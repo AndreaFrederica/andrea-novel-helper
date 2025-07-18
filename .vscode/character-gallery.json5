@@ -1,0 +1,149 @@
+// character-gallery.json5
+[
+  {
+    // 主角－Andrea 小说角色
+    name: "Andrea",
+    aliases: ["andrea"],
+    description: "补全角色名 Andrea",
+  },
+  {
+    name: "张三丰",
+    aliases: ["zhangsan"],
+    description: "补全角色名 张三丰",
+  },
+  {
+    name: "莫小倩",
+    aliases: ["moxiaoqian"],
+    description: "补全角色名 莫小倩",
+  },
+  {
+    name: "博丽灵梦",
+    aliases: ["博丽灵梦", "灵梦", "Reimu"],
+    description: "补全角色名 博丽灵梦",
+  },
+  {
+    name: "雾雨魔理沙",
+    aliases: ["雾雨魔理沙", "魔理沙", "Marisa"],
+    description: "补全角色名 雾雨魔理沙",
+  },
+  {
+    name: "十六夜咲夜",
+    aliases: ["十六夜咲夜", "咲夜", "Sakuya"],
+    description: "补全角色名 十六夜咲夜",
+  },
+  {
+    name: "帕秋莉·诺蕾姬",
+    aliases: ["帕秋莉·诺蕾姬", "帕秋莉", "Patchouli"],
+    description: "补全角色名 帕秋莉·诺蕾姬",
+  },
+  {
+    name: "爱丽丝·玛格特罗伊德",
+    aliases: ["爱丽丝·玛格特罗伊德", "爱丽丝", "Alice"],
+    description: "补全角色名 爱丽丝·玛格特罗伊德",
+  },
+  {
+    name: "蕾米莉亚·斯卡蕾特",
+    aliases: ["蕾米莉亚·斯卡蕾特", "蕾米莉亚", "Remilia"],
+    description: "补全角色名 蕾米莉亚·斯卡蕾特",
+  },
+  {
+    name: "芙兰朵露·斯卡蕾特",
+    aliases: ["芙兰朵露·斯卡蕾特", "芙兰朵露", "Flandre"],
+    description: "补全角色名 芙兰朵露·斯卡蕾特",
+  },
+  {
+    name: "琪露诺",
+    aliases: ["琪露诺", "Cirno"],
+    description: "补全角色名 琪露诺",
+  },
+  {
+    name: "莉莉·怀特",
+    aliases: ["莉莉·怀特", "莉莉", "Lily"],
+    description: "补全角色名 莉莉·怀特",
+  },
+  {
+    name: "古明地觉",
+    aliases: ["古明地觉", "觉", "Satori"],
+    description: "补全角色名 古明地觉",
+  },
+  {
+    name: "古明地恋",
+    aliases: ["古明地恋", "恋", "Koishi"],
+    description: "补全角色名 古明地恋",
+  },
+  {
+    name: "八云紫",
+    aliases: ["八云紫", "紫", "Yukari"],
+    description: "补全角色名 八云紫",
+  },
+  {
+    name: "西行寺幽幽子",
+    aliases: ["西行寺幽幽子", "幽幽子", "Yuyuko"],
+    description: "补全角色名 西行寺幽幽子",
+  },
+  {
+    name: "魂魄妖梦",
+    aliases: ["魂魄妖梦", "妖梦", "Youmu"],
+    description: "补全角色名 魂魄妖梦",
+  },
+  {
+    name: "藤原妹红",
+    aliases: ["藤原妹红", "妹红", "Mokou"],
+    description: "补全角色名 藤原妹红",
+  },
+  {
+    name: "蓬莱山辉夜",
+    aliases: ["蓬莱山辉夜", "辉夜", "Kaguya"],
+    description: "补全角色名 蓬莱山辉夜",
+  },
+  {
+    name: "上白泽慧音",
+    aliases: ["上白泽慧音", "慧音", "Keine"],
+    description: "补全角色名 上白泽慧音",
+  },
+  {
+    name: "洩矢诹访子",
+    aliases: ["洩矢诹访子", "诹访子", "Suwako"],
+    description: "补全角色名 洩矢诹访子",
+  },
+  {
+    name: "东风谷早苗",
+    aliases: ["东风谷早苗", "早苗", "Sanae"],
+    description: "补全角色名 东风谷早苗",
+  },
+  {
+    name: "八意永琳",
+    aliases: ["八意永琳", "永琳", "Eirin"],
+    description: "补全角色名 八意永琳",
+  },
+  {
+    name: "铃仙·优昙华院·因幡",
+    aliases: ["铃仙·优昙华院·因幡", "因幡", "Reisen", "Reisen Udongein Inaba"],
+    description: "补全角色名 铃仙·优昙华院·因幡",
+  },
+  {
+    name: "伊吹萃香",
+    aliases: ["伊吹萃香", "萃香", "Suika"],
+    description: "补全角色名 伊吹萃香",
+  },
+  {
+    name: "射命丸文",
+    aliases: ["射命丸文", "文", "Aya"],
+    description: "补全角色名 射命丸文",
+  },
+  {
+    name: "犬走椛",
+    aliases: ["犬走椛", "椛", "Momiji"],
+    description: "补全角色名 犬走椛",
+  },
+  {
+    name: "封兽鵺",
+    aliases: ["封兽鵺", "鵺", "Nue"],
+    description: "补全角色名 封兽鵺",
+  },
+  {
+    name: "风见幽香",
+    aliases: ["风见幽香", "幽香", "Yuuka"],
+    description: "补全角色名 风见幽香",
+  },
+]

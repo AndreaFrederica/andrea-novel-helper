@@ -1,0 +1,61 @@
+{
+  "name": "andrea-novel-helper",
+  "displayName": "AndreaNovelHelper",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "andrea-novel-helper.helloWorld",
+        "title": "Hello World"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Andrea Novel Helper 配置",
+      "properties": {
+
+        "markdownRoleCompletion.rolesFile": {
+          "type": "string",
+          "default": "character-gallery.json5",
+          "description": "角色库 JSON 文件路径（相对于工作区根目录）"
+        },
+        "markdownRoleCompletion.minChars": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "description": "触发补全前，前缀最少字符数"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "pnpm run compile && pnpm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.101.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.31.1",
+    "@typescript-eslint/parser": "^8.31.1",
+    "eslint": "^9.25.1",
+    "typescript": "^5.8.3",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
