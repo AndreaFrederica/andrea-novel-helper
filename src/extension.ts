@@ -85,6 +85,85 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	// —— 命令：从选中创建角色 —— 
+	const addCmd = vscode.commands.registerCommand(
+		'markdownRoleCompletion.addRoleFromSelection',
+		async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) return;
+			const sel = editor.selection;
+			const name = editor.document.getText(sel).trim();
+			if (!name) {
+				vscode.window.showWarningMessage('请选择文本作为角色名称');
+				return;
+			}
+
+			// 依次让用户填写 type / affiliation / description / color
+			const type = await vscode.window.showQuickPick(
+				['主角', '配角', '联动角色'],
+				{ placeHolder: '选择角色类型' }
+			);
+			if (!type) { return; }
+
+			const affiliation = await vscode.window.showInputBox({
+				placeHolder: '输入从属标签（可选）'
+			});
+
+			const description = await vscode.window.showInputBox({
+				placeHolder: '输入角色简介（可选）'
+			});
+
+			const color = await vscode.window.showInputBox({
+				placeHolder: '输入十六进制颜色，如 #E60033（可选）',
+				validateInput: v => {
+					return v && !/^#([0-9A-Fa-f]{6})$/.test(v) ? '请输入合法的 #RRGGBB 形式' : null;
+				}
+			});
+
+			// 找到并读入 rolesFile
+			const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+			const file = cfg.get<string>('rolesFile')!;
+			const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+			if (!root) {
+				vscode.window.showErrorMessage('未找到工作区根目录');
+				return;
+			}
+			const fullPath = path.join(root, file);
+			if (!fs.existsSync(fullPath)) {
+				vscode.window.showErrorMessage(`角色库文件不存在: ${file}`);
+				return;
+			}
+			const text = fs.readFileSync(fullPath, 'utf8');
+			let arr: any[];
+			try {
+				arr = JSON5.parse(text) as any[];
+			} catch (e) {
+				vscode.window.showErrorMessage(`解析角色库失败: ${e}`);
+				return;
+			}
+
+			// 新角色对象
+			const newRole: any = { name, type };
+			if (affiliation) newRole.affiliation = affiliation;
+			if (description) newRole.description = description;
+			if (color) newRole.color = color;
+
+			// 把新角色 push 到数组末尾
+			arr.push(newRole);
+
+			// 写回文件，使用 JSON5.stringify 保留注释/尾逗号风格
+			const out = JSON5.stringify(arr, null, 2);
+			fs.writeFileSync(fullPath, out, 'utf8');
+
+			vscode.window.showInformationMessage(`已添加角色 "${name}" 到 ${file}`);
+			// 重新加载角色并刷新装饰
+			loadRoles();
+			updateDecorations();
+		}
+	);
+
+	context.subscriptions.push(addCmd);
+
 	// Completion provider
 	const provider = vscode.languages.registerCompletionItemProvider(
 		{ language: 'markdown' },
@@ -282,6 +361,50 @@ export function activate(context: vscode.ExtensionContext) {
 	);
 	context.subscriptions.push(defProv);
 
+
+	// —— 1. 自动监听角色库文件变化 —— 
+	//
+	const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+	const rolesFile = cfg.get<string>('rolesFile')!;
+	const folders = vscode.workspace.workspaceFolders;
+	if (folders && folders.length) {
+		const root = folders[0].uri.fsPath;
+		// 相对工作区根、监控单个文件
+		const watcher = vscode.workspace.createFileSystemWatcher(
+			new vscode.RelativePattern(root, rolesFile)
+		);
+		// 文件改动
+		watcher.onDidChange(() => {
+			loadRoles();
+			updateDecorations();
+			vscode.window.showInformationMessage('角色库已自动刷新');
+		});
+		// 文件被删除或新建也一并处理
+		watcher.onDidCreate(() => {
+			loadRoles();
+			updateDecorations();
+			vscode.window.showInformationMessage('角色库文件已创建，已刷新');
+		});
+		watcher.onDidDelete(() => {
+			roles = [];
+			updateDecorations();
+			vscode.window.showWarningMessage('角色库文件已删除，已清空角色列表');
+		});
+		context.subscriptions.push(watcher);
+	}
+
+	//
+	// —— 2. 手动刷新命令 —— 
+	//
+	const refreshCmd = vscode.commands.registerCommand(
+		'markdownRoleCompletion.refreshRoles',
+		() => {
+			loadRoles();
+			updateDecorations();
+			vscode.window.showInformationMessage('手动刷新角色库完成');
+		}
+	);
+	context.subscriptions.push(refreshCmd);
 
 }
 

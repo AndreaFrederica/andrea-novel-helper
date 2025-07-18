@@ -18,13 +18,36 @@
       {
         "command": "andrea-novel-helper.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "markdownRoleCompletion.addRoleFromSelection",
+        "title": "Create Role from Selection"
+      },
+      {
+        "command": "markdownRoleCompletion.refreshRoles",
+        "title": "Refresh Role Library"
       }
     ],
+    "menus": {
+      "editor/context": [
+        {
+          "when": "editorHasSelection && editorLangId == 'markdown'",
+          "command": "markdownRoleCompletion.addRoleFromSelection",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "markdownRoleCompletion.refreshRoles",
+          "when": "editorLangId == 'markdown'",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "Andrea Novel Helper 配置",
       "properties": {
-
         "markdownRoleCompletion.rolesFile": {
           "type": "string",
           "default": "character-gallery.json5",
