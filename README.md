@@ -1,71 +1,111 @@
 # andrea-novel-helper README
 
-This is the README for your extension "andrea-novel-helper". After writing up a brief description, we recommend including the following sections.
+andrea-novel-helper 是一个面向 Markdown 写作的 VS Code 扩展，帮助你：
 
-## Features
+* 在项目根目录维护一个 JSON5 格式的角色库
+* 支持中文分词后基于主名称与别名的智能补全
+* 在编辑器中为角色名及别名自动着色
+* 鼠标悬停时显示角色的简介、类型、从属与颜色信息
+* Ctrl/Cmd+Click 或 F12 跳转到角色库定义
+* 右键选中文本快速创建新角色并追加到角色库
+* 实时监控角色库文件改动并自动刷新，或通过命令手动刷新
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 
-For example if there is an image subfolder under your extension project workspace:
-
-\!\[feature X\]\(images/feature-x.png\)
-
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
-
-## Requirements
-
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+* Maintain a JSON5-based character library at your workspace root
+* Provide intelligent completions for names and aliases using Chinese word segmentation
+* Automatically colorize character names and aliases in the editor
+* Show hover tooltips with description, type, affiliation, and color
+* Go to definition (Ctrl/Cmd+Click or F12) to jump to the character’s JSON5 entry
+* Right-click selection to quickly create a new character in the library
+* Auto-refresh on library changes or manually trigger a refresh command
 
 ---
 
-## Following extension guidelines
+## 特性 / Features
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+* **多名称补全**：输入角色名或任意别名前缀，即可在 Markdown 中补全至对应名称
+* **中文分词**：利用 `Intl.Segmenter` 精准提取中文“词”级前缀，无需空格
+* **编辑器着色**：根据角色类型或自定义颜色，为主名称和别名统一着色
+* **Hover 提示**：详情面板展示角色简介、类型、从属标签和颜色预览
+* **转到定义**：在文档中按 F12 或 Ctrl/Cmd+Click 跳到角色库文件内的定义行
+* **快速创建**：选中文本右键，填写属性后自动追加 JSON5 格式角色条目
+* **自动/手动刷新**：`character-gallery.json5` 保存时即时刷新，或在命令面板执行 “Refresh Role Library”
+
+---
+
+## 要求 / Requirements
+
+* Visual Studio Code **1.50.0** 或更高版本
+* Node.js 环境（用于本地开发编译）
+* 扩展依赖 `json5`（已在 `package.json` 中声明，无需手动安装）
+
+---
+
+## 扩展设置 / Extension Settings
+
+此扩展在 `contributes.configuration` 中添加了以下设置：
+
+| 设置键                                   | 默认值          | 描述                       |
+| ------------------------------------- | ------------ | ------------------------ |
+| `markdownRoleCompletion.rolesFile`    | `roles.json` | 相对于工作区根目录的角色库 JSON5 文件路径 |
+| `markdownRoleCompletion.minChars`     | `1`          | 触发补全前最少输入的字符数            |
+| `markdownRoleCompletion.defaultColor` | `#CCCCCC`    | 未指定自定义颜色时的默认文字颜色         |
+
+---
+
+## 已知问题 / Known Issues
+
+* 如果角色库非常庞大，首次扫描和着色可能略有延迟
+* JSON5 格式不支持复杂嵌套，目前只解析顶层数组
+* 无自动检测重复名称或别名，需要手动维护库的一致性
+
+---
+
+## 发布说明 / Release Notes
+
+### 0.1.0
+
+* 初始版本：实现基础的 JSON5 角色库加载、分词补全和着色功能
+
+### 0.2.0
+
+* 添加别名支持，补全与着色同时涵盖主名称与所有别名
+* 优化补全结果排序：前缀匹配优先
+
+### 0.3.0
+
+* 引入 HoverProvider，鼠标悬停显示简介、类型、从属与颜色预览
+* 实现 Go To Definition（Ctrl/Cmd+Click / F12）跳转至角色定义
+
+### 0.4.0
+
+* 新增右键命令 “Create Role from Selection”，支持交互式创建新角色
+* 增加文件系统监视器，角色库文件保存时自动刷新补全与着色
+
+---
+
+## 遵循扩展指南 / Following extension guidelines
+
+在开发过程中，我们参考了 VS Code 官方的最佳实践，确保扩展的激活时机、性能和可用性符合规范。
 
 * [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
 
-## Working with Markdown
+---
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+## 使用 Markdown 撰写文档 / Working with Markdown
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+在 VS Code 中编写本 README 时，你可以：
 
-## For more information
+* 窗口拆分：`Ctrl+\`（Windows/Linux），`Cmd+\`（macOS）
+* 切换预览：`Shift+Ctrl+V`（Windows/Linux），`Shift+Cmd+V`（macOS）
+* 快捷片段：输入 `#` 然后 `Ctrl+Space` 查看可用 Markdown 片段
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
+---
+
+## 更多信息 / For more information
+
+* [Visual Studio Code's Markdown Support](https://code.visualstudio.com/docs/languages/markdown)
 * [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
 
 **Enjoy!**
