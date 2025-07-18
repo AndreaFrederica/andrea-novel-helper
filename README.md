@@ -67,21 +67,15 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 ### 0.1.0
 
 * 初始版本：实现基础的 JSON5 角色库加载、分词补全和着色功能
-
-### 0.2.0
-
 * 添加别名支持，补全与着色同时涵盖主名称与所有别名
 * 优化补全结果排序：前缀匹配优先
-
-### 0.3.0
-
 * 引入 HoverProvider，鼠标悬停显示简介、类型、从属与颜色预览
 * 实现 Go To Definition（Ctrl/Cmd+Click / F12）跳转至角色定义
-
-### 0.4.0
-
 * 新增右键命令 “Create Role from Selection”，支持交互式创建新角色
 * 增加文件系统监视器，角色库文件保存时自动刷新补全与着色
+
+## 问题
+* 分词尚不理想 某些词 比如说“睡觉” 觉 可能被发现为角色
 
 ---
 
