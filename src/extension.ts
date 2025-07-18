@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import JSON5 from 'json5';
 
-// 角色定义接口，新增类型(type)与从属标签(affiliation)
+// 角色定义接口
 interface Role {
 	/** 插入的主名称 */
 	name: string;
@@ -70,6 +70,51 @@ function getPrefix(line: string): string {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+	const cfg1 = vscode.workspace.getConfiguration('markdownRoleCompletion');
+	const rolesFile1 = cfg1.get<string>('rolesFile')!;
+
+	const folders1 = vscode.workspace.workspaceFolders;
+	if (folders1 && folders1.length) {
+		const root = folders1[0].uri.fsPath;
+		const fullPath = path.join(root, rolesFile1);
+		// ——— 向导：如果角色库文件不存在，询问并初始化 ———
+		const createWizard = async () => {
+			const choice = await vscode.window.showInformationMessage(
+				`角色库文件 "${rolesFile}" 不存在，是否初始化示例角色库？`,
+				'创建',
+				'取消'
+			);
+			if (choice === '创建') {
+				// 示例角色
+				const example = [
+					{
+						name: "示例角色",
+						type: "配角",
+						affiliation: "示例阵营",
+						aliases: ["示例"],
+						description: "这是一个示例角色，用于说明角色库格式。",
+						color: "#FFA500"
+					}
+				];
+				const content = JSON5.stringify(example, null, 2);
+				// 自动创建目录（若需要）
+				fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+				fs.writeFileSync(fullPath, content, 'utf8');
+				vscode.window.showInformationMessage(`已创建示例角色库：${rolesFile}`);
+			}
+		};
+
+		// 激活时调用一次
+		if (!fs.existsSync(fullPath)) {
+			createWizard().then(() => {
+				// 向导完成后再加载和装饰
+				loadRoles();
+				updateDecorations();
+			});
+		}
+	}
+
+
 	loadRoles();
 	// 配置变更监听
 	context.subscriptions.push(
@@ -89,6 +134,33 @@ export function activate(context: vscode.ExtensionContext) {
 	const addCmd = vscode.commands.registerCommand(
 		'markdownRoleCompletion.addRoleFromSelection',
 		async () => {
+
+			// 确保角色库存在
+			const cfg1 = vscode.workspace.getConfiguration('markdownRoleCompletion');
+			const rolesFile = cfg1.get<string>('rolesFile')!;
+			const root1 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+			if (!root1) return;
+			const fullPath1 = path.join(root1, rolesFile);
+			if (!fs.existsSync(fullPath1)) {
+				await vscode.window.showInformationMessage(
+					`角色库 "${rolesFile}" 不存在，先创建一个示例再继续…`
+				);
+				// 复用上面同样的示例创建逻辑
+				const example = [
+					{
+						name: "示例角色",
+						type: "配角",
+						affiliation: "示例阵营",
+						aliases: ["示例"],
+						description: "这是一个示例角色，用于说明角色库格式。",
+						color: "#FFA500"
+					}
+				];
+				fs.mkdirSync(path.dirname(fullPath1), { recursive: true });
+				fs.writeFileSync(fullPath1, JSON5.stringify(example, null, 2), 'utf8');
+				vscode.window.showInformationMessage(`已初始化示例角色库：${rolesFile}`);
+			}
+
 			const editor = vscode.window.activeTextEditor;
 			if (!editor) return;
 			const sel = editor.selection;
