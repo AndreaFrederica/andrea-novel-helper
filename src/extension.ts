@@ -89,37 +89,70 @@ export function activate(context: vscode.ExtensionContext) {
 	const provider = vscode.languages.registerCompletionItemProvider(
 		{ language: 'markdown' },
 		{
-			provideCompletionItems(doc, pos) {
-				const line = doc.lineAt(pos).text.slice(0, pos.character);
+			provideCompletionItems(document, position) {
+				const line = document.lineAt(position).text.slice(0, position.character);
 				const prefix = getPrefix(line);
 				if (!prefix) return;
-				const min = vscode.workspace.getConfiguration('markdownRoleCompletion').get<number>('minChars')!;
+
+				const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+				const min = cfg.get<number>('minChars')!;
 				if (prefix.length < min) return;
-				return roles.filter(r =>
-					r.name.includes(prefix) || r.aliases?.some(a => a.includes(prefix))
-				).map(r => {
-					const item = new vscode.CompletionItem(r.name, vscode.CompletionItemKind.Text);
-					item.range = new vscode.Range(pos.line, pos.character - prefix.length, pos.line, pos.character);
-					// detail 显示简介 + 类型 + 从属
-					const details = [];
-					if (r.description) details.push(r.description);
-					details.push(`类型: ${r.type}`);
-					if (r.affiliation) details.push(`从属: ${r.affiliation}`);
-					item.detail = details.join(' | ');
-					// documentation 展示颜色方块和类型信息
-					const md = new vscode.MarkdownString();
-					const color = r.color || typeColorMap[r.type] || '#CCCCCC';
-					md.appendMarkdown(`**颜色**: <span style=\"color:${color}\">■</span> \`${color}\``);
-					md.appendMarkdown(`\n\n**类型**: ${r.type}`);
-					if (r.affiliation) md.appendMarkdown(`\n\n**从属**: ${r.affiliation}`);
-					md.isTrusted = true;
-					item.documentation = md;
-					return item;
-				});
+
+				// 准备默认色（如果你在 detail/doc 中需要用到）
+				const defaultColor = cfg.get<string>('defaultColor')!;
+
+				const items: vscode.CompletionItem[] = [];
+
+				for (const role of roles) {
+					// 汇总主名称 + 别名
+					const allNames = new Set<string>([role.name, ...(role.aliases ?? [])]);
+
+					for (const nameItem of allNames) {
+						if (!nameItem.includes(prefix)) continue;
+
+						const item = new vscode.CompletionItem(nameItem, vscode.CompletionItemKind.Text);
+						// 直接插入 nameItem 自身
+						item.insertText = nameItem;
+						// 替换正确范围
+						item.range = new vscode.Range(
+							position.line,
+							position.character - prefix.length,
+							position.line,
+							position.character
+						);
+
+						// detail：简介 | 类型 | 从属
+						const details: string[] = [];
+						if (role.description) details.push(role.description);
+						details.push(`类型: ${role.type}`);
+						if (role.affiliation) details.push(`从属: ${role.affiliation}`);
+						item.detail = details.join(' | ');
+
+						// documentation：颜色方块 + 类型 + 从属
+						const md = new vscode.MarkdownString();
+						const color = role.color || typeColorMap[role.type] || defaultColor;
+						md.appendMarkdown(`**颜色**: <span style="color:${color}">■</span> \`${color}\``);
+						md.appendMarkdown(`\n\n**类型**: ${role.type}`);
+						if (role.affiliation) md.appendMarkdown(`\n\n**从属**: ${role.affiliation}`);
+						md.isTrusted = true;
+						item.documentation = md;
+
+						// 排序：前缀开头优先
+						if (nameItem.startsWith(prefix)) {
+							item.sortText = '1_' + nameItem;
+						} else {
+							item.sortText = '2_' + nameItem;
+						}
+
+						items.push(item);
+					}
+				}
+
+				return items;
 			}
 		}
 	);
-	context.subscriptions.push(provider);
+
 
 
 	function updateDecorations(editor?: vscode.TextEditor) {
@@ -137,26 +170,40 @@ export function activate(context: vscode.ExtensionContext) {
 			.getConfiguration('markdownRoleCompletion')
 			.get<string>('defaultColor')!;
 
-		// 3. 遍历所有角色，一起往 hoverRanges 推
 		for (const r of roles) {
 			const color = r.color || typeColorMap[r.type] || defaultColor;
 			const deco = vscode.window.createTextEditorDecorationType({ color });
 			const ranges: vscode.Range[] = [];
 
-			// 找到角色名所有出现的位置
-			const regex = new RegExp(r.name, 'g');
-			let m: RegExpExecArray | null;
-			while ((m = regex.exec(docText))) {
-				const start = active.document.positionAt(m.index);
-				const end = active.document.positionAt(m.index + m[0].length);
-				const range = new vscode.Range(start, end);
-
-				ranges.push(range);
-				// 记录到 hoverRanges，一次记录一个角色的每个范围
-				hoverRanges.push({ range, role: r });
+			// --- 匹配主名称 ---
+			{
+				const regex = new RegExp(r.name, 'g');
+				let m: RegExpExecArray | null;
+				while ((m = regex.exec(docText))) {
+					const start = active.document.positionAt(m.index);
+					const end = active.document.positionAt(m.index + m[0].length);
+					const range = new vscode.Range(start, end);
+					ranges.push(range);
+					hoverRanges.push({ range, role: r });
+				}
 			}
 
-			// 应用装饰
+			// --- 匹配所有别名 ---
+			if (r.aliases) {
+				for (const alias of r.aliases) {
+					const regex = new RegExp(alias, 'g');
+					let m: RegExpExecArray | null;
+					while ((m = regex.exec(docText))) {
+						const start = active.document.positionAt(m.index);
+						const end = active.document.positionAt(m.index + m[0].length);
+						const range = new vscode.Range(start, end);
+						ranges.push(range);
+						hoverRanges.push({ range, role: r });
+					}
+				}
+			}
+
+			// 应用装饰到主名称+别名所有位置
 			active.setDecorations(deco, ranges);
 			decorationTypes.set(r.name, deco);
 		}
