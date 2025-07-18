@@ -28,6 +28,7 @@ let decorationTypes: Map<string, vscode.TextEditorDecorationType> = new Map();
 // 中文分词器(词级别)
 const segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
 
+
 // 类型到默认颜色映射
 const typeColorMap: Record<string, string> = {
 	主角: '#FFD700',       // 金色
@@ -40,7 +41,7 @@ const typeColorMap: Record<string, string> = {
  */
 function loadRoles() {
 	roles = [];
-	const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const file = cfg.get<string>('rolesFile')!;
 	const folders = vscode.workspace.workspaceFolders;
 	if (!folders || !folders.length) return;
@@ -70,8 +71,16 @@ function getPrefix(line: string): string {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-	const cfg1 = vscode.workspace.getConfiguration('markdownRoleCompletion');
+	const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const rolesFile1 = cfg1.get<string>('rolesFile')!;
+
+	const fileTypes = cfg1.get<string[]>('supportedFileTypes', ['markdown', 'plaintext']);
+
+	// 转换为 VS Code 的语言 ID
+	const supportedLanguages = fileTypes.map(t => {
+		// 特殊映射：txt → plaintext
+		return t === 'txt' ? 'plaintext' : t;
+	});
 
 	const folders1 = vscode.workspace.workspaceFolders;
 	if (folders1 && folders1.length) {
@@ -120,9 +129,9 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration(e => {
 			if (
-				e.affectsConfiguration('markdownRoleCompletion.rolesFile') ||
-				e.affectsConfiguration('markdownRoleCompletion.minChars') ||
-				e.affectsConfiguration('markdownRoleCompletion.defaultColor')
+				e.affectsConfiguration('AndreaNovelHelper.rolesFile') ||
+				e.affectsConfiguration('AndreaNovelHelper.minChars') ||
+				e.affectsConfiguration('AndreaNovelHelper.defaultColor')
 			) {
 				loadRoles();
 				updateDecorations();
@@ -132,11 +141,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// —— 命令：从选中创建角色 —— 
 	const addCmd = vscode.commands.registerCommand(
-		'markdownRoleCompletion.addRoleFromSelection',
+		'AndreaNovelHelper.addRoleFromSelection',
 		async () => {
 
 			// 确保角色库存在
-			const cfg1 = vscode.workspace.getConfiguration('markdownRoleCompletion');
+			const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
 			const rolesFile = cfg1.get<string>('rolesFile')!;
 			const root1 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (!root1) return;
@@ -193,7 +202,7 @@ export function activate(context: vscode.ExtensionContext) {
 			});
 
 			// 找到并读入 rolesFile
-			const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+			const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 			const file = cfg.get<string>('rolesFile')!;
 			const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 			if (!root) {
@@ -238,14 +247,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Completion provider
 	const provider = vscode.languages.registerCompletionItemProvider(
-		{ language: 'markdown' },
+		supportedLanguages,
 		{
 			provideCompletionItems(document, position) {
 				const line = document.lineAt(position).text.slice(0, position.character);
 				const prefix = getPrefix(line);
 				if (!prefix) return;
 
-				const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+				const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 				const min = cfg.get<number>('minChars')!;
 				if (prefix.length < min) return;
 
@@ -308,7 +317,9 @@ export function activate(context: vscode.ExtensionContext) {
 
 	function updateDecorations(editor?: vscode.TextEditor) {
 		const active = editor || vscode.window.activeTextEditor;
-		if (!active || active.document.languageId !== 'markdown') return;
+		if (!active) return;
+		const isSupported = supportedLanguages.includes(active.document.languageId);
+		if (!isSupported) return;
 		const docText = active.document.getText();
 
 		// 1. 清理旧的装饰和 hoverRanges
@@ -318,7 +329,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// 2. 取默认颜色
 		const defaultColor = vscode.workspace
-			.getConfiguration('markdownRoleCompletion')
+			.getConfiguration('AndreaNovelHelper')
 			.get<string>('defaultColor')!;
 
 		for (const r of roles) {
@@ -363,16 +374,28 @@ export function activate(context: vscode.ExtensionContext) {
 	updateDecorations();
 	context.subscriptions.push(
 		vscode.window.onDidChangeActiveTextEditor(updateDecorations),
+
+		// 合并后的文档变化监听器
 		vscode.workspace.onDidChangeTextDocument(e => {
-			if (vscode.window.activeTextEditor && e.document === vscode.window.activeTextEditor.document) {
-				updateDecorations(vscode.window.activeTextEditor);
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) return;
+
+			// 检查文档是否匹配当前活动文档
+			const isActiveDocument = e.document === editor.document;
+
+			// 检查当前文档是否在支持的语言列表中
+			const isSupported = supportedLanguages.includes(editor.document.languageId);
+
+			// 只有当文档是当前活动文档且语言受支持时才更新装饰
+			if (isActiveDocument && isSupported) {
+				updateDecorations(editor);
 			}
 		})
 	);
 
 	// Hover provider 显示名称、简介、类型、从属、颜色
 	const hoverProv = vscode.languages.registerHoverProvider(
-		{ language: 'markdown' },
+		supportedLanguages,
 		{
 			provideHover(doc, pos) {
 				const hit = hoverRanges.find(h => h.range.contains(pos));
@@ -384,7 +407,7 @@ export function activate(context: vscode.ExtensionContext) {
 				md.appendMarkdown(`\n\n**类型**: ${r.type}`);
 				if (r.affiliation) md.appendMarkdown(`\n\n**从属**: ${r.affiliation}`);
 				const defaultColor = vscode.workspace
-					.getConfiguration('markdownRoleCompletion')
+					.getConfiguration('AndreaNovelHelper')
 					.get<string>('defaultColor')!;
 				const c = r.color || typeColorMap[r.type] || defaultColor;
 				md.appendMarkdown(`\n\n**颜色**: <span style="color:${c}">■</span> \`${c}\``);
@@ -398,7 +421,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// “转到定义”提供器：Ctrl+Click 或 F12
 	const defProv = vscode.languages.registerDefinitionProvider(
-		{ language: 'markdown' },
+		supportedLanguages,
 		{
 			provideDefinition(document, position) {
 				// 1. 先用 hoverRanges 定位到哪个角色
@@ -407,7 +430,7 @@ export function activate(context: vscode.ExtensionContext) {
 				const role = hit.role;
 
 				// 2. 找到角色库文件绝对路径
-				const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+				const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 				const file = cfg.get<string>('rolesFile')!;
 				const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 				if (!root) return null;
@@ -436,7 +459,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// —— 1. 自动监听角色库文件变化 —— 
 	//
-	const cfg = vscode.workspace.getConfiguration('markdownRoleCompletion');
+	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const rolesFile = cfg.get<string>('rolesFile')!;
 	const folders = vscode.workspace.workspaceFolders;
 	if (folders && folders.length) {
@@ -469,7 +492,7 @@ export function activate(context: vscode.ExtensionContext) {
 	// —— 2. 手动刷新命令 —— 
 	//
 	const refreshCmd = vscode.commands.registerCommand(
-		'markdownRoleCompletion.refreshRoles',
+		'AndreaNovelHelper.refreshRoles',
 		() => {
 			loadRoles();
 			updateDecorations();

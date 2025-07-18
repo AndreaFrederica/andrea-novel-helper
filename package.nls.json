@@ -1,0 +1,10 @@
+{
+    "extension.name": "Andrea Novel Helper",
+    "extension.description": "Helper tool for novel writing",
+    "command.addRoleFromSelection.title": "Create Role from Selection",
+    "command.refreshRoles.title": "Refresh Role Library",
+    "config.title": "Andrea Novel Helper Settings",
+    "config.rolesFile.description": "Path to the roles JSON file (relative to workspace root)",
+    "config.minChars.description": "Minimum number of prefix characters to trigger completion",
+    "config.supportedFileTypes.description": "Supported file extensions (without dot)"
+}

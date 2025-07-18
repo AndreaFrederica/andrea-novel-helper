@@ -1,0 +1,10 @@
+{
+    "extension.name": "Andrea 小說助手",
+    "extension.description": "小說寫作輔助工具",
+    "command.addRoleFromSelection.title": "從選中內容創建角色",
+    "command.refreshRoles.title": "刷新角色庫",
+    "config.title": "Andrea 小說助手配置",
+    "config.rolesFile.description": "角色庫 JSON 文件路徑（相對於工作區根目錄）",
+    "config.minChars.description": "觸發補全所需的最少前綴字符數",
+    "config.supportedFileTypes.description": "支援的文件擴展名（不帶點）"
+}

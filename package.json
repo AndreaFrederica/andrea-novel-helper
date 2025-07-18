@@ -1,8 +1,8 @@
 {
   "name": "andrea-novel-helper",
-  "displayName": "AndreaNovelHelper",
-  "description": "",
-  "version": "0.0.1",
+  "displayName": "%extension.name%",
+  "description": "%extension.description%",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -19,50 +19,50 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
+"commands": [
       {
-        "command": "andrea-novel-helper.helloWorld",
-        "title": "Hello World"
+        "command": "AndreaNovelHelper.addRoleFromSelection",
+        "title": "%command.addRoleFromSelection.title%"
       },
       {
-        "command": "markdownRoleCompletion.addRoleFromSelection",
-        "title": "Create Role from Selection"
-      },
-      {
-        "command": "markdownRoleCompletion.refreshRoles",
-        "title": "Refresh Role Library"
+        "command": "AndreaNovelHelper.refreshRoles",
+        "title": "%command.refreshRoles.title%"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "when": "editorHasSelection && editorLangId == 'markdown'",
-          "command": "markdownRoleCompletion.addRoleFromSelection",
+          "when": "editorHasSelection",
+          "command": "AndreaNovelHelper.addRoleFromSelection",
           "group": "navigation"
         }
       ],
       "commandPalette": [
         {
-          "command": "markdownRoleCompletion.refreshRoles",
-          "when": "editorLangId == 'markdown'",
+          "command": "AndreaNovelHelper.refreshRoles",
           "group": "navigation"
         }
       ]
     },
     "configuration": {
       "type": "object",
-      "title": "Andrea Novel Helper 配置",
+      "title": "%config.title%",
       "properties": {
-        "markdownRoleCompletion.rolesFile": {
+        "AndreaNovelHelper.rolesFile": {
           "type": "string",
           "default": "character-gallery.json5",
-          "description": "角色库 JSON 文件路径（相对于工作区根目录）"
+          "description": "%config.rolesFile.description%"
         },
-        "markdownRoleCompletion.minChars": {
+        "AndreaNovelHelper.minChars": {
           "type": "number",
           "default": 1,
           "minimum": 1,
-          "description": "触发补全前，前缀最少字符数"
+          "description": "%config.minChars.description%"
+        },
+        "AndreaNovelHelper.supportedFileTypes": {
+          "type": "array",
+          "default": ["markdown", "plaintext"],
+          "description": "%config.supportedFileTypes.description%"
         }
       }
     }

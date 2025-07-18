@@ -3,3 +3,6 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+# 添加 npm 特定忽略
+package-lock.json
+.npm
