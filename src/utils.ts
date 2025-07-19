@@ -76,3 +76,16 @@ export function tokenizeComplexNames(name: string): string[] {
     // 返回去重的有效token（长度至少为2）
     return [...new Set(tokens.filter(token => token.length > 1))];
 }
+
+// 工具：检查两个区间 [s1,e1) 和 [s2,e2) 是否有重叠
+export function rangesOverlap(
+  s1: number, e1: number,
+  s2: number, e2: number
+): boolean {
+  return s1 < e2 && s2 < e1;
+}
+
+// 工具：转义正则特殊字符
+export function escapeRegExp(str: string): string {
+  return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+}

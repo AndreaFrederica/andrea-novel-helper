@@ -10,12 +10,17 @@ import { createCompletionProvider } from './completionProvider';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 import { hoverProv } from './hoverProvider';
 import { defProv } from './defProv';
+import { updateDecorations } from './updateDecorations';
 
 
 // 全局角色列表
 export let roles: Role[] = [];
 // 存储当前文档中每个角色出现的范围和对应角色
 export let hoverRanges: { range: vscode.Range; role: Role }[] = [];
+
+export function setHoverRanges(ranges: { range: vscode.Range; role: Role }[]) {
+    hoverRanges = ranges;
+}
 // editor 装饰类型存储
 export let decorationTypes: Map<string, vscode.TextEditorDecorationType> = new Map();
 
@@ -193,61 +198,6 @@ export function activate(context: vscode.ExtensionContext) {
     // —— 自动补全提供器 ——
     const provider = createCompletionProvider(roles);
 
-    function updateDecorations(editor?: vscode.TextEditor) {
-        const active = editor || vscode.window.activeTextEditor;
-        if (!active) return;
-        const isSupported = supportedLanguages.includes(active.document.languageId);
-        if (!isSupported) return;
-        const docText = active.document.getText();
-
-        // 1. 清理旧的装饰和 hoverRanges
-        decorationTypes.forEach(d => d.dispose());
-        decorationTypes.clear();
-        hoverRanges = [];
-
-        // 2. 取默认颜色
-        const defaultColor = vscode.workspace
-            .getConfiguration('AndreaNovelHelper')
-            .get<string>('defaultColor')!;
-
-        for (const r of roles) {
-            const color = r.color || typeColorMap[r.type] || defaultColor;
-            const deco = vscode.window.createTextEditorDecorationType({ color });
-            const ranges: vscode.Range[] = [];
-
-            // --- 匹配主名称 ---
-            {
-                const regex = new RegExp(r.name, 'g');
-                let m: RegExpExecArray | null;
-                while ((m = regex.exec(docText))) {
-                    const start = active.document.positionAt(m.index);
-                    const end = active.document.positionAt(m.index + m[0].length);
-                    const range = new vscode.Range(start, end);
-                    ranges.push(range);
-                    hoverRanges.push({ range, role: r });
-                }
-            }
-
-            // --- 匹配所有别名 ---
-            if (r.aliases) {
-                for (const alias of r.aliases) {
-                    const regex = new RegExp(alias, 'g');
-                    let m: RegExpExecArray | null;
-                    while ((m = regex.exec(docText))) {
-                        const start = active.document.positionAt(m.index);
-                        const end = active.document.positionAt(m.index + m[0].length);
-                        const range = new vscode.Range(start, end);
-                        ranges.push(range);
-                        hoverRanges.push({ range, role: r });
-                    }
-                }
-            }
-
-            // 应用装饰到主名称+别名所有位置
-            active.setDecorations(deco, ranges);
-            decorationTypes.set(r.name, deco);
-        }
-    }
     // 初始 & 监听
     updateDecorations();
     context.subscriptions.push(
