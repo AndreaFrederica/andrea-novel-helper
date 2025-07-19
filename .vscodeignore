@@ -11,3 +11,5 @@ vsc-extension-quickstart.md
 **/.vscode-test.*
 # 忽略资源中的所有 gif 图片
 resources/*.gif
+
+cspell-roles.txt

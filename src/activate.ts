@@ -7,6 +7,7 @@ import { Role } from './extension';
 import { getPrefix, typeColorMap, getSupportedLanguages } from './utils';
 import { create } from 'domain';
 import { createCompletionProvider } from './completionProvider';
+import { generateCSpellDictionary } from './generateCSpellDictionary';
 
 
 // 全局角色列表
@@ -189,96 +190,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(addCmd);
 
     const provider = createCompletionProvider(roles);
-    // // Completion provider
-    // const provider = vscode.languages.registerCompletionItemProvider(
-    //     supportedLanguages,
-    //     {
-    //         provideCompletionItems(document, position) {
-    //             const line = document.lineAt(position).text.slice(0, position.character);
-    //             const prefix = getPrefix(line);
-    //             if (!prefix) return;
-
-    //             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    //             const min = cfg.get<number>('minChars')!;
-    //             if (prefix.length < min) return;
-    //             const defaultColor = cfg.get<string>('defaultColor')!;
-
-    //             // —— 1. 找到所有匹配角色 —— 
-    //             // 一个角色只要它的主名或任意别名包含 prefix，就算匹配
-    //             const matchedRoles = roles.filter(role => {
-    //                 const names = [role.name, ...(role.aliases || [])];
-    //                 return names.some(n => n.includes(prefix));
-    //             });
-    //             if (matchedRoles.length === 0) return;
-
-    //             // —— 2. 对每个角色，生成它的所有名称 —— 
-    //             // 并给匹配度高的名称排前面
-    //             const items: vscode.CompletionItem[] = [];
-    //             let roleIdx = 0;
-    //             for (const role of matchedRoles) {
-    //                 const allNames = [role.name, ...(role.aliases || [])];
-
-    //                 // 内部先给“以 prefix 开头”的排前面，再是“仅包含”的，最后才是不匹配的（不过这里不会出现）
-    //                 allNames.sort((a, b) => {
-    //                     const aKind = a.startsWith(prefix) ? 0 : a.includes(prefix) ? 1 : 2;
-    //                     const bKind = b.startsWith(prefix) ? 0 : b.includes(prefix) ? 1 : 2;
-    //                     if (aKind !== bKind) return aKind - bKind;
-    //                     return a.localeCompare(b, 'zh');
-    //                 });
-
-    //                 let nameIdx = 0;
-    //                 for (const nameItem of allNames) {
-    //                     const item = new vscode.CompletionItem(nameItem, vscode.CompletionItemKind.Text);
-    //                     item.insertText = nameItem;
-    //                     item.range = new vscode.Range(
-    //                         position.line,
-    //                         position.character - prefix.length,
-    //                         position.line,
-    //                         position.character
-    //                     );
-
-    //                     // **最关键**：告诉 VSCode 用整个 nameItem 来做过滤
-    //                     //* 避免出现只能匹配开头 */
-    //                     item.filterText = prefix + nameItem;
-
-    //                     // detail
-    //                     const details: string[] = [];
-    //                     if (role.description) details.push(role.description);
-    //                     details.push(`类型: ${role.type}`);
-    //                     if (role.affiliation) details.push(`从属: ${role.affiliation}`);
-    //                     item.detail = details.join(' | ');
-
-    //                     // documentation
-    //                     const md = new vscode.MarkdownString();
-    //                     const color = role.color || typeColorMap[role.type] || defaultColor;
-    //                     md.appendMarkdown(`**颜色**: <span style="color:${color}">■</span> \`${color}\``);
-    //                     md.appendMarkdown(`\n\n**类型**: ${role.type}`);
-    //                     if (role.affiliation) md.appendMarkdown(`\n\n**从属**: ${role.affiliation}`);
-    //                     md.isTrusted = true;
-    //                     item.documentation = md;
-
-    //                     // 全局排序：先是匹配度高的角色、再是同角色内匹配度高的名称
-    //                     // 格式：角色序号_名称匹配度_名称序号
-    //                     const nameKind = nameItem.startsWith(prefix) ? 0 : nameItem.includes(prefix) ? 1 : 2;
-    //                     item.sortText =
-    //                         `${roleIdx.toString().padStart(3, '0')}_` +
-    //                         `${nameKind}_` +
-    //                         `${nameIdx.toString().padStart(3, '0')}`;
-
-    //                     items.push(item);
-    //                     nameIdx++;
-    //                 }
-
-    //                 roleIdx++;
-    //             }
-
-    //             return items;
-    //         }
-    //     }
-    // );
-
-
-
 
     function updateDecorations(editor?: vscode.TextEditor) {
         const active = editor || vscode.window.activeTextEditor;
@@ -490,6 +401,7 @@ export function loadRoles() {
     } catch (e) {
         vscode.window.showErrorMessage(`解析角色库失败: ${e}`);
     }
+    generateCSpellDictionary();
 }
 
 
