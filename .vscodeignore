@@ -9,3 +9,5 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+# 忽略资源中的所有 gif 图片
+resources/*.gif
