@@ -8,6 +8,8 @@ import { getPrefix, typeColorMap, getSupportedLanguages } from './utils';
 import { create } from 'domain';
 import { createCompletionProvider } from './completionProvider';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
+import { hoverProv } from './hoverProvider';
+import { defProv } from './defProv';
 
 
 // 全局角色列表
@@ -188,7 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(addCmd);
-
+    // —— 自动补全提供器 ——
     const provider = createCompletionProvider(roles);
 
     function updateDecorations(editor?: vscode.TextEditor) {
@@ -270,66 +272,9 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Hover provider 显示名称、简介、类型、从属、颜色
-    const hoverProv = vscode.languages.registerHoverProvider(
-        supportedLanguages,
-        {
-            provideHover(doc, pos) {
-                const hit = hoverRanges.find(h => h.range.contains(pos));
-                if (!hit) return;
-                const r = hit.role;
-                const md = new vscode.MarkdownString();
-                md.appendMarkdown(`**${r.name}**`);
-                if (r.description) md.appendMarkdown(`\n\n${r.description}`);
-                md.appendMarkdown(`\n\n**类型**: ${r.type}`);
-                if (r.affiliation) md.appendMarkdown(`\n\n**从属**: ${r.affiliation}`);
-                const defaultColor = vscode.workspace
-                    .getConfiguration('AndreaNovelHelper')
-                    .get<string>('defaultColor')!;
-                const c = r.color || typeColorMap[r.type] || defaultColor;
-                md.appendMarkdown(`\n\n**颜色**: <span style="color:${c}">■</span> \`${c}\``);
-                md.isTrusted = true;
-                // 注意这里用 hit.range 保证 hover 范围和装饰一致
-                return new vscode.Hover(md, hit.range);
-            }
-        }
-    );
     context.subscriptions.push(hoverProv);
 
     // “转到定义”提供器：Ctrl+Click 或 F12
-    const defProv = vscode.languages.registerDefinitionProvider(
-        supportedLanguages,
-        {
-            provideDefinition(document, position) {
-                // 1. 先用 hoverRanges 定位到哪个角色
-                const hit = hoverRanges.find(h => h.range.contains(position));
-                if (!hit) return null;
-                const role = hit.role;
-
-                // 2. 找到角色库文件绝对路径
-                const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                const file = cfg.get<string>('rolesFile')!;
-                const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                if (!root) return null;
-                const fullPath = path.join(root, file);
-                if (!fs.existsSync(fullPath)) return null;
-
-                // 3. 读取文件，按行查找 name 字段
-                const content = fs.readFileSync(fullPath, 'utf8');
-                const lines = content.split(/\r?\n/);
-                const idx = lines.findIndex(line =>
-                    // 匹配 JSON5 中 name: "xxx"
-                    new RegExp(`\\bname\\s*:\\s*["']${role.name}["']`).test(line)
-                );
-                if (idx < 0) return null;
-
-                // 4. 构造跳转目标位置
-                const char = lines[idx].indexOf(role.name);
-                const targetUri = vscode.Uri.file(fullPath);
-                const targetPos = new vscode.Position(idx, char);
-                return new vscode.Location(targetUri, targetPos);
-            }
-        }
-    );
     context.subscriptions.push(defProv);
 
 

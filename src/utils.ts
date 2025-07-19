@@ -35,3 +35,44 @@ export const getSupportedLanguages = (): string[] => {
     t === 'txt' ? 'plaintext' : t
   );
 };
+
+// 分词函数：处理罗马字、英文、拼音等混合格式
+export function tokenizeComplexNames(name: string): string[] {
+    const tokens: string[] = [];
+    
+    // 1. 处理常见的复合词分隔符（连字符、下划线、空格）
+    const separatorRegex = /[-_\s]+/;
+    if (separatorRegex.test(name)) {
+        tokens.push(...name.split(separatorRegex));
+    }
+    
+    // 2. 处理驼峰命名法（camelCase 或 PascalCase）
+    const camelCaseParts = name.split(/(?=[A-Z][a-z]|[\d])/);
+    if (camelCaseParts.length > 1) {
+        tokens.push(...camelCaseParts);
+    }
+    
+    // 3. 处理拼音（带声调和不带声调）
+    const pinyinRegex = /[a-z]+[1-5]?/g;
+    const pinyinMatches = name.match(pinyinRegex);
+    if (pinyinMatches && pinyinMatches.join('') === name.toLowerCase()) {
+        tokens.push(...pinyinMatches);
+    }
+    
+    // 4. 处理罗马字（日语）
+    const romajiRegex = /[a-z]+/g;
+    const romajiMatches = name.match(romajiRegex);
+    if (romajiMatches && romajiMatches.join('') === name.toLowerCase()) {
+        tokens.push(...romajiMatches);
+    }
+    
+    // 5. 处理数字+字母组合（如 R2D2, GPT4）
+    const alphanumericRegex = /([a-z]+|\d+)/gi;
+    const alphanumericMatches = name.match(alphanumericRegex);
+    if (alphanumericMatches && alphanumericMatches.length > 1) {
+        tokens.push(...alphanumericMatches);
+    }
+    
+    // 返回去重的有效token（长度至少为2）
+    return [...new Set(tokens.filter(token => token.length > 1))];
+}

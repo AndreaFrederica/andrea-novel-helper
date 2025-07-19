@@ -26,9 +26,9 @@ export const segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
 
 
 export function activate(context: vscode.ExtensionContext) {
-  activateRoles(context);
+	activateRoles(context);
 }
 
 export function deactivate() {
-  deactivateRoles();
+	deactivateRoles();
 }
