@@ -80,7 +80,7 @@ export function createCompletionProvider(roles: Role[]): vscode.Disposable {
                     roleIdx++;
                 }
 
-                return items;
+                return new vscode.CompletionList(items, /* isIncomplete */ true);
             }
         }
     );
