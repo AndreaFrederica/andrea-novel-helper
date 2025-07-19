@@ -34,6 +34,26 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 
 ---
 
+## 演示
+- **创建角色**
+![创建角色演示](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/%E5%88%9B%E5%BB%BA%E8%A7%92%E8%89%B2.gif)
+
+- **为角色创建颜色**
+  ![创建颜色](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/为角色创建颜色.gif)
+
+- **中文分词**
+  ![中文分词](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/中文分词.gif)
+
+- **自动补全**
+  ![自动补全](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/自动补全.gif)
+
+- **转跳定义**
+  ![转跳定义](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/转跳定义.gif)
+
+
+
+---
+
 ## 要求 / Requirements
 
 - Visual Studio Code **1.50.0** 或更高版本
@@ -60,12 +80,13 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - 如果角色库非常庞大，首次扫描和着色可能略有延迟
 - JSON5 格式不支持复杂嵌套，目前只解析顶层数组
 - 无自动检测重复名称或别名，需要手动维护库的一致性
+- JS提供的分词器可能不够准确，某些词如“睡觉”可能被错误识别为角色名，后期考虑更换后端来解决，如使用 `jieba` 等中文分词库。
 
 ---
 
 ## 发布说明 / Release Notes
 
-### 0.1.0
+### 0.0.1
 
 - 初始版本：实现基础的 JSON5 角色库加载、分词补全和着色功能
 - 添加别名支持，补全与着色同时涵盖主名称与所有别名
@@ -74,10 +95,22 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - 实现 Go To Definition（Ctrl/Cmd+Click / F12）跳转至角色定义
 - 新增右键命令 “Create Role from Selection”，支持交互式创建新角色
 - 增加文件系统监视器，角色库文件保存时自动刷新补全与着色
+- 使用 `Intl.Segmenter` 实现中文分词，支持多种语言
+
+### 0.0.2
+- 支持部分i18n，添加中文语言包
+- 增加角色类型支持，提供默认颜色映射
+
+### 0.0.4
+- 修复了不能动态提供建议的问题
 
 ## 问题
 
 - 分词尚不理想 某些词 比如说“睡觉” 觉 可能被发现为角色
+- 角色名字发生包含时，可能会导致着色不准确
+- 没有UUID支持，需要手动保证角色名字不重合
+- 目前没有关系类型支持，后期可能参考数据库的关系模式添加
+- 没有自定义角色类型支持，后期可能添加
 
 ---
 

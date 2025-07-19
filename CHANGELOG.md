@@ -1,9 +1,42 @@
 # Change Log
 
-All notable changes to the "andrea-novel-helper" extension will be documented in this file.
+## [0.0.4] - 2025-07-19
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+### 🐛 修复
+- 修复了补全提供器无法动态响应的问题
 
-## [Unreleased]
+---
 
-- Initial release
+## [0.0.2] - 2025-07-19
+
+### ✨ 新增
+- 支持多语言（i18n），添加中文语言包
+- 新增角色类型功能，支持根据类型应用默认颜色样式
+
+---
+
+## [0.0.1] - 2025-07-18
+
+### 🎉 初始版本
+
+#### ✨ 功能
+- 实现基础的 JSON5 角色库加载、分词补全与着色
+- 添加角色别名支持，补全和着色均支持主名与别名
+- 实现角色的跳转功能（Go to Definition）：支持 `F12` / `Ctrl+Click`
+- 引入 `HoverProvider`，显示角色简介、类型、从属关系和颜色预览
+- 右键菜单：新增命令 “Create Role from Selection”，可交互式创建新角色
+- 文件变更监听：角色库文件保存后自动刷新补全和语法高亮
+- 使用 `Intl.Segmenter` 实现中文分词，兼容多语言场景
+
+#### 🧠 优化
+- 优化补全排序逻辑，前缀匹配的候选项优先显示
+
+---
+
+## 🚧 已知问题
+
+- ❗ 中文分词仍不稳定，某些词（如“睡觉”）会误识别部分字符（如“觉”）为角色
+- ❗ 当角色名之间存在包含关系时，着色可能不准确
+- ❗ 当前无 UUID 支持，角色名称需手动保证唯一
+- ❗ 暂不支持“角色关系”建模，未来可能参考数据库关系结构添加
+- ❗ 角色类型尚未开放自定义，计划后续支持用户自定义类型与颜色映射

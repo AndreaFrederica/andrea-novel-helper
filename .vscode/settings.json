@@ -10,6 +10,22 @@
 	"typescript.tsc.autoDetect": "off",
 	"cSpell.words": [
 		"andreafrederica",
+		"jieba",
 		"RRGGBB"
-	]
+	],
+	"editor.suggestOnTriggerCharacters": false,
+	"[markdown]": {
+		"editor.quickSuggestions": {
+			"other": true,
+			"comments": true,
+			"strings": true
+		},
+		"editor.suggestOnTriggerCharacters": true,
+		"editor.wordBasedSuggestions": "allDocuments",
+		"editor.inlineSuggest.enabled": true
+	},
+	"github.copilot.enable": {
+		"markdown": true,
+		"plaintext": true
+	}
 }
