@@ -107,6 +107,12 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 ### 0.0.5
 - 增加 CSpell 字典生成，支持角色名拼写检查
 
+### 0.0.6
+- 重构装饰更新逻辑，独立 `updateDecorations` 函数
+- 优化工具函数，添加区间重叠检查和正则转义功能
+- 现在能避免 hoverRanges 区间重复的问题
+- 修复了角色信息窗口不能显示颜色的bug
+
 ## 问题
 
 - 分词尚不理想 某些词 比如说“睡觉” 觉 可能被发现为角色
