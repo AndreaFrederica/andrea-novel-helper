@@ -32,35 +32,27 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
         const items: WordCountItem[] = [];
 
         for (const d of dirents) {
-            const name = d.name;
-            const full = path.join(root, name);
-            const uri = vscode.Uri.file(full);
+            const uri = vscode.Uri.file(path.join(root, d.name));
+            let item: WordCountItem;
 
             if (d.isDirectory()) {
-                // --- 目录：用 analyzeFolder，返回 TextStats ---
-                const stats = await this.analyzeFolder(full, exts);
-                if (stats.total > 0) {
-                    const item = new WordCountItem(uri, name, stats, vscode.TreeItemCollapsibleState.Collapsed);
-                    item.id = uri.fsPath;
-                    this.itemsById.set(item.id, item);
-
-                    items.push(item);
-                }
-
+                const stats = await this.analyzeFolder(uri.fsPath, exts);
+                if (stats.total === 0) continue;
+                item = new WordCountItem(uri, d.name, stats, vscode.TreeItemCollapsibleState.Collapsed);
             } else {
-                // 文件：看后缀是否匹配
-                const ext = path.extname(name).slice(1).toLowerCase();
+                // —— 一定要把文件当“叶子节点” —— 
+                const ext = path.extname(d.name).slice(1).toLowerCase();
                 if (!exts.includes(ext)) continue;
-
-                // 统计字数
-                // const text = readTextFileDetectEncoding(full);
-                // const cnt = countWordsMixed(await text);
-                const stats = await countAndAnalyze(full);
-                const item = new WordCountItem(uri, name, stats, vscode.TreeItemCollapsibleState.Collapsed);
-                item.id = uri.fsPath;
-                this.itemsById.set(item.id, item);
-                items.push(item);
+                const stats = await countAndAnalyze(uri.fsPath);
+                // 这里改为 None！
+                item = new WordCountItem(uri, d.name, stats, vscode.TreeItemCollapsibleState.None);
             }
+
+            // —— 公共：给每个节点都注册 id 并缓存 —— 
+            item.id = uri.fsPath;
+            this.itemsById.set(item.id, item);
+
+            items.push(item);
         }
 
         // 可选：文件夹在前，文件按名称排序
@@ -100,6 +92,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
     /** 对外提供，通过路径拿到真实的 TreeItem */
     public getItemById(id: string): WordCountItem | undefined {
         return this.itemsById.get(id);
+    }
+
+    public getParent(element: WordCountItem): WordCountItem | undefined {
+        const parentPath = path.dirname(element.resourceUri.fsPath);
+        return this.itemsById.get(parentPath);
     }
 }
 

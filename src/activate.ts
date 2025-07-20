@@ -290,44 +290,27 @@ export function activate(context: vscode.ExtensionContext) {
             wordCountProvider.refresh();
         })
     );
-
-    // // 4. 当激活的编辑器改变时，自动在视图中定位对应文件项
-    // context.subscriptions.push(
-    //     vscode.window.onDidChangeActiveTextEditor(async editor => {
-    //         if (!editor) return;
-    //         const uri = editor.document.uri;
-    //         // 构造一个“stub”节点，ID 必须和真正的 Item 对应
-    //         const stub = new WordCountItem(
-    //             uri,
-    //             path.basename(uri.fsPath),
-    //             { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 },
-    //             vscode.TreeItemCollapsibleState.None
-    //         );
-    //         stub.id = uri.fsPath;
-
-    //         // reveal 会自动展开父节点并滚动到该项
-    //         try {
-    //             await treeView.reveal(stub, { expand: true, select: true, focus: false });
-    //         } catch {
-    //             // 如果该文件不在统计范围里，reveal 会报错，可以忽略
-    //         }
-    //     })
-    // );
-    // 监听编辑器切换
+    // 监听活动编辑器切换
     context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor(editor => {
+        vscode.window.onDidChangeActiveTextEditor(async editor => {
             if (!editor) return;
             const fsPath = editor.document.uri.fsPath;
 
-            // 从 provider 的缓存里，找出刚才被创建过的那个 TreeItem
-            const element = wordCountProvider.getItemById(fsPath);
-            if (element) {
-                // 直接用真实实例 reveal，VS Code 会展开父节点、滚动并选中它
-                treeView.reveal(element, { expand: true, select: true, focus: false })
-                    .then(undefined, () => {
-                        console.warn(`[AndreaNovelHelper] 无法定位到 TreeItem: ${fsPath}`);
-                    });
-            }
+            // —— 用 stub 调用 reveal —— 
+            // id 必须和 provider 里创建节点时赋的 id 完全一致
+            const stub = {
+                id: fsPath,
+                resourceUri: editor.document.uri
+            } as any;
+
+            // expand:true 会让 VS Code 自动展开各层父节点，并调用 getChildren 注册子节点
+            await treeView.reveal(stub, {
+                expand: true,
+                select: true,
+                focus: false
+            }).then(undefined, () => {
+                // 如果该文件根本不在 word count 范围里，就忽略
+            });
         })
     );
 
