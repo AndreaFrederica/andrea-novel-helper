@@ -10,7 +10,10 @@
 	"typescript.tsc.autoDetect": "off",
 	"cSpell.words": [
 		"andreafrederica",
+		"chardet",
+		"dirents",
 		"jieba",
+		"jschardet",
 		"romaji",
 		"RRGGBB",
 		"yarnrc"
