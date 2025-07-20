@@ -31,6 +31,7 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - **转到定义**：在文档中按 F12 或 Ctrl/Cmd+Click 跳到角色库文件内的定义行
 - **快速创建**：选中文本右键，填写属性后自动追加 JSON5 格式角色条目
 - **自动/手动刷新**：`character-gallery.json5` 保存时即时刷新，或在命令面板执行 “Refresh Role Library”
+- **字数统计**：实验性功能，提供工作区内所有支持文件的字数统计
 
 ---
 
@@ -50,7 +51,8 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - **转跳定义**
   ![转跳定义](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/转跳定义.gif)
 
-
+- **字数统计**
+  ![字数统计](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/字数统计.gif)
 
 ---
 
@@ -113,6 +115,9 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - 现在能避免 hoverRanges 区间重复的问题
 - 修复了角色信息窗口不能显示颜色的bug
 
+### 0.0.8
+- 新增实验性字数统计功能，提供对工作区内所有支持文件的字数统计
+
 ## 问题
 
 - 分词尚不理想 某些词 比如说“睡觉” 觉 可能被发现为角色
@@ -120,6 +125,7 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - 没有UUID支持，需要手动保证角色名字不重合
 - 目前没有关系类型支持，后期可能参考数据库的关系模式添加
 - 没有自定义角色类型支持，后期可能添加
+- 实验性字数统计功能可能会有性能问题，尤其在大项目中（后续考虑加入缓存机制）
 
 ---
 
