@@ -25,7 +25,6 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
             : vscode.workspace.workspaceFolders?.[0].uri.fsPath;
         if (!root) return [];
 
-        // 拿到最新支持的后缀列表
         const exts = getSupportedExtensions(); // e.g. ['md','txt','json']
 
         const dirents = await fs.promises.readdir(root, { withFileTypes: true });
@@ -89,7 +88,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
         return agg;
     }
 
-    /** 对外提供，通过路径拿到真实的 TreeItem */
+    /** 通过路径拿到真实的 TreeItem */
     public getItemById(id: string): WordCountItem | undefined {
         return this.itemsById.get(id);
     }
