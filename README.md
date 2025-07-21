@@ -32,12 +32,15 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - **快速创建**：选中文本右键，填写属性后自动追加 JSON5 格式角色条目
 - **自动/手动刷新**：`character-gallery.json5` 保存时即时刷新，或在命令面板执行 “Refresh Role Library”
 - **字数统计**：实验性功能，提供工作区内所有支持文件的字数统计
+- **敏感词识别**：自动检测并高亮敏感词，支持自定义敏感词列表
+- **词汇库**：提供词汇库支持，可以定义词汇并高亮显示
 
 ---
 
 ## 演示
+
 - **创建角色**
-![创建角色演示](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/%E5%88%9B%E5%BB%BA%E8%A7%92%E8%89%B2.gif)
+  ![创建角色演示](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/%E5%88%9B%E5%BB%BA%E8%A7%92%E8%89%B2.gif)
 
 - **为角色创建颜色**
   ![创建颜色](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/为角色创建颜色.gif)
@@ -53,6 +56,9 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 
 - **字数统计**
   ![字数统计](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/字数统计.gif)
+
+- **敏感词识别**
+  ![敏感词识别](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/敏感词识别.gif)
 
 ---
 
@@ -82,7 +88,7 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - 如果角色库非常庞大，首次扫描和着色可能略有延迟
 - JSON5 格式不支持复杂嵌套，目前只解析顶层数组
 - 无自动检测重复名称或别名，需要手动维护库的一致性
-- JS提供的分词器可能不够准确，某些词如“睡觉”可能被错误识别为角色名，后期考虑更换后端来解决，如使用 `jieba` 等中文分词库。
+- JS 提供的分词器可能不够准确，某些词如“睡觉”可能被错误识别为角色名，后期考虑更换后端来解决，如使用 `jieba` 等中文分词库。
 
 ---
 
@@ -100,29 +106,39 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - 使用 `Intl.Segmenter` 实现中文分词，支持多种语言
 
 ### 0.0.2
-- 支持部分i18n，添加中文语言包
+
+- 支持部分 i18n，添加中文语言包
 - 增加角色类型支持，提供默认颜色映射
 
 ### 0.0.4
+
 - 修复了不能动态提供建议的问题
 
 ### 0.0.5
+
 - 增加 CSpell 字典生成，支持角色名拼写检查
 
 ### 0.0.6
+
 - 重构装饰更新逻辑，独立 `updateDecorations` 函数
 - 优化工具函数，添加区间重叠检查和正则转义功能
 - 现在能避免 hoverRanges 区间重复的问题
-- 修复了角色信息窗口不能显示颜色的bug
+- 修复了角色信息窗口不能显示颜色的 bug
 
 ### 0.0.8
+
 - 新增实验性字数统计功能，提供对工作区内所有支持文件的字数统计
+
+### 0.0.9
+- 修复了非资源管理器面板打开文件强制重定向到资源管理器的问题
+- 新增敏感词和词汇功能，更新相关配置和命令
+- 更改了 `rolesFile` 的默认路径为 `novel-helper/character-gallery.json5`，以便更好地适应项目结构
 
 ## 问题
 
 - 分词尚不理想 某些词 比如说“睡觉” 觉 可能被发现为角色
 - 角色名字发生包含时，可能会导致着色不准确
-- 没有UUID支持，需要手动保证角色名字不重合
+- 没有 UUID 支持，需要手动保证角色名字不重合
 - 目前没有关系类型支持，后期可能参考数据库的关系模式添加
 - 没有自定义角色类型支持，后期可能添加
 - 实验性字数统计功能可能会有性能问题，尤其在大项目中（后续考虑加入缓存机制）

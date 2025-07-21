@@ -274,6 +274,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             watcherJson.onDidDelete(() => {
                 roles = [];
+                loadRoles(); //重新加载角色并刷新装饰
                 updateDecorations();
                 vscode.window.showWarningMessage(`${label}（JSON5）文件已删除，已清空列表`);
             });
@@ -295,6 +296,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             watcherTxt.onDidDelete(() => {
                 roles = [];
+                loadRoles(); //重新加载角色并刷新装饰
                 updateDecorations();
                 vscode.window.showWarningMessage(`${label}（TXT）文件已删除，已清空列表`);
             });
