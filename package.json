@@ -28,6 +28,22 @@
       {
         "command": "AndreaNovelHelper.refreshRoles",
         "title": "%command.refreshRoles.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.addSensitiveWord",
+        "title": "%command.addSensitiveWord.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.refreshSensitiveWords",
+        "title": "%command.refreshSensitiveWords.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.addVocabulary",
+        "title": "%command.addVocabulary.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.refreshVocabulary",
+        "title": "%command.refreshVocabulary.title%"
       }
     ],
     "menus": {
@@ -36,11 +52,29 @@
           "when": "editorHasSelection",
           "command": "AndreaNovelHelper.addRoleFromSelection",
           "group": "navigation"
+        },
+        {
+          "when": "editorHasSelection",
+          "command": "AndreaNovelHelper.addSensitiveWord",
+          "group": "navigation"
+        },
+        {
+          "when": "editorHasSelection",
+          "command": "AndreaNovelHelper.addVocabulary",
+          "group": "navigation"
         }
       ],
       "commandPalette": [
         {
           "command": "AndreaNovelHelper.refreshRoles",
+          "group": "navigation"
+        },
+        {
+          "command": "AndreaNovelHelper.refreshSensitiveWords",
+          "group": "navigation"
+        },
+        {
+          "command": "AndreaNovelHelper.refreshVocabulary",
           "group": "navigation"
         }
       ]
@@ -51,8 +85,18 @@
       "properties": {
         "AndreaNovelHelper.rolesFile": {
           "type": "string",
-          "default": "character-gallery.json5",
+          "default": "novel-helper/character-gallery.json5",
           "description": "%config.rolesFile.description%"
+        },
+        "AndreaNovelHelper.sensitiveWordsFile": {
+          "type": "string",
+          "default": "novel-helper/sensitive-words.json5",
+          "description": "%config.sensitiveWordsFile.description%"
+        },
+        "AndreaNovelHelper.vocabularyFile": {
+          "type": "string",
+          "default": "novel-helper/vocabulary.json5",
+          "description": "%config.vocabularyFile.description%"
         },
         "AndreaNovelHelper.minChars": {
           "type": "number",

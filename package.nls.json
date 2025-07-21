@@ -3,8 +3,14 @@
     "extension.description": "Helper tool for novel writing",
     "command.addRoleFromSelection.title": "Create Role from Selection",
     "command.refreshRoles.title": "Refresh Role Library",
+    "command.addSensitiveWord.title": "Create Sensitive Word from Selection",
+    "command.refreshSensitiveWords.title": "Refresh Sensitive Words",
+    "command.addVocabulary.title": "Create Vocabulary from Selection",
+    "command.refreshVocabulary.title": "Refresh Vocabulary",
     "config.title": "Andrea Novel Helper Settings",
     "config.rolesFile.description": "Path to the roles JSON file (relative to workspace root)",
+    "config.sensitiveWordsFile.description": "Path to the sensitive words JSON file (relative to workspace root)",
+    "config.vocabularyFile.description": "Path to the vocabulary JSON file (relative to workspace root)",
     "config.minChars.description": "Minimum number of prefix characters to trigger completion",
     "config.supportedFileTypes.description": "Supported file extensions (without dot)"
 }

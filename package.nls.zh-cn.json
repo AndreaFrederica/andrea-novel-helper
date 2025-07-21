@@ -3,8 +3,14 @@
     "extension.description": "小说写作辅助工具",
     "command.addRoleFromSelection.title": "从选中内容创建角色",
     "command.refreshRoles.title": "刷新角色库",
+    "command.addSensitiveWord.title": "从选中内容创建敏感词",
+    "command.refreshSensitiveWords.title": "刷新敏感词库",
+    "command.addVocabulary.title": "从选中内容创建词汇",
+    "command.refreshVocabulary.title": "刷新词汇库",
     "config.title": "Andrea 小说助手配置",
     "config.rolesFile.description": "角色库 JSON 文件路径（相对于工作区根目录）",
+    "config.sensitiveWordsFile.description": "敏感词库 JSON 文件路径（相对于工作区根目录）",
+    "config.vocabularyFile.description": "词汇库 JSON 文件路径（相对于工作区根目录）",
     "config.minChars.description": "触发补全所需的最少前缀字符数",
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）"
 }

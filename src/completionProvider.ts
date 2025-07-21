@@ -18,8 +18,9 @@ export function createCompletionProvider(roles: Role[]): vscode.Disposable {
                 if (prefix.length < min) return;
                 const defaultColor = cfg.get<string>('defaultColor')!;
 
-                // 1. 先筛角色
+                // 1. 先筛角色，过滤掉类型为 "敏感词" 的
                 const matchedRoles = roles.filter(role => {
+                    if (role.type === "敏感词") return false;
                     const names = [role.name, ...(role.aliases || [])];
                     return names.some(n => n.includes(prefix));
                 });

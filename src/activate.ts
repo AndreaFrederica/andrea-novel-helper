@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
         // ——— 向导：如果角色库文件不存在，询问并初始化 ———
         const createWizard = async () => {
             const choice = await vscode.window.showInformationMessage(
-                `角色库文件 "${rolesFile}" 不存在，是否初始化示例角色库？`,
+                `角色库文件 "${rolesFile1}" 不存在，是否初始化示例角色库？`,
                 '创建',
                 '取消'
             );
@@ -63,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
                 // 自动创建目录（若需要）
                 fs.mkdirSync(path.dirname(fullPath), { recursive: true });
                 fs.writeFileSync(fullPath, content, 'utf8');
-                vscode.window.showInformationMessage(`已创建示例角色库：${rolesFile}`);
+                vscode.window.showInformationMessage(`已创建示例角色库：${rolesFile1}`);
             }
         };
 
@@ -117,6 +117,13 @@ export function activate(context: vscode.ExtensionContext) {
                         color: "#FFA500"
                     }
                 ];
+                // txt库
+                const txtPath = fullPath1.replace(/\.[^/.]+$/, ".txt");
+                if (!fs.existsSync(txtPath)) {
+                    const txtContent = example.map(item => item.name).join('\n');
+                    fs.writeFileSync(txtPath, txtContent, 'utf8');
+                }
+                // json5库
                 fs.mkdirSync(path.dirname(fullPath1), { recursive: true });
                 fs.writeFileSync(fullPath1, JSON5.stringify(example, null, 2), 'utf8');
                 vscode.window.showInformationMessage(`已初始化示例角色库：${rolesFile}`);
@@ -229,46 +236,79 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(defProv);
 
 
-    // —— 1. 自动监听角色库文件变化 —— 
-    //
-    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const rolesFile = cfg.get<string>('rolesFile')!;
+    // —— 1. 自动监听所有库文件变化（包括 txt 版本） —— 
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length) {
-        const root = folders[0].uri.fsPath;
-        // 相对工作区根、监控单个文件
-        const watcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(root, rolesFile)
-        );
-        // 文件改动
-        watcher.onDidChange(() => {
-            loadRoles();
-            updateDecorations();
-            vscode.window.showInformationMessage('角色库已自动刷新');
-        });
-        // 文件被删除或新建也一并处理
-        watcher.onDidCreate(() => {
-            loadRoles();
-            updateDecorations();
-            vscode.window.showInformationMessage('角色库文件已创建，已刷新');
-        });
-        watcher.onDidDelete(() => {
-            roles = [];
-            updateDecorations();
-            vscode.window.showWarningMessage('角色库文件已删除，已清空角色列表');
-        });
-        context.subscriptions.push(watcher);
+        const rootUri = folders[0].uri;
+
+        const fileKeys = [
+            { key: 'rolesFile', label: '角色库' },
+            { key: 'sensitiveWordsFile', label: '敏感词库' },
+            { key: 'vocabularyFile', label: '词汇库' }
+        ];
+
+        for (const { key, label } of fileKeys) {
+            const fileSetting = cfg1.get<string>(key)!;
+            // 确保转成相对于 workspace 根的 POSIX 路径，glob 只识别 '/'
+            const absPath = path.isAbsolute(fileSetting)
+                ? fileSetting
+                : path.join(rootUri.fsPath, fileSetting);
+            let relPath = path.relative(rootUri.fsPath, absPath);
+            relPath = relPath.split(path.sep).join('/'); // 转成 POSIX
+
+            const txtPath = relPath.replace(/\.[^/.]+$/, ".txt");
+
+            // —— 监听 JSON5/JSON 路径 —— 
+            const watcherJson = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(rootUri, relPath)
+            );
+            watcherJson.onDidChange(() => {
+                loadRoles();
+                updateDecorations();
+                vscode.window.showInformationMessage(`${label}（JSON5）已自动刷新`);
+            });
+            watcherJson.onDidCreate(() => {
+                loadRoles();
+                updateDecorations();
+                vscode.window.showInformationMessage(`${label}（JSON5）文件已创建，已刷新`);
+            });
+            watcherJson.onDidDelete(() => {
+                roles = [];
+                updateDecorations();
+                vscode.window.showWarningMessage(`${label}（JSON5）文件已删除，已清空列表`);
+            });
+            context.subscriptions.push(watcherJson);
+
+            // —— 监听 TXT 路径 —— 
+            const watcherTxt = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(rootUri, txtPath)
+            );
+            watcherTxt.onDidChange(() => {
+                loadRoles();        // 确保 loadRoles() 能识别并加载 TXT
+                updateDecorations();
+                vscode.window.showInformationMessage(`${label}（TXT）已自动刷新`);
+            });
+            watcherTxt.onDidCreate(() => {
+                loadRoles();
+                updateDecorations();
+                vscode.window.showInformationMessage(`${label}（TXT）文件已创建，已刷新`);
+            });
+            watcherTxt.onDidDelete(() => {
+                roles = [];
+                updateDecorations();
+                vscode.window.showWarningMessage(`${label}（TXT）文件已删除，已清空列表`);
+            });
+            context.subscriptions.push(watcherTxt);
+        }
     }
 
-    //
     // —— 2. 手动刷新命令 —— 
-    //
     const refreshCmd = vscode.commands.registerCommand(
         'AndreaNovelHelper.refreshRoles',
         () => {
             loadRoles();
             updateDecorations();
-            vscode.window.showInformationMessage('手动刷新角色库完成');
+            vscode.window.showInformationMessage('所有库已手动刷新');
         }
     );
     context.subscriptions.push(refreshCmd);
@@ -290,54 +330,271 @@ export function activate(context: vscode.ExtensionContext) {
             wordCountProvider.refresh();
         })
     );
-    // 监听活动编辑器切换
+    // 4. 监听活动编辑器切换
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(async editor => {
             if (!editor) return;
-            const fsPath = editor.document.uri.fsPath;
 
-            // —— 用 stub 调用 reveal —— 
-            // id 必须和 provider 里创建节点时赋的 id 完全一致
+            // 1) 视图没展开就直接跳过
+            if (!treeView.visible) return;
+
+            const fsPath = editor.document.uri.fsPath;
             const stub = {
                 id: fsPath,
                 resourceUri: editor.document.uri
             } as any;
 
-            // expand:true 会让 VS Code 自动展开各层父节点，并调用 getChildren 注册子节点
-            await treeView.reveal(stub, {
-                expand: true,
-                select: true,
-                focus: false
-            }).then(undefined, () => {
-                // 如果该文件根本不在 word count 范围里，就忽略
-            });
+            try {
+                await treeView.reveal(stub, {
+                    expand: true,
+                    select: true,
+                    focus: false
+                });
+            } catch {
+                // 文件不在统计范围里时忽略
+            }
         })
     );
 
+
+    // —— 命令：从选中创建敏感词 —— 
+    const addSensitiveCmd = vscode.commands.registerCommand(
+        'AndreaNovelHelper.addSensitiveWord',
+        async () => {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const sensitiveFile = cfg.get<string>('sensitiveWordsFile')!;
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!root) return;
+            const fullPath = path.join(root, sensitiveFile);
+
+            // 当敏感词库文件不存在时，初始化示例
+            if (!fs.existsSync(fullPath)) {
+                await vscode.window.showInformationMessage(
+                    `敏感词库文件 "${sensitiveFile}" 不存在，先创建一个示例再继续…`
+                );
+                const example = [
+                    {
+                        name: "示例敏感词",
+                        type: "敏感词",
+                        description: "这是一个示例敏感词。",
+                        color: "#FF0000"
+                    }
+                ];
+                // txt库
+                const txtPath = fullPath.replace(/\.[^/.]+$/, ".txt");
+                if (!fs.existsSync(txtPath)) {
+                    const txtContent = example.map(item => item.name).join('\n');
+                    fs.writeFileSync(txtPath, txtContent, 'utf8');
+                }
+                // json5库
+                fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+                fs.writeFileSync(fullPath, JSON5.stringify(example, null, 2), 'utf8');
+                vscode.window.showInformationMessage(`已初始化示例敏感词库：${sensitiveFile}`);
+            }
+
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+            const sel = editor.selection;
+            const name = editor.document.getText(sel).trim();
+            if (!name) {
+                vscode.window.showWarningMessage('请选择文本作为敏感词');
+                return;
+            }
+
+            // 不询问类型，直接固定为 "敏感词"
+            const description = await vscode.window.showInputBox({
+                placeHolder: '输入敏感词简介（可选）'
+            });
+            const color = await vscode.window.showInputBox({
+                placeHolder: '输入十六进制颜色，如 #FF0000（可选，默认为红色）',
+                validateInput: v => {
+                    return v && !/^#([0-9A-Fa-f]{6})$/.test(v) ? '请输入合法的 #RRGGBB 形式' : null;
+                }
+            });
+
+            let arr: any[];
+            try {
+                const text = fs.readFileSync(fullPath, 'utf8');
+                arr = JSON5.parse(text) as any[];
+            } catch (e) {
+                vscode.window.showErrorMessage(`解析敏感词库失败: ${e}`);
+                return;
+            }
+
+            // 若用户未输入颜色，则使用红色作为默认颜色
+            const newSensitive: any = { name, type: "敏感词" };
+            if (description) newSensitive.description = description;
+            newSensitive.color = color || "#FF0000";
+
+            arr.push(newSensitive);
+            fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
+            vscode.window.showInformationMessage(`已添加敏感词 "${name}" 到 ${sensitiveFile}`);
+
+            // 刷新全局角色列表（包括特殊角色）
+            loadRoles();
+            updateDecorations();
+        }
+    );
+    context.subscriptions.push(addSensitiveCmd);
+
+
+    // —— 命令：从选中创建词汇 —— 
+    const addVocabularyCmd = vscode.commands.registerCommand(
+        'AndreaNovelHelper.addVocabulary',
+        async () => {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const vocabFile = cfg.get<string>('vocabularyFile')!;
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!root) return;
+            const fullPath = path.join(root, vocabFile);
+
+            if (!fs.existsSync(fullPath)) {
+                await vscode.window.showInformationMessage(
+                    `词汇库文件 "${vocabFile}" 不存在，先创建一个示例再继续…`
+                );
+                const example = [
+                    {
+                        name: "示例词汇",
+                        type: "词汇",
+                        description: "这是一个示例词汇。",
+                        color: "#00AAFF"
+                    }
+                ];
+                // txt库
+                const txtPath = fullPath.replace(/\.[^/.]+$/, ".txt");
+                if (!fs.existsSync(txtPath)) {
+                    const txtContent = example.map(item => item.name).join('\n');
+                    fs.writeFileSync(txtPath, txtContent, 'utf8');
+                }
+                // json5库
+                fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+                fs.writeFileSync(fullPath, JSON5.stringify(example, null, 2), 'utf8');
+                vscode.window.showInformationMessage(`已初始化示例词汇库：${vocabFile}`);
+            }
+
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+            const sel = editor.selection;
+            const name = editor.document.getText(sel).trim();
+            if (!name) {
+                vscode.window.showWarningMessage('请选择文本作为词汇');
+                return;
+            }
+
+            const description = await vscode.window.showInputBox({
+                placeHolder: '输入词汇简介（可选）'
+            });
+            const color = await vscode.window.showInputBox({
+                placeHolder: '输入十六进制颜色，如 #00AAFF（可选）',
+                validateInput: v => {
+                    return v && !/^#([0-9A-Fa-f]{6})$/.test(v) ? '请输入合法的 #RRGGBB 形式' : null;
+                }
+            });
+
+            let arr: any[];
+            try {
+                const text = fs.readFileSync(fullPath, 'utf8');
+                arr = JSON5.parse(text) as any[];
+            } catch (e) {
+                vscode.window.showErrorMessage(`解析词汇库失败: ${e}`);
+                return;
+            }
+
+            const newVocab: any = { name, type: "词汇" };
+            if (description) newVocab.description = description;
+            if (color) newVocab.color = color;
+
+            arr.push(newVocab);
+            fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
+            vscode.window.showInformationMessage(`已添加词汇 "${name}" 到 ${vocabFile}`);
+
+            loadRoles();
+            updateDecorations();
+        }
+    );
+    context.subscriptions.push(addVocabularyCmd);
 }
 
 
 /**
- * 加载角色库 JSON5，支持注释与尾逗号
+ * 加载角色库、词汇库和敏感词库，均为 JSON5，支持注释与尾逗号
  */
 export function loadRoles() {
     roles = [];
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const file = cfg.get<string>('rolesFile')!;
     const folders = vscode.workspace.workspaceFolders;
-    if (!folders || !folders.length) return;
-    const root = folders[0].uri.fsPath;
-    const full = path.join(root, file);
-    if (!fs.existsSync(full)) {
-        vscode.window.showWarningMessage(`角色库未找到: ${file}`);
+    if (!folders || !folders.length) {
+        console.error('loadRoles: 未找到工作区文件夹');
         return;
     }
-    try {
-        const text = fs.readFileSync(full, 'utf8');
-        roles = JSON5.parse(text) as Role[];
-    } catch (e) {
-        vscode.window.showErrorMessage(`解析角色库失败: ${e}`);
+    const root = folders[0].uri.fsPath;
+    console.log(`loadRoles: workspace root = ${root}`);
+
+    // 通用加载函数：fileKey 为配置项键，defaultType 为当 txt 版本加载时使用的类型
+    function loadLibrary(fileKey: string, defaultType: string) {
+        const fileName = cfg.get<string>(fileKey);
+        console.log(`loadLibrary: fileKey = ${fileKey}, fileName = ${fileName}`);
+        if (!fileName) {
+            vscode.window.showErrorMessage(`配置项 ${fileKey} 未设置，请检查设置`);
+            console.error(`loadLibrary: ${fileKey} 为 undefined`);
+            return;
+        }
+        const libPath = path.join(root, fileName);
+        console.log(`loadLibrary: libPath = ${libPath}`);
+
+        // 加载 JSON5 版（如果存在）
+        if (fs.existsSync(libPath)) {
+            try {
+                const text = fs.readFileSync(libPath, 'utf8');
+                const arr = JSON5.parse(text) as Role[];
+                roles.push(...arr);
+                console.log(`loadLibrary: 成功加载 JSON5库 ${fileName}`);
+            } catch (e) {
+                vscode.window.showErrorMessage(`解析 ${fileName} 失败: ${e}`);
+                console.error(`loadLibrary: 解析 ${fileName} 失败: ${e}`);
+            }
+        } else {
+            vscode.window.showWarningMessage(`${fileName} 未找到`);
+            console.warn(`loadLibrary: ${libPath} 不存在`);
+        }
+
+        // 加载 txt 版（仅用于用户迁移，不与 JSON5 同步）
+        const txtPath = libPath.replace(/\.[^/.]+$/, ".txt");
+        console.log(`loadLibrary: TXT版本路径 = ${txtPath}`);
+        if (fs.existsSync(txtPath)) {
+            try {
+                const txtContent = fs.readFileSync(txtPath, 'utf8');
+                const lines = txtContent.split(/\r?\n/).filter(line => line.trim() !== '');
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    let role: Role = { name: trimmed, type: defaultType };
+                    if (fileKey === 'rolesFile') {
+                        // 普通角色的 txt 版本：固定类型为 "txt角色"，使用配置中的默认颜色
+                        role.type = "txt角色";
+                        role.color = cfg.get<string>('defaultColor')!;
+                    } else if (fileKey === 'sensitiveWordsFile') {
+                        // 敏感词：保持 "敏感词"，固定红色
+                        role.type = "敏感词";
+                        role.color = "#FF0000";
+                    } else if (fileKey === 'vocabularyFile') {
+                        // 词汇：保持 "词汇"，不设置颜色
+                        role.type = "词汇";
+                    }
+                    // txt 版不支持别名和描述，直接忽略
+                    roles.push(role);
+                }
+                console.log(`loadLibrary: 成功加载 TXT库 ${fileName}`);
+            } catch (e) {
+                vscode.window.showErrorMessage(`解析 TXT ${fileName} 失败: ${e}`);
+                console.error(`loadLibrary: 解析 TXT ${fileName} 失败: ${e}`);
+            }
+        }
     }
+
+    loadLibrary('rolesFile', "角色");
+    loadLibrary('sensitiveWordsFile', "敏感词");
+    loadLibrary('vocabularyFile', "词汇");
+
     generateCSpellDictionary();
 }
 

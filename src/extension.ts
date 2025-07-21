@@ -9,7 +9,7 @@ export interface Role {
 	/** 插入的主名称 */
 	name: string;
 	/** 角色类型：主角、配角、联动角色 */
-	type: '主角' | '配角' | '联动角色';
+	type: '主角' | '配角' | '联动角色' | '敏感词' | '词汇' | string;
 	/** 从属标签，如所属阵营、组织等 */
 	affiliation?: string;
 	/** 可选别名数组 */
