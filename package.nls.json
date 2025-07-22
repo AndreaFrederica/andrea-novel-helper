@@ -8,6 +8,8 @@
     "command.addVocabulary.title": "ANH:Create Vocabulary from Selection",
     "command.refreshVocabulary.title": "ANH:Refresh Vocabulary",
     "command.openDoubleOutline.title": "ANH:Open Double Outline",
+    "command.refreshOutlineDir.title": "ANH:Refresh Outline_Directory",
+    "command.refreshOutlineFile.title": "ANH:Refresh Outline_File",
     "config.title": "Andrea Novel Helper Settings",
     "config.rolesFile.description": "Path to the roles JSON file (relative to workspace root)",
     "config.sensitiveWordsFile.description": "Path to the sensitive words JSON file (relative to workspace root)",

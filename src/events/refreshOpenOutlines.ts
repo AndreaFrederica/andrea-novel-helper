@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { outlineFS } from '../activate';
 
 export function refreshOpenOutlines() {
     const active = vscode.window.activeTextEditor;
@@ -53,25 +54,22 @@ export function refreshOpenOutlines() {
             continue;
         }
         const p = ed.document.uri.path;
-        if (p.endsWith('_dir_outline.md')) {
+        if (p.endsWith('outline_dir')) {
             folderEditor = ed;
-        } else if (p.endsWith('_outline.md')) {
+        } else if (p.endsWith('outline_file')) {
             fileEditor = ed;
         }
     }
+    if (outlineFS !== undefined) {
+        outlineFS.refreshByTraditionalRel(folderOutlineRel);
+        outlineFS.refreshByTraditionalRel(fileOutlineRel);
 
-    if (folderEditor) {
-        vscode.commands.executeCommand(
-            'vscode.open',
-            folderUri,
-            { viewColumn: folderEditor.viewColumn, preview: false }
-        );
-    }
-    if (fileEditor) {
-        vscode.commands.executeCommand(
-            'vscode.open',
-            fileUri,
-            { viewColumn: fileEditor.viewColumn, preview: false }
-        );
+        if (folderEditor) {
+            outlineFS.refreshDir();
+
+        }
+        if (fileEditor) {
+            outlineFS.refreshFile();
+        }
     }
 }

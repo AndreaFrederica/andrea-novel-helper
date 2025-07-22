@@ -38,6 +38,8 @@ export function cleanRoles() {
     roles = [];
 }
 
+export let outlineFS: undefined | OutlineFSProvider = undefined;
+
 // 在 activate 最外层先定义一个变量，初始化成当前激活 editor 的 scheme
 export let lastEditorScheme = vscode.window.activeTextEditor?.document.uri.scheme;
 
@@ -48,16 +50,35 @@ export function activate(context: vscode.ExtensionContext) {
     const outlineRel = cfg1.get<string>('outlinePath', 'novel-helper/outline');
     const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!ws) return;
+    const wsFolders = vscode.workspace.workspaceFolders;
+    if (!wsFolders?.length) {
+        vscode.window.showErrorMessage('请先打开一个工作区');
+        return;
+    }
+    const wsRoot = wsFolders[0].uri.fsPath;
+    outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
+    if (!outlineFS) {
+        vscode.window.showErrorMessage('无法初始化大纲文件系统提供器');
+        return;
+    }
 
-    // 注册 FS Provider
-    const outlineRoot = path.join(ws, outlineRel);
+    // 注册 andrea-outline:// 文件系统提供器
     context.subscriptions.push(
-        vscode.workspace.registerFileSystemProvider(
-            'andrea-outline',
-            new OutlineFSProvider(outlineRoot),
-            { isCaseSensitive: true }
-        )
+        vscode.workspace.registerFileSystemProvider('andrea-outline', outlineFS, { isReadonly: false })
     );
+
+    // 注册刷新命令
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.refreshOutlineDir', () => {
+            if (!outlineFS) { return; }
+            outlineFS.refreshDir();
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.refreshOutlineFile', () => {
+            if (!outlineFS) { return; }
+            outlineFS.refreshFile();
+        })
+    );
+
 
     // 注册“打开双大纲”命令
     context.subscriptions.push(
@@ -67,6 +88,20 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 
+    // 启动完成后，检查一下有没有已经打开的“内容文件”，如果有就刷新一次大纲
+    setTimeout(() => {
+        for (const editor of vscode.window.visibleTextEditors) {
+            const doc = editor.document;
+            if (
+                doc.uri.scheme === 'file' &&
+                (doc.languageId === 'markdown' || doc.languageId === 'plaintext') &&
+                !doc.uri.fsPath.endsWith('_outline.md')
+            ) {
+                refreshOpenOutlines();
+                break; // 找到一个就行了，退出循环
+            }
+        }
+    }, 200); // 延迟下等 VS Code 完全恢复各个 editor
 
     let lastWasContentFile = isContentEditor(vscode.window.activeTextEditor);
 
@@ -109,6 +144,38 @@ export function activate(context: vscode.ExtensionContext) {
             !doc.uri.fsPath.endsWith('_outline.md')
         );
     }
+
+    // 轮询相关状态
+    const pollingInterval = 1000; // 毫秒
+
+    const handle = setInterval(() => {
+
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+        if (outlineFS === undefined) { return; }
+        const outline_2raw_file_dir = outlineFS.getSourceFileFsPath();
+        if (outline_2raw_file_dir === undefined && isContentEditor()) { refreshOpenOutlines(); }
+
+        const uriStr = editor?.document.uri.toString();
+        const now_fsPath = editor?.document.uri.fsPath;
+        console.log('lastActiveUri:', outline_2raw_file_dir, ' current:', now_fsPath);
+        if (now_fsPath !== outline_2raw_file_dir) {
+
+            // 如果新激活的是“内容文件”，就刷新
+            if (
+                editor.document.uri.scheme === 'file' &&
+                (editor.document.languageId === 'markdown' ||
+                    editor.document.languageId === 'plaintext') &&
+                !editor.document.uri.fsPath.endsWith('_outline.md')
+            ) {
+                refreshOpenOutlines();
+            }
+        }
+    }, pollingInterval);
+
+    context.subscriptions.push({
+        dispose: () => clearInterval(handle)
+    });
 
 
     // 若角色库不存在，提示创建示例

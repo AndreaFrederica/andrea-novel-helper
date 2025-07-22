@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { outlineFS } from '../activate';
 
 export async function openDoubleOutline() {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
@@ -48,13 +49,17 @@ export async function openDoubleOutline() {
     }
 
     // 4. 构造 andrea-outline:// URI
-    const folderUri = vscode.Uri.parse(`andrea-outline://outline/${folderOutlineRel}`);
-    const fileUri2 = vscode.Uri.parse(`andrea-outline://outline/${fileOutlineRel}`);
+    const folderUri = vscode.Uri.parse(`${folderOutlineRel}`);
+    const fileUri2 = vscode.Uri.parse(`${fileOutlineRel}`);
+    if (!outlineFS) { return; }
+    outlineFS.refreshByTraditionalRel(folderOutlineRel);
+    outlineFS.refreshByTraditionalRel(fileOutlineRel);
+
 
     // 1) 在第二列打开“文件夹大纲”
     await vscode.commands.executeCommand(
         'vscode.open',
-        folderUri,
+        vscode.Uri.parse('andrea-outline://outline/outline_dir'),
         { viewColumn: vscode.ViewColumn.Two, preview: false }
     );
 
@@ -70,17 +75,19 @@ export async function openDoubleOutline() {
     // 5) 打开“文件大纲”到下半屏（当前聚焦组）
     await vscode.commands.executeCommand(
         'vscode.open',
-        fileUri2,
+        vscode.Uri.parse('andrea-outline://outline/outline_file'),
         { preview: false }
     );
     // 6) 关闭下半屏中的文件夹大纲副本
     const tabs = vscode.window.tabGroups.activeTabGroup.tabs;
     const folderTab = tabs.find(tab =>
         tab.input instanceof vscode.TabInputText &&
-        tab.input.uri.toString() === folderUri.toString()
+        tab.input.uri.toString() === 'andrea-outline://outline/outline_dir'
     );
 
     if (folderTab) {
         await vscode.window.tabGroups.close(folderTab);
     }
+    outlineFS.refreshDir();
+    outlineFS.refreshFile();
 }

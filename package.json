@@ -54,6 +54,14 @@
       {
         "command": "AndreaNovelHelper.openDoubleOutline",
         "title": "%command.openDoubleOutline.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.refreshOutlineDir",
+        "title": "%command.refreshOutlineDir.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.refreshOutlineFile",
+        "title": "%command.refreshOutlineFile.title%"
       }
     ],
     "menus": {

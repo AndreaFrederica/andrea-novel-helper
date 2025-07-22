@@ -283,3 +283,38 @@ export function loadRoles() {
 
 	generateCSpellDictionary();
 }
+
+
+/**
+ * 给定一个 andrea-outline://outline 下的“文件大纲”URI，
+ * 返回它对应的工作区内原始 Markdown 文件的 Uri。
+ * 如果不是文件大纲（不以 `_outline.md` 结尾）或无工作区，返回 undefined。
+ */
+export function getOriginalFileUriFromOutlineUri(outlineUri: vscode.Uri): vscode.Uri | undefined {
+	// 只处理 our custom scheme
+	if (outlineUri.scheme !== 'andrea-outline') {
+		return undefined;
+	}
+
+	// 拿到相对路径，例如 "chapter1/foo_outline.md"
+	const relOutlinePath = outlineUri.path.replace(/^\/+/, '');
+	const suffix = '_outline.md';
+	if (!relOutlinePath.endsWith(suffix)) {
+		return undefined;
+	}
+
+	// 去掉后缀，得到 "chapter1/foo"
+	const withoutSuffix = relOutlinePath.slice(0, -suffix.length);
+	// 构建原文件相对路径 "chapter1/foo.md"
+	const sourceRel = `${withoutSuffix}.md`;
+
+	// 找到工作区根
+	const ws = vscode.workspace.workspaceFolders?.[0];
+	if (!ws) {
+		return undefined;
+	}
+	const wsRoot = ws.uri.fsPath;
+
+	// 返回 file:// Uri
+	return vscode.Uri.file(path.join(wsRoot, sourceRel));
+}
