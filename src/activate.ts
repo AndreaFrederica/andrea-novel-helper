@@ -18,6 +18,7 @@ import { addVocabulary } from './commands/addVocabulary';
 import { refreshRoles } from './commands/refreshRoles';
 import { OutlineFSProvider } from './Provider/outlineFSProvider';
 import { openDoubleOutline } from './commands/openDoubleOutline';
+import { refreshOpenOutlines } from './events/refreshOpenOutlines';
 
 // 全局角色列表
 export let roles: Role[] = [];
@@ -36,6 +37,9 @@ export let decorationTypes: Map<string, vscode.TextEditorDecorationType> =
 export function cleanRoles() {
     roles = [];
 }
+
+// 在 activate 最外层先定义一个变量，初始化成当前激活 editor 的 scheme
+export let lastEditorScheme = vscode.window.activeTextEditor?.document.uri.scheme;
 
 export function activate(context: vscode.ExtensionContext) {
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
@@ -63,15 +67,49 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 
-    // // 可选：自动刷新
-    // context.subscriptions.push(
-    //     vscode.window.onDidChangeActiveTextEditor(() =>
-    //         vscode.commands.executeCommand('AndreaNovelHelper.openDoubleOutline')
-    //     ),
-    //     vscode.workspace.onDidSaveTextDocument(() =>
-    //         vscode.commands.executeCommand('AndreaNovelHelper.openDoubleOutline')
-    //     )
-    // );
+
+    let lastWasContentFile = isContentEditor(vscode.window.activeTextEditor);
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(editor => {
+            // editor === undefined 时肯定不是我们关心的内容文件，直接跳过
+            if (!editor) {
+                return;
+            }
+
+            const isContentFile = isContentEditor(editor);
+
+            // 只有在 “上一个也是内容文件” → “这次也是内容文件” 时，才刷新
+            if (lastWasContentFile && isContentFile) {
+                refreshOpenOutlines();
+            }
+
+            // 不管有没有触发，都更新状态给下次用
+            lastWasContentFile = isContentFile;
+        }),
+
+        vscode.workspace.onDidSaveTextDocument(doc => {
+            // 保存时，只要是普通文件就刷新
+            if (doc.uri.scheme === 'file'
+                && ['markdown', 'plaintext'].includes(doc.languageId)
+                && !doc.uri.fsPath.endsWith('_outline.md')) {
+                refreshOpenOutlines();
+            }
+        })
+    );
+
+
+    /** 判断这个 editor 是不是“真实的内容文件” */
+    function isContentEditor(editor?: vscode.TextEditor): boolean {
+        if (!editor) return false;
+        const doc = editor.document;
+        return (
+            doc.uri.scheme === 'file' &&
+            (doc.languageId === 'markdown' || doc.languageId === 'plaintext') &&
+            !doc.uri.fsPath.endsWith('_outline.md')
+        );
+    }
+
 
     // 若角色库不存在，提示创建示例
     const folders1 = vscode.workspace.workspaceFolders;
