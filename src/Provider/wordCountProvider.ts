@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { countAndAnalyze, countWordsMixed, getSupportedExtensions, mergeStats, readTextFileDetectEncoding, TextStats } from './utils';
+import { countAndAnalyze, countWordsMixed, getSupportedExtensions, mergeStats, readTextFileDetectEncoding, TextStats } from '../utils/utils';
 
 export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem> {
     private _onDidChange = new vscode.EventEmitter<WordCountItem | undefined>();

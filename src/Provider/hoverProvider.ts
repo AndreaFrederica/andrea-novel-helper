@@ -1,8 +1,8 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
-import { hoverRanges } from './activate';
-import { getSupportedLanguages, typeColorMap } from './utils';
-import { Role } from './extension';
+import { hoverRanges } from '../activate';
+import { getSupportedLanguages, typeColorMap } from '../utils/utils';
+import { Role } from '../extension';
 
 export const hoverProv = vscode.languages.registerHoverProvider(
     getSupportedLanguages(),

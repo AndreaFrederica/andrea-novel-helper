@@ -1,8 +1,8 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
-import { hoverRanges, roles, setHoverRanges } from './activate';
-import { Role } from './extension';
-import { getSupportedLanguages, rangesOverlap, typeColorMap } from './utils';
+import { hoverRanges, roles, setHoverRanges } from '../activate';
+import { Role } from '../extension';
+import { getSupportedLanguages, rangesOverlap, typeColorMap } from '../utils/utils';
 import * as path from 'path';
 import AhoCorasick from 'ahocorasick';
 
@@ -176,8 +176,11 @@ export function updateDecorations(editor?: vscode.TextEditor) {
             const cspellTxt = path.join(root, '.vscode', 'cspell-roles.txt');
             if (doc.uri.fsPath !== cspellTxt) {
                 for (const range of ranges) {
-                    const msg = `发现敏感词：${role.name}` +
-                        (role.description ? ` — ${role.description}` : '');
+                    const base = `发现敏感词：${role.name}\n` +
+                        (role.description ? ` ${role.description}` : '');
+                    const lineNum = range.start.line + 1;
+                    const lineText = doc.lineAt(range.start.line).text.trim();
+                    const msg = `${base}\n第 ${lineNum} 行: ${lineText}`;
                     const diag = new vscode.Diagnostic(
                         range,
                         msg,

@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { roles } from './activate';
+import { roles } from '../activate';
 import * as crypto from 'crypto';
 import { tokenizeComplexNames } from './utils';
 
@@ -18,11 +18,11 @@ export function generateCSpellDictionary() {
 
     // 1. 收集角色名、别名和分词结果
     const wordSet = new Set<string>();
-    
+
     for (const role of roles) {
         // 添加原始名称
         wordSet.add(role.name);
-        
+
         // 添加分词结果
         const nameTokens = tokenizeComplexNames(role.name);
         for (const token of nameTokens) {
@@ -30,12 +30,12 @@ export function generateCSpellDictionary() {
                 wordSet.add(token);
             }
         }
-        
+
         // 处理别名
         if (Array.isArray(role.aliases)) {
             for (const alias of role.aliases) {
                 wordSet.add(alias);
-                
+
                 // 添加别名的分词结果
                 const aliasTokens = tokenizeComplexNames(alias);
                 for (const token of aliasTokens) {
@@ -46,7 +46,7 @@ export function generateCSpellDictionary() {
             }
         }
     }
-    
+
     // 2. 排序并准备写入内容
     const sorted = Array.from(wordSet).sort((a, b) => a.localeCompare(b, 'en'));
     const newContent = sorted.join('\n');

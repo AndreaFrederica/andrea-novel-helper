@@ -1,8 +1,8 @@
 /* eslint-disable curly */
 // src/completionProvider.ts
 import * as vscode from 'vscode';
-import { Role } from './extension';
-import { getPrefix, getSupportedLanguages, typeColorMap } from './utils';
+import { Role } from '../extension';
+import { getPrefix, getSupportedLanguages, typeColorMap } from '../utils/utils';
 
 export function createCompletionProvider(roles: Role[]): vscode.Disposable {
     return vscode.languages.registerCompletionItemProvider(

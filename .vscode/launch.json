@@ -9,6 +9,7 @@
 			"name": "Run Extension",
 			"type": "extensionHost",
 			"request": "launch",
+			"trace": true,
 			"args": [
 				"--extensionDevelopmentPath=${workspaceFolder}"
 			],

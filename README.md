@@ -134,6 +134,8 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - 新增敏感词和词汇功能，更新相关配置和命令
 - 更改了 `rolesFile` 的默认路径为 `novel-helper/character-gallery.json5`，以便更好地适应项目结构
 
+### 以后的版本见ChangeLog
+
 ## 问题
 
 - 分词尚不理想 某些词 比如说“睡觉” 觉 可能被发现为角色

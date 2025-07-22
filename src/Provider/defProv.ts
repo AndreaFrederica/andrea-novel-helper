@@ -1,8 +1,8 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
-import { Role } from './extension';
-import { getPrefix, getSupportedLanguages, typeColorMap } from './utils';
-import { hoverRanges } from './activate';
+import { Role } from '../extension';
+import { getPrefix, getSupportedLanguages, typeColorMap } from '../utils/utils';
+import { hoverRanges } from '../activate';
 import * as path from 'path';
 import * as fs from 'fs';
 

@@ -6,7 +6,9 @@ import * as iconv from 'iconv-lite';
 import JSON5 from 'json5';
 
 /* eslint-disable curly */
-import { segmenter } from "./extension";
+import { Role, segmenter } from "../extension";
+import { cleanRoles, roles } from '../activate';
+import { generateCSpellDictionary } from './generateCSpellDictionary';
 
 export interface TextStats {
 	cjkChars: number;  // 中文字符
@@ -200,3 +202,84 @@ export function mergeStats(a: TextStats, b: TextStats): TextStats {
 	};
 }
 
+
+
+/**
+ * 加载角色库、词汇库和敏感词库，均为 JSON5，支持注释与尾逗号
+ */
+export function loadRoles() {
+	cleanRoles();
+	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+	const folders = vscode.workspace.workspaceFolders;
+	if (!folders || !folders.length) {
+		console.error('loadRoles: 未找到工作区文件夹');
+		return;
+	}
+	const root = folders[0].uri.fsPath;
+	console.log(`loadRoles: workspace root = ${root}`);
+	// 通用加载函数：fileKey 为配置项键，defaultType 为当 txt 版本加载时使用的类型
+	function loadLibrary(fileKey: string, defaultType: string) {
+		const fileName = cfg.get<string>(fileKey);
+		console.log(`loadLibrary: fileKey = ${fileKey}, fileName = ${fileName}`);
+		if (!fileName) {
+			vscode.window.showErrorMessage(`配置项 ${fileKey} 未设置，请检查设置`);
+			console.error(`loadLibrary: ${fileKey} 为 undefined`);
+			return;
+		}
+		const libPath = path.join(root, fileName);
+		console.log(`loadLibrary: libPath = ${libPath}`);
+
+		// 加载 JSON5 版（如果存在）
+		if (fs.existsSync(libPath)) {
+			try {
+				const text = fs.readFileSync(libPath, 'utf8');
+				const arr = JSON5.parse(text) as Role[];
+				roles.push(...arr);
+				console.log(`loadLibrary: 成功加载 JSON5库 ${fileName}`);
+			} catch (e) {
+				vscode.window.showErrorMessage(`解析 ${fileName} 失败: ${e}`);
+				console.error(`loadLibrary: 解析 ${fileName} 失败: ${e}`);
+			}
+		} else {
+			vscode.window.showWarningMessage(`${fileName} 未找到`);
+			console.warn(`loadLibrary: ${libPath} 不存在`);
+		}
+
+		// 加载 txt 版（仅用于用户迁移，不与 JSON5 同步）
+		const txtPath = libPath.replace(/\.[^/.]+$/, ".txt");
+		console.log(`loadLibrary: TXT版本路径 = ${txtPath}`);
+		if (fs.existsSync(txtPath)) {
+			try {
+				const txtContent = fs.readFileSync(txtPath, 'utf8');
+				const lines = txtContent.split(/\r?\n/).filter(line => line.trim() !== '');
+				for (const line of lines) {
+					const trimmed = line.trim();
+					let role: Role = { name: trimmed, type: defaultType };
+					if (fileKey === 'rolesFile') {
+						// 普通角色的 txt 版本：固定类型为 "txt角色"，使用配置中的默认颜色
+						role.type = "txt角色";
+						role.color = cfg.get<string>('defaultColor')!;
+					} else if (fileKey === 'sensitiveWordsFile') {
+						// 敏感词：保持 "敏感词"，固定红色
+						role.type = "敏感词";
+						role.color = "#FF0000";
+					} else if (fileKey === 'vocabularyFile') {
+						// 词汇：保持 "词汇"，不设置颜色
+						role.type = "词汇";
+					}
+					// txt 版不支持别名和描述，直接忽略
+					roles.push(role);
+				}
+				console.log(`loadLibrary: 成功加载 TXT库 ${fileName}`);
+			} catch (e) {
+				vscode.window.showErrorMessage(`解析 TXT ${fileName} 失败: ${e}`);
+				console.error(`loadLibrary: 解析 TXT ${fileName} 失败: ${e}`);
+			}
+		}
+	}
+	loadLibrary('rolesFile', "角色");
+	loadLibrary('sensitiveWordsFile', "敏感词");
+	loadLibrary('vocabularyFile', "词汇");
+
+	generateCSpellDictionary();
+}
