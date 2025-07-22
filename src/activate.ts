@@ -10,7 +10,7 @@ import { createCompletionProvider } from './completionProvider';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 import { hoverProv } from './hoverProvider';
 import { defProv } from './defProv';
-import { updateDecorations } from './updateDecorations';
+import { initAutomaton, updateDecorations } from './updateDecorations';
 import { WordCountItem, WordCountProvider } from './wordCountProvider';
 
 
@@ -79,6 +79,30 @@ export function activate(context: vscode.ExtensionContext) {
 
 
     loadRoles();
+    
+    console.log('[AHO] roles:', roles.map(r => r.name));
+    console.log('[AHO] patterns:', roles.flatMap(r => [r.name, ...(r.aliases || [])]));
+
+    initAutomaton();
+
+    // 2. 小防抖：防止用户快速输入时一堆次 update
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const scheduleUpdate = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => updateDecorations(), 200);
+    };
+
+    // 3. 注册事件：切换编辑器／文本变化／保存时都触发
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(scheduleUpdate),
+        vscode.workspace.onDidChangeTextDocument(scheduleUpdate),
+        vscode.workspace.onDidSaveTextDocument(scheduleUpdate)
+    );
+
+    // 4. 第一次激活也跑一次
+    scheduleUpdate();
+
+
     // 配置变更监听
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(e => {
@@ -90,6 +114,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+
 
     // —— 命令：从选中创建角色 —— 
     const addCmd = vscode.commands.registerCommand(
