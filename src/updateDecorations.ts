@@ -6,17 +6,6 @@ import { escapeRegExp, getSupportedLanguages, rangesOverlap, typeColorMap } from
 import * as path from 'path';
 import AhoCorasick from 'ahocorasick';
 
-// // —— 辅助：从匹配的模式文本反查对应的 Role —— 
-// function findRoleByPattern(pat: string): Role | undefined {
-
-//     console.log('[AHO] roles:', roles.map(r => r.name));
-//     console.log('[AHO] patterns:', roles.flatMap(r => [r.name, ...(r.aliases || [])]));
-//     console.log('[AHO] ROLES!:', roles);
-
-//     const t = roles.find(r => r.name === pat || (r.aliases || []).includes(pat));
-//     return t;
-// }
-
 // Diagnostics 集合
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
 
@@ -46,13 +35,6 @@ export function initAutomaton() {
     ac = new AhoCorasick(patterns);
 }
 
-// // 延迟初始化 Aho–Corasick 自动机
-// export function initAutomaton() {
-//     if (ac) return;
-//     const patterns = roles.flatMap(r => [r.name, ...(r.aliases || [])]);
-//     ac = new AhoCorasick(patterns);
-// }
-
 // 主更新函数
 export function updateDecorations(editor?: vscode.TextEditor) {
     const active = editor || vscode.window.activeTextEditor;
@@ -75,9 +57,7 @@ export function updateDecorations(editor?: vscode.TextEditor) {
     // —— 语言过滤 —— 
     if (!getSupportedLanguages().includes(active.document.languageId)) return;
 
-    // —— 清理旧装饰 & hoverRanges & diagnostics —— 
-    decorationTypes.forEach(d => d.dispose());
-    decorationTypes.clear();
+    // —— 清理旧的 hoverRanges & diagnostics —— 
     setHoverRanges([]);
     diagnosticCollection.delete(active.document.uri);
 
@@ -122,6 +102,26 @@ export function updateDecorations(editor?: vscode.TextEditor) {
         hoverRanges.push({ range, role: c.role });
         if (!roleToRanges.has(c.role)) roleToRanges.set(c.role, []);
         roleToRanges.get(c.role)!.push(range);
+    }
+
+    // 1) 对于之前创建过但这次没出现的角色，仅清空它的 ranges
+    for (const [roleName, deco] of decorationTypes) {
+        // 如果 roleToRanges 里没有这个角色名，说明它不再出现在文档里
+        const stillHas = Array.from(roleToRanges.keys()).some(r => r.name === roleName);
+        if (!stillHas) {
+            active.setDecorations(deco, []);
+        }
+    }
+
+    // 2) 对于文档里出现的角色，复用或创建 decorationType，更新 ranges
+    for (const [role, ranges] of roleToRanges) {
+        let deco = decorationTypes.get(role.name);
+        if (!deco) {
+            const color = role.color || typeColorMap[role.type] || defaultColor;
+            deco = vscode.window.createTextEditorDecorationType({ color });
+            decorationTypes.set(role.name, deco);
+        }
+        active.setDecorations(deco, ranges);
     }
 
     // —— 绘制装饰 & 敏感词诊断 —— 
