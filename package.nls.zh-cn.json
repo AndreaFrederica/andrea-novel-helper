@@ -7,10 +7,12 @@
     "command.refreshSensitiveWords.title": "刷新敏感词库",
     "command.addVocabulary.title": "从选中内容创建词汇",
     "command.refreshVocabulary.title": "刷新词汇库",
+    "command.openDoubleOutline.title": "打开双重大纲",
     "config.title": "Andrea 小说助手配置",
     "config.rolesFile.description": "角色库 JSON 文件路径（相对于工作区根目录）",
     "config.sensitiveWordsFile.description": "敏感词库 JSON 文件路径（相对于工作区根目录）",
     "config.vocabularyFile.description": "词汇库 JSON 文件路径（相对于工作区根目录）",
+    "config.outlinePath.description": "大纲目录路径（相对于工作区根目录）",
     "config.minChars.description": "触发补全所需的最少前缀字符数",
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）"
 }

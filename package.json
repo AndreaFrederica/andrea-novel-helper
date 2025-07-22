@@ -20,6 +20,12 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "textDocumentContentProviders": [
+      {
+        "scheme": "andrea-outline",
+        "language": "markdown"
+      }
+    ],
     "commands": [
       {
         "command": "AndreaNovelHelper.addRoleFromSelection",
@@ -44,6 +50,10 @@
       {
         "command": "AndreaNovelHelper.refreshVocabulary",
         "title": "%command.refreshVocabulary.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.openDoubleOutline",
+        "title": "%command.openDoubleOutline.title%"
       }
     ],
     "menus": {
@@ -97,6 +107,10 @@
           "type": "string",
           "default": "novel-helper/vocabulary.json5",
           "description": "%config.vocabularyFile.description%"
+        },"AndreaNovelHelper.outlinePath": {
+          "type": "string",
+          "default": "novel-helper/outline",
+          "description": "%config.outlinePath.description%"
         },
         "AndreaNovelHelper.minChars": {
           "type": "number",

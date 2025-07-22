@@ -16,6 +16,8 @@ import { addRoleFromSelection } from './commands/addRuleFormSelection';
 import { addSensitiveCmd_obj } from './commands/addSensitiveWord';
 import { addVocabulary } from './commands/addVocabulary';
 import { refreshRoles } from './commands/refreshRoles';
+import { OutlineFSProvider } from './Provider/outlineFSProvider';
+import { openDoubleOutline } from './commands/openDoubleOutline';
 
 // 全局角色列表
 export let roles: Role[] = [];
@@ -38,6 +40,38 @@ export function cleanRoles() {
 export function activate(context: vscode.ExtensionContext) {
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
+
+    const outlineRel = cfg1.get<string>('outlinePath', 'novel-helper/outline');
+    const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!ws) return;
+
+    // 注册 FS Provider
+    const outlineRoot = path.join(ws, outlineRel);
+    context.subscriptions.push(
+        vscode.workspace.registerFileSystemProvider(
+            'andrea-outline',
+            new OutlineFSProvider(outlineRoot),
+            { isCaseSensitive: true }
+        )
+    );
+
+    // 注册“打开双大纲”命令
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            'AndreaNovelHelper.openDoubleOutline',
+            openDoubleOutline
+        )
+    );
+
+    // // 可选：自动刷新
+    // context.subscriptions.push(
+    //     vscode.window.onDidChangeActiveTextEditor(() =>
+    //         vscode.commands.executeCommand('AndreaNovelHelper.openDoubleOutline')
+    //     ),
+    //     vscode.workspace.onDidSaveTextDocument(() =>
+    //         vscode.commands.executeCommand('AndreaNovelHelper.openDoubleOutline')
+    //     )
+    // );
 
     // 若角色库不存在，提示创建示例
     const folders1 = vscode.workspace.workspaceFolders;
