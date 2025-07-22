@@ -9,39 +9,50 @@ import AhoCorasick from 'ahocorasick';
 // —— Diagnostics 集合 —— 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
 
+// uri.fsPath -> 上次的 Diagnostic 数组
+const prevDiagnostics = new Map<string, vscode.Diagnostic[]>();
+
+
 // —— Aho–Corasick 自动机 & 模式映射 —— 
 let ac: AhoCorasick;
 const patternMap = new Map<string, Role>();
 
-// —— 装饰器元数据：角色名 → { deco, propsHash } —— 
-interface DecoMeta { deco: vscode.TextEditorDecorationType; propsHash: string; }
+// —— 装饰器元数据：角色名 → { deco, propsHash, prevRanges } —— 
+interface DecoMeta {
+    deco: vscode.TextEditorDecorationType;
+    propsHash: string;
+    prevRanges: vscode.Range[];
+}
 const decorationMeta = new Map<string, DecoMeta>();
 
-/**
- * 初始化（或重建）Aho–Corasick 自动机，
- * 并在 patternMap 里记录每个模式对应的 Role。
- */
+/** 初始化（或重建）自动机 & patternMap */
 export function initAutomaton() {
     patternMap.clear();
     const patterns: string[] = [];
     for (const r of roles) {
-        const key = r.name;
-        patterns.push(key);
-        patternMap.set(key, r);
+        const nameKey = r.name.trim().normalize('NFC');
+        patterns.push(nameKey);
+        patternMap.set(nameKey, r);
         for (const alias of r.aliases || []) {
-            patterns.push(alias);
-            patternMap.set(alias, r);
+            const a = alias.trim().normalize('NFC');
+            patterns.push(a);
+            patternMap.set(a, r);
         }
     }
     // @ts-ignore
     ac = new AhoCorasick(patterns);
 }
 
-/**
- * 更新全文装饰与诊断。可对任意角色属性变化作出响应：
- * 当某角色的 color/type/affiliation/description 有改动时，
- * 会在下次调用时重建该角色的 TextEditorDecorationType。
- */
+/** 比较两个 Range 数组是否相同 */
+function rangesEqual(a: vscode.Range[], b: vscode.Range[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (!a[i].isEqual(b[i])) return false;
+    }
+    return true;
+}
+
+/** 主更新函数 */
 export function updateDecorations(editor?: vscode.TextEditor) {
     const active = editor || vscode.window.activeTextEditor;
     if (!active) return;
@@ -49,7 +60,7 @@ export function updateDecorations(editor?: vscode.TextEditor) {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const folders = vscode.workspace.workspaceFolders;
 
-    // —— 跳过 敏感词/词汇库 文件（JSON5 & TXT） —— 
+    // —— 跳过词库文件 —— 
     if (folders?.length) {
         const root = folders[0].uri.fsPath;
         const fileB = path.join(root, cfg.get<string>('sensitiveWordsFile')!);
@@ -63,31 +74,40 @@ export function updateDecorations(editor?: vscode.TextEditor) {
     // —— 语言过滤 —— 
     if (!getSupportedLanguages().includes(active.document.languageId)) return;
 
-    // —— 清理旧的 hoverRanges & diagnostics —— 
+    // —— 清理 hoverRanges & diagnostics —— 
     setHoverRanges([]);
-    diagnosticCollection.delete(active.document.uri);
+    // diagnosticCollection.delete(active.document.uri);
 
-    // —— 确保自动机已构建 —— 
+    // —— 构建自动机 —— 
     initAutomaton();
 
     const doc = active.document;
     const text = doc.getText();
     const defaultColor = cfg.get<string>('defaultColor')!;
 
-    // —— 全文 Aho–Corasick 搜索 & 收集候选 —— 
-    const hits = ac.search(text) as Array<[number, string]>;
+    // —— 搜索并统一 matchedPatterns 为 string[] —— 
+    // 原生返回可能是 [number, string] 或 [number, string[]]
+    const rawHits = ac.search(text) as unknown as Array<[number, string | string[]]>;
+    const hits: Array<[number, string[]]> = rawHits.map(([endIdx, pat]) => [
+        endIdx,
+        Array.isArray(pat) ? pat : [pat]
+    ]);
+
     type Candidate = { role: Role; text: string; start: number; end: number };
     const candidates: Candidate[] = [];
 
-    for (const [endIdx, rawPat] of hits) {
-        const key = rawPat[0];
-        const role = patternMap.get(key);
-        if (!role) continue;
-        const startIdx = endIdx - key.length + 1;
-        candidates.push({ role, text: key, start: startIdx, end: endIdx + 1 });
+    // —— 收集所有匹配候选 —— 
+    for (const [endIdx, matchedArray] of hits) {
+        for (const raw of matchedArray) {
+            const pat = raw.trim().normalize('NFC');
+            const role = patternMap.get(pat);
+            if (!role) continue;
+            const startIdx = endIdx - pat.length + 1;
+            candidates.push({ role, text: pat, start: startIdx, end: endIdx + 1 });
+        }
     }
 
-    // —— 长度降序 & 去重（最长优先） —— 
+    // —— 长度降序 & 去重 —— 
     candidates.sort((a, b) => b.text.length - a.text.length);
     const selected: Candidate[] = [];
     for (const c of candidates) {
@@ -107,16 +127,18 @@ export function updateDecorations(editor?: vscode.TextEditor) {
         roleToRanges.get(c.role)!.push(range);
     }
 
-    // —— 1) 清空不再出现角色的装饰 —— 
+    // —— 1) 清空已消失角色的装饰 —— 
     for (const [roleName, meta] of decorationMeta) {
         if (![...roleToRanges.keys()].some(r => r.name === roleName)) {
-            active.setDecorations(meta.deco, []);
+            if (meta.prevRanges.length) {
+                active.setDecorations(meta.deco, []);
+                meta.prevRanges = [];
+            }
         }
     }
 
-    // —— 2) 对出现角色：属性未变复用，属性变了重建 —— 
+    // —— 2) 出现角色：属性 或 范围 变动时才更新装饰 —— 
     for (const [role, ranges] of roleToRanges) {
-        // 收集所有关键字段
         const props = {
             color: role.color ?? typeColorMap[role.type] ?? defaultColor,
             type: role.type,
@@ -127,13 +149,19 @@ export function updateDecorations(editor?: vscode.TextEditor) {
 
         let deco: vscode.TextEditorDecorationType;
         const meta = decorationMeta.get(role.name);
-        if (!meta || meta.propsHash !== propsHash) {
-            // 属性变动或首次：销毁旧的、创建新的
+        const need = !meta ||
+            meta.propsHash !== propsHash ||
+            !rangesEqual(ranges, meta.prevRanges);
+
+        if (need) {
             if (meta) meta.deco.dispose();
             deco = vscode.window.createTextEditorDecorationType({ color: props.color });
-            decorationMeta.set(role.name, { deco, propsHash });
+            decorationMeta.set(role.name, {
+                deco,
+                propsHash,
+                prevRanges: ranges.slice()
+            });
         } else {
-            // 复用现有
             deco = meta.deco;
         }
 
@@ -161,10 +189,24 @@ export function updateDecorations(editor?: vscode.TextEditor) {
             }
         }
     }
+    const key = doc.uri.fsPath;
+    const old = prevDiagnostics.get(key) || [];
+    // 简单对比：长度和每个 message + range 串联起来都一样
+    const equal = old.length === diagnostics.length
+        && old.every((d, i) =>
+            d.message === diagnostics[i].message
+            && d.range.isEqual(diagnostics[i].range)
+            && d.severity === diagnostics[i].severity
+        );
 
-    if (diagnostics.length > 0) {
-        diagnosticCollection.set(doc.uri, diagnostics);
-    } else {
-        diagnosticCollection.delete(doc.uri);
+    if (!equal) {
+        if (diagnostics.length) {
+            diagnosticCollection.set(doc.uri, diagnostics);
+        } else {
+            diagnosticCollection.delete(doc.uri);
+        }
+        // 更新缓存
+        prevDiagnostics.set(key, diagnostics.map(d => d));
     }
+
 }
