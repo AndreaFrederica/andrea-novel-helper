@@ -34,6 +34,7 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - **字数统计**：实验性功能，提供工作区内所有支持文件的字数统计
 - **敏感词识别**：自动检测并高亮敏感词，支持自定义敏感词列表
 - **词汇库**：提供词汇库支持，可以定义词汇并高亮显示
+- **实验性大纲**：提供一个实验性的大纲功能，支持在工作区内创建和管理大纲文件（自动创建）
 
 ---
 
@@ -60,6 +61,8 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - **敏感词识别**
   ![敏感词识别](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/敏感词识别.gif)
 
+- **实验性大纲**
+  ![实验性大纲](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/实验性大纲.gif)
 ---
 
 ## 要求 / Requirements
@@ -89,6 +92,7 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - JSON5 格式不支持复杂嵌套，目前只解析顶层数组
 - 无自动检测重复名称或别名，需要手动维护库的一致性
 - JS 提供的分词器可能不够准确，某些词如“睡觉”可能被错误识别为角色名，后期考虑更换后端来解决，如使用 `jieba` 等中文分词库。
+- 大纲窗体在Code刚启动的时候不能正常显示，需要手动刷新一次。
 
 ---
 

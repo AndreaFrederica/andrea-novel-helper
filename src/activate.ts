@@ -21,6 +21,10 @@ import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSPr
 import { activateHover } from './Provider/hoverProvider';
 import { activateDef } from './Provider/defProv';
 
+
+export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
+export let file_outline_url = 'andrea-outline://outline/outline_file.md';
+
 // 全局角色列表
 export let roles: Role[] = [];
 
@@ -54,6 +58,18 @@ export function activate(context: vscode.ExtensionContext) {
 
     const outlineRel = cfg1.get<string>('outlinePath', 'novel-helper/outline');
     const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
+    const uiLang = vscode.env.language;  // 当前 UI 语言代码
+
+    if (uiLang.startsWith('zh')) {
+        dir_outline_url = 'andrea-outline://outline/目录大纲.md';
+        file_outline_url = 'andrea-outline://outline/文件大纲.md';
+        // } else if (uiLang.startsWith('ja')) {
+        //   runJapaneseLogic();
+    } else {
+        dir_outline_url = 'andrea-outline://outline/outline_dir.md';
+        file_outline_url = 'andrea-outline://outline/outline_file.md';
+    }
     //TODO工作区里的多个文件夹兼容没做(要命)
     if (!ws) return;
     const wsFolders = vscode.workspace.workspaceFolders;

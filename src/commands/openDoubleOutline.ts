@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { outlineFS } from '../activate';
+import { dir_outline_url, file_outline_url, outlineFS } from '../activate';
+import { ensureOutlineFileExists } from '../utils/outline';
 
 export async function openDoubleOutline() {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
@@ -36,26 +37,37 @@ export async function openDoubleOutline() {
     const fileOutlineRel = outlineDirRel
         ? `${outlineDirRel}/${fileBase}_outline.md`
         : `${fileBase}_outline.md`;
+    const fullFileName = path.basename(fileUri.fsPath);
+
 
     // 3. 确保物理文件存在
     const physFolderPath = path.join(outlineRoot, folderOutlineRel);
     const physFilePath = path.join(outlineRoot, fileOutlineRel);
     fs.mkdirSync(path.dirname(physFolderPath), { recursive: true });
-    if (!fs.existsSync(physFolderPath)) {
-        fs.writeFileSync(physFolderPath, '# 文件夹大纲\n\n', 'utf8');
-    }
-    if (!fs.existsSync(physFilePath)) {
-        fs.writeFileSync(physFilePath, '# 当前文件大纲\n\n', 'utf8');
-    }
+    ensureOutlineFileExists(
+        physFolderPath,
+        '📁目录大纲',
+        `目录：${folderKey}`
+    );
+
+    ensureOutlineFileExists(
+        physFilePath,
+        '📄文件大纲',
+        `文件：${fullFileName}`
+    );
+
+
     if (!outlineFS) { return; }
     outlineFS.refreshByTraditionalRel(folderOutlineRel);
     outlineFS.refreshByTraditionalRel(fileOutlineRel);
 
-
     // 1) 在第二列打开“文件夹大纲”
+    if (!dir_outline_url || !file_outline_url) {
+        return vscode.window.showErrorMessage('大纲 URL 未正确设置，请检查配置或重启 VSCode');
+    }
     await vscode.commands.executeCommand(
         'vscode.open',
-        vscode.Uri.parse('andrea-outline://outline/outline_dir'),
+        vscode.Uri.parse(dir_outline_url),
         { viewColumn: vscode.ViewColumn.Two, preview: false }
     );
 
@@ -71,19 +83,17 @@ export async function openDoubleOutline() {
     // 5) 打开“文件大纲”到下半屏（当前聚焦组）
     await vscode.commands.executeCommand(
         'vscode.open',
-        vscode.Uri.parse('andrea-outline://outline/outline_file'),
+        vscode.Uri.parse(file_outline_url),
         { preview: false }
     );
     // 6) 关闭下半屏中的文件夹大纲副本
     const tabs = vscode.window.tabGroups.activeTabGroup.tabs;
     const folderTab = tabs.find(tab =>
         tab.input instanceof vscode.TabInputText &&
-        tab.input.uri.toString() === 'andrea-outline://outline/outline_dir'
+        tab.input.uri.path === vscode.Uri.parse(<string>dir_outline_url).path
     );
 
     if (folderTab) {
         await vscode.window.tabGroups.close(folderTab);
     }
-    // outlineFS.refreshDir();
-    // outlineFS.refreshFile();
 }

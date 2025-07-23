@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { outlineFS } from '../activate';
+import { ensureOutlineFileExists } from '../utils/outline';
 
 export function refreshOpenOutlines() {
     const active = vscode.window.activeTextEditor;
@@ -20,7 +21,8 @@ export function refreshOpenOutlines() {
     const rel = path.relative(wsRoot, active.document.uri.fsPath);
     const parts = rel.split(path.sep);
     const dirParts = parts.slice(0, -1);
-    const baseName = path.basename(parts.pop()!, '.md');
+    const temp =parts.pop()!;
+    const baseName = path.basename(temp, '.md');
     const folderKey = dirParts.length ? dirParts[dirParts.length - 1] : 'root';
     const outlineDirRel = dirParts.join('/');
     const folderOutlineRel = outlineDirRel
@@ -29,43 +31,30 @@ export function refreshOpenOutlines() {
     const fileOutlineRel = outlineDirRel
         ? `${outlineDirRel}/${baseName}_outline.md`
         : `${baseName}_outline.md`;
+    const fullFileName = path.basename(temp);
 
-    // —— 2) 确保物理目录和文件存在 —— 
+
+    // 3. 确保物理文件存在
     const physFolderPath = path.join(outlineRoot, folderOutlineRel);
     const physFilePath = path.join(outlineRoot, fileOutlineRel);
     fs.mkdirSync(path.dirname(physFolderPath), { recursive: true });
-    if (!fs.existsSync(physFolderPath)) {
-        fs.writeFileSync(physFolderPath, '# 文件夹大纲\n\n', 'utf8');
-    }
-    if (!fs.existsSync(physFilePath)) {
-        fs.writeFileSync(physFilePath, '# 当前文件大纲\n\n', 'utf8');
-    }
+    ensureOutlineFileExists(
+        physFolderPath,
+        '📁目录大纲',
+        `目录：${folderKey}`
+    );
 
-    // —— 4) 在已打开的 outline 编辑器里分别刷新 —— 
-    let folderEditor: vscode.TextEditor | undefined;
-    let fileEditor: vscode.TextEditor | undefined;
+    ensureOutlineFileExists(
+        physFilePath,
+        '📄文件大纲',
+        `文件：${fullFileName}`
+    );
 
-    for (const ed of vscode.window.visibleTextEditors) {
-        if (ed.document.uri.scheme !== 'andrea-outline') {
-            continue;
-        }
-        const p = ed.document.uri.path;
-        if (p.endsWith('outline_dir')) {
-            folderEditor = ed;
-        } else if (p.endsWith('outline_file')) {
-            fileEditor = ed;
-        }
-    }
     if (outlineFS !== undefined) {
+        console.log(`[RefreshOutlines] 刷新大纲：${folderOutlineRel} & ${fileOutlineRel}`);
         outlineFS.refreshByTraditionalRel(folderOutlineRel);
         outlineFS.refreshByTraditionalRel(fileOutlineRel);
-
-        // if (folderEditor) {
-        //     outlineFS.refreshDir();
-
-        // }
-        // if (fileEditor) {
-        //     outlineFS.refreshFile();
-        // }
+    }else {
+        console.warn('[RefreshOutlines] outlineFS 未定义，无法刷新大纲');
     }
 }

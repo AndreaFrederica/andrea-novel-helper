@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { Volume, createFsFromVolume } from 'memfs';
 import * as realFs from 'fs';
+import { dir_outline_url, file_outline_url } from '../../activate';
 
 /**
  * 基于 memfs 的内存盘 FileSystemProvider
@@ -25,19 +26,19 @@ export class MemoryOutlineFSProvider implements vscode.FileSystemProvider {
 
     /** 根据 alias 或 lastRel 计算内存盘路径 */
     private toMemPath(uri: vscode.Uri): string {
-        if (uri.path === '/outline_dir' && this.lastFolderRel) {
-            return `/current_dir_outline.md`;
+        const decodedPath = decodeURIComponent(uri.path);
+        console.log(`[MemoryOutlineFSProvider] 处理路径：${decodedPath}`);
+        if (['/目录大纲.md', '/outline_dir.md'].includes(decodedPath)) {
+            console.log(`[MemoryOutlineFSProvider] 使用内存盘路径：/current_dir_outline.md`);
+            return '/current_dir_outline.md';
         }
-        if (uri.path === '/outline_file' && this.lastFileRel) {
-            return `/current_file_outline.md`;
+        if (['/文件大纲.md', '/outline_file.md'].includes(decodedPath)) {
+            console.log(`[MemoryOutlineFSProvider] 使用内存盘路径：/current_file_outline.md`);
+            return '/current_file_outline.md';
         }
-        // default listing wrapper
-        if (uri.path === '/') {
-            return '/';
-        }
-        // fallback: use packaging files
-        return uri.path;
+        return decodedPath;
     }
+
 
     watch(): vscode.Disposable { return new vscode.Disposable(() => { }); }
 
@@ -96,11 +97,11 @@ export class MemoryOutlineFSProvider implements vscode.FileSystemProvider {
         if (relPath.endsWith('_dir_outline.md')) {
             this.lastFolderRel = relPath;
             memPath = '/current_dir_outline.md';
-            uri = vscode.Uri.parse('andrea-outline://outline/outline_dir');
+            uri = vscode.Uri.parse(dir_outline_url);
         } else if (relPath.endsWith('_outline.md')) {
             this.lastFileRel = relPath;
             memPath = '/current_file_outline.md';
-            uri = vscode.Uri.parse('andrea-outline://outline/outline_file');
+            uri = vscode.Uri.parse(file_outline_url);
         } else {
             console.warn(`[MemoryOutlineFSProvider] Unexpected relPath: ${relPath}`);
             return;

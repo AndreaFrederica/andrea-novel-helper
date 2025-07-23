@@ -37,3 +37,11 @@ async function buildFileOutline(uri: vscode.Uri): Promise<string> {
     walk(symbols, 0);
     return lines.join('\n');
 }
+
+export function ensureOutlineFileExists(filePath: string, title: string, secondLine: string): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    if (!fs.existsSync(filePath)) {
+        const content = `# ${title}\n> ${secondLine}\n`;
+        fs.writeFileSync(filePath, content, 'utf8');
+    }
+}

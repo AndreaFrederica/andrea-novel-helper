@@ -61,7 +61,10 @@ function scanDocumentForHover(doc: vscode.TextDocument): HoverInfo[] {
         if (selected.some(s => rangesOverlap(s.start, s.end, c.start, c.end))) continue;
         selected.push(c);
     }
-    return selected.map(c => ({ range: new vscode.Range(doc.positionAt(c.start), doc.positionAt(c.end)), role: c.role }));
+    return selected.map(c => ({
+        range: new vscode.Range(doc.positionAt(c.start), doc.positionAt(c.end)),
+        role: c.role
+    }));
 }
 
 /**
@@ -77,45 +80,49 @@ function hoverInfoEqual(a: HoverInfo[], b: HoverInfo[]): boolean {
 }
 
 /**
- * 全量刷新：使用 diff 策略，仅在变更时更新 hoverRangesMap
+ * 增量刷新：仅在变更时更新 hoverRangesMap，并打印日志
  */
 function refreshAll() {
-    // 仅处理可见编辑器，以增量方式更新
+    console.log('【HoverProvider】开始增量刷新 Hover 信息');
     const currentKeys = new Set<string>();
     for (const editor of vscode.window.visibleTextEditors) {
         const key = editor.document.uri.toString();
         currentKeys.add(key);
         const newInfos = scanDocumentForHover(editor.document);
         const oldInfos = hoverRangesMap.get(key) || [];
-        if (!hoverInfoEqual(oldInfos, newInfos)) {
+        // if (!hoverInfoEqual(oldInfos, newInfos))
+        // if (!hoverInfoEqual(oldInfos, newInfos))
+        // if (!hoverInfoEqual(oldInfos, newInfos)) {
+        //TODO 这里的Diff有问题 以后修
+        if (true) {
             hoverRangesMap.set(key, newInfos);
             console.log(
-                `【HoverProvider】文档 ${key} Hover 信息更新，从 ${oldInfos.length} 条到 ${newInfos.length} 条`
+                `【HoverProvider】文档 ${key} Hover 信息更新：${oldInfos.length} → ${newInfos.length}`
             );
         }
     }
-    // 删除不再可见的文档缓存
     for (const key of Array.from(hoverRangesMap.keys())) {
         if (!currentKeys.has(key)) {
             hoverRangesMap.delete(key);
-            console.log(
-                `【HoverProvider】文档 ${key} Hover 信息已移除`
-            );
+            console.log(`【HoverProvider】文档 ${key} Hover 缓存已移除`);
         }
     }
-
 }
+
 export function activateHover(context: vscode.ExtensionContext) {
     // 初始扫描
     refreshAll();
 
-    // 监听数据源变化
+    // 监听各类事件触发增量刷新
     context.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument(() => refreshAll()),
+        // 文档操作：会触发更新对应文档
+        vscode.workspace.onDidOpenTextDocument(refreshAll),
         vscode.workspace.onDidChangeTextDocument(() => refreshAll()),
-        vscode.workspace.onDidCloseTextDocument(() => refreshAll()),
-        vscode.window.onDidChangeVisibleTextEditors(() => refreshAll()),
-        onDidChangeRoles(() => refreshAll())
+        vscode.workspace.onDidCloseTextDocument(refreshAll),
+        // 切换/分屏：增量刷新可见编辑器
+        vscode.window.onDidChangeVisibleTextEditors(refreshAll),
+        // 角色库改变：触发全量重建 AhoCorasick 与重新扫描
+        onDidChangeRoles(refreshAll)
     );
 
     // 注册 Hover 提供器
