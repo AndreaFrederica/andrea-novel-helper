@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { Role } from './extension';
 import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createCompletionProvider } from './Provider/completionProvider';
-import { hoverProv } from './Provider/hoverProvider';
+// import { hoverProv } from './Provider/hoverProvider';
 import { defProv } from './Provider/defProv';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { WordCountProvider } from './Provider/wordCountProvider';
@@ -20,6 +20,7 @@ import { OutlineFSProvider } from './Provider/fileSystem/outlineFSProvider';
 import { openDoubleOutline } from './commands/openDoubleOutline';
 import { refreshOpenOutlines } from './events/refreshOpenOutlines';
 import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSProvider';
+import { activateHover } from './Provider/hoverProvider';
 
 // 全局角色列表
 export let roles: Role[] = [];
@@ -281,7 +282,8 @@ export function activate(context: vscode.ExtensionContext) {
     createCompletionProvider(roles);
 
     // Hover 和 Definition 提供器
-    context.subscriptions.push(hoverProv, defProv);
+    activateHover(context);
+    context.subscriptions.push( defProv);
 
     // 监听所有库文件变更（包括 JSON5 和 TXT）
     if (folders1 && folders1.length) {
