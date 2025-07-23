@@ -7,8 +7,6 @@ import * as vscode from 'vscode';
 import { Role } from './extension';
 import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createCompletionProvider } from './Provider/completionProvider';
-// import { hoverProv } from './Provider/hoverProvider';
-import { defProv } from './Provider/defProv';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { WordCountProvider } from './Provider/wordCountProvider';
 
@@ -21,6 +19,7 @@ import { openDoubleOutline } from './commands/openDoubleOutline';
 import { refreshOpenOutlines } from './events/refreshOpenOutlines';
 import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSProvider';
 import { activateHover } from './Provider/hoverProvider';
+import { activateDef } from './Provider/defProv';
 
 // 全局角色列表
 export let roles: Role[] = [];
@@ -44,6 +43,10 @@ export let outlineFS: undefined | OutlineFSProvider | MemoryOutlineFSProvider = 
 
 // 在 activate 最外层先定义一个变量，初始化成当前激活 editor 的 scheme
 export let lastEditorScheme = vscode.window.activeTextEditor?.document.uri.scheme;
+
+// 用于发布“角色列表已变更”的事件
+export const _onDidChangeRoles = new vscode.EventEmitter<void>();
+export const onDidChangeRoles = _onDidChangeRoles.event;
 
 export function activate(context: vscode.ExtensionContext) {
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
@@ -283,7 +286,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Hover 和 Definition 提供器
     activateHover(context);
-    context.subscriptions.push( defProv);
+    activateDef(context);
 
     // 监听所有库文件变更（包括 JSON5 和 TXT）
     if (folders1 && folders1.length) {

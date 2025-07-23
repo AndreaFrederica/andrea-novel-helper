@@ -7,7 +7,7 @@ import JSON5 from 'json5';
 
 /* eslint-disable curly */
 import { Role, segmenter } from "../extension";
-import { cleanRoles, roles } from '../activate';
+import { _onDidChangeRoles, cleanRoles, roles } from '../activate';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 
 export interface TextStats {
@@ -280,6 +280,7 @@ export function loadRoles() {
 	loadLibrary('rolesFile', "角色");
 	loadLibrary('sensitiveWordsFile', "敏感词");
 	loadLibrary('vocabularyFile', "词汇");
+	_onDidChangeRoles.fire();
 
 	generateCSpellDictionary();
 }
