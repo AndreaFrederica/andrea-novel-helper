@@ -26,12 +26,10 @@ function initAutomaton() {
         const key = r.name.trim().normalize('NFC');
         patterns.push(key);
         patternMap.set(key, r);
-        if (r.aliases) {
-            for (const alias of r.aliases) {
-                const a = alias.trim().normalize('NFC');
-                patterns.push(a);
-                patternMap.set(a, r);
-            }
+        if (r.aliases) for (const alias of r.aliases) {
+            const a = alias.trim().normalize('NFC');
+            patterns.push(a);
+            patternMap.set(a, r);
         }
     }
     // @ts-ignore
@@ -67,71 +65,84 @@ function scanDocumentForHover(doc: vscode.TextDocument): HoverInfo[] {
 }
 
 /**
- * 更新对应 doc 的 Hover 信息
+ * 比较两组 HoverInfo 是否完全一致
  */
-function updateHoverRangesForDocument(doc: vscode.TextDocument) {
-    const key = doc.uri.toString();
-    hoverRangesMap.set(key, scanDocumentForHover(doc));
+function hoverInfoEqual(a: HoverInfo[], b: HoverInfo[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        const ai = a[i], bi = b[i];
+        if (!ai.range.isEqual(bi.range) || ai.role.name !== bi.role.name) return false;
+    }
+    return true;
 }
 
 /**
- * 移除缓存
- */
-function removeHoverRangesForDocument(doc: vscode.TextDocument) {
-    hoverRangesMap.delete(doc.uri.toString());
-}
-
-/**
- * 全量刷新：重新扫描所有可见编辑器
+ * 全量刷新：使用 diff 策略，仅在变更时更新 hoverRangesMap
  */
 function refreshAll() {
-    vscode.window.visibleTextEditors.forEach(editor => updateHoverRangesForDocument(editor.document));
-}
+    // 仅处理可见编辑器，以增量方式更新
+    const currentKeys = new Set<string>();
+    for (const editor of vscode.window.visibleTextEditors) {
+        const key = editor.document.uri.toString();
+        currentKeys.add(key);
+        const newInfos = scanDocumentForHover(editor.document);
+        const oldInfos = hoverRangesMap.get(key) || [];
+        if (!hoverInfoEqual(oldInfos, newInfos)) {
+            hoverRangesMap.set(key, newInfos);
+            console.log(
+                `【HoverProvider】文档 ${key} Hover 信息更新，从 ${oldInfos.length} 条到 ${newInfos.length} 条`
+            );
+        }
+    }
+    // 删除不再可见的文档缓存
+    for (const key of Array.from(hoverRangesMap.keys())) {
+        if (!currentKeys.has(key)) {
+            hoverRangesMap.delete(key);
+            console.log(
+                `【HoverProvider】文档 ${key} Hover 信息已移除`
+            );
+        }
+    }
 
+}
 export function activateHover(context: vscode.ExtensionContext) {
     // 初始扫描
     refreshAll();
 
-    // 监听文档打开、变更与关闭
+    // 监听数据源变化
     context.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument(updateHoverRangesForDocument),
-        vscode.workspace.onDidChangeTextDocument(e => updateHoverRangesForDocument(e.document)),
-        vscode.workspace.onDidCloseTextDocument(removeHoverRangesForDocument),
-        vscode.window.onDidChangeVisibleTextEditors(editors => editors.forEach(editor => {
-            const key = editor.document.uri.toString();
-            if (!hoverRangesMap.has(key)) updateHoverRangesForDocument(editor.document);
-        })),
-        // 监听角色库变更
-        onDidChangeRoles(refreshAll)
+        vscode.workspace.onDidOpenTextDocument(() => refreshAll()),
+        vscode.workspace.onDidChangeTextDocument(() => refreshAll()),
+        vscode.workspace.onDidCloseTextDocument(() => refreshAll()),
+        vscode.window.onDidChangeVisibleTextEditors(() => refreshAll()),
+        onDidChangeRoles(() => refreshAll())
     );
 
     // 注册 Hover 提供器
     const hoverProv = vscode.languages.registerHoverProvider(
         getSupportedLanguages(),
-        { provideHover(doc, pos) {
-            const key = doc.uri.toString();
-            const ranges = hoverRangesMap.get(key) || [];
-            const hit = ranges.find(h => h.range.contains(pos));
-            if (!hit) return;
-            const r = hit.role;
-
-            const md = new vscode.MarkdownString('', true);
-            md.isTrusted = true;
-            md.appendMarkdown(`**${r.name}**\n\n`);
-            if (r.description) md.appendMarkdown(`${r.description}\n\n`);
-            md.appendMarkdown(`**类型**: ${r.type}\n\n`);
-            if (r.affiliation) md.appendMarkdown(`**从属**: ${r.affiliation}\n\n`);
-
-            const defaultColor = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor')!;
-            const c = r.color || typeColorMap[r.type] || defaultColor;
-            const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"${c}\"/></svg>`;
-            const b64 = Buffer.from(svg).toString('base64');
-            const uri = `data:image/svg+xml;base64,${b64}`;
-            md.appendMarkdown(`**颜色**: ![](${uri}) \`${c}\``);
-
-            return new vscode.Hover(md, hit.range);
-        }}
+        {
+            provideHover(doc, pos) {
+                const key = doc.uri.toString();
+                const ranges = hoverRangesMap.get(key) || [];
+                const hit = ranges.find(h => h.range.contains(pos));
+                if (!hit) return;
+                const r = hit.role;
+                const md = new vscode.MarkdownString('', true);
+                md.isTrusted = true;
+                md.appendMarkdown(`**${r.name}**\n\n`);
+                if (r.description) md.appendMarkdown(`${r.description}\n\n`);
+                md.appendMarkdown(`**类型**: ${r.type}\n\n`);
+                if (r.affiliation) md.appendMarkdown(`**从属**: ${r.affiliation}\n\n`);
+                const defaultColor = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor')!;
+                const c = r.color || typeColorMap[r.type] || defaultColor;
+                const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"${c}\"/></svg>`;
+                const b64 = Buffer.from(svg).toString('base64');
+                const uri = `data:image/svg+xml;base64,${b64}`;
+                md.appendMarkdown(`**颜色**: ![](${uri}) \`${c}\``);
+                return new vscode.Hover(md, hit.range);
+            }
+        }
     );
-
     context.subscriptions.push(hoverProv);
 }
