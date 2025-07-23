@@ -16,9 +16,10 @@ import { addRoleFromSelection } from './commands/addRuleFormSelection';
 import { addSensitiveCmd_obj } from './commands/addSensitiveWord';
 import { addVocabulary } from './commands/addVocabulary';
 import { refreshRoles } from './commands/refreshRoles';
-import { OutlineFSProvider } from './Provider/outlineFSProvider';
+import { OutlineFSProvider } from './Provider/fileSystem/outlineFSProvider';
 import { openDoubleOutline } from './commands/openDoubleOutline';
 import { refreshOpenOutlines } from './events/refreshOpenOutlines';
+import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSProvider';
 
 // 全局角色列表
 export let roles: Role[] = [];
@@ -38,7 +39,7 @@ export function cleanRoles() {
     roles = [];
 }
 
-export let outlineFS: undefined | OutlineFSProvider = undefined;
+export let outlineFS: undefined | OutlineFSProvider | MemoryOutlineFSProvider = undefined;
 
 // 在 activate 最外层先定义一个变量，初始化成当前激活 editor 的 scheme
 export let lastEditorScheme = vscode.window.activeTextEditor?.document.uri.scheme;
@@ -49,6 +50,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const outlineRel = cfg1.get<string>('outlinePath', 'novel-helper/outline');
     const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    //TODO工作区里的多个文件夹兼容没做(要命)
     if (!ws) return;
     const wsFolders = vscode.workspace.workspaceFolders;
     if (!wsFolders?.length) {
@@ -56,7 +58,8 @@ export function activate(context: vscode.ExtensionContext) {
         return;
     }
     const wsRoot = wsFolders[0].uri.fsPath;
-    outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
+    // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
+    outlineFS = new MemoryOutlineFSProvider(path.join(wsRoot, outlineRel));
     if (!outlineFS) {
         vscode.window.showErrorMessage('无法初始化大纲文件系统提供器');
         return;

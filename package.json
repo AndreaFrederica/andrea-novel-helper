@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "%extension.name%",
   "description": "%extension.description%",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -115,7 +115,8 @@
           "type": "string",
           "default": "novel-helper/vocabulary.json5",
           "description": "%config.vocabularyFile.description%"
-        },"AndreaNovelHelper.outlinePath": {
+        },
+        "AndreaNovelHelper.outlinePath": {
           "type": "string",
           "default": "novel-helper/outline",
           "description": "%config.outlinePath.description%"
@@ -171,6 +172,7 @@
     "iconv": "^3.0.1",
     "iconv-lite": "^0.6.3",
     "jschardet": "^3.1.4",
-    "json5": "^2.2.3"
+    "json5": "^2.2.3",
+    "memfs": "^4.17.2"
   }
 }

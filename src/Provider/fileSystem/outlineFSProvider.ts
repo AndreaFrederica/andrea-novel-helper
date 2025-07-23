@@ -71,13 +71,23 @@ export class OutlineFSProvider implements vscode.FileSystemProvider {
     /** 外部调用：根据传统 relPath 记录并刷新对应 alias */
     public refreshByTraditionalRel(relPath: string): void {
         if (relPath.endsWith('_dir_outline.md')) {
-            this.lastFolderRel = relPath;
+            // this.lastFolderRel = 'EMPTY_outline.md';
             const alias = vscode.Uri.parse('andrea-outline://outline/outline_dir');
+            this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri: alias }]);
+
+
+            this.lastFolderRel = relPath;
+            this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri: alias }]);
             this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri: alias }]);
         }
         else if (relPath.endsWith('_outline.md')) {
-            this.lastFileRel = relPath;
+            // this.lastFolderRel = 'EMPTY_outline.md';
             const alias = vscode.Uri.parse('andrea-outline://outline/outline_file');
+            
+
+
+            this.lastFileRel = relPath;
+            this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri: alias }]);
             this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri: alias }]);
         }
         // 否则忽略
