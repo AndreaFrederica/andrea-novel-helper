@@ -47,10 +47,6 @@ export async function openDoubleOutline() {
     if (!fs.existsSync(physFilePath)) {
         fs.writeFileSync(physFilePath, '# 当前文件大纲\n\n', 'utf8');
     }
-
-    // 4. 构造 andrea-outline:// URI
-    const folderUri = vscode.Uri.parse(`${folderOutlineRel}`);
-    const fileUri2 = vscode.Uri.parse(`${fileOutlineRel}`);
     if (!outlineFS) { return; }
     outlineFS.refreshByTraditionalRel(folderOutlineRel);
     outlineFS.refreshByTraditionalRel(fileOutlineRel);
@@ -88,6 +84,6 @@ export async function openDoubleOutline() {
     if (folderTab) {
         await vscode.window.tabGroups.close(folderTab);
     }
-    outlineFS.refreshDir();
-    outlineFS.refreshFile();
+    // outlineFS.refreshDir();
+    // outlineFS.refreshFile();
 }

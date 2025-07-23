@@ -10,8 +10,6 @@ export class OutlineFSProvider implements vscode.FileSystemProvider {
     // 新增：保存最后收到的两条 rel
     private lastFolderRel: string | undefined;
     private lastFileRel: string | undefined;
-    private folderMap = new Map<string/*aliasUri.toString()*/, string/*relPath*/>();
-    private fileMap = new Map<string/*aliasUri.toString()*/, string/*relPath*/>();
 
     constructor(private outlineRoot: string) { }
 

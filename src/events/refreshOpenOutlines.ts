@@ -41,10 +41,6 @@ export function refreshOpenOutlines() {
         fs.writeFileSync(physFilePath, '# 当前文件大纲\n\n', 'utf8');
     }
 
-    // —— 3) 构造 andrea-outline:// URI —— 
-    const folderUri = vscode.Uri.parse(`andrea-outline://outline/${folderOutlineRel}`);
-    const fileUri = vscode.Uri.parse(`andrea-outline://outline/${fileOutlineRel}`);
-
     // —— 4) 在已打开的 outline 编辑器里分别刷新 —— 
     let folderEditor: vscode.TextEditor | undefined;
     let fileEditor: vscode.TextEditor | undefined;
@@ -64,12 +60,12 @@ export function refreshOpenOutlines() {
         outlineFS.refreshByTraditionalRel(folderOutlineRel);
         outlineFS.refreshByTraditionalRel(fileOutlineRel);
 
-        if (folderEditor) {
-            outlineFS.refreshDir();
+        // if (folderEditor) {
+        //     outlineFS.refreshDir();
 
-        }
-        if (fileEditor) {
-            outlineFS.refreshFile();
-        }
+        // }
+        // if (fileEditor) {
+        //     outlineFS.refreshFile();
+        // }
     }
 }
