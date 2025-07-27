@@ -20,6 +20,15 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "AndreaNovelHelperSidebar",
+          "title": "%sidebar.anh.title%",
+          "icon": "images/anh_logo_dark.svg"
+        }
+      ]
+    },
     "textDocumentContentProviders": [
       {
         "scheme": "andrea-outline",
@@ -66,9 +75,65 @@
       {
         "command": "AndreaNovelHelper.refreshOutlineFile",
         "title": "%command.refreshOutlineFile.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.openResourceFile",
+        "title": "打开资源文件"
+      },
+      {
+        "command": "AndreaNovelHelper.deleteNode",
+        "title": "删除包/文件"
+      },
+      {
+        "command": "AndreaNovelHelper.createCharacterGallery",
+        "title": "创建 character-gallery.json5"
+      },
+      {
+        "command": "AndreaNovelHelper.createSensitiveWords",
+        "title": "创建 sensitive-words"
+      },
+      {
+        "command": "AndreaNovelHelper.createVocabulary",
+        "title": "创建 vocabulary"
+      },
+      {
+        "command": "AndreaNovelHelper.createSubPackage",
+        "title": "创建子包"
       }
     ],
     "menus": {
+      "view/item/context": [
+        {
+          "when": "view == packageManagerView && viewItem == resourceFile",
+          "command": "AndreaNovelHelper.deleteNode",
+          "group": "inline"
+        },
+        {
+          "when": "view == packageManagerView && viewItem == package",
+          "command": "AndreaNovelHelper.deleteNode",
+          "group": "inline"
+        },
+        {
+          "when": "view == packageManagerView && viewItem == package",
+          "command": "AndreaNovelHelper.createSubPackage",
+          "group": "inline"
+        },
+        {
+          "when": "view == packageManagerView && viewItem == package",
+          "command": "AndreaNovelHelper.createCharacterGallery",
+          "group": "inline"
+        },
+        {
+          "when": "view == packageManagerView && viewItem == package",
+          "command": "AndreaNovelHelper.createSensitiveWords",
+          "group": "inline"
+        },
+        {
+          "when": "view == packageManagerView && viewItem == package",
+          "command": "AndreaNovelHelper.createVocabulary",
+          "group": "inline"
+        }
+      ],
       "editor/title": [
         {
           "command": "AndreaNovelHelper.openDoubleOutline",
@@ -154,6 +219,12 @@
         {
           "id": "wordCountExplorer",
           "name": "Word Count"
+        }
+      ],
+      "AndreaNovelHelperSidebar": [
+        {
+          "id": "packageManagerView",
+          "name": "包管理器"
         }
       ]
     }

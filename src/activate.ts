@@ -8,7 +8,7 @@ import { Role } from './extension';
 import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
-import { WordCountProvider } from './Provider/wordCountProvider';
+import { WordCountProvider } from './Provider/view/wordCountProvider';
 
 import { addRoleFromSelection } from './commands/addRuleFormSelection';
 import { addSensitiveCmd_obj } from './commands/addSensitiveWord';
@@ -20,6 +20,7 @@ import { refreshOpenOutlines } from './events/refreshOpenOutlines';
 import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSProvider';
 import { activateHover } from './Provider/hoverProvider';
 import { activateDef } from './Provider/defProv';
+import { registerPackageManagerView } from './Provider/view/packageManagerView';
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -200,6 +201,7 @@ export function activate(context: vscode.ExtensionContext) {
         dispose: () => clearInterval(handle)
     });
 
+    registerPackageManagerView(context);
 
     // 若角色库不存在，提示创建示例
     const folders1 = vscode.workspace.workspaceFolders;
