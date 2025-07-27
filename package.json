@@ -16,7 +16,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:markdown"
+    "onLanguage:markdown",
+    "onLanguage:plaintext"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -99,39 +100,48 @@
       {
         "command": "AndreaNovelHelper.createSubPackage",
         "title": "创建子包"
+      },
+      {
+        "command": "AndreaNovelHelper.renamePackage",
+        "title": "重命名包"
       }
     ],
     "menus": {
       "view/item/context": [
         {
-          "when": "view == packageManagerView && viewItem == resourceFile",
-          "command": "AndreaNovelHelper.deleteNode",
-          "group": "inline"
-        },
-        {
-          "when": "view == packageManagerView && viewItem == package",
-          "command": "AndreaNovelHelper.deleteNode",
-          "group": "inline"
-        },
-        {
-          "when": "view == packageManagerView && viewItem == package",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createSubPackage",
-          "group": "inline"
+          "group": "1_modification"
         },
         {
-          "when": "view == packageManagerView && viewItem == package",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createCharacterGallery",
-          "group": "inline"
+          "group": "1_modification"
         },
         {
-          "when": "view == packageManagerView && viewItem == package",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createSensitiveWords",
-          "group": "inline"
+          "group": "1_modification"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createVocabulary",
+          "group": "1_modification"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile)",
+          "command": "AndreaNovelHelper.deleteNode",
+          "group": "2_deletion"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError)",
+          "command": "AndreaNovelHelper.openResourceFile",
+          "group": "3_open"
         },
         {
           "when": "view == packageManagerView && viewItem == package",
-          "command": "AndreaNovelHelper.createVocabulary",
-          "group": "inline"
+          "command": "AndreaNovelHelper.renamePackage",
+          "group": "1_modification"
         }
       ],
       "editor/title": [
