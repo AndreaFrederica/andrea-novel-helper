@@ -240,7 +240,29 @@ export function activate(context: vscode.ExtensionContext) {
             }
         };
 
-        if (!fs.existsSync(fullPath)) {
+        // 检查是否存在任何描述文件（角色、敏感词、词汇等）
+        const hasAnyDescriptionFile = () => {
+            const novelHelperDir = path.join(root, 'novel-helper');
+            if (!fs.existsSync(novelHelperDir)) {
+                return false;
+            }
+
+            try {
+                const files = fs.readdirSync(novelHelperDir);
+                // 检查是否有任何相关描述文件
+                return files.some(file => {
+                    const fileName = file.toLowerCase();
+                    const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
+                    const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
+                    return hasKeywords && hasValidExtension;
+                });
+            } catch (error) {
+                return false;
+            }
+        };
+
+        // 只有在默认角色库文件不存在且没有任何描述文件时才提示创建
+        if (!fs.existsSync(fullPath) && !hasAnyDescriptionFile()) {
             createWizard().then(() => {
                 loadRoles();
                 updateDecorations();

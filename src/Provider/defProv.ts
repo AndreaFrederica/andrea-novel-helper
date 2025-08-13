@@ -64,6 +64,27 @@ function findDefinitionInFile(role: Role, filePath: string): vscode.Location | n
                     new vscode.Position(directStringIdx, col)
                 );
             }
+        } else if (fileExt === '.md') {
+            // Markdown 文件：查找一级标题或内容中的角色名
+            const titlePattern = new RegExp(`^#\\s+.*${escapeRegExp(role.name)}.*$`);
+            const titleIdx = lines.findIndex(l => titlePattern.test(l));
+            if (titleIdx >= 0) {
+                const col = lines[titleIdx].indexOf(role.name);
+                return new vscode.Location(
+                    vscode.Uri.file(filePath),
+                    new vscode.Position(titleIdx, col)
+                );
+            }
+
+            // 如果没找到标题，查找内容中的角色名
+            const contentIdx = lines.findIndex(l => l.includes(role.name) && !l.trim().startsWith('#'));
+            if (contentIdx >= 0) {
+                const col = lines[contentIdx].indexOf(role.name);
+                return new vscode.Location(
+                    vscode.Uri.file(filePath),
+                    new vscode.Position(contentIdx, col)
+                );
+            }
         }
 
         return null;

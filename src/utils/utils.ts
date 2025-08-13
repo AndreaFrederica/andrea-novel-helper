@@ -9,6 +9,7 @@ import JSON5 from 'json5';
 import { Role, segmenter } from "../extension";
 import { _onDidChangeRoles, cleanRoles, roles } from '../activate';
 import { globalFileCache } from './fileCache';
+import { parseMarkdownRoles } from './markdownParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 
 export interface TextStats {
@@ -297,7 +298,7 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
  */
 function isRoleFile(fileName: string): boolean {
 	const lowerName = fileName.toLowerCase();
-	const validExtensions = ['.json5', '.txt'];
+	const validExtensions = ['.json5', '.txt', '.md'];
 	const hasValidExtension = validExtensions.some(ext => lowerName.endsWith(ext));
 	
 	if (!hasValidExtension) {
@@ -336,6 +337,8 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 			loadJSON5RoleFile(content, filePath, packagePath, fileType);
 		} else if (fileName.endsWith('.txt')) {
 			loadTXTRoleFile(content, filePath, packagePath, fileType);
+		} else if (fileName.endsWith('.md')) {
+			loadMarkdownRoleFile(content, filePath, packagePath, fileType);
 		}
 	} catch (error) {
 		console.error(`loadRoleFile: 加载文件失败 ${filePath}: ${error}`);
@@ -421,8 +424,26 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 }
 
 /**
- * 加载 TXT 格式的角色文件
+ * 加载 Markdown 格式的角色文件
  */
+function loadMarkdownRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
+	// 如果文件为空，记录日志但不报错
+	if (content.trim() === '') {
+		console.log(`loadMarkdownRoleFile: ${filePath} 是空文件，跳过加载`);
+		return;
+	}
+	
+	try {
+		const markdownRoles = parseMarkdownRoles(content, filePath, packagePath, defaultType);
+		for (const role of markdownRoles) {
+			roles.push(role);
+		}
+		console.log(`loadMarkdownRoleFile: 从 ${filePath} 加载了 ${markdownRoles.length} 个角色`);
+	} catch (error) {
+		console.error(`loadMarkdownRoleFile: 解析 Markdown 文件失败 ${filePath}: ${error}`);
+		throw new Error(`解析 Markdown 文件失败: ${error}`);
+	}
+}
 function loadTXTRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');

@@ -41,8 +41,8 @@ export class PackageNode extends vscode.TreeItem {
         // click to open files if not a directory
         if (!isDir) {
             this.command = {
-                command: 'AndreaNovelHelper.openResourceFile',
-                title: 'Open Resource File',
+                command: 'AndreaNovelHelper.openFile',
+                title: 'Open File',
                 arguments: [this.resourceUri]
             };
         }
@@ -93,9 +93,9 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                             vscode.TreeItemCollapsibleState.Collapsed
                         )
                     );
-                } else if (/character-gallery|sensitive-words|vocabulary/.test(name)) {
+                } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(name)) {
                     const ext = path.extname(name).toLowerCase();
-                    const allowed = ['.json5', '.txt'];
+                    const allowed = ['.json5', '.txt', '.md'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.None
@@ -130,9 +130,9 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                         vscode.TreeItemCollapsibleState.Collapsed
                     )
                 );
-            } else if (/character-gallery|sensitive-words|vocabulary/.test(name)) {
+            } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(name)) {
                 const ext = path.extname(name).toLowerCase();
-                const allowed = ['.json5', '.txt'];
+                const allowed = ['.json5', '.txt', '.md'];
                 const fileNode = new PackageNode(
                     vscode.Uri.file(full),
                     vscode.TreeItemCollapsibleState.None
@@ -163,10 +163,73 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         vscode.window.registerTreeDataProvider('packageManagerView', provider)
     );
 
-    // Command: open resource file
+    // Command: open file
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.openResourceFile', (uri: vscode.Uri) => {
-            vscode.window.showTextDocument(uri);
+        vscode.commands.registerCommand('AndreaNovelHelper.openFile', async (uri: vscode.Uri | PackageNode) => {
+            try {
+                // 如果传入的是 PackageNode，提取 resourceUri
+                const fileUri = uri instanceof vscode.Uri ? uri : (uri as PackageNode).resourceUri;
+                await vscode.window.showTextDocument(fileUri);
+            } catch (error) {
+                vscode.window.showErrorMessage(`无法打开文件: ${error}`);
+            }
+        })
+    );
+
+    // Command: open with specific application
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.openWith', async (node: PackageNode) => {
+            const filePath = node.resourceUri.fsPath;
+            const fileName = path.basename(filePath);
+            
+            // 直接调用 VS Code 的内置"打开方式"命令
+            try {
+                await vscode.commands.executeCommand('explorer.openWith', node.resourceUri);
+            } catch (error) {
+                // 如果上面的命令不可用，提供一个简化的选择菜单
+                const options = [
+                    {
+                        label: 'VS Code 编辑器',
+                        description: '在当前编辑器中打开',
+                        action: 'vscode'
+                    },
+                    {
+                        label: 'VS Code 新窗口',
+                        description: '在新的 VS Code 窗口中打开',
+                        action: 'vscode-new'
+                    },
+                    {
+                        label: '系统默认程序',
+                        description: '使用系统默认关联程序打开',
+                        action: 'system-default'
+                    },
+                    {
+                        label: '文件资源管理器',
+                        description: '在文件资源管理器中显示',
+                        action: 'explorer'
+                    }
+                ];
+
+                const selected = await vscode.window.showQuickPick(options, {
+                    placeHolder: `选择打开 ${fileName} 的方式`,
+                    title: '打开方式'
+                });
+
+                if (selected) {
+                    await executeOpenAction(selected.action, node.resourceUri);
+                }
+            }
+        })
+    );
+
+    // Command: reveal in file explorer
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.revealInExplorer', async (node: PackageNode) => {
+            try {
+                await vscode.commands.executeCommand('revealFileInOS', node.resourceUri);
+            } catch (error) {
+                vscode.window.showErrorMessage(`无法在文件资源管理器中显示文件: ${error}`);
+            }
         })
     );
 
@@ -215,6 +278,14 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
+    // Command: create markdown files with custom names
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.createMarkdownFile', async (node: PackageNode) => {
+            const file = await promptForMarkdownFile(node.resourceUri.fsPath);
+            if (file) provider.refresh();
+        })
+    );
+
     // Command: create sub-package
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.createSubPackage', async (node: PackageNode) => {
@@ -230,35 +301,67 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
-    // Command: rename package
+    // Command: rename package or file
     context.subscriptions.push(
         vscode.commands.registerCommand(
             'AndreaNovelHelper.renamePackage',
             async (node: PackageNode) => {
-                // 弹出输入框，默认值为当前包名
-                const oldName = node.label as string;
-                const newName = await vscode.window.showInputBox({
-                    prompt: `重命名包 ${oldName}`,
-                    value: oldName
-                });
-                if (!newName || newName === oldName) {
-                    return;
-                }
+                const stat = fs.statSync(node.resourceUri.fsPath);
+                if (stat.isDirectory()) {
+                    // 原有的包重命名逻辑
+                    const oldName = node.label as string;
+                    const newName = await vscode.window.showInputBox({
+                        prompt: `重命名包 ${oldName}`,
+                        value: oldName
+                    });
+                    if (!newName || newName === oldName) {
+                        return;
+                    }
 
-                // 计算旧路径和新路径
-                const oldPath = node.resourceUri.fsPath;
-                const newPath = path.join(path.dirname(oldPath), newName);
-                if (fs.existsSync(newPath)) {
-                    vscode.window.showErrorMessage(`目标名称 "${newName}" 已存在`);
-                    return;
-                }
+                    // 计算旧路径和新路径
+                    const oldPath = node.resourceUri.fsPath;
+                    const newPath = path.join(path.dirname(oldPath), newName);
+                    if (fs.existsSync(newPath)) {
+                        vscode.window.showErrorMessage(`目标名称 "${newName}" 已存在`);
+                        return;
+                    }
 
-                // 重命名文件夹
-                fs.renameSync(oldPath, newPath);
-                provider.refresh();
+                    // 重命名文件夹
+                    fs.renameSync(oldPath, newPath);
+                    provider.refresh();
+                } else {
+                    // 新的文件重命名逻辑
+                    const newFileName = await promptForFileRename(node);
+                    if (newFileName) {
+                        provider.refresh();
+                    }
+                }
             }
         )
     );
+
+    // Command: create specific Markdown files
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGalleryMd', async (node: PackageNode) => {
+            const file = await createSpecificMarkdownFile(node.resourceUri.fsPath, '角色');
+            if (file) provider.refresh();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWordsMd', async (node: PackageNode) => {
+            const file = await createSpecificMarkdownFile(node.resourceUri.fsPath, '敏感词');
+            if (file) provider.refresh();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.createVocabularyMd', async (node: PackageNode) => {
+            const file = await createSpecificMarkdownFile(node.resourceUri.fsPath, '词汇');
+            if (file) provider.refresh();
+        })
+    );
+
     // —— 改进的文件系统监听 —— 
     const helperRoot = path.join(rootFsPath, 'novel-helper');
     // 监听 novel-helper 下所有变动
@@ -286,7 +389,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         // 如果是文件，只关注包含关键词的文件
         const fileName = path.basename(uri.fsPath);
         const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
-        const hasValidExtension = /\.(json5|txt)$/i.test(fileName);
+        const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
         
         return hasKeywords && hasValidExtension;
     };
@@ -390,4 +493,252 @@ async function promptForExtension(dir: string, baseName: string): Promise<string
     
     fs.writeFileSync(file, initialContent);
     return file;
+}
+
+async function createSpecificMarkdownFile(dir: string, roleType: string): Promise<string | undefined> {
+    // 导入 Markdown 解析器函数
+    const { generateMarkdownTemplate, generateDefaultFileName, generateCustomFileName } = await import('../../utils/markdownParser.js');
+    
+    // 询问自定义文件名
+    const customName = await vscode.window.showInputBox({
+        prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
+        placeHolder: '例如: 主要人物、禁用词汇等'
+    });
+    
+    // 生成文件名
+    let fileName: string;
+    if (customName && customName.trim()) {
+        fileName = generateCustomFileName(customName.trim(), roleType);
+    } else {
+        fileName = generateDefaultFileName(roleType);
+    }
+    
+    const file = path.join(dir, `${fileName}.md`);
+    if (fs.existsSync(file)) {
+        vscode.window.showWarningMessage(`文件 ${fileName}.md 已存在`);
+        return;
+    }
+    
+    // 生成模板内容
+    const template = generateMarkdownTemplate(roleType);
+    fs.writeFileSync(file, template, 'utf8');
+    
+    // 打开新创建的文件
+    const document = await vscode.workspace.openTextDocument(file);
+    await vscode.window.showTextDocument(document);
+    
+    return file;
+}
+
+async function promptForMarkdownFile(dir: string): Promise<string | undefined> {
+    // 导入 Markdown 解析器函数
+    const { generateMarkdownTemplate, generateDefaultFileName, generateCustomFileName } = await import('../../utils/markdownParser.js');
+    
+    // 选择文件类型
+    const roleType = await vscode.window.showQuickPick(
+        ['角色', '敏感词', '词汇'], 
+        { placeHolder: '选择文件类型' }
+    );
+    if (!roleType) return;
+    
+    // 询问自定义文件名
+    const customName = await vscode.window.showInputBox({
+        prompt: '输入自定义文件名（留空使用默认名称）',
+        placeHolder: '例如: 主要人物、禁用词汇等'
+    });
+    
+    // 生成文件名
+    let fileName: string;
+    if (customName && customName.trim()) {
+        fileName = generateCustomFileName(customName.trim(), roleType);
+    } else {
+        fileName = generateDefaultFileName(roleType);
+    }
+    
+    const file = path.join(dir, `${fileName}.md`);
+    if (fs.existsSync(file)) {
+        vscode.window.showWarningMessage(`${fileName}.md already exists`);
+        return;
+    }
+    
+    // 生成模板内容
+    const template = generateMarkdownTemplate(roleType);
+    fs.writeFileSync(file, template);
+    
+    // 打开新创建的文件
+    const uri = vscode.Uri.file(file);
+    await vscode.window.showTextDocument(uri);
+    
+    return file;
+}
+
+async function promptForFileRename(node: PackageNode): Promise<string | undefined> {
+    const oldPath = node.resourceUri.fsPath;
+    const oldName = path.basename(oldPath);
+    const ext = path.extname(oldName).toLowerCase();
+    const baseName = path.basename(oldName, ext);
+    const dir = path.dirname(oldPath);
+
+    // 检测当前文件类型
+    let detectedType = '角色';
+    if (/sensitive-words|sensitive/i.test(baseName)) {
+        detectedType = '敏感词';
+    } else if (/vocabulary|vocab/i.test(baseName)) {
+        detectedType = '词汇';
+    } else if (/character-gallery|character|role|roles/i.test(baseName)) {
+        detectedType = '角色';
+    }
+
+    // 如果是 .md 文件，使用完整的重命名流程
+    if (ext === '.md') {
+        // 导入 Markdown 解析器函数
+        const { generateCustomFileName, generateDefaultFileName } = await import('../../utils/markdownParser.js');
+        
+        // 选择文件类型
+        const roleType = await vscode.window.showQuickPick(
+            ['角色', '敏感词', '词汇'], 
+            { 
+                placeHolder: '选择文件类型',
+                title: `重命名文件: ${oldName}`
+            }
+        );
+        if (!roleType) return;
+
+        // 询问自定义文件名
+        const customName = await vscode.window.showInputBox({
+            prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
+            placeHolder: '例如: 主要人物、禁用词汇等'
+        });
+        
+        // 生成新文件名
+        let newFileName: string;
+        if (customName && customName.trim()) {
+            newFileName = generateCustomFileName(customName.trim(), roleType);
+        } else {
+            newFileName = generateDefaultFileName(roleType);
+        }
+        
+        const newPath = path.join(dir, `${newFileName}.md`);
+        
+        if (newPath === oldPath) {
+            return; // 没有变化
+        }
+        
+        if (fs.existsSync(newPath)) {
+            vscode.window.showErrorMessage(`文件 ${newFileName}.md 已存在`);
+            return;
+        }
+        
+        // 重命名文件
+        fs.renameSync(oldPath, newPath);
+        return newPath;
+    } 
+    // 对于 .json5 和 .txt 文件，使用简化的重命名流程
+    else if (ext === '.json5' || ext === '.txt') {
+        // 选择文件类型
+        const roleType = await vscode.window.showQuickPick(
+            ['角色', '敏感词', '词汇'], 
+            { 
+                placeHolder: '选择文件类型',
+                title: `重命名文件: ${oldName}`
+            }
+        );
+        if (!roleType) return;
+
+        // 询问自定义文件名前缀
+        const customName = await vscode.window.showInputBox({
+            prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
+            placeHolder: '例如: 主要人物、禁用词汇等'
+        });
+        
+        // 生成新文件名
+        let newFileName: string;
+        if (customName && customName.trim()) {
+            // 生成格式：自定义名字_关键词
+            const keyword = roleType === '角色' ? 'character-gallery' : 
+                           roleType === '敏感词' ? 'sensitive-words' : 'vocabulary';
+            newFileName = `${customName.trim()}_${keyword}`;
+        } else {
+            // 使用默认名称
+            newFileName = roleType === '角色' ? 'character-gallery' : 
+                         roleType === '敏感词' ? 'sensitive-words' : 'vocabulary';
+        }
+        
+        const newPath = path.join(dir, `${newFileName}${ext}`);
+        
+        if (newPath === oldPath) {
+            return; // 没有变化
+        }
+        
+        if (fs.existsSync(newPath)) {
+            vscode.window.showErrorMessage(`文件 ${newFileName}${ext} 已存在`);
+            return;
+        }
+        
+        // 重命名文件
+        fs.renameSync(oldPath, newPath);
+        return newPath;
+    } else {
+        // 对于其他文件类型，使用简单的重命名
+        const newName = await vscode.window.showInputBox({
+            prompt: `重命名文件 ${oldName}`,
+            value: baseName
+        });
+        
+        if (!newName || newName === baseName) {
+            return;
+        }
+        
+        const newPath = path.join(dir, `${newName}${ext}`);
+        
+        if (fs.existsSync(newPath)) {
+            vscode.window.showErrorMessage(`文件 ${newName}${ext} 已存在`);
+            return;
+        }
+        
+        // 重命名文件
+        fs.renameSync(oldPath, newPath);
+        return newPath;
+    }
+}
+
+/**
+ * 执行不同的打开操作
+ */
+async function executeOpenAction(action: string, uri: vscode.Uri): Promise<void> {
+    try {
+        switch (action) {
+            case 'vscode':
+                // 在当前编辑器中打开
+                await vscode.window.showTextDocument(uri);
+                break;
+                
+            case 'vscode-new':
+                // 在新窗口中打开
+                try {
+                    await vscode.commands.executeCommand('vscode.openWith', uri, 'default', vscode.ViewColumn.Beside);
+                } catch {
+                    // 如果上面的命令失败，使用普通的新窗口打开
+                    await vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside });
+                }
+                break;
+                
+            case 'system-default':
+                // 系统默认程序
+                await vscode.env.openExternal(uri);
+                break;
+                
+            case 'explorer':
+                // 在文件资源管理器中显示
+                await vscode.commands.executeCommand('revealFileInOS', uri);
+                break;
+                
+            default:
+                // 默认用 VS Code 打开
+                await vscode.window.showTextDocument(uri);
+                break;
+        }
+    } catch (error) {
+        vscode.window.showErrorMessage(`打开文件失败: ${error}`);
+    }
 }
