@@ -17,5 +17,7 @@
     "config.outlinePath.description": "Path to the outline directory (relative to workspace root)",
     "config.minChars.description": "Minimum number of prefix characters to trigger completion",
     "config.supportedFileTypes.description": "Supported file extensions (without dot)",
+    "config.markdownToolbarEnabled.description": "Enable Markdown selection toolbar",
+    "config.markdownToolbarHeight.description": "Height of the Markdown toolbar (in pixels)",
     "sidebar.anh.title":"Andrea Novel Helper"
 }

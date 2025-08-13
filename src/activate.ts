@@ -22,6 +22,7 @@ import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSPr
 import { activateHover } from './Provider/hoverProvider';
 import { activateDef } from './Provider/defProv';
 import { registerPackageManagerView } from './Provider/view/packageManagerView';
+import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -332,6 +333,9 @@ export function activate(context: vscode.ExtensionContext) {
     activateHover(context);
     activateDef(context);
 
+    // Markdown 工具条
+    activateMarkdownToolbar(context);
+
     // 注释掉传统的文件监听，改为由包管理器统一处理
     // 监听所有库文件变更（包括 JSON5 和 TXT）
     /*
@@ -472,6 +476,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
     decorationTypes.forEach((d) => d.dispose());
+    deactivateMarkdownToolbar();
 }
 
 export { loadRoles };

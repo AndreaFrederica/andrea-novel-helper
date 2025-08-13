@@ -15,5 +15,7 @@
     "config.outlinePath.description": "大纲目录路径（相对于工作区根目录）",
     "config.minChars.description": "触发补全所需的最少前缀字符数",
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）",
+    "config.markdownToolbarEnabled.description": "启用 Markdown 选区工具条",
+    "config.markdownToolbarHeight.description": "Markdown 工具条高度（像素）",
     "sidebar.anh.title":"Andrea小说助手"
 }

@@ -15,6 +15,33 @@
 				"kind": "build",
 				"isDefault": true
 			}
+		},
+		{
+			"label": "VSCE: 打包扩展",
+			"type": "shell",
+			"command": "npx vsce package",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "VSCE: 发布扩展",
+			"type": "shell",
+			"command": "npx vsce publish",
+			"group": "none",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"clear": true
+			},
+			"problemMatcher": []
 		}
 	]
 }

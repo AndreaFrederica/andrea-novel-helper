@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+    }
+    .container {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: var(--vscode-editorWidget-background);
+      color: var(--vscode-editor-foreground);
+      border: 1px solid var(--vscode-editorWidget-border);
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      font: 12px/1 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial;
+      /* 可以通过调整 margin-left 来控制工具条的水平位置 */
+    }
+    button {
+      border: none;
+      background: transparent;
+      color: inherit;
+      padding: 3px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    button:hover { 
+      background: var(--vscode-toolbar-hoverBackground); 
+    }
+    button:active {
+      background: var(--vscode-toolbar-activeBackground);
+    }
+    .sep { 
+      width: 1px; 
+      height: 14px; 
+      background: var(--vscode-editorWidget-border); 
+      margin: 0 2px; 
+    }
+    .icon-btn {
+      font-weight: bold;
+      min-width: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <button class="icon-btn" data-action="bold" title="粗体"><b>B</b></button>
+    <button class="icon-btn" data-action="italic" title="斜体"><i>I</i></button>
+    <button class="icon-btn" data-action="strike" title="删除线"><s>S</s></button>
+    <div class="sep"></div>
+    <button data-action="code" title="代码">code</button>
+    <button data-action="link" title="链接">link</button>
+    <div class="sep"></div>
+    <button data-action="h1" title="一级标题">H1</button>
+    <button data-action="h2" title="二级标题">H2</button>
+    <button data-action="h3" title="三级标题">H3</button>
+    <div class="sep"></div>
+    <button data-action="ul" title="无序列表">• List</button>
+    <button data-action="ol" title="有序列表">1. List</button>
+    <button data-action="quote" title="引用">" Quote"</button>
+    <div class="sep"></div>
+    <button data-action="task" title="任务列表">☐ Task</button>
+    <button data-action="clear" title="清除格式">Clear</button>
+  </div>
+  
+  <script>
+    const vscode = acquireVsCodeApi();
+    
+    document.body.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      
+      // 添加点击反馈
+      btn.style.transform = 'scale(0.95)';
+      setTimeout(() => {
+        btn.style.transform = '';
+      }, 100);
+      
+      vscode.postMessage({ 
+        type: 'format', 
+        action: btn.dataset.action 
+      });
+    }, { passive: true });
+    
+    // 阻止右键菜单
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+  </script>
+</body>
+</html>
