@@ -1,0 +1,47 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "WordCount Ignore",
+    "scopeName": "source.wcignore",
+    "patterns": [
+        {
+            "include": "#comment"
+        },
+        {
+            "include": "#pattern"
+        }
+    ],
+    "repository": {
+        "comment": {
+            "patterns": [
+                {
+                    "name": "comment.line.number-sign.wcignore",
+                    "match": "^\\s*#.*$"
+                }
+            ]
+        },
+        "pattern": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.glob.wcignore",
+                    "match": "[*?\\[\\]]"
+                },
+                {
+                    "name": "constant.character.escape.wcignore",
+                    "match": "\\\\."
+                },
+                {
+                    "name": "keyword.operator.negation.wcignore",
+                    "match": "^!"
+                },
+                {
+                    "name": "keyword.operator.directory.wcignore",
+                    "match": "/$"
+                },
+                {
+                    "name": "string.unquoted.wcignore",
+                    "match": "^[^#\\s].*"
+                }
+            ]
+        }
+    }
+}

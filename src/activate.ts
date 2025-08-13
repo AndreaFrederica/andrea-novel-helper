@@ -388,6 +388,47 @@ export function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(treeView);
 
+    // 监听 .gitignore 和 .wcignore 文件变化，刷新字数统计
+    if (folders1 && folders1.length) {
+        const rootUri = folders1[0].uri;
+        
+        // 监听 .gitignore 文件
+        const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(rootUri, '.gitignore')
+        );
+        gitignoreWatcher.onDidChange(() => {
+            wordCountProvider.refreshIgnoreParser();
+            vscode.window.showInformationMessage('检测到 .gitignore 变化，已刷新字数统计');
+        });
+        gitignoreWatcher.onDidCreate(() => {
+            wordCountProvider.refreshIgnoreParser();
+            vscode.window.showInformationMessage('检测到 .gitignore 创建，已刷新字数统计');
+        });
+        gitignoreWatcher.onDidDelete(() => {
+            wordCountProvider.refreshIgnoreParser();
+            vscode.window.showInformationMessage('检测到 .gitignore 删除，已刷新字数统计');
+        });
+        context.subscriptions.push(gitignoreWatcher);
+
+        // 监听 .wcignore 文件
+        const wcignoreWatcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(rootUri, '.wcignore')
+        );
+        wcignoreWatcher.onDidChange(() => {
+            wordCountProvider.refreshIgnoreParser();
+            vscode.window.showInformationMessage('检测到 .wcignore 变化，已刷新字数统计');
+        });
+        wcignoreWatcher.onDidCreate(() => {
+            wordCountProvider.refreshIgnoreParser();
+            vscode.window.showInformationMessage('检测到 .wcignore 创建，已刷新字数统计');
+        });
+        wcignoreWatcher.onDidDelete(() => {
+            wordCountProvider.refreshIgnoreParser();
+            vscode.window.showInformationMessage('检测到 .wcignore 删除，已刷新字数统计');
+        });
+        context.subscriptions.push(wcignoreWatcher);
+    }
+
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.refreshWordCount', () => {
             wordCountProvider.refresh();

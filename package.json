@@ -23,6 +23,21 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "wcignore",
+        "aliases": ["WordCount Ignore", "wcignore"],
+        "extensions": [".wcignore"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "wcignore",
+        "scopeName": "source.wcignore",
+        "path": "./syntaxes/wcignore.tmLanguage.json"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
