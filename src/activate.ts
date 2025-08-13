@@ -9,6 +9,7 @@ import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { WordCountProvider } from './Provider/view/wordCountProvider';
+import { initAhoCorasickManager } from './utils/ahoCorasickManager';
 
 import { addRoleFromSelection } from './commands/addRuleFormSelection';
 import { addSensitiveCmd_obj } from './commands/addSensitiveWord';
@@ -202,6 +203,9 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     registerPackageManagerView(context);
+
+    // 初始化 AhoCorasick 管理器
+    initAhoCorasickManager(context);
 
     // 若角色库不存在，提示创建示例
     const folders1 = vscode.workspace.workspaceFolders;

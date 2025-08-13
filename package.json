@@ -17,7 +17,9 @@
   ],
   "activationEvents": [
     "onLanguage:markdown",
-    "onLanguage:plaintext"
+    "onLanguage:plaintext",
+    "onFileSystem:andrea-outline",
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {

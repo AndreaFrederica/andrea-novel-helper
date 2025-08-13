@@ -4,16 +4,12 @@ import { hoverRanges, roles, setHoverRanges } from '../activate';
 import { Role } from '../extension';
 import { getSupportedLanguages, rangesOverlap, typeColorMap } from '../utils/utils';
 import * as path from 'path';
-import AhoCorasick from 'ahocorasick';
+import { ahoCorasickManager } from '../utils/ahoCorasickManager';
 
 // —— Diagnostics 集合 —— 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
 // uri.fsPath -> 上次的 Diagnostic 数组
 const prevDiagnostics = new Map<string, vscode.Diagnostic[]>();
-
-// —— Aho–Corasick 自动机 & 模式映射 —— 
-let ac: AhoCorasick;
-const patternMap = new Map<string, Role>();
 
 // —— 装饰器元数据：角色名 → { deco, propsHash } —— 
 interface DecoMeta {
@@ -24,18 +20,7 @@ const decorationMeta = new Map<string, DecoMeta>();
 
 /** 初始化（或重建）自动机 & patternMap */
 export function initAutomaton() {
-    patternMap.clear();
-    const patterns: string[] = [];
-    for (const r of roles) {
-        const nameKey = r.name.trim().normalize('NFC');
-        patterns.push(nameKey); patternMap.set(nameKey, r);
-        for (const alias of r.aliases || []) {
-            const a = alias.trim().normalize('NFC');
-            patterns.push(a); patternMap.set(a, r);
-        }
-    }
-    // @ts-ignore
-    ac = new AhoCorasick(patterns);
+    ahoCorasickManager.initAutomaton();
 }
 
 /** 比较两个 Range 数组是否相同 */
@@ -108,7 +93,7 @@ export function updateDecorations() {
         // 重建自动机并搜索
         initAutomaton();
         const text = doc.getText();
-        const rawHits = ac.search(text) as unknown as Array<[number, string | string[]]>;
+        const rawHits = ahoCorasickManager.search(text);
         const hits: Array<[number, string[]]> = rawHits.map(([endIdx, pat]) => [
             endIdx, Array.isArray(pat) ? pat : [pat]
         ]);
@@ -119,7 +104,7 @@ export function updateDecorations() {
         for (const [endIdx, arr] of hits) {
             for (const raw of arr) {
                 const pat = raw.trim().normalize('NFC');
-                const role = patternMap.get(pat);
+                const role = ahoCorasickManager.getRole(pat);
                 if (!role) continue;
                 candidates.push({ role, text: pat, start: endIdx - pat.length + 1, end: endIdx + 1 });
             }

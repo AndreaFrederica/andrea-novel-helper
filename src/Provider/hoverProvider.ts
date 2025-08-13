@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import { getSupportedLanguages, typeColorMap, rangesOverlap } from '../utils/utils';
 import { roles, onDidChangeRoles } from '../activate';
-import AhoCorasick from 'ahocorasick';
+import { ahoCorasickManager } from '../utils/ahoCorasickManager';
 import { Role } from '../extension';
 
 // 存储每个文档的 Hover 信息
@@ -12,44 +12,19 @@ interface HoverInfo {
 }
 export const hoverRangesMap = new Map<string, HoverInfo[]>();
 
-// —— Aho–Corasick 自动机 & 模式映射 ——
-let ac: AhoCorasick;
-const patternMap = new Map<string, Role>();
-
-/**
- * 初始化（或重建）自动机 & patternMap
- */
-function initAutomaton() {
-    patternMap.clear();
-    const patterns: string[] = [];
-    for (const r of roles) {
-        const key = r.name.trim().normalize('NFC');
-        patterns.push(key);
-        patternMap.set(key, r);
-        if (r.aliases) for (const alias of r.aliases) {
-            const a = alias.trim().normalize('NFC');
-            patterns.push(a);
-            patternMap.set(a, r);
-        }
-    }
-    // @ts-ignore
-    ac = new AhoCorasick(patterns);
-}
-
 /**
  * 扫描文档，生成 Hover 信息列表
  */
 function scanDocumentForHover(doc: vscode.TextDocument): HoverInfo[] {
-    initAutomaton();
     const text = doc.getText();
-    const rawHits = ac.search(text) as Array<[number, string | string[]]>;
+    const rawHits = ahoCorasickManager.search(text);
     type Candidate = { role: Role; start: number; end: number };
     const candidates: Candidate[] = [];
     for (const [endIdx, patOrArr] of rawHits) {
         const patterns = Array.isArray(patOrArr) ? patOrArr : [patOrArr];
         for (const raw of patterns) {
             const pat = raw.trim().normalize('NFC');
-            const role = patternMap.get(pat);
+            const role = ahoCorasickManager.getRole(pat);
             if (!role) continue;
             const start = endIdx - pat.length + 1;
             candidates.push({ role, start, end: endIdx + 1 });
