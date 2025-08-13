@@ -22,9 +22,6 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
-  "enabledApiProposals": [
-    "editorInsets"
-  ],
   "contributes": {
     "languages": [
       {

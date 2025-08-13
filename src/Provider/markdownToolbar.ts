@@ -1,14 +1,10 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
 
-let inset: any | undefined;
-let insetLine = -1;
 let disposables: vscode.Disposable[] = [];
 let statusBarItem: vscode.StatusBarItem | undefined;
-let lastNotificationTime = 0;
-const NOTIFICATION_COOLDOWN = 3000; // 3秒冷却时间
+
+const MD_KIND_ROOT = vscode.CodeActionKind.Refactor.append('markdown');
 
 class MarkdownCodeActionProvider implements vscode.CodeActionProvider {
     provideCodeActions(
@@ -34,47 +30,58 @@ class MarkdownCodeActionProvider implements vscode.CodeActionProvider {
         const actions: vscode.CodeAction[] = [];
 
         // 内联格式化操作
-        actions.push(this.createFormatAction('$(bold) 将选中文本设为粗体', 'bold', range, '**'));
-        actions.push(this.createFormatAction('$(italic) 将选中文本设为斜体', 'italic', range, '*'));
-        actions.push(this.createFormatAction('$(strikethrough) 将选中文本设为删除线', 'strike', range, '~~'));
-        actions.push(this.createFormatAction('$(code) 将选中文本设为行内代码', 'code', range, '`'));
-        actions.push(this.createLinkAction('$(link) 将选中文本转换为链接', range));
+        actions.push(this.createFormatAction('$(text-size) 粗体', 'bold', range));
+        actions.push(this.createFormatAction('$(italic) 斜体', 'italic', range));
+        actions.push(this.createFormatAction('$(edit) 删除线', 'strike', range));
+        actions.push(this.createFormatAction('$(symbol-string) 行内代码', 'code', range));
+        actions.push(this.createLinkAction('$(link-external) 转换为链接', range));
 
-        // 标题操作（总是显示，因为可以应用于单行或多行）
-        actions.push(this.createBlockAction('$(heading) 转换为 H1 标题', 'h1', range));
-        actions.push(this.createBlockAction('$(heading) 转换为 H2 标题', 'h2', range));
-        actions.push(this.createBlockAction('$(heading) 转换为 H3 标题', 'h3', range));
-        actions.push(this.createBlockAction('$(heading) 转换为 H4 标题', 'h4', range));
+        // 标题操作
+        actions.push(this.createBlockAction('$(symbol-text) H1 标题', 'h1', range));
+        actions.push(this.createBlockAction('$(symbol-text) H2 标题', 'h2', range));
+        actions.push(this.createBlockAction('$(symbol-text) H3 标题', 'h3', range));
+        actions.push(this.createBlockAction('$(symbol-text) H4 标题', 'h4', range));
 
         // 列表和其他块级格式化操作
-        actions.push(this.createBlockAction('$(list-unordered) 转换为无序列表', 'ul', range));
-        actions.push(this.createBlockAction('$(list-ordered) 转换为有序列表', 'ol', range));
-        actions.push(this.createBlockAction('$(tasklist) 转换为任务列表', 'task', range));
-        actions.push(this.createBlockAction('$(quote) 转换为引用', 'quote', range));
+        actions.push(this.createBlockAction('$(list-flat) 无序列表', 'ul', range));
+        actions.push(this.createBlockAction('$(list-ordered) 有序列表', 'ol', range));
+        actions.push(this.createBlockAction('$(checklist) 任务列表', 'task', range));
+        actions.push(this.createBlockAction('$(quote) 引用', 'quote', range));
 
         // 清除格式操作
         if (this.hasMarkdownFormatting(selectedText)) {
-            actions.push(this.createClearAction('$(clear-all) 清除 Markdown 格式', range));
+            actions.push(this.createClearAction('$(clear-all) 清除格式', range));
         }
 
         // 添加打开完整菜单的选项
-        actions.push(this.createMenuAction('$(menu) 打开完整格式化菜单...', range));
+        actions.push(this.createMenuAction('$(tools) 更多格式选项...', range));
 
         return actions;
     }
 
-    private createFormatAction(title: string, action: string, range: vscode.Range, marker: string): vscode.CodeAction {
-        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Refactor);
+    // private createFormatAction(title: string, action: string, range: vscode.Range): vscode.CodeAction {
+    //     const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Empty.append('markdown.format'));
+    //     codeAction.command = {
+    //         command: 'AndreaNovelHelper.applyMarkdownFormat',
+    //         title: title,
+    //         arguments: [action, range]
+    //     };
+    //     return codeAction;
+    // }
+    private createFormatAction(title: string, action: string, range: vscode.Range) {
+        const kind = vscode.CodeActionKind.Source.append('markdown').append('format');
+        const codeAction = new vscode.CodeAction(title, kind);
         codeAction.command = {
             command: 'AndreaNovelHelper.applyMarkdownFormat',
-            title: title,
+            title,
             arguments: [action, range]
         };
         return codeAction;
     }
 
+
     private createLinkAction(title: string, range: vscode.Range): vscode.CodeAction {
-        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Refactor);
+        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Empty.append('markdown.format'));
         codeAction.command = {
             command: 'AndreaNovelHelper.applyMarkdownFormat',
             title: title,
@@ -84,7 +91,7 @@ class MarkdownCodeActionProvider implements vscode.CodeActionProvider {
     }
 
     private createBlockAction(title: string, action: string, range: vscode.Range): vscode.CodeAction {
-        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Refactor);
+        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Empty.append('markdown.format'));
         codeAction.command = {
             command: 'AndreaNovelHelper.applyMarkdownFormat',
             title: title,
@@ -94,7 +101,7 @@ class MarkdownCodeActionProvider implements vscode.CodeActionProvider {
     }
 
     private createClearAction(title: string, range: vscode.Range): vscode.CodeAction {
-        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Refactor);
+        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Empty.append('markdown.format'));
         codeAction.command = {
             command: 'AndreaNovelHelper.applyMarkdownFormat',
             title: title,
@@ -104,7 +111,7 @@ class MarkdownCodeActionProvider implements vscode.CodeActionProvider {
     }
 
     private createMenuAction(title: string, range: vscode.Range): vscode.CodeAction {
-        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Refactor);
+        const codeAction = new vscode.CodeAction(title, vscode.CodeActionKind.Empty.append('markdown.format'));
         codeAction.command = {
             command: 'AndreaNovelHelper.showMarkdownFormatMenu',
             title: title,
@@ -126,17 +133,17 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
     // 注册代码操作提供器
     const codeActionProvider = new MarkdownCodeActionProvider();
     const codeActionDisposable = vscode.languages.registerCodeActionsProvider(
-        ['markdown', 'plaintext'], 
-        codeActionProvider, 
+        ['markdown', 'plaintext'],
+        codeActionProvider,
         {
-            providedCodeActionKinds: [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Refactor]
+            providedCodeActionKinds: [MD_KIND_ROOT]
         }
     );
 
     const showForSelection = (editor: vscode.TextEditor) => {
         // 仅对 markdown 和 plaintext 生效
         if (!['markdown', 'plaintext'].includes(editor.document.languageId)) {
-            hideInset();
+            hideStatusBar();
             return;
         }
 
@@ -144,48 +151,18 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
         const config = vscode.workspace.getConfiguration('AndreaNovelHelper');
         const toolbarEnabled = config.get<boolean>('markdownToolbarEnabled', true);
         if (!toolbarEnabled) {
-            hideInset();
+            hideStatusBar();
             return;
         }
 
         const sel = editor.selection;
         if (!sel || sel.isEmpty) {
-            hideInset();
+            hideStatusBar();
             return;
         }
 
-        // 从配置中获取工具条高度
-        const toolbarHeight = config.get<number>('markdownToolbarHeight', 28);
-
-        // 将工具条锚定到选区的起始行
-        const line = sel.start.line;
-        // 若同一行已存在就不重复创建，仅更新内容
-        if (!inset || insetLine !== line) {
-            hideInset();
-            insetLine = line;
-            // 尝试使用实验性 API，如果不可用则显示状态栏消息
-            try {
-                const createInset = (vscode.window as any).createWebviewTextEditorInset;
-                if (createInset) {
-                    inset = createInset(editor, line, toolbarHeight);
-                    inset.webview.options = { enableScripts: true };
-                    inset.webview.html = getToolbarHtml(context);
-                    inset.webview.onDidReceiveMessage((msg: any) => handleMessage(msg, editor));
-                } else {
-                    // 如果实验性 API 不可用，显示状态栏消息作为替代
-                    showStatusBarToolbar(editor, sel);
-                    return;
-                }
-            } catch (error) {
-                console.error('WebviewTextEditorInset API error:', error);
-                // 回退到状态栏显示
-                showStatusBarToolbar(editor, sel);
-                return;
-            }
-        } else if (inset) {
-            // 已存在时同步刷新（主题变化等）
-            inset.webview.html = getToolbarHtml(context);
-        }
+        // 显示状态栏工具条
+        showStatusBarToolbar(editor, sel);
     };
 
     // 监听：选区变化、可见范围变化、活动编辑器变化、配置变化
@@ -208,10 +185,10 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
             const originalSelection = editor.selection;
             const selection = new vscode.Selection(range.start, range.end);
             editor.selection = selection;
-            
+
             const msg = { type: 'format', action: action };
             await handleMessage(msg, editor);
-            
+
             // 恢复原始选区
             editor.selection = originalSelection;
         }),
@@ -219,7 +196,7 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
             const config = vscode.workspace.getConfiguration('AndreaNovelHelper');
             const currentEnabled = config.get<boolean>('markdownToolbarEnabled', true);
             const newEnabled = !currentEnabled;
-            
+
             config.update('markdownToolbarEnabled', newEnabled, vscode.ConfigurationTarget.Global).then(() => {
                 const ed = vscode.window.activeTextEditor;
                 if (!ed) return;
@@ -227,7 +204,7 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
                     showForSelection(ed);
                     vscode.window.showInformationMessage('Markdown 工具条已启用');
                 } else {
-                    hideInset();
+                    hideStatusBar();
                     vscode.window.showInformationMessage('Markdown 工具条已禁用');
                 }
             });
@@ -235,10 +212,10 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('AndreaNovelHelper.showMarkdownFormatMenu', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) return;
-            
+
             const selection = editor.selection;
             if (!selection || selection.isEmpty) return;
-            
+
             const items = [
                 { label: '$(bold) 粗体', action: 'bold' },
                 { label: '$(italic) 斜体', action: 'italic' },
@@ -255,11 +232,11 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
                 { label: '$(tasklist) 任务列表', action: 'task' },
                 { label: '$(clear-all) 清除格式', action: 'clear' }
             ];
-            
+
             const selected = await vscode.window.showQuickPick(items, {
                 placeHolder: '选择 Markdown 格式化选项'
             });
-            
+
             if (selected) {
                 const msg = { type: 'format', action: selected.action };
                 await handleMessage(msg, editor);
@@ -277,17 +254,12 @@ export function activateMarkdownToolbar(context: vscode.ExtensionContext) {
 }
 
 export function deactivateMarkdownToolbar() {
-    hideInset();
-    statusBarItem?.dispose();
-    statusBarItem = undefined;
+    hideStatusBar();
     disposables.forEach(d => d.dispose());
     disposables = [];
 }
 
-function hideInset() {
-    inset?.dispose();
-    inset = undefined;
-    insetLine = -1;
+function hideStatusBar() {
     statusBarItem?.hide();
 }
 
@@ -296,17 +268,17 @@ function showStatusBarToolbar(editor: vscode.TextEditor, selection: vscode.Selec
         // 保留在右下角，避免干扰其他功能
         statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     }
-    
+
     const selectedText = editor.document.getText(selection);
     const truncatedText = selectedText.length > 15 ? selectedText.substring(0, 15) + '...' : selectedText;
-    
+
     // 使用更醒目的图标和文字
     statusBarItem.text = `$(tools) MD格式: "${truncatedText}"`;
     statusBarItem.tooltip = 'Markdown 格式化工具 - 点击打开选项';
     statusBarItem.command = 'AndreaNovelHelper.showMarkdownFormatMenu';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');
     statusBarItem.show();
-    
+
     // 状态栏作为备用方案，主要依赖代码操作
 }
 
@@ -322,16 +294,16 @@ async function showQuickFormatOptions(editor: vscode.TextEditor, selection: vsco
         { label: '$(list-unordered) 无序列表 - 文本', action: 'ul', description: '将选中文本转换为无序列表' },
         { label: '$(clear-all) 清除格式', action: 'clear', description: '移除所有 Markdown 格式' }
     ];
-    
+
     const selected = await vscode.window.showQuickPick(commonFormats, {
         placeHolder: '选择常用的 Markdown 格式',
         matchOnDescription: true
     });
-    
+
     if (selected) {
         const msg = { type: 'format', action: selected.action };
         await handleMessage(msg, editor);
-        
+
         // 格式化完成后显示成功提示
         const selectedText = editor.document.getText(selection);
         const truncatedText = selectedText.length > 15 ? selectedText.substring(0, 15) + '...' : selectedText;
@@ -341,72 +313,9 @@ async function showQuickFormatOptions(editor: vscode.TextEditor, selection: vsco
     }
 }
 
-function getToolbarHtml(context: vscode.ExtensionContext): string {
-    // 读取HTML文件
-    const htmlPath = path.join(__dirname, 'markdown-toolbar.html');
-    try {
-        return fs.readFileSync(htmlPath, 'utf8');
-    } catch (error) {
-        // 如果文件不存在，返回基本的HTML
-        return getFallbackHtml();
-    }
-}
-
-function getFallbackHtml(): string {
-    return /* html */ `
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          :root { color-scheme: light dark; }
-          body { margin: 0; padding: 0; background: transparent; }
-          .container {
-            display: inline-flex; gap: 6px; align-items: center; padding: 2px 6px;
-            border-radius: 6px; background: var(--vscode-editorWidget-background);
-            color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-editorWidget-border);
-            box-shadow: 0 2px 8px rgba(0,0,0,.2); font: 12px/1 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial;
-          }
-          button { border: none; background: transparent; color: inherit; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-          button:hover { background: var(--vscode-toolbar-hoverBackground); }
-          .sep { width: 1px; height: 14px; background: var(--vscode-editorWidget-border); margin: 0 2px; }
-          .icon-btn { font-weight: bold; min-width: 20px; text-align: center; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <button class="icon-btn" data-action="bold" title="粗体"><b>B</b></button>
-          <button class="icon-btn" data-action="italic" title="斜体"><i>I</i></button>
-          <button class="icon-btn" data-action="strike" title="删除线"><s>S</s></button>
-          <button data-action="code" title="行内代码">code</button>
-          <button data-action="link" title="链接">🔗</button>
-          <div class="sep"></div>
-          <button data-action="h1" title="一级标题">H1</button>
-          <button data-action="h2" title="二级标题">H2</button>
-          <button data-action="h3" title="三级标题">H3</button>
-          <div class="sep"></div>
-          <button data-action="ul" title="无序列表">• List</button>
-          <button data-action="ol" title="有序列表">1. List</button>
-          <button data-action="quote" title="引用">❝ Quote</button>
-          <button data-action="task" title="任务列表">☐ Task</button>
-          <div class="sep"></div>
-          <button data-action="clear" title="清除格式">✕ Clear</button>
-        </div>
-        <script>
-          const vscode = acquireVsCodeApi();
-          document.body.addEventListener('click', (e) => {
-            const btn = e.target.closest('button[data-action]');
-            if (!btn) return;
-            vscode.postMessage({ type: 'format', action: btn.dataset.action });
-          });
-        </script>
-      </body>
-    </html>`;
-}
-
 async function handleMessage(msg: any, editor: vscode.TextEditor) {
     if (msg?.type !== 'format') return;
-    
+
     const action = msg.action as string;
     // 取最新选区（用户可能点按钮前又调整了选区）
     const sel = editor.selection;
@@ -430,31 +339,31 @@ async function inlineFormat(
     const doc = editor.document;
     const text = doc.getText(sel);
     let left = '', right = '';
-    
+
     if (action === 'bold') { left = right = '**'; }
     if (action === 'italic') { left = right = '*'; }
     if (action === 'strike') { left = right = '~~'; }
     if (action === 'code') { left = right = '`'; }
     if (action === 'link') {
-        const url = await vscode.window.showInputBox({ 
-            prompt: '输入链接 URL', 
+        const url = await vscode.window.showInputBox({
+            prompt: '输入链接 URL',
             value: 'https://',
             placeHolder: '请输入完整的链接地址'
         });
         if (!url) return;
         const linkText = text.trim() ? text : '链接文本';
         const replaced = `[${linkText}](${url})`;
-        await editor.edit(ed => ed.replace(sel, replaced), { 
-            undoStopAfter: true, 
-            undoStopBefore: true 
+        await editor.edit(ed => ed.replace(sel, replaced), {
+            undoStopAfter: true,
+            undoStopBefore: true
         });
         return;
     }
-    
+
     const replaced = `${left}${text}${right}`;
-    await editor.edit(ed => ed.replace(sel, replaced), { 
-        undoStopAfter: true, 
-        undoStopBefore: true 
+    await editor.edit(ed => ed.replace(sel, replaced), {
+        undoStopAfter: true,
+        undoStopBefore: true
     });
 }
 
@@ -471,7 +380,7 @@ async function blockFormat(
 
     for (let line = start; line < end; line++) {
         const r = new vscode.Range(
-            new vscode.Position(line, 0), 
+            new vscode.Position(line, 0),
             new vscode.Position(line, Number.MAX_SAFE_INTEGER)
         );
         const lineText = doc.getText(r).replace(/\r?\n?$/, '');
@@ -492,9 +401,9 @@ async function blockFormat(
     }
 
     if (edits.length) {
-        await editor.edit(ed => edits.forEach(e => ed.replace(e.range, e.text)), { 
-            undoStopAfter: true, 
-            undoStopBefore: true 
+        await editor.edit(ed => edits.forEach(e => ed.replace(e.range, e.text)), {
+            undoStopAfter: true,
+            undoStopBefore: true
         });
     }
 
@@ -516,7 +425,7 @@ async function blockFormat(
 async function clearFormat(editor: vscode.TextEditor, sel: vscode.Selection) {
     const doc = editor.document;
     const text = doc.getText(sel);
-    
+
     // 移除各种 Markdown 格式
     let cleaned = text
         // 移除粗体
@@ -550,8 +459,8 @@ async function clearFormat(editor: vscode.TextEditor, sel: vscode.Selection) {
         cleaned = cleanedLines.join('\n');
     }
 
-    await editor.edit(ed => ed.replace(sel, cleaned), { 
-        undoStopAfter: true, 
-        undoStopBefore: true 
+    await editor.edit(ed => ed.replace(sel, cleaned), {
+        undoStopAfter: true,
+        undoStopBefore: true
     });
 }
