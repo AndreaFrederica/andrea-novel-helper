@@ -208,10 +208,11 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
             role.type = stripMarkdown(processedContent);
             break;
         case 'color':
-            // 验证颜色格式
+            // 提取和验证颜色格式
             const colorText = stripMarkdown(processedContent);
-            if (/^#[0-9A-Fa-f]{6}$/.test(colorText) || /^#[0-9A-Fa-f]{3}$/.test(colorText)) {
-                role.color = colorText;
+            const extractedColor = extractColor(colorText);
+            if (extractedColor) {
+                role.color = extractedColor;
             }
             break;
         case 'affiliation':
@@ -280,6 +281,166 @@ function processMarkdownContent(lines: string[]): string {
     }
     
     return contentLines.join('\n');
+}
+
+/**
+ * 从文本中提取颜色值
+ * 支持多种颜色格式：#RGB, #RRGGBB, #RRGGBBAA, RGB(), RGBA(), HSL(), HSLA(), HSV(), HSVA() 以及带描述的颜色
+ * 
+ * 示例：
+ * - "#ff1e40" -> "#ff1e40"
+ * - "#ff1e40ff" -> "#ff1e40ff"
+ * - "#ff1e40 (红色)" -> "#ff1e40"
+ * - "红色 #ff1e40 很漂亮" -> "#ff1e40"
+ * - "#abc" -> "#abc"
+ * - "#abcd" -> "#abcd"
+ * - "rgb(255, 30, 64)" -> "rgb(255, 30, 64)"
+ * - "rgba(255, 30, 64, 0.8)" -> "rgba(255, 30, 64, 0.8)"
+ * - "hsl(348, 100%, 56%)" -> "hsl(348, 100%, 56%)"
+ * - "hsv(348, 88%, 100%)" -> "hsv(348, 88%, 100%)"
+ */
+function extractColor(text: string): string | null {
+    if (!text) {
+        return null;
+    }
+    
+    // 支持的颜色格式（按优先级排序：先匹配更复杂的格式）
+    const colorPatterns = [
+        // RGB/RGBA 格式
+        /rgba?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(0?\.\d+|1(?:\.0+)?|\d+(?:\.\d+)?%?))?\s*\)/i,
+        // HSL/HSLA 格式
+        /hsla?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*(?:,\s*(0?\.\d+|1(?:\.0+)?|\d+(?:\.\d+)?%?))?\s*\)/i,
+        // HSV/HSVA 格式
+        /hsva?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*(?:,\s*(0?\.\d+|1(?:\.0+)?|\d+(?:\.\d+)?%?))?\s*\)/i,
+        // HEX 格式
+        /#[0-9A-Fa-f]{8}/, // #RRGGBBAA (8位，包含透明度)
+        /#[0-9A-Fa-f]{6}/, // #RRGGBB (6位标准格式)
+        /#[0-9A-Fa-f]{4}/, // #RGBA (4位，包含透明度)
+        /#[0-9A-Fa-f]{3}/  // #RGB (3位短格式)
+    ];
+    
+    // 尝试匹配各种颜色格式
+    for (const pattern of colorPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+            const colorValue = match[0];
+            // 验证提取的颜色值是否有效
+            if (validateColorValue(colorValue)) {
+                return colorValue;
+            }
+        }
+    }
+    
+    // 如果没有找到颜色值，检查是否是纯颜色文本（去除所有非颜色字符后重试HEX格式）
+    const cleanText = text.replace(/[^#0-9A-Fa-f]/g, '');
+    if (cleanText.startsWith('#')) {
+        const hexPatterns = [
+            /#[0-9A-Fa-f]{8}/, // #RRGGBBAA
+            /#[0-9A-Fa-f]{6}/, // #RRGGBB
+            /#[0-9A-Fa-f]{4}/, // #RGBA
+            /#[0-9A-Fa-f]{3}/  // #RGB
+        ];
+        for (const pattern of hexPatterns) {
+            if (pattern.test(cleanText)) {
+                return cleanText;
+            }
+        }
+    }
+    
+    return null;
+}
+
+/**
+ * 验证颜色值是否有效
+ */
+function validateColorValue(colorValue: string): boolean {
+    // HEX 格式验证
+    if (colorValue.startsWith('#')) {
+        return /^#[0-9A-Fa-f]{3,8}$/.test(colorValue);
+    }
+    
+    // RGB/RGBA 格式验证
+    if (colorValue.toLowerCase().startsWith('rgb')) {
+        const rgbMatch = colorValue.match(/rgba?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(0?\.\d+|1(?:\.0+)?|\d+(?:\.\d+)?%?))?\s*\)/i);
+        if (rgbMatch) {
+            const [, r, g, b, a] = rgbMatch;
+            const red = parseInt(r, 10);
+            const green = parseInt(g, 10);
+            const blue = parseInt(b, 10);
+            
+            // 检查 RGB 值是否在有效范围内 (0-255)
+            if (red < 0 || red > 255 || green < 0 || green > 255 || blue < 0 || blue > 255) {
+                return false;
+            }
+            
+            // 检查透明度值是否在有效范围内 (0-1)
+            if (a !== undefined) {
+                const alpha = a.endsWith('%') ? parseFloat(a) / 100 : parseFloat(a);
+                if (alpha < 0 || alpha > 1) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        return false;
+    }
+    
+    // HSL/HSLA 格式验证
+    if (colorValue.toLowerCase().startsWith('hsl')) {
+        const hslMatch = colorValue.match(/hsla?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*(?:,\s*(0?\.\d+|1(?:\.0+)?|\d+(?:\.\d+)?%?))?\s*\)/i);
+        if (hslMatch) {
+            const [, h, s, l, a] = hslMatch;
+            const hue = parseInt(h, 10);
+            const saturation = parseInt(s, 10);
+            const lightness = parseInt(l, 10);
+            
+            // 检查 HSL 值是否在有效范围内
+            if (hue < 0 || hue > 360 || saturation < 0 || saturation > 100 || lightness < 0 || lightness > 100) {
+                return false;
+            }
+            
+            // 检查透明度值是否在有效范围内 (0-1)
+            if (a !== undefined) {
+                const alpha = a.endsWith('%') ? parseFloat(a) / 100 : parseFloat(a);
+                if (alpha < 0 || alpha > 1) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        return false;
+    }
+    
+    // HSV/HSVA 格式验证
+    if (colorValue.toLowerCase().startsWith('hsv')) {
+        const hsvMatch = colorValue.match(/hsva?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})%?\s*,\s*(\d{1,3})%?\s*(?:,\s*(0?\.\d+|1(?:\.0+)?|\d+(?:\.\d+)?%?))?\s*\)/i);
+        if (hsvMatch) {
+            const [, h, s, v, a] = hsvMatch;
+            const hue = parseInt(h, 10);
+            const saturation = parseInt(s, 10);
+            const value = parseInt(v, 10);
+            
+            // 检查 HSV 值是否在有效范围内
+            if (hue < 0 || hue > 360 || saturation < 0 || saturation > 100 || value < 0 || value > 100) {
+                return false;
+            }
+            
+            // 检查透明度值是否在有效范围内 (0-1)
+            if (a !== undefined) {
+                const alpha = a.endsWith('%') ? parseFloat(a) / 100 : parseFloat(a);
+                if (alpha < 0 || alpha > 1) {
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        return false;
+    }
+    
+    return false;
 }
 
 /**
@@ -359,6 +520,9 @@ export function generateMarkdownTemplate(roleType: string): string {
 
 ## 类型
 角色
+
+## 颜色
+rgb(255, 30, 64) - 温暖的红色，也可以用 #ff1e40 或 hsl(348, 100%, 56%)
 
 ## 外貌
 - **身高**: 175cm
