@@ -18,6 +18,8 @@ export interface Role {
 	description?: string;
 	/** 颜色十六进制，如 '#E60033'，优先级高于类型默认色 */
 	color?: string;
+	/** 是否启用分词过滤，避免单字误匹配 */
+	wordSegmentFilter?: boolean;
 }
 
 

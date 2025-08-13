@@ -1,6 +1,7 @@
 import AhoCorasick from 'ahocorasick';
 import { Role } from '../extension';
 import { roles, onDidChangeRoles } from '../activate';
+import { findCompleteWords, shouldUseSegmentFilter } from './segmentFilter';
 
 /**
  * AhoCorasick 自动机管理器
@@ -46,13 +47,53 @@ class AhoCorasickManager {
     }
 
     /**
-     * 搜索文本中的匹配项
+     * 搜索文本中的匹配项（支持分词过滤）
      */
     public search(text: string): Array<[number, string | string[]]> {
         if (!this.isInitialized || !this.ac) {
             this.initAutomaton();
         }
-        return this.ac!.search(text) as Array<[number, string | string[]]>;
+        
+        const rawHits = this.ac!.search(text) as Array<[number, string | string[]]>;
+        const filteredHits: Array<[number, string | string[]]> = [];
+        
+        for (const [endIdx, patOrArr] of rawHits) {
+            const patterns = Array.isArray(patOrArr) ? patOrArr : [patOrArr];
+            const validPatterns: string[] = [];
+            
+            for (const pattern of patterns) {
+                const role = this.getRole(pattern);
+                if (!role) {
+                    continue;
+                }
+                
+                // 检查是否需要分词过滤
+                if (shouldUseSegmentFilter(pattern, role.wordSegmentFilter)) {
+                    // 使用分词过滤验证
+                    const matches = findCompleteWords(text, pattern);
+                    const currentEnd = endIdx + 1;
+                    const currentStart = currentEnd - pattern.length;
+                    
+                    // 检查当前位置是否在完整词匹配中
+                    const isValidMatch = matches.some(match => 
+                        match.start === currentStart && match.end === currentEnd
+                    );
+                    
+                    if (isValidMatch) {
+                        validPatterns.push(pattern);
+                    }
+                } else {
+                    // 不使用分词过滤，直接接受
+                    validPatterns.push(pattern);
+                }
+            }
+            
+            if (validPatterns.length > 0) {
+                filteredHits.push([endIdx, validPatterns.length === 1 ? validPatterns[0] : validPatterns]);
+            }
+        }
+        
+        return filteredHits;
     }
 
     /**
