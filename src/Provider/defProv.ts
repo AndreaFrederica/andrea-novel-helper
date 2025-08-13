@@ -8,6 +8,72 @@ import { Role } from '../extension';
 import { hoverRangesMap } from './hoverProvider';
 
 /**
+ * 转义正则表达式特殊字符
+ */
+function escapeRegExp(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 在指定文件中查找角色定义
+ */
+function findDefinitionInFile(role: Role, filePath: string): vscode.Location | null {
+    if (!fs.existsSync(filePath)) return null;
+
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const lines = content.split(/\r?\n/);
+        const fileExt = path.extname(filePath).toLowerCase();
+
+        if (fileExt === '.txt') {
+            // TXT 文件：直接查找角色名
+            const idx = lines.findIndex(l => l.trim() === role.name);
+            if (idx >= 0) {
+                const col = lines[idx].indexOf(role.name);
+                return new vscode.Location(
+                    vscode.Uri.file(filePath),
+                    new vscode.Position(idx, col)
+                );
+            }
+        } else if (fileExt === '.json5') {
+            // JSON5 文件：查找 name 字段
+            const namePattern = new RegExp(`\\bname\\s*:\\s*["'\`]${escapeRegExp(role.name)}["'\`]`);
+            const idx = lines.findIndex(l => namePattern.test(l));
+            if (idx >= 0) {
+                const col = lines[idx].indexOf(role.name);
+                return new vscode.Location(
+                    vscode.Uri.file(filePath),
+                    new vscode.Position(idx, col)
+                );
+            }
+
+            // 如果没找到 name 字段，尝试查找数组中的字符串
+            const directStringIdx = lines.findIndex(l => {
+                const trimmed = l.trim();
+                return trimmed === `"${role.name}",` || 
+                       trimmed === `"${role.name}"` ||
+                       trimmed === `'${role.name}',` || 
+                       trimmed === `'${role.name}'` ||
+                       trimmed === `\`${role.name}\`,` || 
+                       trimmed === `\`${role.name}\``;
+            });
+            if (directStringIdx >= 0) {
+                const col = lines[directStringIdx].indexOf(role.name);
+                return new vscode.Location(
+                    vscode.Uri.file(filePath),
+                    new vscode.Position(directStringIdx, col)
+                );
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error(`defProvider: 读取文件失败 ${filePath}: ${error}`);
+        return null;
+    }
+}
+
+/**
  * 创建并注册 Definition Provider
  */
 export function activateDef(context: vscode.ExtensionContext) {
@@ -21,6 +87,12 @@ export function activateDef(context: vscode.ExtensionContext) {
                 if (!hit) return null;
                 const role: Role = hit.role;
 
+                // 优先使用角色的 sourcePath（包管理器模式）
+                if (role.sourcePath) {
+                    return findDefinitionInFile(role, role.sourcePath);
+                }
+
+                // 回退到传统模式（向后兼容）
                 const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
                 const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
                 if (!root) return null;
@@ -39,46 +111,12 @@ export function activateDef(context: vscode.ExtensionContext) {
                 const jsonPath = path.join(root, fileRel);
                 const txtPath = jsonPath.replace(/\.[^/.]+$/, '.txt');
 
-                // txt 类型角色
-                if (role.type === 'txt角色') {
-                    if (!fs.existsSync(txtPath)) return null;
-                    const lines = fs.readFileSync(txtPath, 'utf8').split(/\r?\n/);
-                    const idx = lines.findIndex(l => l.trim() === role.name);
-                    if (idx < 0) return null;
-                    const col = lines[idx].indexOf(role.name);
-                    return new vscode.Location(
-                        vscode.Uri.file(txtPath),
-                        new vscode.Position(idx, col)
-                    );
-                }
+                // 尝试 JSON5 文件定位
+                const jsonLocation = findDefinitionInFile(role, jsonPath);
+                if (jsonLocation) return jsonLocation;
 
-                // 普通 JSON5 文件定位
-                if (fs.existsSync(jsonPath)) {
-                    const lines = fs.readFileSync(jsonPath, 'utf8').split(/\r?\n/);
-                    const idx = lines.findIndex(l => /["']/.test(l) && new RegExp(`\\bname\\s*:\\s*["']${role.name}["']`).test(l));
-                    if (idx >= 0) {
-                        const col = lines[idx].indexOf(role.name);
-                        return new vscode.Location(
-                            vscode.Uri.file(jsonPath),
-                            new vscode.Position(idx, col)
-                        );
-                    }
-                }
-
-                // 备用 TXT 文件定位
-                if (fs.existsSync(txtPath)) {
-                    const lines = fs.readFileSync(txtPath, 'utf8').split(/\r?\n/);
-                    const idx = lines.findIndex(l => l.trim() === role.name);
-                    if (idx >= 0) {
-                        const col = lines[idx].indexOf(role.name);
-                        return new vscode.Location(
-                            vscode.Uri.file(txtPath),
-                            new vscode.Position(idx, col)
-                        );
-                    }
-                }
-
-                return null;
+                // 尝试 TXT 文件定位
+                return findDefinitionInFile(role, txtPath);
             }
         }
     );

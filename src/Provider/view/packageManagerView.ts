@@ -192,7 +192,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             if (fs.existsSync(file)) {
                 vscode.window.showWarningMessage('character-gallery.json5 already exists');
             } else {
-                fs.writeFileSync(file, '{\n  // TODO\n}');
+                // 创建空的角色数组而不是空对象
+                fs.writeFileSync(file, '[\n  // 在这里添加角色\n]');
                 provider.refresh();
             }
         })
@@ -258,33 +259,114 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             }
         )
     );
-    // —— 新增：监听文件系统变化 —— 
+    // —— 改进的文件系统监听 —— 
     const helperRoot = path.join(rootFsPath, 'novel-helper');
     // 监听 novel-helper 下所有变动
     const watcherPattern = new vscode.RelativePattern(rootFsPath, 'novel-helper/**');
     const watcher = vscode.workspace.createFileSystemWatcher(watcherPattern);
 
-    // 排除 outline 子目录
-    const ignoreOutline = (uri: vscode.Uri) =>
-        !uri.fsPath.includes(path.join(helperRoot, 'outline') + path.sep);
+    // 改进的过滤逻辑：只关注相关文件和目录
+    const shouldRefresh = (uri: vscode.Uri) => {
+        const relativePath = path.relative(helperRoot, uri.fsPath);
+        
+        // 排除 outline 目录
+        if (relativePath.startsWith('outline' + path.sep) || relativePath === 'outline') {
+            return false;
+        }
+        
+        // 如果是目录变化，总是刷新
+        try {
+            if (fs.existsSync(uri.fsPath) && fs.statSync(uri.fsPath).isDirectory()) {
+                return true;
+            }
+        } catch (error) {
+            // 文件可能已被删除，仍需要刷新
+        }
+        
+        // 如果是文件，只关注包含关键词的文件
+        const fileName = path.basename(uri.fsPath);
+        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
+        const hasValidExtension = /\.(json5|txt)$/i.test(fileName);
+        
+        return hasKeywords && hasValidExtension;
+    };
 
-    watcher.onDidCreate(uri => {
-        if (ignoreOutline(uri)) {
-            provider.refresh();
+    // 统一的刷新处理函数
+    const handleFileChange = (uri: vscode.Uri, changeType: 'create' | 'delete' | 'change') => {
+        if (!shouldRefresh(uri)) {
+            return;
         }
-    });
-    watcher.onDidDelete(uri => {
-        if (ignoreOutline(uri)) {
-            provider.refresh();
-        }
-    });
-    watcher.onDidChange(uri => {
-        if (ignoreOutline(uri)) {
-            provider.refresh();
-        }
-    });
+
+        console.log(`包管理器：检测到文件${changeType} ${uri.fsPath}`);
+        provider.refresh();
+        
+        // 动态导入并触发角色数据增量更新
+        import('../../utils/utils.js').then(({ loadRoles }) => {
+            if (changeType === 'delete') {
+                // 文件删除：强制完整刷新
+                loadRoles(true);
+            } else {
+                // 文件创建或修改：增量更新
+                loadRoles(false, [uri.fsPath]);
+            }
+            
+            // 触发装饰器更新
+            import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
+                updateDecorations();
+            }).catch(error => {
+                console.error(`装饰器更新失败: ${error}`);
+            });
+            
+            // 显示用户通知
+            const fileName = path.basename(uri.fsPath);
+            const changeTypeMap = {
+                'create': '创建',
+                'delete': '删除', 
+                'change': '修改'
+            };
+            vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[changeType]}: ${fileName}`);
+        }).catch(error => {
+            console.error(`角色数据更新失败: ${error}`);
+        });
+    };
+
+    // 监听文件系统事件
+    watcher.onDidCreate(uri => handleFileChange(uri, 'create'));
+    watcher.onDidDelete(uri => handleFileChange(uri, 'delete'));
+    watcher.onDidChange(uri => handleFileChange(uri, 'change'));
 
     context.subscriptions.push(watcher);
+
+    // 额外监听文本文档保存事件（更精确的文件内容变化检测）
+    const saveWatcher = vscode.workspace.onDidSaveTextDocument((document) => {
+        const filePath = document.uri.fsPath;
+        
+        // 检查是否在 novel-helper 目录下
+        if (!filePath.startsWith(helperRoot)) {
+            return;
+        }
+        
+        if (shouldRefresh(document.uri)) {
+            console.log(`包管理器：检测到相关文件保存 ${filePath}`);
+            provider.refresh();
+            
+            // 触发角色数据增量更新
+            import('../../utils/utils.js').then(({ loadRoles }) => {
+                loadRoles(false, [filePath]);
+                
+                // 触发装饰器更新
+                import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
+                    updateDecorations();
+                }).catch(error => {
+                    console.error(`装饰器更新失败: ${error}`);
+                });
+            }).catch(error => {
+                console.error(`角色数据更新失败: ${error}`);
+            });
+        }
+    });
+
+    context.subscriptions.push(saveWatcher);
 }
 
 async function promptForExtension(dir: string, baseName: string): Promise<string | undefined> {
@@ -295,6 +377,17 @@ async function promptForExtension(dir: string, baseName: string): Promise<string
         vscode.window.showWarningMessage(`${baseName}.${ext} already exists`);
         return;
     }
-    fs.writeFileSync(file, '');
+    
+    // 根据文件类型创建合适的初始内容
+    let initialContent = '';
+    if (ext === 'json5') {
+        // 创建空的角色数组
+        initialContent = '[\n  // 在这里添加角色\n]';
+    } else if (ext === 'txt') {
+        // TXT 文件可以保持空白
+        initialContent = '';
+    }
+    
+    fs.writeFileSync(file, initialContent);
     return file;
 }

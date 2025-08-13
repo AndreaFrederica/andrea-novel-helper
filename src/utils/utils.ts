@@ -8,6 +8,7 @@ import JSON5 from 'json5';
 /* eslint-disable curly */
 import { Role, segmenter } from "../extension";
 import { _onDidChangeRoles, cleanRoles, roles } from '../activate';
+import { globalFileCache } from './fileCache';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 
 export interface TextStats {
@@ -206,9 +207,10 @@ export function mergeStats(a: TextStats, b: TextStats): TextStats {
 
 /**
  * 包管理器方式加载角色库：递归扫描 novel-helper 目录下的所有包
+ * @param forceRefresh 是否强制刷新所有文件（不使用缓存）
+ * @param changedFiles 指定只更新这些文件（用于增量更新）
  */
-export function loadRoles() {
-	cleanRoles();
+export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]) {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const folders = vscode.workspace.workspaceFolders;
 	if (!folders || !folders.length) {
@@ -221,21 +223,37 @@ export function loadRoles() {
 	console.log(`loadRoles: workspace root = ${root}`);
 	console.log(`loadRoles: novel-helper root = ${novelHelperRoot}`);
 
+	// 如果强制刷新，清空缓存
+	if (forceRefresh) {
+		globalFileCache.clear();
+		cleanRoles();
+	}
+
 	// 检查 novel-helper 目录是否存在
 	if (!fs.existsSync(novelHelperRoot)) {
 		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot}`);
 		// 仍然尝试加载传统方式的文件（向后兼容）
-		loadTraditionalRoles();
+		loadTraditionalRoles(forceRefresh, changedFiles);
 		return;
 	}
 
-	// 递归扫描所有包
-	try {
-		scanPackageDirectory(novelHelperRoot, '');
-		console.log(`loadRoles: 成功加载 ${roles.length} 个角色`);
-	} catch (error) {
-		console.error(`loadRoles: 扫描包目录时出错: ${error}`);
-		vscode.window.showErrorMessage(`加载角色库时出错: ${error}`);
+	// 如果指定了变化文件列表，进行增量更新
+	if (changedFiles && changedFiles.length > 0) {
+		console.log(`loadRoles: 增量更新 ${changedFiles.length} 个文件`);
+		performIncrementalUpdate(changedFiles, novelHelperRoot);
+	} else {
+		// 完整扫描
+		if (!forceRefresh) {
+			cleanRoles(); // 只有非强制刷新时才清理角色列表
+		}
+		
+		try {
+			scanPackageDirectory(novelHelperRoot, '');
+			console.log(`loadRoles: 成功加载 ${roles.length} 个角色`);
+		} catch (error) {
+			console.error(`loadRoles: 扫描包目录时出错: ${error}`);
+			vscode.window.showErrorMessage(`加载角色库时出错: ${error}`);
+		}
 	}
 
 	_onDidChangeRoles.fire();
@@ -296,7 +314,7 @@ function isRoleFile(fileName: string): boolean {
 }
 
 /**
- * 加载单个角色文件
+ * 加载单个角色文件（使用缓存优化）
  * @param filePath 文件绝对路径
  * @param packagePath 包路径（相对于 novel-helper）
  * @param fileName 文件名
@@ -305,7 +323,13 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 	console.log(`loadRoleFile: 加载文件 ${filePath}`);
 	
 	try {
-		const content = fs.readFileSync(filePath, 'utf8');
+		// 使用缓存获取文件内容
+		const content = globalFileCache.getFileContent(filePath);
+		if (content === null) {
+			console.warn(`loadRoleFile: 无法读取文件 ${filePath}`);
+			return;
+		}
+		
 		const fileType = getFileType(fileName);
 		
 		if (fileName.endsWith('.json5')) {
@@ -339,7 +363,14 @@ function getFileType(fileName: string): string {
  */
 function loadJSON5RoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
 	try {
-		const data = JSON5.parse(content);
+		// 处理空文件或只包含空白字符的文件
+		const trimmedContent = content.trim();
+		if (trimmedContent === '') {
+			console.log(`loadJSON5RoleFile: ${filePath} 是空文件，跳过解析`);
+			return;
+		}
+		
+		const data = JSON5.parse(trimmedContent);
 		let rolesArray: Role[] = [];
 		
 		// 支持数组格式和对象格式
@@ -358,6 +389,9 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 					...(typeof roleData === 'object' ? roleData : { type: defaultType }),
 				})) as Role[];
 			}
+		} else {
+			console.warn(`loadJSON5RoleFile: ${filePath} 包含无效的数据类型: ${typeof data}`);
+			return;
 		}
 		
 		// 为每个角色添加路径信息
@@ -375,7 +409,14 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 		
 		console.log(`loadJSON5RoleFile: 从 ${filePath} 加载了 ${rolesArray.length} 个角色`);
 	} catch (error) {
-		throw new Error(`解析 JSON5 文件失败: ${error}`);
+		// 提供更详细的错误信息
+		if (error instanceof SyntaxError) {
+			console.error(`loadJSON5RoleFile: JSON5 语法错误 ${filePath}: ${error.message}`);
+			throw new Error(`JSON5 语法错误: ${error.message}。请检查文件格式是否正确。`);
+		} else {
+			console.error(`loadJSON5RoleFile: 解析错误 ${filePath}: ${error}`);
+			throw new Error(`解析 JSON5 文件失败: ${error}`);
+		}
 	}
 }
 
@@ -385,6 +426,12 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 function loadTXTRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+	
+	// 如果文件为空，记录日志但不报错
+	if (lines.length === 0) {
+		console.log(`loadTXTRoleFile: ${filePath} 是空文件，跳过加载`);
+		return;
+	}
 	
 	for (const line of lines) {
 		const trimmed = line.trim();
@@ -413,8 +460,10 @@ function loadTXTRoleFile(content: string, filePath: string, packagePath: string,
 
 /**
  * 传统方式加载角色（向后兼容）
+ * @param forceRefresh 是否强制刷新
+ * @param changedFiles 变化的文件列表
  */
-function loadTraditionalRoles() {
+function loadTraditionalRoles(forceRefresh: boolean = false, changedFiles?: string[]) {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const folders = vscode.workspace.workspaceFolders;
 	if (!folders || !folders.length) {
@@ -430,50 +479,78 @@ function loadTraditionalRoles() {
 			return;
 		}
 		const libPath = path.join(root, fileName);
+		const txtPath = libPath.replace(/\.[^/.]+$/, ".txt");
+		
+		// 如果指定了变化文件，只处理相关文件
+		if (changedFiles) {
+			const shouldProcessJson = changedFiles.includes(libPath);
+			const shouldProcessTxt = changedFiles.includes(txtPath);
+			
+			if (!shouldProcessJson && !shouldProcessTxt) {
+				return;
+			}
+			
+			// 移除该文件的角色
+			const filePathsToRemove = [libPath, txtPath];
+			for (let i = roles.length - 1; i >= 0; i--) {
+				if (roles[i].sourcePath && filePathsToRemove.includes(roles[i].sourcePath!)) {
+					roles.splice(i, 1);
+				}
+			}
+		}
 
 		// 加载 JSON5 版（如果存在）
-		if (fs.existsSync(libPath)) {
+		if (fs.existsSync(libPath) && (!changedFiles || changedFiles.includes(libPath))) {
 			try {
-				const text = fs.readFileSync(libPath, 'utf8');
-				const arr = JSON5.parse(text) as Role[];
-				// 为传统加载的角色添加路径信息
-				for (const role of arr) {
-					role.packagePath = '';  // 根目录
-					role.sourcePath = libPath;
+				const content = forceRefresh ? 
+					fs.readFileSync(libPath, 'utf8') : 
+					globalFileCache.getFileContent(libPath);
+				
+				if (content) {
+					const arr = JSON5.parse(content) as Role[];
+					// 为传统加载的角色添加路径信息
+					for (const role of arr) {
+						role.packagePath = '';  // 根目录
+						role.sourcePath = libPath;
+					}
+					roles.push(...arr);
+					console.log(`loadTraditionalRoles: 成功加载 JSON5库 ${fileName}`);
 				}
-				roles.push(...arr);
-				console.log(`loadTraditionalRoles: 成功加载 JSON5库 ${fileName}`);
 			} catch (e) {
 				vscode.window.showErrorMessage(`解析 ${fileName} 失败: ${e}`);
 			}
 		}
 
 		// 加载 txt 版
-		const txtPath = libPath.replace(/\.[^/.]+$/, ".txt");
-		if (fs.existsSync(txtPath)) {
+		if (fs.existsSync(txtPath) && (!changedFiles || changedFiles.includes(txtPath))) {
 			try {
-				const txtContent = fs.readFileSync(txtPath, 'utf8');
-				const lines = txtContent.split(/\r?\n/).filter(line => line.trim() !== '');
-				for (const line of lines) {
-					const trimmed = line.trim();
-					let role: Role = { 
-						name: trimmed, 
-						type: defaultType,
-						packagePath: '',
-						sourcePath: txtPath
-					};
-					if (fileKey === 'rolesFile') {
-						role.type = "txt角色";
-						role.color = cfg.get<string>('defaultColor')!;
-					} else if (fileKey === 'sensitiveWordsFile') {
-						role.type = "敏感词";
-						role.color = "#FF0000";
-					} else if (fileKey === 'vocabularyFile') {
-						role.type = "词汇";
+				const content = forceRefresh ? 
+					fs.readFileSync(txtPath, 'utf8') : 
+					globalFileCache.getFileContent(txtPath);
+				
+				if (content) {
+					const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+					for (const line of lines) {
+						const trimmed = line.trim();
+						let role: Role = { 
+							name: trimmed, 
+							type: defaultType,
+							packagePath: '',
+							sourcePath: txtPath
+						};
+						if (fileKey === 'rolesFile') {
+							role.type = "txt角色";
+							role.color = cfg.get<string>('defaultColor')!;
+						} else if (fileKey === 'sensitiveWordsFile') {
+							role.type = "敏感词";
+							role.color = "#FF0000";
+						} else if (fileKey === 'vocabularyFile') {
+							role.type = "词汇";
+						}
+						roles.push(role);
 					}
-					roles.push(role);
+					console.log(`loadTraditionalRoles: 成功加载 TXT库 ${fileName}`);
 				}
-				console.log(`loadTraditionalRoles: 成功加载 TXT库 ${fileName}`);
 			} catch (e) {
 				vscode.window.showErrorMessage(`解析 TXT ${fileName} 失败: ${e}`);
 			}
@@ -483,6 +560,45 @@ function loadTraditionalRoles() {
 	loadLibrary('rolesFile', "角色");
 	loadLibrary('sensitiveWordsFile', "敏感词");
 	loadLibrary('vocabularyFile', "词汇");
+}
+
+/**
+ * 执行增量更新
+ * @param changedFiles 变化的文件路径列表
+ * @param novelHelperRoot novel-helper 根目录
+ */
+function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: string) {
+	console.log(`performIncrementalUpdate: 处理 ${changedFiles.length} 个变化文件`);
+	
+	// 移除变化文件对应的角色
+	for (const filePath of changedFiles) {
+		// 移除该文件的所有角色
+		for (let i = roles.length - 1; i >= 0; i--) {
+			if (roles[i].sourcePath === filePath) {
+				roles.splice(i, 1);
+			}
+		}
+		
+		// 刷新文件缓存
+		globalFileCache.refreshFile(filePath);
+	}
+	
+	// 重新加载变化的文件
+	for (const filePath of changedFiles) {
+		if (!fs.existsSync(filePath)) {
+			// 文件已删除，从缓存中移除
+			globalFileCache.removeFile(filePath);
+			continue;
+		}
+		
+		const fileName = path.basename(filePath);
+		if (!isRoleFile(fileName)) {
+			continue;
+		}
+		
+		const packagePath = path.relative(novelHelperRoot, path.dirname(filePath));
+		loadRoleFile(filePath, packagePath, fileName);
+	}
 }
 
 

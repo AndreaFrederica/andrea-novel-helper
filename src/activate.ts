@@ -310,7 +310,9 @@ export function activate(context: vscode.ExtensionContext) {
     activateHover(context);
     activateDef(context);
 
+    // 注释掉传统的文件监听，改为由包管理器统一处理
     // 监听所有库文件变更（包括 JSON5 和 TXT）
+    /*
     if (folders1 && folders1.length) {
         const rootUri = folders1[0].uri;
         const fileKeys = [
@@ -379,6 +381,7 @@ export function activate(context: vscode.ExtensionContext) {
             context.subscriptions.push(watcherTxt);
         }
     }
+    */
 
     // Word Count 树视图
     const wordCountProvider = new WordCountProvider();

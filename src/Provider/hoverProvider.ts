@@ -116,6 +116,18 @@ export function activateHover(context: vscode.ExtensionContext) {
                 if (r.description) md.appendMarkdown(`${r.description}\n\n`);
                 md.appendMarkdown(`**类型**: ${r.type}\n\n`);
                 if (r.affiliation) md.appendMarkdown(`**从属**: ${r.affiliation}\n\n`);
+                
+                // 显示路径信息
+                if (r.packagePath || r.sourcePath) {
+                    if (r.packagePath) {
+                        md.appendMarkdown(`**包路径**: ${r.packagePath}\n\n`);
+                    }
+                    if (r.sourcePath) {
+                        const fileName = r.sourcePath.split(/[/\\]/).pop() || r.sourcePath;
+                        md.appendMarkdown(`**源文件**: ${fileName}\n\n`);
+                    }
+                }
+                
                 const defaultColor = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor')!;
                 const c = r.color || typeColorMap[r.type] || defaultColor;
                 const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"${c}\"/></svg>`;
