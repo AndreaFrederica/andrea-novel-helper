@@ -20,6 +20,10 @@ export interface Role {
 	color?: string;
 	/** 是否启用分词过滤，避免单字误匹配 */
 	wordSegmentFilter?: boolean;
+	/** 角色所在的包路径（相对于 novel-helper 目录） */
+	packagePath?: string;
+	/** 角色来源文件路径（完整路径） */
+	sourcePath?: string;
 }
 
 

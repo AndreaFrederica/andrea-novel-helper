@@ -20,6 +20,7 @@
 		"jschardet",
 		"romaji",
 		"RRGGBB",
+		"wcignore",
 		"yarnrc"
 	],
 	"editor.suggestOnTriggerCharacters": false,

@@ -1,3 +1,4 @@
+/* eslint-disable curly */
 // src/packageManagerView.ts
 import * as vscode from 'vscode';
 import * as fs from 'fs';
