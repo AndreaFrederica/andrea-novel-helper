@@ -173,6 +173,7 @@ export function createCompletionProvider(roles: Role[]): vscode.Disposable {
 
                         // documentation - 显示完整信息
                         const md = new vscode.MarkdownString();
+                        
                         const color = role.color || typeColorMap[role.type] || defaultColor;
                         md.appendMarkdown(`**颜色**: <span style="color:${color}">■</span> \`${color}\``);
                         md.appendMarkdown(`\n\n**类型**: ${role.type}`);

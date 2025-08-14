@@ -218,6 +218,7 @@ export function activateHover(context: vscode.ExtensionContext) {
                 const r = hit.role;
                 const md = new vscode.MarkdownString('', true);
                 md.isTrusted = true;
+                
                 md.appendMarkdown(`**${r.name}**\n\n`);
                 if (r.description) {
                     // 如果描述包含 Markdown 格式，直接使用；否则作为普通文本

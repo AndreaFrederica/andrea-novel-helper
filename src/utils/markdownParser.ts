@@ -4,6 +4,8 @@
  */
 
 import { Role } from '../extension';
+import * as path from 'path';
+import * as vscode from 'vscode';
 
 /**
  * 字段的中文别名映射
@@ -118,7 +120,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
             if (!isInRole || headerLevel <= roleHeaderLevel) {
                 // 保存当前角色
                 if (currentRole && currentRole.name) {
-                    saveCurrentField(currentRole, currentField, currentContent);
+                    saveCurrentField(currentRole, currentField, currentContent, filePath);
                     finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
                 }
                 
@@ -174,7 +176,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
             // 如果在角色中，且是直接子标题（字段标题）
             if (isInRole && currentRole && headerLevel === roleHeaderLevel + 1) {
                 // 保存上一个字段
-                saveCurrentField(currentRole, currentField, currentContent);
+                saveCurrentField(currentRole, currentField, currentContent, filePath);
                 
                 // 开始新字段
                 currentField = getStandardFieldName(headerText);
@@ -197,7 +199,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
     
     // 保存最后一个角色
     if (currentRole && currentRole.name) {
-        saveCurrentField(currentRole, currentField, currentContent);
+        saveCurrentField(currentRole, currentField, currentContent, filePath);
         finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
     }
     
@@ -207,13 +209,13 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
 /**
  * 保存当前字段内容到角色对象
  */
-function saveCurrentField(role: Partial<Role>, fieldName: string, content: string[]): void {
+function saveCurrentField(role: Partial<Role>, fieldName: string, content: string[], sourcePath?: string): void {
     if (!fieldName || content.length === 0) {
         return;
     }
     
     // 处理 Markdown 内容，保留格式
-    const processedContent = processMarkdownContent(content);
+    const processedContent = processMarkdownContent(content, sourcePath);
     
     if (!processedContent) {
         return;
@@ -261,9 +263,43 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
 }
 
 /**
+ * 将 Markdown 行中的相对路径图片转换为绝对路径
+ */
+function convertRelativeImagePaths(line: string, sourcePath: string): string {
+    // 匹配 Markdown 图片语法：![alt](path) 或 ![alt](path "title")
+    const imageRegex = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g;
+    
+    return line.replace(imageRegex, (match, alt, imagePath, title) => {
+        // 如果已经是绝对路径或者是 URL，则不处理
+        if (path.isAbsolute(imagePath) || imagePath.startsWith('http://') || imagePath.startsWith('https://') || imagePath.startsWith('data:')) {
+            return match;
+        }
+        
+        try {
+            // 获取 Markdown 文件所在的目录
+            const sourceDir = path.dirname(sourcePath);
+            // 解析相对路径为绝对路径
+            const absolutePath = path.resolve(sourceDir, imagePath);
+            // 转换为 VS Code 可识别的 file:// URI
+            const fileUri = vscode.Uri.file(absolutePath).toString();
+            
+            // 重构图片链接
+            if (title) {
+                return `![${alt}](${fileUri} "${title}")`;
+            } else {
+                return `![${alt}](${fileUri})`;
+            }
+        } catch (error) {
+            console.warn(`Failed to convert image path: ${imagePath}`, error);
+            return match; // 出错时返回原始内容
+        }
+    });
+}
+
+/**
  * 处理 Markdown 内容，保留格式并清理
  */
-function processMarkdownContent(lines: string[]): string {
+function processMarkdownContent(lines: string[], sourcePath?: string): string {
     if (lines.length === 0) {
         return '';
     }
@@ -295,16 +331,24 @@ function processMarkdownContent(lines: string[]): string {
             return Math.min(min, indent);
         }, Infinity);
     
+    let processedLines = contentLines;
     if (minIndent > 0 && minIndent !== Infinity) {
-        return contentLines.map(line => {
+        processedLines = contentLines.map(line => {
             if (line.trim() === '') {
                 return '';
             }
             return line.slice(minIndent);
-        }).join('\n');
+        });
     }
     
-    return contentLines.join('\n');
+    // 处理图片路径：将相对路径转换为绝对路径
+    if (sourcePath) {
+        processedLines = processedLines.map(line => 
+            convertRelativeImagePaths(line, sourcePath)
+        );
+    }
+    
+    return processedLines.join('\n');
 }
 
 /**
