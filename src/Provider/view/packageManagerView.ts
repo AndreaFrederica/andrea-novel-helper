@@ -40,9 +40,10 @@ export class PackageNode extends vscode.TreeItem {
 
         // click to open files if not a directory
         if (!isDir) {
+            // 所有文件都使用默认打开方式
             this.command = {
-                command: 'AndreaNovelHelper.openFile',
-                title: 'Open File',
+                command: 'AndreaNovelHelper.openFileWithDefault',
+                title: 'Open File with Default',
                 arguments: [this.resourceUri]
             };
         }
@@ -114,7 +115,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             return [newNode as any, ...children];
         }
 
-        // 子节点：按照文件夹/文件原逻辑扫描
+        // 子节点：扫描目录内容
         const dir = node.resourceUri.fsPath;
         if (!fs.existsSync(dir)) {
             return [];
@@ -124,25 +125,53 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             const stat = fs.statSync(full);
 
             if (stat.isDirectory()) {
+                // 所有子目录都显示
                 nodes.push(
                     new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.Collapsed
                     )
                 );
-            } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(name)) {
-                const ext = path.extname(name).toLowerCase();
-                const allowed = ['.json5', '.txt', '.md'];
-                const fileNode = new PackageNode(
-                    vscode.Uri.file(full),
-                    vscode.TreeItemCollapsibleState.None
-                );
-                if (!allowed.includes(ext)) {
-                    fileNode.label += ' (格式错误)';
-                    fileNode.iconPath = new vscode.ThemeIcon('error');
-                    fileNode.contextValue = 'resourceFileError';
+            } else {
+                // 对于文件，分两类处理
+                if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(name)) {
+                    // 角色相关文件：检查格式并标记错误
+                    const ext = path.extname(name).toLowerCase();
+                    const allowed = ['.json5', '.txt', '.md'];
+                    const fileNode = new PackageNode(
+                        vscode.Uri.file(full),
+                        vscode.TreeItemCollapsibleState.None
+                    );
+                    if (!allowed.includes(ext)) {
+                        fileNode.label += ' (格式错误)';
+                        fileNode.iconPath = new vscode.ThemeIcon('error');
+                        fileNode.contextValue = 'resourceFileError';
+                    }
+                    nodes.push(fileNode);
+                } else {
+                    // 其他资源文件：全部显示，设置为普通资源文件
+                    const fileNode = new PackageNode(
+                        vscode.Uri.file(full),
+                        vscode.TreeItemCollapsibleState.None
+                    );
+                    fileNode.contextValue = 'generalResourceFile'; // 普通资源文件，不被监视
+                    
+                    // 根据文件类型设置图标
+                    const ext = path.extname(name).toLowerCase();
+                    if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'].includes(ext)) {
+                        fileNode.iconPath = new vscode.ThemeIcon('file-media');
+                    } else if (['.doc', '.docx', '.pdf', '.txt', '.rtf'].includes(ext)) {
+                        fileNode.iconPath = new vscode.ThemeIcon('file-text');
+                    } else if (['.html', '.htm', '.xml'].includes(ext)) {
+                        fileNode.iconPath = new vscode.ThemeIcon('file-code');
+                    } else if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) {
+                        fileNode.iconPath = new vscode.ThemeIcon('file-zip');
+                    } else {
+                        fileNode.iconPath = new vscode.ThemeIcon('file');
+                    }
+                    
+                    nodes.push(fileNode);
                 }
-                nodes.push(fileNode);
             }
             return nodes;
         }, []);
@@ -161,6 +190,18 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.window.registerTreeDataProvider('packageManagerView', provider)
+    );
+
+    // Command: open file with default application
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.openFileWithDefault', async (uri: vscode.Uri) => {
+            try {
+                // 使用 VS Code 的默认打开方式
+                await vscode.commands.executeCommand('vscode.open', uri);
+            } catch (error) {
+                vscode.window.showErrorMessage(`无法打开文件: ${error}`);
+            }
+        })
     );
 
     // Command: open file
@@ -377,7 +418,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             return false;
         }
         
-        // 如果是目录变化，总是刷新
+        // 如果是目录变化，总是刷新（用于显示结构变化）
         try {
             if (fs.existsSync(uri.fsPath) && fs.statSync(uri.fsPath).isDirectory()) {
                 return true;
@@ -386,7 +427,16 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             // 文件可能已被删除，仍需要刷新
         }
         
-        // 如果是文件，只关注包含关键词的文件
+        // 如果是文件，只关注包含关键词的文件（角色相关文件）
+        const fileName = path.basename(uri.fsPath);
+        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
+        const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
+        
+        return hasKeywords && hasValidExtension;
+    };
+
+    // 改进的角色数据更新判断：只有角色相关文件才触发角色数据更新
+    const shouldUpdateRoles = (uri: vscode.Uri) => {
         const fileName = path.basename(uri.fsPath);
         const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
         const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
@@ -403,34 +453,37 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         console.log(`包管理器：检测到文件${changeType} ${uri.fsPath}`);
         provider.refresh();
         
-        // 动态导入并触发角色数据增量更新
-        import('../../utils/utils.js').then(({ loadRoles }) => {
-            if (changeType === 'delete') {
-                // 文件删除：强制完整刷新
-                loadRoles(true);
-            } else {
-                // 文件创建或修改：增量更新
-                loadRoles(false, [uri.fsPath]);
-            }
-            
-            // 触发装饰器更新
-            import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
-                updateDecorations();
+        // 只有角色相关文件才触发角色数据更新
+        if (shouldUpdateRoles(uri)) {
+            // 动态导入并触发角色数据增量更新
+            import('../../utils/utils.js').then(({ loadRoles }) => {
+                if (changeType === 'delete') {
+                    // 文件删除：强制完整刷新
+                    loadRoles(true);
+                } else {
+                    // 文件创建或修改：增量更新
+                    loadRoles(false, [uri.fsPath]);
+                }
+                
+                // 触发装饰器更新
+                import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
+                    updateDecorations();
+                }).catch(error => {
+                    console.error(`装饰器更新失败: ${error}`);
+                });
+                
+                // 显示用户通知
+                const fileName = path.basename(uri.fsPath);
+                const changeTypeMap = {
+                    'create': '创建',
+                    'delete': '删除', 
+                    'change': '修改'
+                };
+                vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[changeType]}: ${fileName}`);
             }).catch(error => {
-                console.error(`装饰器更新失败: ${error}`);
+                console.error(`角色数据更新失败: ${error}`);
             });
-            
-            // 显示用户通知
-            const fileName = path.basename(uri.fsPath);
-            const changeTypeMap = {
-                'create': '创建',
-                'delete': '删除', 
-                'change': '修改'
-            };
-            vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[changeType]}: ${fileName}`);
-        }).catch(error => {
-            console.error(`角色数据更新失败: ${error}`);
-        });
+        }
     };
 
     // 监听文件系统事件
@@ -453,19 +506,22 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             console.log(`包管理器：检测到相关文件保存 ${filePath}`);
             provider.refresh();
             
-            // 触发角色数据增量更新
-            import('../../utils/utils.js').then(({ loadRoles }) => {
-                loadRoles(false, [filePath]);
-                
-                // 触发装饰器更新
-                import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
-                    updateDecorations();
+            // 只有角色相关文件才触发角色数据更新
+            if (shouldUpdateRoles(document.uri)) {
+                // 触发角色数据增量更新
+                import('../../utils/utils.js').then(({ loadRoles }) => {
+                    loadRoles(false, [filePath]);
+                    
+                    // 触发装饰器更新
+                    import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
+                        updateDecorations();
+                    }).catch(error => {
+                        console.error(`装饰器更新失败: ${error}`);
+                    });
                 }).catch(error => {
-                    console.error(`装饰器更新失败: ${error}`);
+                    console.error(`角色数据更新失败: ${error}`);
                 });
-            }).catch(error => {
-                console.error(`角色数据更新失败: ${error}`);
-            });
+            }
         }
     });
 
