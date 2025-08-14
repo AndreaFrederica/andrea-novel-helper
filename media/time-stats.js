@@ -1,0 +1,312 @@
+const vscode = acquireVsCodeApi();
+
+function fmtMinutes(ms) {
+    const mins = Math.round(ms / 60000);
+    return mins + ' 分钟';
+}
+
+// 获取统计数据的API函数
+function requestStatsData() {
+    console.log('Requesting stats data from API...');
+    vscode.postMessage({ type: 'get-stats-data' });
+}
+
+// 页面加载完成后立即请求数据
+window.addEventListener('DOMContentLoaded', () => {
+    console.log('Webview DOM loaded, requesting stats data...');
+    requestStatsData();
+
+    // 每30秒刷新一次数据
+    setInterval(requestStatsData, 1000);
+});
+
+window.addEventListener('message', (e) => {
+    const data = e.data;
+    console.log('Webview received message:', data);
+    console.log('Message event object:', e);
+
+    if (!data) {
+        console.error('No data in message');
+        return;
+    }
+
+    if (data.type === 'error') {
+        console.error('Error from API:', data.message);
+        // 显示错误信息
+        document.getElementById('k_total').textContent = '错误';
+        document.getElementById('k_today_time').textContent = data.message;
+        document.getElementById('k_today_avg').textContent = '0 CPM';
+        document.getElementById('k_today_peak').textContent = '0 CPM';
+        return;
+    }
+
+    if (data.type !== 'time-stats-data') {
+        console.log('Message type not recognized:', data.type);
+        return;
+    }
+
+    console.log('Processing time stats data:', {
+        supportsGlobal: data.supportsGlobal,
+        perFileLineLength: data.perFileLine?.length,
+        totalMillisAll: data.totalMillisAll,
+        todayChars: data.today?.chars,
+        heatmapKeys: Object.keys(data.heatmap || {}).length,
+        bucketSizeMs: data.bucketSizeMs,
+        rawData: data
+    });
+
+    // KPI
+    console.log('Setting KPI values:', {
+        totalMillisAll: data.totalMillisAll,
+        todayMillis: data.today.millis,
+        todayAvgCPM: data.today.avgCPM,
+        todayPeakCPM: data.today.peakCPM
+    });
+
+    document.getElementById('k_total').textContent = fmtMinutes(data.totalMillisAll);
+    document.getElementById('k_today_time').textContent = fmtMinutes(data.today.millis);
+    document.getElementById('k_today_avg').textContent = data.today.avgCPM + ' CPM';
+    document.getElementById('k_today_peak').textContent = data.today.peakCPM + ' CPM';
+
+    document.getElementById('scopeTag').textContent = data.supportsGlobal ? '跨文件汇总' : '仅当前文件';
+
+    // 折线：perFileLine
+    console.log('About to draw line chart...');
+    drawLineChart(document.getElementById('lineChart'), data.perFileLine);
+
+    // 柱状：today.hourly
+    console.log('About to draw today bars...');
+    drawTodayBars(document.getElementById('todayBars'), data.today.hourly);
+
+    // 今日热力图：today.quarterHourly
+    console.log('About to draw today heatmap...');
+    drawTodayHeatmap(document.getElementById('todayHeatmap'), data.today.quarterHourly);
+
+    // 热力图：heatmap (dayTs -> chars)
+    console.log('About to draw yearly heatmap...');
+    drawHeatmap(document.getElementById('heatmap'), data.heatmap);
+});
+
+function drawAxes(ctx, W, H, padding) {
+    ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, H - padding);
+    ctx.lineTo(W - padding, H - padding);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+}
+
+function drawLineChart(canvas, rows) {
+    console.log('Drawing line chart with data:', rows);
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height, pad = 32;
+    ctx.clearRect(0, 0, W, H);
+    drawAxes(ctx, W, H, pad);
+
+    if (!rows || !rows.length) {
+        console.log('No line chart data available');
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+        ctx.font = '14px system-ui';
+        ctx.fillText('暂无数据', pad + 8, pad + 16);
+        return;
+    }
+
+    console.log('Line chart data points:', rows.length);
+    const xs = rows.map(r => r.t);
+    const ys = rows.map(r => r.cpm);
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+    const yMin = 0, yMax = Math.max(60, Math.max(...ys));
+
+    console.log('Line chart ranges:', { xMin, xMax, yMin, yMax });
+
+    const xMap = x => pad + (W - 2 * pad) * (x - xMin) / Math.max(1, (xMax - xMin));
+    const yMap = y => (H - pad) - (H - 2 * pad) * (y - yMin) / Math.max(1, (yMax - yMin));
+
+    // grid Y
+    ctx.strokeStyle = '#888'; ctx.globalAlpha = .2;
+    const step = Math.max(10, Math.round(yMax / 5));
+    for (let y = 0; y <= yMax; y += step) {
+        const yy = yMap(y);
+        ctx.beginPath(); ctx.moveTo(pad, yy); ctx.lineTo(W - pad, yy); ctx.stroke();
+        ctx.fillStyle = '#888'; ctx.fillText(String(y), 4, yy + 3);
+    }
+    ctx.globalAlpha = 1;
+
+    // line
+    ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#4444ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    rows.forEach((r, i) => {
+        const X = xMap(r.t), Y = yMap(r.cpm);
+        if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+    });
+    ctx.stroke();
+    console.log('Line chart drawn successfully');
+}
+
+function drawTodayBars(canvas, hourly) {
+    console.log('Drawing today bars with data:', hourly);
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height, pad = 32;
+    ctx.clearRect(0, 0, W, H);
+    drawAxes(ctx, W, H, pad);
+
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+    const vals = hours.map(h => hourly[h] || 0);
+    const maxV = Math.max(10, ...vals);
+    const barW = (W - 2 * pad) / 24 * .8;
+    const xBase = pad + ((W - 2 * pad) / 24) * .1;
+
+    console.log('Bar chart values:', vals);
+    console.log('Max value:', maxV);
+
+    const yMap = v => (H - pad) - (H - 2 * pad) * v / maxV;
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+    hours.forEach((h, idx) => {
+        const v = vals[idx];
+        const x = xBase + idx * (W - 2 * pad) / 24;
+        const y = yMap(v);
+        const hh = (H - pad) - y;
+        ctx.fillRect(x, y, barW, hh);
+        if (idx % 3 === 0) {
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+            ctx.font = '10px system-ui';
+            ctx.fillText(String(h), x, H - pad + 12);
+        }
+    });
+    console.log('Today bars drawn successfully');
+}
+
+function drawHeatmap(canvas, heatmap) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const cell = 12, gap = 2;
+    const cols = 53; // 约 52 周 + 1
+    const rows = 7;  // 周一~周日
+    const startX = 60, startY = 20;
+
+    // 计算最近 53*7 天的起点（以今天为末尾）
+    const today = new Date();
+    const endDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const dayMs = 24 * 3600 * 1000;
+
+    // 找出最大值用于颜色映射
+    let maxVal = 0;
+    const days = [];
+    for (let i = cols * rows - 1; i >= 0; i--) {
+        const ts = endDay - i * dayMs;
+        const v = heatmap[ts] || 0;
+        days.push({ ts, v });
+        if (v > maxVal) maxVal = v;
+    }
+
+    // 画标签
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+    ctx.fillText('周', 20, startY + 6);
+    ctx.fillText('一', 20, startY + cell + gap + 6);
+    ctx.fillText('二', 20, startY + 2 * (cell + gap) + 6);
+    ctx.fillText('三', 20, startY + 3 * (cell + gap) + 6);
+    ctx.fillText('四', 20, startY + 4 * (cell + gap) + 6);
+    ctx.fillText('五', 20, startY + 5 * (cell + gap) + 6);
+    ctx.fillText('六', 20, startY + 6 * (cell + gap) + 6);
+
+    // 画格子
+    const colorFor = v => {
+        if (maxVal <= 0) return '#2f2f2f33';
+        const t = Math.min(1, v / maxVal);
+        const alpha = 0.15 + 0.85 * t; // 越多越深
+        return `rgba(100,180,255,${alpha})`;
+    };
+
+    let idx = 0;
+    for (let c = 0; c < cols; c++) {
+        for (let r = 0; r < rows; r++) {
+            const d = days[idx++];
+            const x = startX + c * (cell + gap);
+            const y = startY + r * (cell + gap);
+            ctx.fillStyle = colorFor(d.v);
+            ctx.fillRect(x, y, cell, cell);
+        }
+    }
+}
+
+function drawTodayHeatmap(canvas, quarterHourly) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const cell = 8, gap = 1;
+    const cols = 24; // 24小时
+    const rows = 4;  // 每小时4个15分钟刻度
+    const startX = 60, startY = 20;
+
+    // 找出最大值用于颜色映射
+    let maxVal = 0;
+    const allValues = [];
+    for (let h = 0; h < 24; h++) {
+        for (let q = 0; q < 4; q++) {
+            const idx = h * 4 + q;
+            const v = quarterHourly[idx] || 0;
+            allValues.push(v);
+            if (v > maxVal) maxVal = v;
+        }
+    }
+
+    // 画时间标签
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+    ctx.font = '10px system-ui';
+
+    // Y轴标签（15分钟刻度）
+    ctx.fillText('00', 20, startY + 8);
+    ctx.fillText('15', 20, startY + cell + gap + 8);
+    ctx.fillText('30', 20, startY + 2 * (cell + gap) + 8);
+    ctx.fillText('45', 20, startY + 3 * (cell + gap) + 8);
+
+    // X轴标签（小时）
+    for (let h = 0; h < 24; h += 3) {
+        const x = startX + h * (cell + gap);
+        ctx.fillText(h.toString().padStart(2, '0'), x, startY + 4 * (cell + gap) + 15);
+    }
+
+    // 颜色映射函数
+    const colorFor = v => {
+        if (maxVal <= 0) return '#2f2f2f33';
+        const t = Math.min(1, v / maxVal);
+        const intensity = 0.15 + 0.85 * t;
+        return `rgba(100,180,255,${intensity})`;
+    };
+
+    // 画格子
+    for (let h = 0; h < 24; h++) {
+        for (let q = 0; q < 4; q++) {
+            const idx = h * 4 + q;
+            const v = quarterHourly[idx] || 0;
+            const x = startX + h * (cell + gap);
+            const y = startY + q * (cell + gap);
+
+            ctx.fillStyle = colorFor(v);
+            ctx.fillRect(x, y, cell, cell);
+
+            // 如果有数据，显示工具提示样式的边框
+            if (v > 0) {
+                ctx.strokeStyle = 'rgba(100,180,255,0.8)';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(x, y, cell, cell);
+            }
+        }
+    }
+
+    // 添加说明文字
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+    ctx.font = '11px system-ui';
+    ctx.fillText('时间 →', startX, startY - 5);
+    ctx.save();
+    ctx.translate(15, startY + 40);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('分钟', 0, 0);
+    ctx.restore();
+}

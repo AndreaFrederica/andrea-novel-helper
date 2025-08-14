@@ -188,7 +188,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         const uriStr = editor?.document.uri.toString();
         const now_fsPath = editor?.document.uri.fsPath;
-        console.log('lastActiveUri:', outline_2raw_file_dir, ' current:', now_fsPath);
+        // console.log('lastActiveUri:', outline_2raw_file_dir, ' current:', now_fsPath);
         if (now_fsPath !== outline_2raw_file_dir) {
 
             // 如果新激活的是“内容文件”，就刷新
@@ -490,10 +490,12 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
-    activateTimeStats(context);
     
     // 初始化全局文件追踪（为备份等功能提供基础）
+    // 注意：必须在 timeStats 之前初始化，因为 timeStats 依赖于全局文件追踪
     initializeGlobalFileTracking(context);
+    
+    activateTimeStats(context);
     
     // 注册文件追踪相关命令
     context.subscriptions.push(

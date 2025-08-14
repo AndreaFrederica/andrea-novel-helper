@@ -69,16 +69,29 @@ function computeZhEnCount(text: string): { zhChars: number; enWords: number; tot
 
 // 获取或创建文件统计（接入全局追踪）
 function getOrCreateFileStats(filePath: string): FileStats {
+    console.log('TimeStats: getOrCreateFileStats called for:', filePath);
+
     const g = getGlobalFileTracking?.();
+    console.log('TimeStats: getGlobalFileTracking result:', !!g);
+
     if (!g) {
+        console.log('TimeStats: No global file tracking, returning empty stats');
         return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
     }
+
     const uuid = g.getFileUuid(filePath);
+    console.log('TimeStats: File UUID for', filePath, ':', uuid);
+
     if (!uuid) {
+        console.log('TimeStats: No UUID found, returning empty stats');
         return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
     }
+
     const ws = g.getWritingStats(uuid);
+    console.log('TimeStats: Writing stats for UUID', uuid, ':', ws);
+
     if (ws) {
+        console.log('TimeStats: Found writing stats, returning populated stats');
         return {
             totalMillis: ws.totalMillis,
             charsAdded: ws.charsAdded,
@@ -89,6 +102,8 @@ function getOrCreateFileStats(filePath: string): FileStats {
             sessions: ws.sessions ?? [],   // 同上
         };
     }
+
+    console.log('TimeStats: No writing stats found, returning empty stats');
     return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
 }
 
@@ -149,20 +164,20 @@ function calcPeakCPM(fsEntry: FileStats, bucketSizeMs: number): number {
 function calcCurrentCPM(fsEntry: FileStats, bucketSizeMs: number): number {
     const t = now();
     const currentBucketStart = Math.floor(t / bucketSizeMs) * bucketSizeMs;
-    
+
     // 使用滑动窗口算法：考虑最近N个桶的加权平均
     const windowSize = 3; // 考虑最近3个桶
     const recentBuckets = fsEntry.buckets
         .filter(b => b.start <= currentBucketStart && b.start > currentBucketStart - windowSize * bucketSizeMs)
         .sort((a, b) => b.start - a.start); // 按时间倒序
-    
+
     if (recentBuckets.length === 0) {
         return 0;
     }
-    
+
     // 当前桶（如果存在）
     const currentBucket = recentBuckets.find(b => b.start === currentBucketStart);
-    
+
     // 如果当前桶有数据且时间足够长，优先使用当前桶
     if (currentBucket && currentBucket.charsAdded > 0) {
         const elapsedMs = t - currentBucketStart;
@@ -170,15 +185,15 @@ function calcCurrentCPM(fsEntry: FileStats, bucketSizeMs: number): number {
             return Math.round((currentBucket.charsAdded * 60000) / elapsedMs);
         }
     }
-    
+
     // 使用加权平均：越近的桶权重越高
     let totalChars = 0;
     let totalWeight = 0;
-    
+
     for (let i = 0; i < recentBuckets.length; i++) {
         const bucket = recentBuckets[i];
         let weight: number;
-        
+
         if (bucket.start === currentBucketStart) {
             // 当前桶：根据经过时间动态计算权重
             const elapsedMs = t - currentBucketStart;
@@ -188,15 +203,15 @@ function calcCurrentCPM(fsEntry: FileStats, bucketSizeMs: number): number {
             // 历史桶：距离越近权重越高
             weight = 1 / (i + 1);
         }
-        
+
         totalChars += bucket.charsAdded * weight;
         totalWeight += weight;
     }
-    
+
     if (totalWeight === 0) {
         return 0;
     }
-    
+
     // 计算加权平均CPM
     const avgCharsPerBucket = totalChars / totalWeight;
     return Math.round((avgCharsPerBucket * 60000) / bucketSizeMs);
@@ -406,7 +421,7 @@ async function exportStatsCSV(context: vscode.ExtensionContext) {
 }
 
 // -------------------- 仪表板（独立 HTML） --------------------
-function openDashboard(context: vscode.ExtensionContext) {
+async function openDashboard(context: vscode.ExtensionContext) {
     if (!currentDocPath) {
         vscode.window.showInformationMessage('当前没有活动文件');
         return;
@@ -414,8 +429,24 @@ function openDashboard(context: vscode.ExtensionContext) {
 
     // 为了调试，先更新当前文件的统计数据
     const currentTime = Date.now();
+
+    // 确保当前文件被追踪
+    const globalTracking = getGlobalFileTracking?.();
+    if (globalTracking) {
+        console.log('TimeStats: Ensuring current file is tracked...');
+        const tracker = require('./utils/fileTracker').getFileTracker();
+        if (tracker) {
+            try {
+                await tracker.handleFileCreated(currentDocPath);
+                console.log('TimeStats: File tracking triggered for:', currentDocPath);
+            } catch (error) {
+                console.warn('TimeStats: Failed to trigger file tracking:', error);
+            }
+        }
+    }
+
     const fsEntry = getFileStats(currentDocPath);
-    
+
     // 如果没有数据
     if (fsEntry.buckets.length === 0) {
         console.log('TimeStats: No existing buckets');
@@ -428,212 +459,250 @@ function openDashboard(context: vscode.ExtensionContext) {
         { enableScripts: true, localResourceRoots: [vscode.Uri.file(path.join(context.extensionPath, 'media'))] }
     );
 
-    // 载入独立 HTML
     const htmlPath = path.join(context.extensionPath, 'media', 'time-stats.html');
-    let html = '';
-    try {
-        html = fs.readFileSync(htmlPath, 'utf8');
-    } catch (e) {
-        html = `<html><body><h3>缺少 media/time-stats.html</h3></body></html>`;
-    }
-    panel.webview.html = html.replace(/%CSP_SOURCE%/g, panel.webview.cspSource);
+    let html = fs.readFileSync(htmlPath, 'utf8');
 
-    // 准备数据：当前文件 + 跨文件（若可）
-    const { bucketSizeMs } = getConfig();
-    const fileStats = getFileStats(currentDocPath);
-    console.log('TimeStats: Current file stats:', {
-        path: currentDocPath,
-        totalMillis: fileStats.totalMillis,
-        charsAdded: fileStats.charsAdded,
-        bucketsCount: fileStats.buckets.length,
-        sessionsCount: fileStats.sessions.length,
-        buckets: fileStats.buckets.slice(0, 3) // 显示前3个桶
-    });
-    
-    const perFileLine = fileStats.buckets
-        .slice()
-        .sort((a, b) => a.start - b.start)
-        .map(b => ({ t: b.start, cpm: Math.round((b.charsAdded * 60000) / bucketSizeMs) }));
-    
-    // 如果没有数据，创建一些测试数据用于调试
-    if (perFileLine.length === 0) {
-        console.log('TimeStats: No bucket data, creating test data');
-        const currentTime = Date.now();
-        const testData = [];
-        for (let i = 0; i < 5; i++) {
-            testData.push({
-                t: currentTime - (5 - i) * bucketSizeMs,
-                cpm: Math.floor(Math.random() * 100) + 20
-            });
+    // 生成 webview 可访问的 JS URI
+    const scriptUri = panel.webview.asWebviewUri(
+        vscode.Uri.file(path.join(context.extensionPath, 'media', 'time-stats.js'))
+    );
+
+    // 替换占位符
+    html = html
+        .replace(/%CSP_SOURCE%/g, panel.webview.cspSource)
+        .replace(/%SCRIPT_URI%/g, scriptUri.toString());
+
+    panel.webview.html = html;
+
+
+    // 创建一个数据获取API函数
+    const getStatsData = () => {
+        if (!currentDocPath) {
+            console.warn('TimeStats: No current document path available');
+            return null;
         }
-        perFileLine.push(...testData);
-    }
-    
-    console.log('TimeStats: Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
 
-    // 跨文件汇总（尽量从全局拿；否则降级为当前文件）
-    const g = getGlobalFileTracking?.();
-    type Ws = {
-        filePath?: string;
-        totalMillis: number;
-        charsAdded: number;
-        lastActiveTime: number;
-        buckets?: { start: number; end: number; charsAdded: number }[];
-        sessions?: { start: number; end: number }[];
-    };
+        console.log('TimeStats: API called to get stats data');
 
-    let allStats: Ws[] = [];
-    let globalCapable = false;
-
-    console.log('TimeStats: Global file tracking available:', !!g);
-
-    if (g && typeof g.getAllWritingStats === 'function') {
-        try {
-            allStats = g.getAllWritingStats(); // 使用新的方法
-            globalCapable = true;
-            console.log('TimeStats: Successfully retrieved', allStats.length, 'file stats from global tracking');
-        } catch (error) {
-            console.error('TimeStats: Failed to get all writing stats:', error);
-        }
-    }
-
-    if (!globalCapable) {
-        // 降级：只用当前文件
-        allStats = [{
-            filePath: currentDocPath,
+        // 准备数据：当前文件 + 跨文件（若可）
+        const { bucketSizeMs } = getConfig();
+        const fileStats = getFileStats(currentDocPath);
+        console.log('TimeStats: Current file stats:', {
+            path: currentDocPath,
             totalMillis: fileStats.totalMillis,
             charsAdded: fileStats.charsAdded,
-            lastActiveTime: fileStats.lastSeen,
-            buckets: fileStats.buckets,
-            sessions: fileStats.sessions,
-        }];
-    }
+            bucketsCount: fileStats.buckets.length,
+            sessionsCount: fileStats.sessions.length,
+            buckets: fileStats.buckets.slice(0, 3) // 显示前3个桶
+        });
 
-    // 计算：全文件累计时长、今日时长/平均/峰值、热力图（日粒度）、今日按小时柱状图
-    const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const msDay = 24 * 60 * 60 * 1000;
-    const todayStart = startOfDay(new Date());
+        const perFileLine = fileStats.buckets
+            .slice()
+            .sort((a, b) => a.start - b.start)
+            .map(b => ({ t: b.start, cpm: Math.round((b.charsAdded * 60000) / bucketSizeMs) }));
 
-    // 累计时长（全文件）
-    const totalMillisAll = allStats.reduce((s, it) => s + (it.totalMillis || 0), 0);
-
-    // 今日：从 sessions 聚合（有 sessions 用 sessions，没有则从 buckets 近似）
-    let todayMillis = 0;
-    let todayChars = 0;
-    let todayPeakCPM = 0;
-    const todayHourly: Record<number, number> = {}; // 0..23 -> charsAdded
-    for (let h = 0; h < 24; h++) {
-        todayHourly[h] = 0;
-    }
-
-    // 今日15分钟粒度热力图：96个时间点（24小时 × 4刻钟）
-    const todayQuarterHourly: Record<number, number> = {}; // 0..95 -> charsAdded
-    for (let i = 0; i < 96; i++) {
-        todayQuarterHourly[i] = 0;
-    }
-
-    // 热力图：最近 52 周（364 天）每天的 charsAdded
-    const heatDays = 364;
-    const heatStart = todayStart - heatDays * msDay;
-    const heatmap: Record<number, number> = {}; // dayStartTs -> charsAdded
-
-    function addCharsToDay(ts: number, chars: number) {
-        const dayTs = startOfDay(new Date(ts));
-        heatmap[dayTs] = (heatmap[dayTs] ?? 0) + chars;
-    }
-
-    for (const it of allStats) {
-        const buckets = it.buckets ?? [];
-        // 用 buckets 估算每日与今日
-        for (const b of buckets) {
-            const ts = b.start;
-            if (ts >= heatStart) {
-                addCharsToDay(ts, b.charsAdded);
+        // 如果没有数据，创建一些测试数据用于调试
+        if (perFileLine.length === 0) {
+            console.log('TimeStats: No bucket data, creating test data');
+            const currentTime = Date.now();
+            const testData = [];
+            for (let i = 0; i < 5; i++) {
+                testData.push({
+                    t: currentTime - (5 - i) * bucketSizeMs,
+                    cpm: Math.floor(Math.random() * 100) + 20
+                });
             }
+            perFileLine.push(...testData);
+        }
 
-            if (ts >= todayStart) {
-                todayChars += b.charsAdded;
-                const cpm = Math.round((b.charsAdded * 60000) / bucketSizeMs);
-                if (cpm > todayPeakCPM) {
-                    todayPeakCPM = cpm;
+        console.log('TimeStats: Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
+
+        // 跨文件汇总（尽量从全局拿；否则降级为当前文件）
+        const globalFileTracking = getGlobalFileTracking?.();
+        type Ws = {
+            filePath?: string;
+            totalMillis: number;
+            charsAdded: number;
+            lastActiveTime: number;
+            buckets?: { start: number; end: number; charsAdded: number }[];
+            sessions?: { start: number; end: number }[];
+        };
+
+        let allStats: Ws[] = [];
+        let globalCapable = false;
+
+        console.log('TimeStats: Global file tracking available:', !!globalFileTracking);
+
+        if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
+            try {
+                allStats = globalFileTracking.getAllWritingStats(); // 使用新的方法
+                globalCapable = true;
+                console.log('TimeStats: Successfully retrieved', allStats.length, 'file stats from global tracking');
+            } catch (error) {
+                console.error('TimeStats: Failed to get all writing stats:', error);
+            }
+        }
+
+        if (!globalCapable) {
+            // 降级：只用当前文件
+            allStats = [{
+                filePath: currentDocPath,
+                totalMillis: fileStats.totalMillis,
+                charsAdded: fileStats.charsAdded,
+                lastActiveTime: fileStats.lastSeen,
+                buckets: fileStats.buckets,
+                sessions: fileStats.sessions,
+            }];
+        }
+
+        // 计算：全文件累计时长、今日时长/平均/峰值、热力图（日粒度）、今日按小时柱状图
+        const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const msDay = 24 * 60 * 60 * 1000;
+        const todayStart = startOfDay(new Date());
+
+        // 累计时长（全文件）
+        const totalMillisAll = allStats.reduce((s, it) => s + (it.totalMillis || 0), 0);
+
+        // 今日：从 sessions 聚合（有 sessions 用 sessions，没有则从 buckets 近似）
+        let todayMillis = 0;
+        let todayChars = 0;
+        let todayPeakCPM = 0;
+        const todayHourly: Record<number, number> = {}; // 0..23 -> charsAdded
+        for (let h = 0; h < 24; h++) {
+            todayHourly[h] = 0;
+        }
+
+        // 今日15分钟粒度热力图：96个时间点（24小时 × 4刻钟）
+        const todayQuarterHourly: Record<number, number> = {}; // 0..95 -> charsAdded
+        for (let i = 0; i < 96; i++) {
+            todayQuarterHourly[i] = 0;
+        }
+
+        // 热力图：最近 52 周（364 天）每天的 charsAdded
+        const heatDays = 364;
+        const heatStart = todayStart - heatDays * msDay;
+        const heatmap: Record<number, number> = {}; // dayStartTs -> charsAdded
+
+        function addCharsToDay(ts: number, chars: number) {
+            const dayTs = startOfDay(new Date(ts));
+            heatmap[dayTs] = (heatmap[dayTs] ?? 0) + chars;
+        }
+
+        for (const it of allStats) {
+            const buckets = it.buckets ?? [];
+            // 用 buckets 估算每日与今日
+            for (const b of buckets) {
+                const ts = b.start;
+                if (ts >= heatStart) {
+                    addCharsToDay(ts, b.charsAdded);
                 }
 
-                const hour = new Date(ts).getHours();
-                todayHourly[hour] += b.charsAdded;
+                if (ts >= todayStart) {
+                    todayChars += b.charsAdded;
+                    const cpm = Math.round((b.charsAdded * 60000) / bucketSizeMs);
+                    if (cpm > todayPeakCPM) {
+                        todayPeakCPM = cpm;
+                    }
 
-                // 计算15分钟粒度索引 (0-95)
-                const date = new Date(ts);
-                const quarterHourIndex = date.getHours() * 4 + Math.floor(date.getMinutes() / 15);
-                todayQuarterHourly[quarterHourIndex] += b.charsAdded;
+                    const hour = new Date(ts).getHours();
+                    todayHourly[hour] += b.charsAdded;
+
+                    // 计算15分钟粒度索引 (0-95)
+                    const date = new Date(ts);
+                    const quarterHourIndex = date.getHours() * 4 + Math.floor(date.getMinutes() / 15);
+                    todayQuarterHourly[quarterHourIndex] += b.charsAdded;
+                }
+            }
+
+            // 今日用时（用 sessions 更精确）
+            const sessions = it.sessions ?? [];
+            for (const s of sessions) {
+                // 累加与今天交集
+                const st = Math.max(s.start, todayStart);
+                const en = Math.min(s.end, todayStart + msDay);
+                if (en > st) {
+                    todayMillis += (en - st);
+                }
+            }
+        }
+        const todayMinutes = todayMillis / 60000;
+        const todayAvgCPM = todayMinutes > 0 ? Math.round(todayChars / todayMinutes) : 0;
+
+        // 如果没有今日数据，创建一些测试数据
+        if (todayChars === 0 && todayMillis === 0) {
+            console.log('TimeStats: No today data, creating test data');
+            todayChars = 150;
+            todayMillis = 3600000; // 1小时
+            todayPeakCPM = 120;
+            const currentHour = new Date().getHours();
+            todayHourly[currentHour] = 50;
+            todayHourly[currentHour - 1] = 30;
+            todayHourly[currentHour - 2] = 70;
+
+            // 添加一些15分钟数据
+            for (let i = 0; i < 8; i++) {
+                const idx = currentHour * 4 + (i % 4);
+                if (idx >= 0 && idx < 96) {
+                    todayQuarterHourly[idx] = Math.floor(Math.random() * 20) + 5;
+                }
             }
         }
 
-        // 今日用时（用 sessions 更精确）
-        const sessions = it.sessions ?? [];
-        for (const s of sessions) {
-            // 累加与今天交集
-            const st = Math.max(s.start, todayStart);
-            const en = Math.min(s.end, todayStart + msDay);
-            if (en > st) {
-                todayMillis += (en - st);
-            }
-        }
-    }
-    const todayMinutes = todayMillis / 60000;
-    const todayAvgCPM = todayMinutes > 0 ? Math.round(todayChars / todayMinutes) : 0;
+        // 重新计算今日平均CPM
+        const finalTodayMinutes = todayMillis / 60000;
+        const finalTodayAvgCPM = finalTodayMinutes > 0 ? Math.round(todayChars / finalTodayMinutes) : 0;
 
-    // 如果没有今日数据，创建一些测试数据
-    if (todayChars === 0 && todayMillis === 0) {
-        console.log('TimeStats: No today data, creating test data');
-        todayChars = 150;
-        todayMillis = 3600000; // 1小时
-        todayPeakCPM = 120;
-        const currentHour = new Date().getHours();
-        todayHourly[currentHour] = 50;
-        todayHourly[currentHour - 1] = 30;
-        todayHourly[currentHour - 2] = 70;
-        
-        // 添加一些15分钟数据
-        for (let i = 0; i < 8; i++) {
-            const idx = currentHour * 4 + (i % 4);
-            if (idx >= 0 && idx < 96) {
-                todayQuarterHourly[idx] = Math.floor(Math.random() * 20) + 5;
-            }
-        }
-    }
+        const result = {
+            type: 'time-stats-data',
+            supportsGlobal: globalCapable,
+            perFileLine,               // 当前文件的速度曲线
+            totalMillisAll,            // 全文件累计时长
+            today: {
+                millis: todayMillis,
+                avgCPM: finalTodayAvgCPM,
+                peakCPM: todayPeakCPM,
+                hourly: todayHourly,
+                quarterHourly: todayQuarterHourly,
+                chars: todayChars,
+            },
+            heatmap,                   // dayTs -> charsAdded（最近 52 周）
+            bucketSizeMs
+        };
 
-    // 重新计算今日平均CPM
-    const finalTodayMinutes = todayMillis / 60000;
-    const finalTodayAvgCPM = finalTodayMinutes > 0 ? Math.round(todayChars / finalTodayMinutes) : 0;
+        console.log('TimeStats: Generated stats data:', {
+            globalCapable,
+            allStatsCount: allStats.length,
+            perFileLineLength: perFileLine.length,
+            totalMillisAll,
+            todayChars,
+            todayHourlySum: Object.values(todayHourly).reduce((a, b) => a + b, 0),
+            heatmapDaysCount: Object.keys(heatmap).length
+        });
 
-    const messageData = {
-        type: 'time-stats-data',
-        supportsGlobal: globalCapable,
-        perFileLine,               // 当前文件的速度曲线
-        totalMillisAll,            // 全文件累计时长
-        today: {
-            millis: todayMillis,
-            avgCPM: finalTodayAvgCPM,
-            peakCPM: todayPeakCPM,
-            hourly: todayHourly,
-            quarterHourly: todayQuarterHourly,
-            chars: todayChars,
-        },
-        heatmap,                   // dayTs -> charsAdded（最近 52 周）
-        bucketSizeMs
+        return result;
     };
 
-    console.log('TimeStats: Sending data to webview:', {
-        globalCapable,
-        allStatsCount: allStats.length,
-        perFileLineLength: perFileLine.length,
-        totalMillisAll,
-        todayChars,
-        todayHourlySum: Object.values(todayHourly).reduce((a, b) => a + b, 0),
-        heatmapDaysCount: Object.keys(heatmap).length
-    });
+    // 监听来自webview的API调用
+    const messageDisposable = panel.webview.onDidReceiveMessage(
+        message => {
+            console.log('TimeStats: Received message from webview:', message);
 
-    panel.webview.postMessage(messageData);
+            if (message.type === 'get-stats-data') {
+                console.log('TimeStats: API request for stats data');
+                const data = getStatsData();
+                if (data) {
+                    panel.webview.postMessage(data);
+                } else {
+                    panel.webview.postMessage({
+                        type: 'error',
+                        message: 'No current document available'
+                    });
+                }
+            }
+        },
+        undefined,
+        context.subscriptions
+    );
 }
 
 // -------------------- 激活/反激活 --------------------
@@ -657,7 +726,14 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
         vscode.window.onDidChangeWindowState(handleWindowStateChange),
         vscode.workspace.onDidCloseTextDocument(handleDocumentClose),
         vscode.workspace.onDidRenameFiles(handleRename),
-        vscode.commands.registerCommand('AndreaNovelHelper.openTimeStats', () => openDashboard(context)),
+        vscode.commands.registerCommand('AndreaNovelHelper.openTimeStats', async () => {
+            try {
+                await openDashboard(context);
+            } catch (error) {
+                console.error('TimeStats: Failed to open dashboard:', error);
+                vscode.window.showErrorMessage('无法打开写作统计仪表板');
+            }
+        }),
         vscode.commands.registerCommand('AndreaNovelHelper.exportTimeStatsCSV', () => exportStatsCSV(context)),
     );
 
