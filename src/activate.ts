@@ -410,12 +410,22 @@ export function activate(context: vscode.ExtensionContext) {
     */
 
     // Word Count 树视图
-    const wordCountProvider = new WordCountProvider();
+    const wordCountProvider = new WordCountProvider(context.workspaceState);
     const treeView = vscode.window.createTreeView('wordCountExplorer', {
         treeDataProvider: wordCountProvider,
         showCollapseAll: true
     });
-    context.subscriptions.push(treeView);
+    
+    // 监听树视图展开/折叠事件以保存状态
+    context.subscriptions.push(
+        treeView.onDidExpandElement(e => {
+            wordCountProvider.onDidExpandElement(e.element);
+        }),
+        treeView.onDidCollapseElement(e => {
+            wordCountProvider.onDidCollapseElement(e.element);
+        }),
+        treeView
+    );
 
     // 监听 .gitignore 和 .wcignore 文件变化，刷新字数统计
     if (folders1 && folders1.length) {

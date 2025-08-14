@@ -15,8 +15,17 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
     private isInitializing = false;
     private pendingRefresh = false;
     private ignoreParser: CombinedIgnoreParser | null = null;
+    
+    // 状态持久化
+    private expandedNodes = new Set<string>();
+    private memento: vscode.Memento;
 
-    constructor() {
+    constructor(memento: vscode.Memento) {
+        this.memento = memento;
+        // 从工作区状态恢复展开状态
+        const savedState = this.memento.get<string[]>('wordCountExpandedNodes', []);
+        this.expandedNodes = new Set(savedState);
+        
         vscode.workspace.onDidSaveTextDocument((doc) => {
             // 检查是否是 .gitignore 或 .wcignore 文件
             const fileName = path.basename(doc.uri.fsPath);
@@ -71,6 +80,23 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
         this._onDidChange.fire(undefined); 
     }
 
+    // 保存展开状态到工作区
+    private saveExpandedState(): void {
+        this.memento.update('wordCountExpandedNodes', Array.from(this.expandedNodes));
+    }
+
+    // 处理节点展开
+    onDidExpandElement(node: WordCountItem): void {
+        this.expandedNodes.add(node.id!);
+        this.saveExpandedState();
+    }
+
+    // 处理节点折叠
+    onDidCollapseElement(node: WordCountItem): void {
+        this.expandedNodes.delete(node.id!);
+        this.saveExpandedState();
+    }
+
     private clearCache() {
         this.statsCache.clear();
         this.itemsById.clear();
@@ -116,7 +142,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
             if (d.isDirectory()) {
                 const stats = await this.analyzeFolder(uri.fsPath, exts);
                 if (stats.total === 0) continue;
-                item = new WordCountItem(uri, d.name, stats, vscode.TreeItemCollapsibleState.Collapsed);
+                // 根据保存的状态决定展开状态
+                const isExpanded = this.expandedNodes.has(uri.fsPath);
+                item = new WordCountItem(uri, d.name, stats, 
+                    isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
             } else {
                 // —— 一定要把文件当“叶子节点” —— 
                 const ext = path.extname(d.name).slice(1).toLowerCase();
@@ -195,7 +224,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
             
             if (d.isDirectory()) {
                 const placeholderStats: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
-                const item = new WordCountItem(uri, d.name, placeholderStats, vscode.TreeItemCollapsibleState.Collapsed, true);
+                // 根据保存的状态决定展开状态
+                const isExpanded = this.expandedNodes.has(uri.fsPath);
+                const item = new WordCountItem(uri, d.name, placeholderStats, 
+                    isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed, true);
                 item.id = uri.fsPath;
                 this.itemsById.set(item.id, item);
                 items.push(item);

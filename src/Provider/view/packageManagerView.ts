@@ -56,11 +56,37 @@ export class PackageNode extends vscode.TreeItem {
 export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNode> {
     private _onDidChange = new vscode.EventEmitter<PackageNode | void>();
     readonly onDidChangeTreeData = this._onDidChange.event;
+    
+    // 保存展开状态的键值对
+    private expandedNodes = new Set<string>();
+    private memento: vscode.Memento;
 
-    constructor(private workspaceRoot: string) { }
+    constructor(private workspaceRoot: string, memento: vscode.Memento) { 
+        this.memento = memento;
+        // 从工作区状态恢复展开状态
+        const savedState = this.memento.get<string[]>('packageManagerExpandedNodes', []);
+        this.expandedNodes = new Set(savedState);
+    }
 
     refresh(): void {
         this._onDidChange.fire();
+    }
+
+    // 保存展开状态到工作区
+    private saveExpandedState(): void {
+        this.memento.update('packageManagerExpandedNodes', Array.from(this.expandedNodes));
+    }
+
+    // 处理节点展开
+    onDidExpandElement(node: PackageNode): void {
+        this.expandedNodes.add(node.id!);
+        this.saveExpandedState();
+    }
+
+    // 处理节点折叠
+    onDidCollapseElement(node: PackageNode): void {
+        this.expandedNodes.delete(node.id!);
+        this.saveExpandedState();
     }
 
     getTreeItem(node: PackageNode): vscode.TreeItem {
@@ -88,10 +114,12 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 const stat = fs.statSync(full);
 
                 if (stat.isDirectory()) {
+                    // 根据保存的状态决定展开状态
+                    const isExpanded = this.expandedNodes.has(full);
                     nodes.push(
                         new PackageNode(
                             vscode.Uri.file(full),
-                            vscode.TreeItemCollapsibleState.Collapsed
+                            isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
                         )
                     );
                 } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(name)) {
@@ -125,11 +153,12 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             const stat = fs.statSync(full);
 
             if (stat.isDirectory()) {
-                // 所有子目录都显示
+                // 根据保存的状态决定子目录展开状态
+                const isExpanded = this.expandedNodes.has(full);
                 nodes.push(
                     new PackageNode(
                         vscode.Uri.file(full),
-                        vscode.TreeItemCollapsibleState.Collapsed
+                        isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
                     )
                 );
             } else {
@@ -186,10 +215,23 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     if (!ws) return;
 
     const rootFsPath = ws[0].uri.fsPath;
-    const provider = new PackageManagerProvider(rootFsPath);
+    const provider = new PackageManagerProvider(rootFsPath, context.workspaceState);
 
+    // 注册 TreeDataProvider
+    const treeView = vscode.window.createTreeView('packageManagerView', {
+        treeDataProvider: provider,
+        showCollapseAll: true
+    });
+
+    // 监听树视图展开/折叠事件以保存状态
     context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('packageManagerView', provider)
+        treeView.onDidExpandElement(e => {
+            provider.onDidExpandElement(e.element);
+        }),
+        treeView.onDidCollapseElement(e => {
+            provider.onDidCollapseElement(e.element);
+        }),
+        treeView
     );
 
     // Command: open file with default application
