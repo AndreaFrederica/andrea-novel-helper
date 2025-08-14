@@ -88,6 +88,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
     let currentField = '';
     let currentContent: string[] = [];
     let roleHeaderLevel = 0; // 记录角色标题的级别
+    let isInRole = false; // 标记是否在角色定义中
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -113,24 +114,65 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                 return nextHeaderMatch && nextHeaderMatch[1].length > headerLevel;
             });
             
-            // 如果这个标题有子标题，则认为它是角色标题
-            if (hasSubHeaders) {
+            // 如果这是比当前角色标题级别低或相等的标题，可能是新角色
+            if (!isInRole || headerLevel <= roleHeaderLevel) {
                 // 保存当前角色
                 if (currentRole && currentRole.name) {
                     saveCurrentField(currentRole, currentField, currentContent);
                     finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
                 }
                 
-                // 开始新角色
-                currentRole = { name: headerText };
-                roleHeaderLevel = headerLevel;
-                currentField = '';
-                currentContent = [];
-                continue;
+                // 检查是否是直接字段标题（即下一级标题是已知字段）
+                const hasDirectFieldHeaders = lines.slice(i + 1).some(nextLine => {
+                    const nextHeaderMatch = nextLine.trim().match(/^(#+)\s+(.+)$/);
+                    if (nextHeaderMatch && nextHeaderMatch[1].length === headerLevel + 1) {
+                        const nextHeaderText = nextHeaderMatch[2].trim();
+                        const standardFieldName = getStandardFieldName(nextHeaderText);
+                        // 检查是否是已知的基础字段或扩展字段
+                        return Object.keys(FIELD_ALIASES).includes(standardFieldName) || 
+                               Object.values(FIELD_ALIASES).includes(nextHeaderText.trim());
+                    }
+                    return false;
+                });
+                
+                // 判断是否是角色标题：有子标题且其中包含任何已知的字段标题
+                if (hasSubHeaders && hasDirectFieldHeaders) {
+                    // 开始新角色
+                    currentRole = { name: headerText };
+                    roleHeaderLevel = headerLevel;
+                    currentField = '';
+                    currentContent = [];
+                    isInRole = true;
+                    continue;
+                } else if (hasSubHeaders) {
+                    // 如果有子标题但不是字段标题，跳过（可能是章节标题）
+                    currentRole = null;
+                    currentField = '';
+                    currentContent = [];
+                    roleHeaderLevel = 0;
+                    isInRole = false;
+                    continue;
+                } else {
+                    // 没有子标题的标题，创建简单角色（只有名字）
+                    const simpleRole: Role = {
+                        name: headerText,
+                        type: defaultType,
+                        packagePath,
+                        sourcePath: filePath
+                    };
+                    roles.push(simpleRole);
+                    
+                    currentRole = null;
+                    currentField = '';
+                    currentContent = [];
+                    roleHeaderLevel = 0;
+                    isInRole = false;
+                    continue;
+                }
             }
             
-            // 如果是子标题（字段标题）
-            if (currentRole && headerLevel > roleHeaderLevel) {
+            // 如果在角色中，且是直接子标题（字段标题）
+            if (isInRole && currentRole && headerLevel === roleHeaderLevel + 1) {
                 // 保存上一个字段
                 saveCurrentField(currentRole, currentField, currentContent);
                 
@@ -140,33 +182,15 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                 continue;
             }
             
-            // 如果是同级或更高级标题，但没有子标题，可能是单独的条目
-            if (headerLevel <= roleHeaderLevel || !currentRole) {
-                // 保存当前角色
-                if (currentRole && currentRole.name) {
-                    saveCurrentField(currentRole, currentField, currentContent);
-                    finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
-                }
-                
-                // 创建简单角色（只有名字）
-                const simpleRole: Role = {
-                    name: headerText,
-                    type: defaultType,
-                    packagePath,
-                    sourcePath: filePath
-                };
-                roles.push(simpleRole);
-                
-                currentRole = null;
-                currentField = '';
-                currentContent = [];
-                roleHeaderLevel = 0;
+            // 如果是字段内的子标题，则作为内容处理
+            if (isInRole && currentRole && headerLevel > roleHeaderLevel + 1) {
+                currentContent.push(line);
                 continue;
             }
         }
         
         // 处理普通内容
-        if (currentRole) {
+        if (isInRole && currentRole) {
             currentContent.push(line);
         }
     }
@@ -551,6 +575,11 @@ rgb(255, 30, 64) - 温暖的红色，也可以用 #ff1e40 或 hsl(348, 100%, 56%
 ### 青少年时期
 - 搬到城市求学
 - 经历了人生的第一次重大挫折
+
+### 成年时期
+- 大学毕业后进入职场
+- 经历了多次职业转换
+- 最终找到了自己的人生方向
 
 ## 关系
 - **最好的朋友**: 张小明（从小一起长大）
