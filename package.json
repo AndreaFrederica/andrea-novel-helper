@@ -144,6 +144,10 @@
         "title": "创建词汇表 (.md)"
       },
       {
+        "command": "AndreaNovelHelper.createRegexPatterns",
+        "title": "创建正则表达式配置"
+      },
+      {
         "command": "AndreaNovelHelper.openWith",
         "title": "打开方式..."
       },
@@ -216,6 +220,11 @@
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createVocabularyMd",
+          "group": "1_modification"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createRegexPatterns",
           "group": "1_modification"
         },
         {
@@ -306,6 +315,11 @@
           "type": "string",
           "default": "novel-helper/vocabulary.json5",
           "description": "%config.vocabularyFile.description%"
+        },
+        "AndreaNovelHelper.regexPatternsFile": {
+          "type": "string",
+          "default": "novel-helper/regex-patterns.json5",
+          "description": "%config.regexPatternsFile.description%"
         },
         "AndreaNovelHelper.outlinePath": {
           "type": "string",

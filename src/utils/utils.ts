@@ -35,7 +35,8 @@ export function getPrefix(line: string): string {
 export const typeColorMap: Record<string, string> = {
 	主角: '#FFD700',       // 金色
 	配角: '#ADD8E6',       // 淡蓝
-	'联动角色': '#90EE90'  // 淡绿
+	'联动角色': '#90EE90', // 淡绿
+	'正则表达式': '#FFA500' // 橙色
 };
 
 /**
@@ -298,6 +299,12 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
  */
 function isRoleFile(fileName: string): boolean {
 	const lowerName = fileName.toLowerCase();
+	
+	// 正则表达式文件只支持JSON5格式
+	if (lowerName.includes('regex-patterns') || lowerName.includes('regex')) {
+		return lowerName.endsWith('.json5');
+	}
+	
 	const validExtensions = ['.json5', '.txt', '.md'];
 	const hasValidExtension = validExtensions.some(ext => lowerName.endsWith(ext));
 	
@@ -308,7 +315,8 @@ function isRoleFile(fileName: string): boolean {
 	// 检查文件名是否包含角色相关关键词
 	const roleKeywords = [
 		'character-gallery', 'character', 'role', 'roles',
-		'sensitive-words', 'sensitive', 'vocabulary', 'vocab'
+		'sensitive-words', 'sensitive', 'vocabulary', 'vocab',
+		'regex-patterns', 'regex'
 	];
 	
 	return roleKeywords.some(keyword => lowerName.includes(keyword));
@@ -356,6 +364,8 @@ function getFileType(fileName: string): string {
 		return '敏感词';
 	} else if (lowerName.includes('vocabulary') || lowerName.includes('vocab')) {
 		return '词汇';
+	} else if (lowerName.includes('regex-patterns') || lowerName.includes('regex')) {
+		return '正则表达式';
 	} else {
 		return '角色';
 	}
@@ -468,6 +478,10 @@ function loadTXTRoleFile(content: string, filePath: string, packagePath: string,
 		// 根据类型设置默认颜色
 		if (defaultType === '敏感词') {
 			role.color = '#FF0000';
+		} else if (defaultType === '正则表达式') {
+			// 正则表达式类型不支持TXT格式，跳过
+			console.warn(`loadTXTRoleFile: 正则表达式类型不支持TXT格式，跳过文件 ${filePath}`);
+			return;
 		} else if (defaultType === '角色') {
 			role.type = 'txt角色';
 			role.color = cfg.get<string>('defaultColor')!;
@@ -567,6 +581,10 @@ function loadTraditionalRoles(forceRefresh: boolean = false, changedFiles?: stri
 							role.color = "#FF0000";
 						} else if (fileKey === 'vocabularyFile') {
 							role.type = "词汇";
+						} else if (fileKey === 'regexPatternsFile') {
+							// 正则表达式类型不支持TXT格式，跳过
+							console.warn(`loadTraditionalRoles: 正则表达式类型不支持TXT格式，跳过 ${txtPath}`);
+							return;
 						}
 						roles.push(role);
 					}
@@ -581,6 +599,7 @@ function loadTraditionalRoles(forceRefresh: boolean = false, changedFiles?: stri
 	loadLibrary('rolesFile', "角色");
 	loadLibrary('sensitiveWordsFile', "敏感词");
 	loadLibrary('vocabularyFile', "词汇");
+	loadLibrary('regexPatternsFile', "正则表达式");
 }
 
 /**

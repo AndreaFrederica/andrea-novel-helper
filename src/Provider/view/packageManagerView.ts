@@ -122,7 +122,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                             isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
                         )
                     );
-                } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(name)) {
+                } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(name)) {
                     const ext = path.extname(name).toLowerCase();
                     const allowed = ['.json5', '.txt', '.md'];
                     const fileNode = new PackageNode(
@@ -163,7 +163,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 );
             } else {
                 // 对于文件，分两类处理
-                if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(name)) {
+                if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
                     const ext = path.extname(name).toLowerCase();
                     const allowed = ['.json5', '.txt', '.md'];
@@ -445,6 +445,14 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
+    // Command: create regex patterns file
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.createRegexPatterns', async (node: PackageNode) => {
+            const file = await createRegexPatternsFile(node.resourceUri.fsPath);
+            if (file) provider.refresh();
+        })
+    );
+
     // —— 改进的文件系统监听 —— 
     const helperRoot = path.join(rootFsPath, 'novel-helper');
     // 监听 novel-helper 下所有变动
@@ -471,7 +479,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         
         // 如果是文件，只关注包含关键词的文件（角色相关文件）
         const fileName = path.basename(uri.fsPath);
-        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
+        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
         const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
         
         return hasKeywords && hasValidExtension;
@@ -480,7 +488,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     // 改进的角色数据更新判断：只有角色相关文件才触发角色数据更新
     const shouldUpdateRoles = (uri: vscode.Uri) => {
         const fileName = path.basename(uri.fsPath);
-        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
+        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
         const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
         
         return hasKeywords && hasValidExtension;
@@ -626,6 +634,86 @@ async function createSpecificMarkdownFile(dir: string, roleType: string): Promis
     await vscode.window.showTextDocument(document);
     
     return file;
+}
+
+async function createRegexPatternsFile(dir: string): Promise<string | undefined> {
+    // 询问自定义文件名
+    const customName = await vscode.window.showInputBox({
+        prompt: '输入正则表达式文件的自定义名称（留空使用默认名称）',
+        placeHolder: '例如: 对话着色、特殊格式等'
+    });
+    
+    // 生成文件名
+    let fileName: string;
+    if (customName && customName.trim()) {
+        fileName = `${customName.trim()}_regex-patterns`;
+    } else {
+        fileName = 'regex-patterns';
+    }
+    
+    const file = path.join(dir, `${fileName}.json5`);
+    if (fs.existsSync(file)) {
+        vscode.window.showWarningMessage(`文件 ${fileName}.json5 已存在`);
+        return;
+    }
+    
+    // 生成模板内容
+    const template = generateRegexPatternsTemplate();
+    fs.writeFileSync(file, template, 'utf8');
+    
+    // 打开新创建的文件
+    const document = await vscode.workspace.openTextDocument(file);
+    await vscode.window.showTextDocument(document);
+    
+    return file;
+}
+
+function generateRegexPatternsTemplate(): string {
+    return `// 正则表达式着色器配置文件
+// 这个文件定义了基于正则表达式的文本着色规则
+[
+  // === 正则表达式角色示例（JSON5 合法）===
+  {
+    name: "中文对话",
+    type: "正则表达式",
+    // 中文引号：U+201C/U+201D
+    regex: "“[^”]*”",
+    regexFlags: "g",
+    color: "#98FB98",
+    priority: 100,
+    description: "匹配中文引号内的对话内容",
+  },
+//   {
+//     name: "英文对话",
+//     type: "正则表达式",
+//     regex: "\"[^\"]*\"",
+//     regexFlags: "g",
+//     color: "#87CEEB",
+//     priority: 100,
+//     description: "匹配英文引号内的对话内容",
+//   },
+  {
+    name: "心理描写",
+    type: "正则表达式",
+    // 全角括号（中文括号）
+    regex: "（[^（）]*）",
+    regexFlags: "g",
+    color: "#DDA0DD",
+    priority: 120,
+    description: "匹配全角括号内的心理描写",
+  },
+  {
+    name: "旁白注释",
+    type: "正则表达式",
+    // 字符串里要放入“反斜杠”，必须写成 \\ 才能到达正则引擎
+    // 目标正则是：\[([^\[\]]*)\]
+    regex: "\\[([^\\[\\]]*)\\]",
+    regexFlags: "g",
+    color: "#F0E68C",
+    priority: 110,
+    description: "匹配方括号内的旁白注释",
+  },
+]`;
 }
 
 async function promptForMarkdownFile(dir: string): Promise<string | undefined> {

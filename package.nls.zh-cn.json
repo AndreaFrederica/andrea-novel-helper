@@ -12,6 +12,7 @@
     "config.rolesFile.description": "角色库 JSON 文件路径（相对于工作区根目录）",
     "config.sensitiveWordsFile.description": "敏感词库 JSON 文件路径（相对于工作区根目录）",
     "config.vocabularyFile.description": "词汇库 JSON 文件路径（相对于工作区根目录）",
+    "config.regexPatternsFile.description": "正则表达式配置 JSON 文件路径（相对于工作区根目录）",
     "config.outlinePath.description": "大纲目录路径（相对于工作区根目录）",
     "config.minChars.description": "触发补全所需的最少前缀字符数",
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）",

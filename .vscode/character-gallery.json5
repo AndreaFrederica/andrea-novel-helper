@@ -146,4 +146,45 @@
     aliases: ["风见幽香", "幽香", "Yuuka"],
     description: "补全角色名 风见幽香",
   },
+  // === 正则表达式角色示例（JSON5 合法）===
+  {
+    name: "中文对话",
+    type: "正则表达式",
+    // 中文引号：U+201C/U+201D
+    regex: "“[^”]*”",
+    regexFlags: "g",
+    color: "#98FB98",
+    priority: 100,
+    description: "匹配中文引号内的对话内容",
+  },
+  {
+    name: "英文对话",
+    type: "正则表达式",
+    regex: "\"[^\"]*\"",
+    regexFlags: "g",
+    color: "#87CEEB",
+    priority: 100,
+    description: "匹配英文引号内的对话内容",
+  },
+  {
+    name: "心理描写",
+    type: "正则表达式",
+    // 全角括号（中文括号）
+    regex: "（[^（）]*）",
+    regexFlags: "g",
+    color: "#DDA0DD",
+    priority: 120,
+    description: "匹配全角括号内的心理描写",
+  },
+  {
+    name: "旁白注释",
+    type: "正则表达式",
+    // 字符串里要放入“反斜杠”，必须写成 \\ 才能到达正则引擎
+    // 目标正则是：\[([^\[\]]*)\]
+    regex: "\\[([^\\[\\]]*)\\]",
+    regexFlags: "g",
+    color: "#F0E68C",
+    priority: 110,
+    description: "匹配方括号内的旁白注释",
+  },
 ]

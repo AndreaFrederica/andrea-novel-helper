@@ -90,7 +90,7 @@ export function updateDecorations() {
         // 重置 hoverRanges
         setHoverRanges([]);
 
-        // 重建自动机并搜索
+        // 1. 处理普通角色（AC自动机）
         initAutomaton();
         const text = doc.getText();
         const rawHits = ahoCorasickManager.search(text);
@@ -98,22 +98,125 @@ export function updateDecorations() {
             endIdx, Array.isArray(pat) ? pat : [pat]
         ]);
 
-        // 收集并去重 Candidate
-        type Candidate = { role: Role; text: string; start: number; end: number };
+        // 收集并去重普通角色 Candidate
+        type Candidate = { role: Role; text: string; start: number; end: number; priority: number };
         const candidates: Candidate[] = [];
+        
+        // 添加普通角色匹配（普通角色优先级设为0-499，确保高于正则表达式）
         for (const [endIdx, arr] of hits) {
             for (const raw of arr) {
                 const pat = raw.trim().normalize('NFC');
                 const role = ahoCorasickManager.getRole(pat);
                 if (!role) continue;
-                candidates.push({ role, text: pat, start: endIdx - pat.length + 1, end: endIdx + 1 });
+                candidates.push({ 
+                    role, 
+                    text: pat, 
+                    start: endIdx - pat.length + 1, 
+                    end: endIdx + 1,
+                    priority: role.priority ?? 100 // 普通角色默认优先级为100
+                });
             }
         }
-        candidates.sort((a, b) => b.text.length - a.text.length);
+
+        // 2. 处理正则表达式角色（正则表达式优先级设为500+，确保低于普通角色）
+        for (const role of roles) {
+            if (role.type === '正则表达式' && role.regex) {
+                try {
+                    const regex = new RegExp(role.regex, role.regexFlags || 'g');
+                    let match;
+                    
+                    // 重置正则表达式的lastIndex（防止全局匹配状态影响）
+                    regex.lastIndex = 0;
+                    
+                    while ((match = regex.exec(text)) !== null) {
+                        const start = match.index;
+                        const end = start + match[0].length;
+                        
+                        candidates.push({
+                            role,
+                            text: match[0],
+                            start,
+                            end,
+                            priority: (role.priority ?? 500) + 500 // 正则表达式角色优先级+500，确保低于普通角色
+                        });
+                        
+                        // 防止无限循环（如果正则表达式匹配空字符串）
+                        if (match[0].length === 0) {
+                            regex.lastIndex++;
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`正则表达式角色 "${role.name}" 的模式无效:`, error);
+                }
+            }
+        }
+
+        // 按优先级和长度排序：优先级高的先处理，同优先级按长度倒序
+        candidates.sort((a, b) => {
+            if (a.priority !== b.priority) return a.priority - b.priority;
+            return b.text.length - a.text.length;
+        });
+
+        // 智能去重：高优先级的覆盖低优先级的，但允许正则表达式被分割
         const selected: Candidate[] = [];
+        const occupiedRanges: Array<{start: number, end: number}> = [];
+        
         for (const c of candidates) {
-            if (selected.some(s => rangesOverlap(s.start, s.end, c.start, c.end))) continue;
-            selected.push(c);
+            if (c.role.type === '正则表达式') {
+                // 对于正则表达式，计算未被占用的片段
+                const freeSegments = calculateFreeSegments(c.start, c.end, occupiedRanges);
+                
+                // 为每个自由片段创建一个候选项
+                for (const segment of freeSegments) {
+                    if (segment.end > segment.start) { // 确保片段有效
+                        selected.push({
+                            role: c.role,
+                            text: text.substring(segment.start, segment.end),
+                            start: segment.start,
+                            end: segment.end,
+                            priority: c.priority
+                        });
+                    }
+                }
+            } else {
+                // 对于普通角色，检查是否与已占用范围重叠
+                const hasOverlap = occupiedRanges.some(range => rangesOverlap(range.start, range.end, c.start, c.end));
+                if (!hasOverlap) {
+                    selected.push(c);
+                    occupiedRanges.push({start: c.start, end: c.end});
+                }
+            }
+        }
+
+        // 计算未被占用的片段
+        function calculateFreeSegments(start: number, end: number, occupied: Array<{start: number, end: number}>): Array<{start: number, end: number}> {
+            // 找到与当前范围重叠的已占用范围
+            const overlapping = occupied.filter(range => rangesOverlap(range.start, range.end, start, end))
+                .sort((a, b) => a.start - b.start);
+            
+            if (overlapping.length === 0) {
+                return [{start, end}];
+            }
+            
+            const segments: Array<{start: number, end: number}> = [];
+            let currentPos = start;
+            
+            for (const range of overlapping) {
+                // 添加当前位置到重叠范围开始之间的片段
+                if (currentPos < range.start) {
+                    segments.push({start: currentPos, end: Math.min(range.start, end)});
+                }
+                // 移动到重叠范围结束后
+                currentPos = Math.max(currentPos, range.end);
+                if (currentPos >= end) break;
+            }
+            
+            // 添加最后一个片段
+            if (currentPos < end) {
+                segments.push({start: currentPos, end});
+            }
+            
+            return segments;
         }
 
         // 生成 role → ranges

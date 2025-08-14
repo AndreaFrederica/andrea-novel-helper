@@ -14,6 +14,7 @@
     "config.rolesFile.description": "Path to the roles JSON file (relative to workspace root)",
     "config.sensitiveWordsFile.description": "Path to the sensitive words JSON file (relative to workspace root)",
     "config.vocabularyFile.description": "Path to the vocabulary JSON file (relative to workspace root)",
+    "config.regexPatternsFile.description": "Path to the regex patterns JSON file (relative to workspace root)",
     "config.outlinePath.description": "Path to the outline directory (relative to workspace root)",
     "config.minChars.description": "Minimum number of prefix characters to trigger completion",
     "config.supportedFileTypes.description": "Supported file extensions (without dot)",
