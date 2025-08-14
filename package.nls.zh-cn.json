@@ -23,6 +23,7 @@
     "config.timeStats.enabledLanguages.description": "参与写作统计的语言 ID 列表（默认：markdown, plaintext）。",
     "config.timeStats.idleThresholdMs.description": "空闲阈值（毫秒）；超过该时间无输入视为暂停统计（默认：30000）。",
     "config.timeStats.bucketSizeMs.description": "用于 CPM 计算的时间桶大小（毫秒）（默认：60000）。",
+    "config.timeStats.imeDebounceMs.description": "IME 输入法去抖时间（毫秒），用于避免中文输入时的虚假统计（默认：350）。",
     "config.timeStats.respectWcignore.description": "时间统计是否遵循 .wcignore 忽略规则（默认：false，只遵循 .gitignore）。",
     "config.fileTracker.respectWcignore.description": "文件追踪是否遵循 .wcignore 忽略规则（默认：false，只遵循 .gitignore）。",
     "command.showFileTrackingStats.title": "显示文件追踪统计",

@@ -37,6 +37,26 @@ let windowFocused = true;
 // 始终只保留一个
 let statusBarItem: vscode.StatusBarItem | undefined;
 
+// —— IME 友好的去抖计数状态 ——
+interface RuntimeDocState {
+    lastCount: number;            // 上次稳定时的"码字总量"（computeZhEnCount 的 total）
+    lastVersion: number;          // 上次稳定时的文档版本
+    debounce?: NodeJS.Timeout;    // 去抖定时器
+    lastFlushTs: number;          // 上次冲刷时间
+}
+const docStates = new Map<string, RuntimeDocState>();
+
+function getOrInitDocState(doc: vscode.TextDocument): RuntimeDocState {
+    const fp = doc.uri.fsPath;
+    let st = docStates.get(fp);
+    if (!st) {
+        const base = computeZhEnCount(doc.getText()).total;
+        st = { lastCount: base, lastVersion: doc.version, lastFlushTs: now() };
+        docStates.set(fp, st);
+    }
+    return st;
+}
+
 // -------------------- 配置 --------------------
 function getConfig() {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
@@ -44,6 +64,7 @@ function getConfig() {
         enabledLanguages: cfg.get<string[]>('enabledLanguages', ['markdown', 'plaintext']),
         idleThresholdMs: cfg.get<number>('idleThresholdMs', 30000),
         bucketSizeMs: cfg.get<number>('bucketSizeMs', 60000),
+        imeDebounceMs: cfg.get<number>('imeDebounceMs', 350), // IME 去抖时间
     };
 }
 
@@ -250,6 +271,55 @@ function resetIdleTimer(idleThresholdMs: number) {
     }, idleThresholdMs);
 }
 
+// -------------------- IME 友好的去抖计数 --------------------
+function flushDocStats(doc: vscode.TextDocument) {
+    const { bucketSizeMs } = getConfig();
+    const filePath = doc.uri.fsPath;
+    const st = docStates.get(filePath);
+    if (!st) {
+        return;
+    }
+
+    const t = now();
+    const totalNow = computeZhEnCount(doc.getText()).total;   // 整体计算一次
+    const delta = totalNow - st.lastCount;                    // 净增量（>0 计新增，<0 计删除）
+    if (delta !== 0) {
+        const fsEntry = getFileStats(filePath);
+        if (delta > 0) {
+            fsEntry.charsAdded += delta;
+        } else {
+            fsEntry.charsDeleted += -delta;
+        }
+
+        // 桶只统计正向新增，避免"改候选"拉低 CPM
+        bumpBucket(fsEntry, t, Math.max(0, delta), bucketSizeMs);
+
+        fsEntry.lastSeen = t;
+        persistFileStats(filePath, fsEntry);
+    }
+
+    st.lastCount = totalNow;
+    st.lastVersion = doc.version;
+    st.lastFlushTs = t;
+    updateStatusBar();
+}
+
+function scheduleFlush(doc: vscode.TextDocument) {
+    const { imeDebounceMs } = getConfig();
+    const fp = doc.uri.fsPath;
+    const st = getOrInitDocState(doc);
+
+    if (st.debounce) {
+        clearTimeout(st.debounce);
+    }
+    st.debounce = setTimeout(() => {
+        // 只有当前编辑器且窗口聚焦时再冲刷，避免后台自动变动造成误差
+        if (vscode.window.activeTextEditor?.document === doc && windowFocused) {
+            flushDocStats(doc);
+        }
+    }, imeDebounceMs);
+}
+
 // -------------------- 状态栏 --------------------
 function setStatusBarTextAndTooltip() {
     if (!statusBarItem) {
@@ -292,7 +362,7 @@ function updateStatusBar() {
 
 // -------------------- 事件 --------------------
 function handleTextChange(e: vscode.TextDocumentChangeEvent) {
-    const { enabledLanguages, idleThresholdMs, bucketSizeMs } = getConfig();
+    const { enabledLanguages, idleThresholdMs } = getConfig();
     const doc = e.document;
     if (!enabledLanguages.includes(doc.languageId)) {
         return;
@@ -306,34 +376,33 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
 
     currentDocPath = doc.uri.fsPath;
     startSession();
-
-    let added = 0, deleted = 0;
-    for (const change of e.contentChanges) {
-        added += change.text.length;
-        deleted += change.rangeLength;
-    }
-    const fsEntry = getFileStats(currentDocPath);
-    fsEntry.charsAdded += added;
-    fsEntry.charsDeleted += deleted;
-    const t = now();
-    bumpBucket(fsEntry, t, added, bucketSizeMs);
-    fsEntry.lastSeen = t;
-    persistFileStats(currentDocPath, fsEntry);
-
     resetIdleTimer(idleThresholdMs);
-    updateStatusBar();
+
+    // 关键：去抖，等待 IME 稳定后统一计算净增量
+    getOrInitDocState(doc);
+    scheduleFlush(doc);
 }
 
 function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     const { idleThresholdMs } = getConfig();
+    // 先把旧文档冲刷一下
+    if (currentDocPath) {
+        const oldDoc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
+        if (oldDoc) {
+            flushDocStats(oldDoc);
+        }
+    }
     endSession();
+
     if (editor && getConfig().enabledLanguages.includes(editor.document.languageId)) {
         currentDocPath = editor.document.uri.fsPath;
-
         const g = getGlobalFileTracking?.();
         if (g) {
             currentDocUuid = g.getFileUuid(currentDocPath);
         }
+
+        // 初始化基线计数
+        getOrInitDocState(editor.document);
 
         startSession();
         resetIdleTimer(idleThresholdMs);
@@ -348,6 +417,12 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
 function handleWindowStateChange(state: vscode.WindowState) {
     windowFocused = state.focused;
     if (!windowFocused) {
+        if (currentDocPath) {
+            const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
+            if (doc) {
+                flushDocStats(doc); // 失焦时冲刷
+            }
+        }
         endSession();
         updateStatusBar();
     } else {
@@ -361,9 +436,11 @@ function handleWindowStateChange(state: vscode.WindowState) {
 }
 function handleDocumentClose(doc: vscode.TextDocument) {
     if (currentDocPath === doc.uri.fsPath) {
+        flushDocStats(doc); // 关闭前冲刷
         endSession();
         currentDocPath = undefined;
         currentDocUuid = undefined;
+        docStates.delete(doc.uri.fsPath); // 清理状态
         updateStatusBar();
     }
 }
@@ -743,6 +820,12 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
 }
 
 export function deactivateTimeStats() {
+    if (currentDocPath) {
+        const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
+        if (doc) {
+            flushDocStats(doc); // 反激活前冲刷
+        }
+    }
     endSession();
     if (statusBarItem) {
         statusBarItem.dispose();

@@ -361,6 +361,13 @@
           "maximum": 600000,
           "description": "%config.timeStats.bucketSizeMs.description%"
         },
+        "AndreaNovelHelper.timeStats.imeDebounceMs": {
+          "type": "number",
+          "default": 350,
+          "minimum": 100,
+          "maximum": 2000,
+          "description": "%config.timeStats.imeDebounceMs.description%"
+        },
         "AndreaNovelHelper.timeStats.respectWcignore": {
           "type": "boolean",
           "default": false,
