@@ -91,6 +91,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
     let currentContent: string[] = [];
     let roleHeaderLevel = 0; // 记录角色标题的级别
     let isInRole = false; // 标记是否在角色定义中
+    let roleDirectContent: string[] = []; // 角色下面的直接内容（不属于任何字段）
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -100,6 +101,8 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
         if (!trimmedLine) {
             if (currentContent.length > 0) {
                 currentContent.push('');
+            } else if (isInRole && roleDirectContent.length > 0) {
+                roleDirectContent.push('');
             }
             continue;
         }
@@ -121,6 +124,8 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                 // 保存当前角色
                 if (currentRole && currentRole.name) {
                     saveCurrentField(currentRole, currentField, currentContent, filePath);
+                    // 保存角色的直接内容到描述字段（如果没有描述字段的话）
+                    saveRoleDirectContent(currentRole, roleDirectContent, filePath);
                     finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
                 }
                 
@@ -144,6 +149,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                     roleHeaderLevel = headerLevel;
                     currentField = '';
                     currentContent = [];
+                    roleDirectContent = [];
                     isInRole = true;
                     continue;
                 } else if (hasSubHeaders) {
@@ -151,6 +157,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                     currentRole = null;
                     currentField = '';
                     currentContent = [];
+                    roleDirectContent = [];
                     roleHeaderLevel = 0;
                     isInRole = false;
                     continue;
@@ -167,6 +174,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                     currentRole = null;
                     currentField = '';
                     currentContent = [];
+                    roleDirectContent = [];
                     roleHeaderLevel = 0;
                     isInRole = false;
                     continue;
@@ -193,17 +201,49 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
         
         // 处理普通内容
         if (isInRole && currentRole) {
-            currentContent.push(line);
+            if (currentField) {
+                // 如果有当前字段，内容归属于该字段
+                currentContent.push(line);
+            } else {
+                // 如果没有当前字段，内容归属于角色的直接内容
+                roleDirectContent.push(line);
+            }
         }
     }
     
     // 保存最后一个角色
     if (currentRole && currentRole.name) {
         saveCurrentField(currentRole, currentField, currentContent, filePath);
+        // 保存角色的直接内容到描述字段（如果没有描述字段的话）
+        saveRoleDirectContent(currentRole, roleDirectContent, filePath);
         finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
     }
     
     return roles;
+}
+
+/**
+ * 保存角色的直接内容（不属于任何字段的内容）到描述字段
+ */
+function saveRoleDirectContent(role: Partial<Role>, directContent: string[], sourcePath?: string): void {
+    if (directContent.length === 0) {
+        return;
+    }
+    
+    // 处理 Markdown 内容，保留格式
+    const processedContent = processMarkdownContent(directContent, sourcePath);
+    
+    if (!processedContent) {
+        return;
+    }
+    
+    // 如果角色已经有描述字段，将直接内容添加到描述字段前面
+    if (role.description) {
+        role.description = processedContent + '\n\n' + role.description;
+    } else {
+        // 如果没有描述字段，创建描述字段
+        role.description = processedContent;
+    }
 }
 
 /**
