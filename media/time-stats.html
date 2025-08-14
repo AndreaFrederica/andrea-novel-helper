@@ -138,9 +138,15 @@
         window.addEventListener('message', (e) => {
             const data = e.data;
             console.log('Webview received message:', data);
+            console.log('Message event object:', e);
             
-            if (!data || data.type !== 'time-stats-data') {
-                console.log('Message type not recognized or missing data');
+            if (!data) {
+                console.error('No data in message');
+                return;
+            }
+            
+            if (data.type !== 'time-stats-data') {
+                console.log('Message type not recognized:', data.type);
                 return;
             }
 
@@ -149,10 +155,19 @@
                 perFileLineLength: data.perFileLine?.length,
                 totalMillisAll: data.totalMillisAll,
                 todayChars: data.today?.chars,
-                heatmapKeys: Object.keys(data.heatmap || {}).length
+                heatmapKeys: Object.keys(data.heatmap || {}).length,
+                bucketSizeMs: data.bucketSizeMs,
+                rawData: data
             });
 
             // KPI
+            console.log('Setting KPI values:', {
+                totalMillisAll: data.totalMillisAll,
+                todayMillis: data.today.millis,
+                todayAvgCPM: data.today.avgCPM,
+                todayPeakCPM: data.today.peakCPM
+            });
+            
             document.getElementById('k_total').textContent = fmtMinutes(data.totalMillisAll);
             document.getElementById('k_today_time').textContent = fmtMinutes(data.today.millis);
             document.getElementById('k_today_avg').textContent = data.today.avgCPM + ' CPM';
@@ -161,15 +176,19 @@
             document.getElementById('scopeTag').textContent = data.supportsGlobal ? '跨文件汇总' : '仅当前文件';
 
             // 折线：perFileLine
+            console.log('About to draw line chart...');
             drawLineChart(document.getElementById('lineChart'), data.perFileLine);
 
             // 柱状：today.hourly
+            console.log('About to draw today bars...');
             drawTodayBars(document.getElementById('todayBars'), data.today.hourly);
 
             // 今日热力图：today.quarterHourly
+            console.log('About to draw today heatmap...');
             drawTodayHeatmap(document.getElementById('todayHeatmap'), data.today.quarterHourly);
 
             // 热力图：heatmap (dayTs -> chars)
+            console.log('About to draw yearly heatmap...');
             drawHeatmap(document.getElementById('heatmap'), data.heatmap);
         });
 
@@ -185,20 +204,27 @@
         }
 
         function drawLineChart(canvas, rows) {
+            console.log('Drawing line chart with data:', rows);
             const ctx = canvas.getContext('2d');
             const W = canvas.width, H = canvas.height, pad = 32;
             ctx.clearRect(0, 0, W, H);
             drawAxes(ctx, W, H, pad);
 
             if (!rows || !rows.length) {
+                console.log('No line chart data available');
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+                ctx.font = '14px system-ui';
                 ctx.fillText('暂无数据', pad + 8, pad + 16);
                 return;
             }
 
+            console.log('Line chart data points:', rows.length);
             const xs = rows.map(r => r.t);
             const ys = rows.map(r => r.cpm);
             const xMin = Math.min(...xs), xMax = Math.max(...xs);
             const yMin = 0, yMax = Math.max(60, Math.max(...ys));
+
+            console.log('Line chart ranges:', { xMin, xMax, yMin, yMax });
 
             const xMap = x => pad + (W - 2 * pad) * (x - xMin) / Math.max(1, (xMax - xMin));
             const yMap = y => (H - pad) - (H - 2 * pad) * (y - yMin) / Math.max(1, (yMax - yMin));
@@ -214,25 +240,32 @@
             ctx.globalAlpha = 1;
 
             // line
+            ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#4444ff';
+            ctx.lineWidth = 2;
             ctx.beginPath();
             rows.forEach((r, i) => {
                 const X = xMap(r.t), Y = yMap(r.cpm);
                 if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
             });
-            ctx.lineWidth = 2;
             ctx.stroke();
+            console.log('Line chart drawn successfully');
         }
 
         function drawTodayBars(canvas, hourly) {
+            console.log('Drawing today bars with data:', hourly);
             const ctx = canvas.getContext('2d');
             const W = canvas.width, H = canvas.height, pad = 32;
             ctx.clearRect(0, 0, W, H);
             drawAxes(ctx, W, H, pad);
+            
             const hours = Array.from({ length: 24 }, (_, i) => i);
             const vals = hours.map(h => hourly[h] || 0);
             const maxV = Math.max(10, ...vals);
             const barW = (W - 2 * pad) / 24 * .8;
             const xBase = pad + ((W - 2 * pad) / 24) * .1;
+
+            console.log('Bar chart values:', vals);
+            console.log('Max value:', maxV);
 
             const yMap = v => (H - pad) - (H - 2 * pad) * v / maxV;
             ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
@@ -242,8 +275,13 @@
                 const y = yMap(v);
                 const hh = (H - pad) - y;
                 ctx.fillRect(x, y, barW, hh);
-                if (idx % 3 === 0) ctx.fillText(String(h), x, H - pad + 12);
+                if (idx % 3 === 0) {
+                    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+                    ctx.font = '10px system-ui';
+                    ctx.fillText(String(h), x, H - pad + 12);
+                }
             });
+            console.log('Today bars drawn successfully');
         }
 
         function drawHeatmap(canvas, heatmap) {

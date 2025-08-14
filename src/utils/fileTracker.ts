@@ -74,6 +74,12 @@ export class FileTracker {
      * 检查文件是否应该被忽略
      */
     private shouldIgnoreFile(filePath: string): boolean {
+        // 检查是否为数据库文件本身，避免追踪数据库文件
+        const dbPath = path.join(this.config.workspaceRoot, 'novel-helper', 'file-tracking.json');
+        if (path.resolve(filePath) === path.resolve(dbPath)) {
+            return true; // 忽略数据库文件本身
+        }
+
         // 检查忽略规则
         if (this.ignoreParser) {
             if (this.config.respectWcignore) {

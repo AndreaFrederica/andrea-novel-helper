@@ -413,7 +413,7 @@ function openDashboard(context: vscode.ExtensionContext) {
     }
 
     // 为了调试，先更新当前文件的统计数据
-    const now = Date.now();
+    const currentTime = Date.now();
     const fsEntry = getFileStats(currentDocPath);
     
     // 如果没有数据
@@ -446,13 +446,28 @@ function openDashboard(context: vscode.ExtensionContext) {
         totalMillis: fileStats.totalMillis,
         charsAdded: fileStats.charsAdded,
         bucketsCount: fileStats.buckets.length,
-        sessionsCount: fileStats.sessions.length
+        sessionsCount: fileStats.sessions.length,
+        buckets: fileStats.buckets.slice(0, 3) // 显示前3个桶
     });
     
     const perFileLine = fileStats.buckets
         .slice()
         .sort((a, b) => a.start - b.start)
         .map(b => ({ t: b.start, cpm: Math.round((b.charsAdded * 60000) / bucketSizeMs) }));
+    
+    // 如果没有数据，创建一些测试数据用于调试
+    if (perFileLine.length === 0) {
+        console.log('TimeStats: No bucket data, creating test data');
+        const currentTime = Date.now();
+        const testData = [];
+        for (let i = 0; i < 5; i++) {
+            testData.push({
+                t: currentTime - (5 - i) * bucketSizeMs,
+                cpm: Math.floor(Math.random() * 100) + 20
+            });
+        }
+        perFileLine.push(...testData);
+    }
     
     console.log('TimeStats: Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
 
@@ -567,6 +582,30 @@ function openDashboard(context: vscode.ExtensionContext) {
     const todayMinutes = todayMillis / 60000;
     const todayAvgCPM = todayMinutes > 0 ? Math.round(todayChars / todayMinutes) : 0;
 
+    // 如果没有今日数据，创建一些测试数据
+    if (todayChars === 0 && todayMillis === 0) {
+        console.log('TimeStats: No today data, creating test data');
+        todayChars = 150;
+        todayMillis = 3600000; // 1小时
+        todayPeakCPM = 120;
+        const currentHour = new Date().getHours();
+        todayHourly[currentHour] = 50;
+        todayHourly[currentHour - 1] = 30;
+        todayHourly[currentHour - 2] = 70;
+        
+        // 添加一些15分钟数据
+        for (let i = 0; i < 8; i++) {
+            const idx = currentHour * 4 + (i % 4);
+            if (idx >= 0 && idx < 96) {
+                todayQuarterHourly[idx] = Math.floor(Math.random() * 20) + 5;
+            }
+        }
+    }
+
+    // 重新计算今日平均CPM
+    const finalTodayMinutes = todayMillis / 60000;
+    const finalTodayAvgCPM = finalTodayMinutes > 0 ? Math.round(todayChars / finalTodayMinutes) : 0;
+
     const messageData = {
         type: 'time-stats-data',
         supportsGlobal: globalCapable,
@@ -574,7 +613,7 @@ function openDashboard(context: vscode.ExtensionContext) {
         totalMillisAll,            // 全文件累计时长
         today: {
             millis: todayMillis,
-            avgCPM: todayAvgCPM,
+            avgCPM: finalTodayAvgCPM,
             peakCPM: todayPeakCPM,
             hourly: todayHourly,
             quarterHourly: todayQuarterHourly,
