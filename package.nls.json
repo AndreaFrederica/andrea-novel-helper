@@ -20,4 +20,15 @@
     "config.markdownToolbarEnabled.description": "Enable Markdown selection toolbar",
     "config.markdownToolbarHeight.description": "Height of the Markdown toolbar (in pixels)",
     "sidebar.anh.title":"Andrea Novel Helper"
+  ,
+  "command.openTimeStats.title": "ANH:Open Time Stats",
+  "command.exportTimeStatsCSV.title": "ANH:Export Time Stats CSV",
+  "config.timeStats.enabledLanguages.description": "Language IDs to track writing statistics (default: markdown, plaintext).",
+  "config.timeStats.idleThresholdMs.description": "Idle threshold in milliseconds for writing statistics; inactivity above this stops counting (default: 30000).",
+  "config.timeStats.bucketSizeMs.description": "Time bucket size in milliseconds for CPM calculation (default: 60000).",
+  "config.timeStats.respectWcignore.description": "Whether time statistics respect .wcignore ignore rules (default: false, only respects .gitignore).",
+  "config.fileTracker.respectWcignore.description": "Whether file tracking respects .wcignore ignore rules (default: false, only respects .gitignore).",
+  "command.showFileTrackingStats.title": "ANH:Show File Tracking Statistics",
+  "command.cleanupMissingFiles.title": "ANH:Cleanup Missing Files",
+  "command.exportTrackingData.title": "ANH:Export Tracking Data"
 }

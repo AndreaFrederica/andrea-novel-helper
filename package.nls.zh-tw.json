@@ -7,4 +7,10 @@
     "config.rolesFile.description": "角色庫 JSON 文件路徑（相對於工作區根目錄）",
     "config.minChars.description": "觸發補全所需的最少前綴字符數",
     "config.supportedFileTypes.description": "支援的文件擴展名（不帶點）"
+    ,
+    "command.openTimeStats.title": "打開寫作統計",
+    "command.exportTimeStatsCSV.title": "匯出寫作統計CSV",
+    "config.timeStats.enabledLanguages.description": "參與寫作統計的語言 ID 列表（預設：markdown, plaintext）。",
+    "config.timeStats.idleThresholdMs.description": "閒置閾值（毫秒）；超過此時間無輸入視為暫停統計（預設：30000）。",
+    "config.timeStats.bucketSizeMs.description": "用於 CPM 計算的時間桶大小（毫秒）（預設：60000）。"
 }

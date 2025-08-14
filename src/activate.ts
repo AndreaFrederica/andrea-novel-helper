@@ -22,7 +22,11 @@ import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSPr
 import { activateHover } from './Provider/hoverProvider';
 import { activateDef } from './Provider/defProv';
 import { registerPackageManagerView } from './Provider/view/packageManagerView';
+// import { StatusBarProvider } from './Provider/statusBarProvider'; // 已禁用，使用 timeStats 中的状态栏
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
+import { activateTimeStats, deactivateTimeStats } from './timeStats';
+import { initializeGlobalFileTracking } from './utils/globalFileTracking';
+import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData } from './commands/fileTrackingCommands';
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -427,6 +431,10 @@ export function activate(context: vscode.ExtensionContext) {
         treeView
     );
 
+    // 状态栏提供器 - 已禁用，使用 timeStats 中的状态栏
+    // const statusBarProvider = new StatusBarProvider(wordCountProvider);
+    // statusBarProvider.activate(context);
+
     // 监听 .gitignore 和 .wcignore 文件变化，刷新字数统计
     if (folders1 && folders1.length) {
         const rootUri = folders1[0].uri;
@@ -482,11 +490,23 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+    activateTimeStats(context);
+    
+    // 初始化全局文件追踪（为备份等功能提供基础）
+    initializeGlobalFileTracking(context);
+    
+    // 注册文件追踪相关命令
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.showFileTrackingStats', showFileTrackingStats),
+        vscode.commands.registerCommand('AndreaNovelHelper.cleanupMissingFiles', cleanupMissingFiles),
+        vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData)
+    );
 }
 
 export function deactivate() {
     decorationTypes.forEach((d) => d.dispose());
     deactivateMarkdownToolbar();
+    deactivateTimeStats();
 }
 
 export { loadRoles };

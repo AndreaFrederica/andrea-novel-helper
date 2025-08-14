@@ -17,5 +17,15 @@
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）",
     "config.markdownToolbarEnabled.description": "启用 Markdown 选区工具条",
     "config.markdownToolbarHeight.description": "Markdown 工具条高度（像素）",
-    "sidebar.anh.title":"Andrea小说助手"
+    "sidebar.anh.title":"Andrea小说助手",
+    "command.openTimeStats.title": "打开写作统计",
+    "command.exportTimeStatsCSV.title": "导出写作统计CSV",
+    "config.timeStats.enabledLanguages.description": "参与写作统计的语言 ID 列表（默认：markdown, plaintext）。",
+    "config.timeStats.idleThresholdMs.description": "空闲阈值（毫秒）；超过该时间无输入视为暂停统计（默认：30000）。",
+    "config.timeStats.bucketSizeMs.description": "用于 CPM 计算的时间桶大小（毫秒）（默认：60000）。",
+    "config.timeStats.respectWcignore.description": "时间统计是否遵循 .wcignore 忽略规则（默认：false，只遵循 .gitignore）。",
+    "config.fileTracker.respectWcignore.description": "文件追踪是否遵循 .wcignore 忽略规则（默认：false，只遵循 .gitignore）。",
+    "command.showFileTrackingStats.title": "显示文件追踪统计",
+    "command.cleanupMissingFiles.title": "清理不存在的文件",
+    "command.exportTrackingData.title": "导出追踪数据"
 }

@@ -26,8 +26,13 @@
     "languages": [
       {
         "id": "wcignore",
-        "aliases": ["WordCount Ignore", "wcignore"],
-        "extensions": [".wcignore"],
+        "aliases": [
+          "WordCount Ignore",
+          "wcignore"
+        ],
+        "extensions": [
+          ".wcignore"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -157,6 +162,18 @@
       {
         "command": "AndreaNovelHelper.applyMarkdownFormat",
         "title": "应用 Markdown 格式"
+      },
+      {
+        "command": "AndreaNovelHelper.showFileTrackingStats",
+        "title": "%command.showFileTrackingStats.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.cleanupMissingFiles",
+        "title": "%command.cleanupMissingFiles.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.exportTrackingData",
+        "title": "%command.exportTrackingData.title%"
       }
     ],
     "menus": {
@@ -321,6 +338,38 @@
           "minimum": 20,
           "maximum": 50,
           "description": "%config.markdownToolbarHeight.description%"
+        },
+        "AndreaNovelHelper.timeStats.enabledLanguages": {
+          "type": "array",
+          "default": [
+            "markdown",
+            "plaintext"
+          ],
+          "description": "%config.timeStats.enabledLanguages.description%"
+        },
+        "AndreaNovelHelper.timeStats.idleThresholdMs": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 5000,
+          "maximum": 300000,
+          "description": "%config.timeStats.idleThresholdMs.description%"
+        },
+        "AndreaNovelHelper.timeStats.bucketSizeMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 10000,
+          "maximum": 600000,
+          "description": "%config.timeStats.bucketSizeMs.description%"
+        },
+        "AndreaNovelHelper.timeStats.respectWcignore": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.timeStats.respectWcignore.description%"
+        },
+        "AndreaNovelHelper.fileTracker.respectWcignore": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.fileTracker.respectWcignore.description%"
         }
       }
     },
@@ -359,12 +408,14 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@types/uuid": "^10.0.0",
     "ahocorasick": "^1.0.2",
     "chardet": "^2.1.0",
     "iconv": "^3.0.1",
     "iconv-lite": "^0.6.3",
     "jschardet": "^3.1.4",
     "json5": "^2.2.3",
-    "memfs": "^4.17.2"
+    "memfs": "^4.17.2",
+    "uuid": "^11.1.0"
   }
 }

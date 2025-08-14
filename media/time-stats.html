@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; img-src %CSP_SOURCE%; style-src %CSP_SOURCE% 'unsafe-inline'; script-src %CSP_SOURCE%; font-src %CSP_SOURCE%;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>写作统计仪表板</title>
+    <style>
+        :root {
+            --fg: var(--vscode-editor-foreground);
+            --bg: var(--vscode-editor-background);
+            --muted: var(--vscode-editor-inactiveSelectionBackground);
+            --accent: var(--vscode-textLink-foreground);
+            --border: var(--vscode-editorWidget-border);
+        }
+
+        body {
+            margin: 0;
+            padding: 16px;
+            color: var(--fg);
+            background: var(--bg);
+            font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        }
+
+        h2 {
+            margin: 0 0 12px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            grid-gap: 16px;
+        }
+
+        .card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .kpi {
+            flex: 1 1 180px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .kpi .label {
+            opacity: .8;
+            font-size: 12px;
+        }
+
+        .kpi .value {
+            font-size: 20px;
+            margin-top: 6px;
+        }
+
+        canvas {
+            width: 100%;
+            height: 260px;
+        }
+
+        .muted {
+            opacity: .7;
+            font-size: 12px;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 0 8px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>写作统计仪表板 <span id="scopeTag" class="tag"></span></h2>
+
+    <div class="row" id="kpis">
+        <div class="kpi">
+            <div class="label">全文件累计用时</div>
+            <div class="value" id="k_total"></div>
+        </div>
+        <div class="kpi">
+            <div class="label">今日已码用时</div>
+            <div class="value" id="k_today_time"></div>
+        </div>
+        <div class="kpi">
+            <div class="label">今日平均速度</div>
+            <div class="value" id="k_today_avg"></div>
+        </div>
+        <div class="kpi">
+            <div class="label">今日峰值速度</div>
+            <div class="value" id="k_today_peak"></div>
+        </div>
+    </div>
+
+    <div class="grid" style="margin-top:16px;">
+        <div class="card">
+            <div class="muted">当前文件速度曲线（CPM）</div>
+            <canvas id="lineChart" width="900" height="260"></canvas>
+        </div>
+        <div class="card">
+            <div class="muted">今日码字（按小时）</div>
+            <canvas id="todayBars" width="600" height="260"></canvas>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+        <div class="muted">今日热力图（24小时 × 4刻钟，共96个时间点）</div>
+        <canvas id="todayHeatmap" width="1000" height="120"></canvas>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+        <div class="muted">热力图（最近 52 周，每天码字量）</div>
+        <canvas id="heatmap" width="1000" height="180"></canvas>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+
+        function fmtMinutes(ms) {
+            const mins = Math.round(ms / 60000);
+            return mins + ' 分钟';
+        }
+
+        window.addEventListener('message', (e) => {
+            const data = e.data;
+            console.log('Webview received message:', data);
+            
+            if (!data || data.type !== 'time-stats-data') {
+                console.log('Message type not recognized or missing data');
+                return;
+            }
+
+            console.log('Processing time stats data:', {
+                supportsGlobal: data.supportsGlobal,
+                perFileLineLength: data.perFileLine?.length,
+                totalMillisAll: data.totalMillisAll,
+                todayChars: data.today?.chars,
+                heatmapKeys: Object.keys(data.heatmap || {}).length
+            });
+
+            // KPI
+            document.getElementById('k_total').textContent = fmtMinutes(data.totalMillisAll);
+            document.getElementById('k_today_time').textContent = fmtMinutes(data.today.millis);
+            document.getElementById('k_today_avg').textContent = data.today.avgCPM + ' CPM';
+            document.getElementById('k_today_peak').textContent = data.today.peakCPM + ' CPM';
+
+            document.getElementById('scopeTag').textContent = data.supportsGlobal ? '跨文件汇总' : '仅当前文件';
+
+            // 折线：perFileLine
+            drawLineChart(document.getElementById('lineChart'), data.perFileLine);
+
+            // 柱状：today.hourly
+            drawTodayBars(document.getElementById('todayBars'), data.today.hourly);
+
+            // 今日热力图：today.quarterHourly
+            drawTodayHeatmap(document.getElementById('todayHeatmap'), data.today.quarterHourly);
+
+            // 热力图：heatmap (dayTs -> chars)
+            drawHeatmap(document.getElementById('heatmap'), data.heatmap);
+        });
+
+        function drawAxes(ctx, W, H, padding) {
+            ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+            ctx.globalAlpha = 0.6;
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, H - padding);
+            ctx.lineTo(W - padding, H - padding);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+
+        function drawLineChart(canvas, rows) {
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height, pad = 32;
+            ctx.clearRect(0, 0, W, H);
+            drawAxes(ctx, W, H, pad);
+
+            if (!rows || !rows.length) {
+                ctx.fillText('暂无数据', pad + 8, pad + 16);
+                return;
+            }
+
+            const xs = rows.map(r => r.t);
+            const ys = rows.map(r => r.cpm);
+            const xMin = Math.min(...xs), xMax = Math.max(...xs);
+            const yMin = 0, yMax = Math.max(60, Math.max(...ys));
+
+            const xMap = x => pad + (W - 2 * pad) * (x - xMin) / Math.max(1, (xMax - xMin));
+            const yMap = y => (H - pad) - (H - 2 * pad) * (y - yMin) / Math.max(1, (yMax - yMin));
+
+            // grid Y
+            ctx.strokeStyle = '#888'; ctx.globalAlpha = .2;
+            const step = Math.max(10, Math.round(yMax / 5));
+            for (let y = 0; y <= yMax; y += step) {
+                const yy = yMap(y);
+                ctx.beginPath(); ctx.moveTo(pad, yy); ctx.lineTo(W - pad, yy); ctx.stroke();
+                ctx.fillStyle = '#888'; ctx.fillText(String(y), 4, yy + 3);
+            }
+            ctx.globalAlpha = 1;
+
+            // line
+            ctx.beginPath();
+            rows.forEach((r, i) => {
+                const X = xMap(r.t), Y = yMap(r.cpm);
+                if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+            });
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function drawTodayBars(canvas, hourly) {
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height, pad = 32;
+            ctx.clearRect(0, 0, W, H);
+            drawAxes(ctx, W, H, pad);
+            const hours = Array.from({ length: 24 }, (_, i) => i);
+            const vals = hours.map(h => hourly[h] || 0);
+            const maxV = Math.max(10, ...vals);
+            const barW = (W - 2 * pad) / 24 * .8;
+            const xBase = pad + ((W - 2 * pad) / 24) * .1;
+
+            const yMap = v => (H - pad) - (H - 2 * pad) * v / maxV;
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+            hours.forEach((h, idx) => {
+                const v = vals[idx];
+                const x = xBase + idx * (W - 2 * pad) / 24;
+                const y = yMap(v);
+                const hh = (H - pad) - y;
+                ctx.fillRect(x, y, barW, hh);
+                if (idx % 3 === 0) ctx.fillText(String(h), x, H - pad + 12);
+            });
+        }
+
+        function drawHeatmap(canvas, heatmap) {
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            ctx.clearRect(0, 0, W, H);
+
+            const cell = 12, gap = 2;
+            const cols = 53; // 约 52 周 + 1
+            const rows = 7;  // 周一~周日
+            const startX = 60, startY = 20;
+
+            // 计算最近 53*7 天的起点（以今天为末尾）
+            const today = new Date();
+            const endDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+            const dayMs = 24 * 3600 * 1000;
+
+            // 找出最大值用于颜色映射
+            let maxVal = 0;
+            const days = [];
+            for (let i = cols * rows - 1; i >= 0; i--) {
+                const ts = endDay - i * dayMs;
+                const v = heatmap[ts] || 0;
+                days.push({ ts, v });
+                if (v > maxVal) maxVal = v;
+            }
+
+            // 画标签
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+            ctx.fillText('周', 20, startY + 6);
+            ctx.fillText('一', 20, startY + cell + gap + 6);
+            ctx.fillText('二', 20, startY + 2 * (cell + gap) + 6);
+            ctx.fillText('三', 20, startY + 3 * (cell + gap) + 6);
+            ctx.fillText('四', 20, startY + 4 * (cell + gap) + 6);
+            ctx.fillText('五', 20, startY + 5 * (cell + gap) + 6);
+            ctx.fillText('六', 20, startY + 6 * (cell + gap) + 6);
+
+            // 画格子
+            const colorFor = v => {
+                if (maxVal <= 0) return '#2f2f2f33';
+                const t = Math.min(1, v / maxVal);
+                const alpha = 0.15 + 0.85 * t; // 越多越深
+                return `rgba(100,180,255,${alpha})`;
+            };
+
+            let idx = 0;
+            for (let c = 0; c < cols; c++) {
+                for (let r = 0; r < rows; r++) {
+                    const d = days[idx++];
+                    const x = startX + c * (cell + gap);
+                    const y = startY + r * (cell + gap);
+                    ctx.fillStyle = colorFor(d.v);
+                    ctx.fillRect(x, y, cell, cell);
+                }
+            }
+        }
+
+        function drawTodayHeatmap(canvas, quarterHourly) {
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            ctx.clearRect(0, 0, W, H);
+
+            const cell = 8, gap = 1;
+            const cols = 24; // 24小时
+            const rows = 4;  // 每小时4个15分钟刻度
+            const startX = 60, startY = 20;
+
+            // 找出最大值用于颜色映射
+            let maxVal = 0;
+            const allValues = [];
+            for (let h = 0; h < 24; h++) {
+                for (let q = 0; q < 4; q++) {
+                    const idx = h * 4 + q;
+                    const v = quarterHourly[idx] || 0;
+                    allValues.push(v);
+                    if (v > maxVal) maxVal = v;
+                }
+            }
+
+            // 画时间标签
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+            ctx.font = '10px system-ui';
+            
+            // Y轴标签（15分钟刻度）
+            ctx.fillText('00', 20, startY + 8);
+            ctx.fillText('15', 20, startY + cell + gap + 8);
+            ctx.fillText('30', 20, startY + 2 * (cell + gap) + 8);
+            ctx.fillText('45', 20, startY + 3 * (cell + gap) + 8);
+
+            // X轴标签（小时）
+            for (let h = 0; h < 24; h += 3) {
+                const x = startX + h * (cell + gap);
+                ctx.fillText(h.toString().padStart(2, '0'), x, startY + 4 * (cell + gap) + 15);
+            }
+
+            // 颜色映射函数
+            const colorFor = v => {
+                if (maxVal <= 0) return '#2f2f2f33';
+                const t = Math.min(1, v / maxVal);
+                const intensity = 0.15 + 0.85 * t;
+                return `rgba(100,180,255,${intensity})`;
+            };
+
+            // 画格子
+            for (let h = 0; h < 24; h++) {
+                for (let q = 0; q < 4; q++) {
+                    const idx = h * 4 + q;
+                    const v = quarterHourly[idx] || 0;
+                    const x = startX + h * (cell + gap);
+                    const y = startY + q * (cell + gap);
+                    
+                    ctx.fillStyle = colorFor(v);
+                    ctx.fillRect(x, y, cell, cell);
+
+                    // 如果有数据，显示工具提示样式的边框
+                    if (v > 0) {
+                        ctx.strokeStyle = 'rgba(100,180,255,0.8)';
+                        ctx.lineWidth = 0.5;
+                        ctx.strokeRect(x, y, cell, cell);
+                    }
+                }
+            }
+
+            // 添加说明文字
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--fg') || '#888';
+            ctx.font = '11px system-ui';
+            ctx.fillText('时间 →', startX, startY - 5);
+            ctx.save();
+            ctx.translate(15, startY + 40);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('分钟', 0, 0);
+            ctx.restore();
+        }
+    </script>
+</body>
+
+</html>

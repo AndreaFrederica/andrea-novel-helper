@@ -7,4 +7,10 @@
     "config.rolesFile.description": "キャラクターライブラリ JSON ファイルのパス（ワークスペースルートからの相対パス）",
     "config.minChars.description": "補完をトリガーするための最小プレフィックス文字数",
     "config.supportedFileTypes.description": "サポートされるファイル拡張子（ドットなし）"
+    ,
+    "command.openTimeStats.title": "タイム統計を開く",
+    "command.exportTimeStatsCSV.title": "タイム統計CSVをエクスポート",
+    "config.timeStats.enabledLanguages.description": "執筆統計を追跡する言語 ID のリスト（デフォルト: markdown, plaintext）。",
+    "config.timeStats.idleThresholdMs.description": "アイドル閾値（ミリ秒）。この時間以上入力がなければ統計が一時停止します（デフォルト: 30000）。",
+    "config.timeStats.bucketSizeMs.description": "CPM 計算のための時間バケットサイズ（ミリ秒）（デフォルト: 60000）。"
 }

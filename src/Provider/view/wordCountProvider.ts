@@ -341,6 +341,22 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
         const parentPath = path.dirname(element.resourceUri.fsPath);
         return this.itemsById.get(parentPath);
     }
+
+    /** 获取文件的字数统计 */
+    public async getFileStats(filePath: string): Promise<TextStats | null> {
+        try {
+            return await this.getOrCalculateFileStats(filePath);
+        } catch (error) {
+            console.error(`Error getting file stats for ${filePath}:`, error);
+            return null;
+        }
+    }
+
+    /** 获取文件的总字数 */
+    public async getFileWordCount(filePath: string): Promise<number> {
+        const stats = await this.getFileStats(filePath);
+        return stats ? stats.total : 0;
+    }
 }
 
 export class WordCountItem extends vscode.TreeItem {
