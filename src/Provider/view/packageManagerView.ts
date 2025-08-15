@@ -61,6 +61,10 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
     private expandedNodes = new Set<string>();
     private memento: vscode.Memento;
 
+    // 剪贴板（复制/剪切临时存放路径）
+    private copyClipboard: string[] | null = null; // 复制
+    private cutClipboard: string[] | null = null;  // 剪切
+
     constructor(private workspaceRoot: string, memento: vscode.Memento) { 
         this.memento = memento;
         // 从工作区状态恢复展开状态
@@ -70,6 +74,53 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
 
     refresh(): void {
         this._onDidChange.fire();
+    }
+
+    // —— 剪贴板操作 ——
+    public setCopy(paths: string[] | null) { this.copyClipboard = paths && paths.length? [...paths]: null; }
+    public setCut(paths: string[] | null) { this.cutClipboard = paths && paths.length? [...paths]: null; }
+    public hasClipboard() { return (this.copyClipboard && this.copyClipboard.length) || (this.cutClipboard && this.cutClipboard.length); }
+    public async pasteInto(targetDir: string) {
+        if (!this.hasClipboard()) return;
+        const entries: {source: string; base: string; isDir: boolean;}[] = [];
+        const pushEntry = (p:string) => {
+            if (!fs.existsSync(p)) return; const st = fs.statSync(p);
+            entries.push({source: p, base: path.basename(p), isDir: st.isDirectory()});
+        };
+        if (this.copyClipboard) this.copyClipboard.forEach(pushEntry);
+        if (this.cutClipboard) this.cutClipboard.forEach(pushEntry);
+
+        for (const e of entries) {
+            let dest = path.join(targetDir, e.base);
+            if (fs.existsSync(dest)) {
+                // 防冲突：附加 (copy) 递增
+                let idx=1; const baseName = path.basename(e.base, path.extname(e.base)); const ext = path.extname(e.base);
+                while (fs.existsSync(dest)) {
+                    dest = path.join(targetDir, `${baseName} (${idx++})${ext}`);
+                }
+            }
+            if (this.copyClipboard && (!this.cutClipboard || !this.cutClipboard.includes(e.source))) {
+                // 复制
+                await this.copyRecursive(e.source, dest);
+            } else {
+                // 剪切或剪切优先
+                fs.renameSync(e.source, dest);
+            }
+        }
+        // 剪切后清空
+        if (this.cutClipboard) this.cutClipboard = null;
+        this.refresh();
+    }
+    private async copyRecursive(src: string, dest: string) {
+        const st = fs.statSync(src);
+        if (st.isDirectory()) {
+            fs.mkdirSync(dest, {recursive: true});
+            for (const name of fs.readdirSync(src)) {
+                await this.copyRecursive(path.join(src,name), path.join(dest,name));
+            }
+        } else {
+            fs.copyFileSync(src, dest);
+        }
     }
 
     // 保存展开状态到工作区
@@ -221,7 +272,28 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     // 注册 TreeDataProvider
     const treeView = vscode.window.createTreeView('packageManagerView', {
         treeDataProvider: provider,
-        showCollapseAll: true
+        showCollapseAll: true,
+        canSelectMany: true,
+        dragAndDropController: new class implements vscode.TreeDragAndDropController<PackageNode> {
+            dropMimeTypes = ['application/vnd.code.tree.packageManagerView','text/uri-list'];
+            dragMimeTypes = ['text/uri-list'];
+            async handleDrag(source: readonly PackageNode[], data: vscode.DataTransfer) {
+                data.set('text/uri-list', new vscode.DataTransferItem(source.map(s=>s.resourceUri.toString()).join('\n')));
+            }
+            async handleDrop(target: PackageNode | undefined, data: vscode.DataTransfer, _token: vscode.CancellationToken) {
+                try {
+                    const urisRaw = data.get('text/uri-list')?.value as string | undefined;
+                    if (!urisRaw) return;
+                    const uris = urisRaw.split(/\r?\n/).filter(Boolean).map(u=>vscode.Uri.parse(u));
+                    const toDir = target && fs.existsSync(target.resourceUri.fsPath) && fs.statSync(target.resourceUri.fsPath).isDirectory()? target.resourceUri.fsPath : path.join(rootFsPath,'novel-helper');
+                    const paths = uris.map(u=>u.fsPath);
+                    provider.setCut(paths);
+                    await provider.pasteInto(toDir);
+                } catch (err) {
+                    vscode.window.showErrorMessage('拖拽移动失败: '+err);
+                }
+            }
+        }
     });
 
     // 监听树视图展开/折叠事件以保存状态
@@ -244,6 +316,27 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             } catch (error) {
                 vscode.window.showErrorMessage(`无法打开文件: ${error}`);
             }
+        })
+    );
+
+    // —— 复制 / 剪切 / 粘贴 命令 ——
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.package.copy', (node: PackageNode | PackageNode[]) => {
+            const nodes = Array.isArray(node)? node: treeView.selection.length? treeView.selection: [node];
+            provider.setCopy(nodes.map(n=>n.resourceUri.fsPath));
+            provider.setCut(null);
+            vscode.window.setStatusBarMessage(`已复制 ${nodes.length} 个项目`, 2000);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.package.cut', (node: PackageNode | PackageNode[]) => {
+            const nodes = Array.isArray(node)? node: treeView.selection.length? treeView.selection: [node];
+            provider.setCut(nodes.map(n=>n.resourceUri.fsPath));
+            provider.setCopy(null);
+            vscode.window.setStatusBarMessage(`已剪切 ${nodes.length} 个项目`, 2000);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.package.paste', async (target?: PackageNode) => {
+            const dir = target && fs.existsSync(target.resourceUri.fsPath) && fs.statSync(target.resourceUri.fsPath).isDirectory()? target.resourceUri.fsPath: path.join(rootFsPath,'novel-helper');
+            await provider.pasteInto(dir);
+            vscode.window.setStatusBarMessage('粘贴完成', 2000);
         })
     );
 

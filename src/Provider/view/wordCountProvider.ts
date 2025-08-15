@@ -662,7 +662,32 @@ export class WordCountItem extends vscode.TreeItem {
             tip.isTrusted = true;
             this.tooltip = tip;
         } else {
-            this.description = `(${stats.total})`;
+            // 根据配置格式化字数
+            const cfg = vscode.workspace.getConfiguration();
+            const mode = cfg.get<string>('AndreaNovelHelper.wordCount.displayFormat', 'raw');
+            const total = stats.total;
+            let formatted: string;
+            switch (mode) {
+                case 'wan':
+                    if (total >= 10000) {
+                        formatted = (total / 10000).toFixed(3).replace(/\.0+$/,'') + '万';
+                    } else formatted = String(total);
+                    break;
+                case 'k':
+                    if (total >= 1000) {
+                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/,'') + 'k';
+                    } else formatted = String(total);
+                    break;
+                case 'qian':
+                    if (total >= 1000) {
+                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/,'') + '千';
+                    } else formatted = String(total);
+                    break;
+                case 'raw':
+                default:
+                    formatted = String(total);
+            }
+            this.description = `(${formatted})`;
         }
 
         this.id = this.resourceUri.fsPath;

@@ -70,6 +70,8 @@ export class FileTrackingDataManager {
     private dbDir: string; // 新的分片目录 .anh-fsdb
     private indexPath: string; // 索引文件 .anh-fsdb/index.json
     private useSharded: boolean = true; // 始终启用分片
+    private lazyLoadShards: boolean = true; // 启动仅加载索引按需加载
+    private indexDirFlag: Set<string> = new Set();
     private workspaceRoot: string;
     private pendingSaves = new Set<string>();
     private saveTimer: NodeJS.Timeout | null = null;
@@ -110,6 +112,23 @@ export class FileTrackingDataManager {
         markTemp: 0,
         markSaved: 0
     };
+    // 脏分片追踪（仅写入变化的元数据分片，减少 IO）
+    private dirtyShardUuids: Set<string> = new Set();
+    private removedShardUuids: Set<string> = new Set();
+    /**
+     * 标记某个分片为脏并记录原因
+     * @param uuid 分片 UUID
+     * @param reason 触发原因 (用于调试定位不必要的写入)
+     */
+    private markShardDirty(uuid?: string, reason?: string) {
+        if (!uuid) { return; }
+        if (!this.dirtyShardUuids.has(uuid)) {
+            if (reason) {
+                console.log(`[FileTracking] markShardDirty uuid=${uuid} reason=${reason}`);
+            }
+        }
+        this.dirtyShardUuids.add(uuid);
+    }
 
     constructor(workspaceRoot: string) {
         this.workspaceRoot = workspaceRoot;
@@ -135,8 +154,12 @@ export class FileTrackingDataManager {
         try { this.purgeGitEntries(); } catch (e) { console.warn('[FileTracking] purgeGitEntries 失败（忽略）', e); }
     // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
     this.migrateIfNeeded();
-    // 加载分片（若已存在）
-    this.loadShardedFiles();
+    // 惰性：若存在 index 且开启惰性，则仅加载索引；否则全量加载分片
+    if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
+        this.loadIndexOnly();
+    } else {
+        this.loadShardedFiles();
+    }
     }
 
     /** 判断路径是否位于 .git 目录 */
@@ -312,13 +335,24 @@ export class FileTrackingDataManager {
                 // 只写基础字段映射用于备份/恢复（可选）
                 files: Object.values(this.database.files).map(f=>({uuid:f.uuid,filePath:f.filePath,isDirectory:f.isDirectory,size:f.size,mtime:f.mtime,hash:f.hash,updatedAt:f.updatedAt}))
             };
-            const content = JSON.stringify(slim, null, 2);
-            fs.writeFileSync(this.dbPath, content, 'utf8');
+            // 根据配置决定是否写 legacy 快照
+            let writeLegacy = false;
+            try {
+                writeLegacy = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('writeLegacySnapshot', false) === true;
+            } catch {}
+            let content = '';
+            if (writeLegacy) {
+                content = JSON.stringify(slim, null, 2);
+                fs.writeFileSync(this.dbPath, content, 'utf8');
+            } else {
+                // 若配置关闭且旧文件存在且我们是首次迁移后，可以选择清理；此处不自动删，避免用户依赖；仅在首次检测到未启用写入且文件为空列表写过时保留。
+                content = '{"legacyDisabled":true}';
+            }
             this.lastSavedHash = this.calculateDatabaseHash();
             this.hasUnsavedChanges = false;
             const dur = Date.now() - t0;
             this.stats.saveWrite++;
-            console.log(`[FileTracking] 保存(Index) size=${content.length}B dur=${dur}ms files=${Object.keys(this.database.files).length}`);
+            console.log(`[FileTracking] 保存(Index) legacy=${writeLegacy?'yes':'no'} size=${content.length}B dur=${dur}ms files=${Object.keys(this.database.files).length}`);
         } catch (error) {
             console.error('Failed to save file tracking database:', error);
         }
@@ -477,6 +511,7 @@ export class FileTrackingDataManager {
      * 通过 UUID 获取文件元数据
      */
     public getFileByUuid(uuid: string): FileMetadata | undefined {
+        if (this.lazyLoadShards && !this.database.files[uuid]) { this.ensureShardLoaded(uuid); }
         return this.database.files[uuid];
     }
 
@@ -485,7 +520,8 @@ export class FileTrackingDataManager {
      */
     public getFileByPath(filePath: string): FileMetadata | undefined {
         const uuid = this.getFileUuid(filePath);
-        return uuid ? this.database.files[uuid] : undefined;
+        if (!uuid) { return undefined; }
+        return this.getFileByUuid(uuid);
     }
 
     /**
@@ -508,14 +544,35 @@ export class FileTrackingDataManager {
             
             // 检查是否已存在
             let uuid = this.getFileUuid(filePath);
-            const existingFile = uuid ? this.database.files[uuid] : undefined;
+            let existingFile = uuid ? this.database.files[uuid] : undefined;
+            // 惰性：如果已有 uuid 但尚未加载分片，先加载以便正确比较（避免误判为变化）
+            if (uuid && !existingFile && this.lazyLoadShards) {
+                this.ensureShardLoaded(uuid);
+                existingFile = this.database.files[uuid];
+            }
             
             // 如果文件已存在且哈希未变化，不需要任何更新
-            if (!isDirectory) { // 仅对普通文件使用哈希短路
-                if (existingFile && existingFile.hash === hash && uuid) {
+            if (!isDirectory && existingFile && uuid) {
+                // 进一步比较 size / mtime，降低无意义写入
+                if (existingFile.hash === hash && existingFile.size === stats.size && existingFile.mtime === stats.mtimeMs) {
                     this.stats.skipUnchangedFile++;
-                    return uuid; // 文件内容未变
+                    return uuid; // 完全未变
                 }
+                // 内容相同但 size/mtime 变化（极少见），或内容变化：只更新必要字段
+                const nowLite = Date.now();
+                let changed = false;
+                if (existingFile.hash !== hash) { existingFile.hash = hash; changed = true; }
+                if (existingFile.size !== stats.size) { existingFile.size = stats.size; changed = true; }
+                if (existingFile.mtime !== stats.mtimeMs) { existingFile.mtime = stats.mtimeMs; changed = true; }
+                if (changed) {
+                    existingFile.lastTrackedAt = nowLite;
+                    existingFile.updatedAt = nowLite;
+                    this.markChanged();
+                    this.markShardDirty(uuid, 'existing file content changed (hash/size/mtime)');
+                    if (!isDirectory) { this.markAncestorsDirty(filePath); }
+                    this.scheduleSave();
+                }
+                return uuid;
             }
             
             // 创建新的 UUID（如果不存在）
@@ -558,6 +615,7 @@ export class FileTrackingDataManager {
             this.database.pathToUuid[filePath] = uuid;
             
             this.markChanged();
+            this.markShardDirty(uuid, existingFile ? 'recreate metadata (missing shard loaded later)' : 'new file tracked');
             this.scheduleSave();
             // 如果是文件，更新其父目录聚合哈希
             if (!isDirectory) {
@@ -585,6 +643,7 @@ export class FileTrackingDataManager {
         if (uuid) {
             delete this.database.files[uuid];
             delete this.database.pathToUuid[filePath];
+            this.removedShardUuids.add(uuid);
             this.markChanged();
             this.scheduleSave();
             // 更新父目录哈希
@@ -611,6 +670,7 @@ export class FileTrackingDataManager {
                 this.database.pathToUuid[newPath] = uuid;
                 
                 this.markChanged();
+                this.markShardDirty(uuid, 'rename file path/metadata changed');
                 this.scheduleSave();
                 this.markAncestorsDirty(newPath);
                 this.stats.renameFile++;
@@ -642,6 +702,7 @@ export class FileTrackingDataManager {
                     meta.fileExtension = path.extname(newAbs).toLowerCase();
                     meta.updatedAt = Date.now();
                     meta.lastTrackedAt = Date.now();
+                    this.markShardDirty(uuid, 'rename directory children path update');
                 }
                 changed = true;
             }
@@ -681,22 +742,113 @@ export class FileTrackingDataManager {
                         averageCPM: 0
                     };
                 }
-                
-                // 更新统计信息
-                Object.assign(metadata.writingStats, stats);
-                metadata.updatedAt = Date.now();
-                
-                this.markChanged();
-                this.scheduleSave();
-                this.stats.writingStatsUpdates++;
+                const prev = metadata.writingStats;
+                // 构造新的临时对象以比较变化
+                const next = { ...prev } as typeof prev;
+                if (stats.totalMillis !== undefined) { next.totalMillis = stats.totalMillis; }
+                if (stats.charsAdded !== undefined) { next.charsAdded = stats.charsAdded; }
+                if (stats.charsDeleted !== undefined) { next.charsDeleted = stats.charsDeleted; }
+                if (stats.lastActiveTime !== undefined) { next.lastActiveTime = stats.lastActiveTime; }
+                if (stats.sessionsCount !== undefined) { next.sessionsCount = stats.sessionsCount; }
+                if (stats.averageCPM !== undefined) { next.averageCPM = stats.averageCPM; }
+                if (stats.buckets !== undefined) { next.buckets = stats.buckets; }
+                if (stats.sessions !== undefined) { next.sessions = stats.sessions; }
+
+                const simpleChanged = prev.totalMillis !== next.totalMillis || prev.charsAdded !== next.charsAdded || prev.charsDeleted !== next.charsDeleted || prev.sessionsCount !== next.sessionsCount || prev.averageCPM !== next.averageCPM;
+                const bucketsChanged = JSON.stringify(prev.buckets||[]) !== JSON.stringify(next.buckets||[]);
+                const sessionsChanged = JSON.stringify(prev.sessions||[]) !== JSON.stringify(next.sessions||[]);
+                const lastActiveChangedOnly = !simpleChanged && !bucketsChanged && !sessionsChanged && prev.lastActiveTime !== next.lastActiveTime;
+
+                // 仅 lastActiveTime 变化（纯阅读/聚焦）不写入，避免产生无意义脏分片
+                if (lastActiveChangedOnly) {
+                    return; // 不更新写库
+                }
+                if (simpleChanged || bucketsChanged || sessionsChanged) {
+                    const reasonParts: string[] = [];
+                    if (prev.totalMillis !== next.totalMillis) { reasonParts.push('totalMillis'); }
+                    if (prev.charsAdded !== next.charsAdded) { reasonParts.push('charsAdded'); }
+                    if (prev.charsDeleted !== next.charsDeleted) { reasonParts.push('charsDeleted'); }
+                    if (prev.sessionsCount !== next.sessionsCount) { reasonParts.push('sessionsCount'); }
+                    if (prev.averageCPM !== next.averageCPM) { reasonParts.push('averageCPM'); }
+                    if (bucketsChanged) { reasonParts.push('buckets'); }
+                    if (sessionsChanged) { reasonParts.push('sessions'); }
+                    console.log(`[FileTracking] writingStats diff -> ${reasonParts.join(',') || 'unknown'} file=${filePath}`);
+                    Object.assign(prev, next);
+                    metadata.updatedAt = Date.now();
+                    this.markChanged();
+                    this.markShardDirty(uuid, 'writingStats changed');
+                    this.scheduleSave();
+                    this.stats.writingStatsUpdates++;
+                }
             }
         }
+    }
+
+    /**
+     * 更新文件的字数统计（供 WordCountProvider 使用）
+     */
+    public updateWordCountStats(filePath: string, stats: {
+        cjkChars: number;
+        asciiChars: number;
+        words: number;
+        nonWSChars: number;
+        total: number;
+    }): void {
+        const uuid = this.getFileUuid(filePath);
+        if (!uuid) { return; }
+        const metadata = this.database.files[uuid];
+        if (!metadata) { return; }
+        if (!metadata.wordCountStats) {
+            metadata.wordCountStats = { cjkChars:0, asciiChars:0, words:0, nonWSChars:0, total:0 };
+        }
+        const prev = metadata.wordCountStats;
+        const changed = prev.cjkChars !== stats.cjkChars || prev.asciiChars !== stats.asciiChars || prev.words !== stats.words || prev.nonWSChars !== stats.nonWSChars || prev.total !== stats.total;
+        if (!changed) { return; }
+        metadata.wordCountStats = { ...stats };
+        metadata.updatedAt = Date.now();
+        metadata.lastTrackedAt = Date.now();
+        this.markChanged();
+    this.markShardDirty(uuid, 'wordCountStats changed');
+        this.scheduleSave();
+        this.stats.wordCountUpdates++;
+    }
+
+    /** 标记文件为临时（未保存） */
+    public markFileTemporary(filePath: string): void {
+        const uuid = this.getFileUuid(filePath);
+        if (!uuid) { return; }
+        const meta = this.database.files[uuid];
+        if (!meta) { return; }
+        if (meta.isTemporary) { return; }
+        meta.isTemporary = true;
+        meta.updatedAt = Date.now();
+        meta.lastTrackedAt = Date.now();
+        this.markChanged();
+    this.markShardDirty(uuid, 'mark temporary');
+        this.scheduleSave();
+        this.stats.markTemp++;
+    }
+    /** 取消临时标记（文件已保存） */
+    public markFileSaved(filePath: string): void {
+        const uuid = this.getFileUuid(filePath);
+        if (!uuid) { return; }
+        const meta = this.database.files[uuid];
+        if (!meta) { return; }
+        if (!meta.isTemporary) { return; }
+        meta.isTemporary = false;
+        meta.updatedAt = Date.now();
+        meta.lastTrackedAt = Date.now();
+        this.markChanged();
+    this.markShardDirty(uuid, 'mark saved');
+        this.scheduleSave();
+        this.stats.markSaved++;
     }
 
     /**
      * 获取所有被追踪的文件
      */
     public getAllFiles(): FileMetadata[] {
+        this.ensureAllShardsLoaded();
         return Object.values(this.database.files);
     }
 
@@ -833,7 +985,7 @@ export class FileTrackingDataManager {
         } catch (e) { console.warn('写入分片失败', e); }
     }
     private loadShardedFiles(): void {
-    if (!fs.existsSync(this.dbDir)) { return; }
+        if (!fs.existsSync(this.dbDir)) { return; }
         try {
             const entries = fs.readdirSync(this.dbDir);
             for (const sub of entries) {
@@ -857,184 +1009,105 @@ export class FileTrackingDataManager {
             }
         } catch (e) { console.warn('加载分片失败', e); }
     }
+    // ===== 惰性加载支持（重新实现并修复截断） =====
+    private loadIndexOnly(): void {
+        try {
+            if (!fs.existsSync(this.indexPath)) { return; }
+            const raw = fs.readFileSync(this.indexPath,'utf8');
+            const idx = JSON.parse(raw);
+            const entries = idx.entries || idx.files || [];
+            for (const ent of entries) {
+                if (typeof ent === 'string') { continue; } // 老格式忽略
+                const u = ent.u; const p = ent.p; const d = ent.d;
+                if (!u || !p) { continue; }
+                this.database.pathToUuid[p] = u;
+                if (d) {
+                    // 目录需要即时可用（哈希聚合、后续子文件添加）
+                    const meta = this.readSingleShard(u);
+                    if (meta) { this.database.files[u] = meta; }
+                    this.indexDirFlag.add(u);
+                }
+            }
+            console.log(`[FileTracking] 惰性索引加载 paths=${Object.keys(this.database.pathToUuid).length} preloadDirs=${this.indexDirFlag.size}`);
+        } catch (e) { console.warn('惰性加载 index 失败', e); }
+    }
+    private readSingleShard(uuid: string): FileMetadata | undefined {
+        try {
+            const p = this.shardFilePath(uuid);
+            if (!fs.existsSync(p)) { return undefined; }
+            return JSON.parse(fs.readFileSync(p,'utf8')) as FileMetadata;
+        } catch { return undefined; }
+    }
+    private ensureShardLoaded(uuid: string): void {
+        if (this.database.files[uuid]) { return; }
+        const meta = this.readSingleShard(uuid);
+        if (meta) {
+            this.database.files[uuid] = meta;
+            if (meta.isDirectory) { this.indexDirFlag.add(uuid); }
+        }
+    }
+    private ensureAllShardsLoaded(): void {
+        if (!this.lazyLoadShards) { return; }
+        const total = Object.keys(this.database.pathToUuid).length;
+        if (Object.keys(this.database.files).length >= total) { return; }
+        for (const u of Object.values(this.database.pathToUuid)) {
+            if (!this.database.files[u]) { this.ensureShardLoaded(u); }
+        }
+        console.log('[FileTracking] 惰性补全加载完成');
+    }
     private writeIndex(): void {
         try {
-            const idx = { version: this.DB_VERSION, lastUpdated: Date.now(), files: Object.keys(this.database.files) };
+            // 使用 pathToUuid 保证即便尚未加载分片也能写出索引
+            const entries = Object.entries(this.database.pathToUuid).map(([p,u])=>{
+                const meta = this.database.files[u];
+                const isDir = meta ? !!meta.isDirectory : this.indexDirFlag.has(u);
+                return {u, p, d: isDir?1:0};
+            });
+            const idx = { version: this.DB_VERSION + '+idx1', lastUpdated: Date.now(), entries };
             fs.writeFileSync(this.indexPath, JSON.stringify(idx));
         } catch (e) { console.warn('写入 index 失败', e); }
     }
     private saveSharded(force:boolean): void {
-        // 简单策略：当有未保存变化时，全量遍历内存写需要更新的分片（此处先不做脏标记优化）
-    if (!this.hasUnsavedChanges && !force) { return; }
-        for (const meta of Object.values(this.database.files)) {
-            this.writeShard(meta);
+        if (!this.hasUnsavedChanges && !force) { return; }
+        if (force && this.dirtyShardUuids.size === 0 && this.removedShardUuids.size === 0) {
+            // 全量写入（包括惰性未加载但存在 pathToUuid 的分片 -> 若未加载则跳过，因为没有最新内存副本）
+            for (const uuid of Object.values(this.database.pathToUuid)) {
+                const meta = this.database.files[uuid];
+                if (meta) { this.writeShard(meta); }
+            }
+            this.writeIndex();
+            return;
+        }
+        for (const uuid of this.dirtyShardUuids) {
+            const meta = this.database.files[uuid];
+            if (meta) { this.writeShard(meta); }
+        }
+        for (const uuid of this.removedShardUuids) {
+            try { const p = this.shardFilePath(uuid); if (fs.existsSync(p)) { fs.unlinkSync(p); } } catch {/* ignore */}
         }
         this.writeIndex();
+        this.dirtyShardUuids.clear();
+        this.removedShardUuids.clear();
     }
-
-    /**
-     * 处理文件删除
-     */
-    public handleFileDeleted(filePath: string): boolean {
-        const uuid = this.database.pathToUuid[filePath];
-        if (!uuid) {
-            return false; // 文件未被追踪
-        }
-
-        // 从数据库中移除
-        delete this.database.files[uuid];
-        delete this.database.pathToUuid[filePath];
-        
-        this.markChanged();
-        this.scheduleSave();
-        
-        console.log(`文件已从追踪中移除: ${filePath} (UUID: ${uuid})`);
-        return true;
-    }
-
-    /**
-     * 处理文件重命名
-     */
-    public handleFileRenamed(oldPath: string, newPath: string): boolean {
-        const uuid = this.database.pathToUuid[oldPath];
-        if (!uuid) {
-            return false; // 原文件未被追踪
-        }
-
-        const fileMetadata = this.database.files[uuid];
-        if (!fileMetadata) {
-            return false;
-        }
-
-        // 更新路径映射
-        delete this.database.pathToUuid[oldPath];
-        this.database.pathToUuid[newPath] = uuid;
-
-        // 更新文件元数据
-        fileMetadata.filePath = newPath;
-        fileMetadata.fileName = path.basename(newPath);
-        fileMetadata.fileExtension = path.extname(newPath).substring(1);
-        fileMetadata.lastTrackedAt = Date.now();
-        fileMetadata.updatedAt = Date.now();
-
-        this.markChanged();
-        this.scheduleSave();
-
-        console.log(`文件路径已更新: ${oldPath} -> ${newPath} (UUID: ${uuid})`);
-        return true;
-    }
-
-    /**
-     * 为未保存的文件创建临时追踪记录
-     * 用于timeStats等需要在文件保存前就开始追踪的场景
-     */
+    /** 兼容: 创建临时文件追踪记录 */
     public createTemporaryFile(filePath: string): string {
-        // 检查是否已经存在
-        let uuid = this.getFileUuid(filePath);
-        if (uuid) {
-            // 文件已存在，标记为临时状态
-            this.markAsTemporary(filePath);
-            return uuid;
-        }
-
-        // 创建新的临时文件记录
-        uuid = uuidv4();
+        const existing = this.getFileUuid(filePath);
+        if (existing) { this.markFileTemporary(filePath); return existing; }
+        const now = Date.now();
+        const uuid = uuidv4();
         const fileName = path.basename(filePath);
         const fileExtension = path.extname(filePath).toLowerCase();
-        const now = Date.now();
-
-        const metadata: FileMetadata = {
-            uuid,
-            filePath,
-            fileName,
-            fileExtension,
-            size: 0, // 临时文件大小未知
-            mtime: now,
-            hash: '', // 临时文件没有哈希
-            isTemporary: true,
-            createdAt: now,
-            lastTrackedAt: now,
-            updatedAt: now
-        };
-
-        // 更新数据库
-        this.database.files[uuid] = metadata;
+        const meta: FileMetadata = { uuid, filePath, fileName, fileExtension, size:0, mtime:0, hash:'', isDirectory:false, isTemporary:true, createdAt:now, lastTrackedAt:now, updatedAt:now };
+        this.database.files[uuid] = meta;
         this.database.pathToUuid[filePath] = uuid;
-
         this.markChanged();
+    this.markShardDirty(uuid, 'create temporary file');
         this.scheduleSave();
-
-        console.log(`创建临时文件追踪记录: ${filePath} (UUID: ${uuid})`);
-    this.stats.temporaryCreate++;
+        this.stats.temporaryCreate++;
         return uuid;
     }
-
-    /**
-     * 标记文件为临时文件（未保存到磁盘）
-     */
-    public markAsTemporary(filePath: string): void {
-        const uuid = this.database.pathToUuid[filePath];
-        if (uuid && this.database.files[uuid]) {
-            const metadata = this.database.files[uuid];
-            if (!metadata.isTemporary) { // 只有状态真的改变时才保存
-                metadata.isTemporary = true;
-                metadata.lastTrackedAt = Date.now();
-                this.markChanged();
-                this.scheduleSave();
-                this.stats.markTemp++;
-            }
-        }
-    }
-
-    /**
-     * 标记文件为已保存（不再是临时文件）
-     */
-    public markAsSaved(filePath: string): void {
-        const uuid = this.database.pathToUuid[filePath];
-        if (uuid && this.database.files[uuid]) {
-            const metadata = this.database.files[uuid];
-            if (metadata.isTemporary !== false) { // 只有状态真的改变时才保存
-                metadata.isTemporary = false;
-                metadata.lastTrackedAt = Date.now();
-                this.markChanged();
-                this.scheduleSave();
-                this.stats.markSaved++;
-            }
-        }
-    }
-
-    /**
-     * 更新文件的字数统计缓存（供 WordCountProvider 使用）
-     */
-    public updateWordCountStats(filePath: string, stats: {
-        cjkChars: number;
-        asciiChars: number;
-        words: number;
-        nonWSChars: number;
-        total: number;
-    }): void {
-        const uuid = this.getFileUuid(filePath);
-        if (uuid) {
-            const metadata = this.database.files[uuid];
-            if (metadata) {
-                metadata.wordCountStats = { ...stats };
-                metadata.updatedAt = Date.now();
-                
-                this.markChanged();
-                this.scheduleSave();
-                this.stats.wordCountUpdates++;
-            }
-        }
-    }
-
-    /**
-     * 关闭数据管理器
-     */
-    public async dispose(): Promise<void> {
-        if (this.saveTimer) {
-            clearTimeout(this.saveTimer);
-            this.saveTimer = null;
-        }
-        await this.forceSave();
-    }
+    public markAsTemporary(filePath: string) { this.markFileTemporary(filePath); }
+    public markAsSaved(filePath: string) { this.markFileSaved(filePath); }
+    public handleFileDeleted(filePath: string): boolean { const uuid = this.getFileUuid(filePath); if (!uuid) { return false; } this.removeFile(filePath); return true; }
+    public async dispose(): Promise<void> { await this.forceSave(); }
 }

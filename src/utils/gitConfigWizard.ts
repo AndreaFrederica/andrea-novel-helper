@@ -21,7 +21,9 @@ async function promptGitNotInstalled(): Promise<void> {
     }
 }
 
-export async function checkGitConfigAndGuide(workspaceRoot: string) {
+interface GitConfigGuideOptions { silentIfConfigured?: boolean; }
+
+export async function checkGitConfigAndGuide(workspaceRoot: string, options?: GitConfigGuideOptions) {
     // 若未安装 git，直接返回
     const gitCheck = await runGit(workspaceRoot, ['--version']);
     if (gitCheck.code !== 0) {
@@ -39,7 +41,11 @@ export async function checkGitConfigAndGuide(workspaceRoot: string) {
     const effectiveName = hasLocalPair ? localName : globalName;
     const effectiveEmail = hasLocalPair ? localEmail : globalEmail;
 
+    let needConfigure = false;
     if (effectiveName && effectiveEmail) {
+        if (options?.silentIfConfigured) {
+            return; // 静默退出
+        }
         const detailLines = [
             `当前生效: ${effectiveName} <${effectiveEmail}> (${hasLocalPair ? '本仓库(local)' : '全局(global)'})`,
             `本仓库(local): ${hasLocalPair ? localName + ' <' + localEmail + '>' : '未设置'}`,
@@ -56,13 +62,20 @@ export async function checkGitConfigAndGuide(workspaceRoot: string) {
             }
             return;
         }
+        // 选择重新配置
+        needConfigure = true;
+    } else {
+        // 缺失任一字段 -> 需要配置
+        const pick2 = await vscode.window.showInformationMessage('检测到尚未配置 Git 用户名/邮箱，是否现在配置？', '立即配置', '跳过');
+        if (pick2 !== '立即配置') { return; }
+        needConfigure = true;
     }
+
+    if (!needConfigure) { return; }
 
     // 准备进入配置/重新配置流程；预填默认值（若存在）
     let userName = effectiveName || '';
     let userEmail = effectiveEmail || '';
-    const pick = await vscode.window.showInformationMessage('检测到尚未配置 Git 用户名/邮箱，是否现在配置？', '立即配置', '跳过');
-    if (pick !== '立即配置') { return; }
 
     // 逐步向导
     const nameInput = await vscode.window.showInputBox({ prompt: '输入 Git 用户名 (user.name)', ignoreFocusOut: true, value: userName, validateInput: v => v.trim() ? undefined : '不能为空' });
@@ -110,7 +123,7 @@ export function registerGitConfigCommand(context: vscode.ExtensionContext) {
     const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!ws) { return; }
     const cmd = vscode.commands.registerCommand('AndreaNovelHelper.setupGitIdentity', () => {
-        checkGitConfigAndGuide(ws);
+    checkGitConfigAndGuide(ws);
     });
     context.subscriptions.push(cmd);
 }

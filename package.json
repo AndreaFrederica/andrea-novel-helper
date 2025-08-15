@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "%extension.name%",
   "description": "%extension.description%",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -101,71 +101,71 @@
       },
       {
         "command": "AndreaNovelHelper.openFile",
-        "title": "打开"
+  "title": "%command.openFile.title%"
       },
       {
         "command": "AndreaNovelHelper.deleteNode",
-        "title": "删除包/文件"
+  "title": "%command.deleteNode.title%"
       },
       {
         "command": "AndreaNovelHelper.createCharacterGallery",
-        "title": "创建 character-gallery.json5"
+  "title": "%command.createCharacterGallery.title%"
       },
       {
         "command": "AndreaNovelHelper.createSensitiveWords",
-        "title": "创建 sensitive-words"
+  "title": "%command.createSensitiveWords.title%"
       },
       {
         "command": "AndreaNovelHelper.createVocabulary",
-        "title": "创建 vocabulary"
+  "title": "%command.createVocabulary.title%"
       },
       {
         "command": "AndreaNovelHelper.createSubPackage",
-        "title": "创建子包"
+  "title": "%command.createSubPackage.title%"
       },
       {
         "command": "AndreaNovelHelper.renamePackage",
-        "title": "重命名"
+  "title": "%command.renamePackage.title%"
       },
       {
         "command": "AndreaNovelHelper.createMarkdownFile",
-        "title": "创建 Markdown 文件"
+  "title": "%command.createMarkdownFile.title%"
       },
       {
         "command": "AndreaNovelHelper.createCharacterGalleryMd",
-        "title": "创建角色表 (.md)"
+  "title": "%command.createCharacterGalleryMd.title%"
       },
       {
         "command": "AndreaNovelHelper.createSensitiveWordsMd",
-        "title": "创建敏感词表 (.md)"
+  "title": "%command.createSensitiveWordsMd.title%"
       },
       {
         "command": "AndreaNovelHelper.createVocabularyMd",
-        "title": "创建词汇表 (.md)"
+  "title": "%command.createVocabularyMd.title%"
       },
       {
         "command": "AndreaNovelHelper.createRegexPatterns",
-        "title": "创建正则表达式配置"
+  "title": "%command.createRegexPatterns.title%"
       },
       {
         "command": "AndreaNovelHelper.openWith",
-        "title": "打开方式..."
+  "title": "%command.openWith.title%"
       },
       {
         "command": "AndreaNovelHelper.revealInExplorer",
-        "title": "在文件资源管理器中显示"
+  "title": "%command.revealInExplorer.title%"
       },
       {
         "command": "AndreaNovelHelper.toggleMarkdownToolbar",
-        "title": "切换 Markdown 工具条"
+  "title": "%command.toggleMarkdownToolbar.title%"
       },
       {
         "command": "AndreaNovelHelper.showMarkdownFormatMenu",
-        "title": "Markdown 格式化菜单"
+  "title": "%command.showMarkdownFormatMenu.title%"
       },
       {
         "command": "AndreaNovelHelper.applyMarkdownFormat",
-        "title": "应用 Markdown 格式"
+  "title": "%command.applyMarkdownFormat.title%"
       },
       {
         "command": "AndreaNovelHelper.showFileTrackingStats",
@@ -181,114 +181,126 @@
       },
       {
         "command": "AndreaNovelHelper.gcFileTracking",
-        "title": "GC 清理文件追踪数据库"
+  "title": "%command.gcFileTracking.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.createNewFile",
-        "title": "新建文章"
+  "title": "%command.wordCount.createNewFile.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.createNewFolder",
-        "title": "新建文件夹"
+  "title": "%command.wordCount.createNewFolder.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFileAbove",
-        "title": "在上方新建文件"
+  "title": "%command.wordCount.insertFileAbove.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFileBelow",
-        "title": "在下方新建文件"
+  "title": "%command.wordCount.insertFileBelow.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFolderAbove",
-        "title": "在上方新建文件夹"
+  "title": "%command.wordCount.insertFolderAbove.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFolderBelow",
-        "title": "在下方新建文件夹"
+  "title": "%command.wordCount.insertFolderBelow.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.open",
-        "title": "打开"
+  "title": "%command.wordCount.open.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.revealInOS",
-        "title": "在文件资源管理器中显示"
+  "title": "%command.wordCount.revealInOS.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.rename",
-        "title": "重命名"
+  "title": "%command.wordCount.rename.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.delete",
-        "title": "删除"
+  "title": "%command.wordCount.delete.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.toggleManualOrdering",
-        "title": "切换手动排序"
+  "title": "%command.wordCount.toggleManualOrdering.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.generateIndexFromName",
-        "title": "从名称生成索引"
+  "title": "%command.wordCount.generateIndexFromName.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.clearIndex",
-        "title": "清除索引"
+  "title": "%command.wordCount.clearIndex.title%"
       }
       ,
       {
         "command": "AndreaNovelHelper.wordCount.setIndexManual",
-        "title": "设置索引(手动)"
+  "title": "%command.wordCount.setIndexManual.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
-        "title": "按名称批量重建索引"
+  "title": "%command.wordCount.bulkGenerateIndices.title%"
       }
       ,
       {
         "command": "AndreaNovelHelper.wordCount.copy",
-        "title": "复制"
+  "title": "%command.wordCount.copy.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.cut",
-        "title": "剪切"
+  "title": "%command.wordCount.cut.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.paste",
-        "title": "粘贴"
+  "title": "%command.wordCount.paste.title%"
       }
       ,
       {
+        "command": "AndreaNovelHelper.package.copy",
+  "title": "%command.package.copy.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.package.cut",
+  "title": "%command.package.cut.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.package.paste",
+  "title": "%command.package.paste.title%"
+      },
+      {
         "command": "AndreaNovelHelper.setupGitIdentity",
-        "title": "配置 Git 用户信息"
+  "title": "%command.setupGitIdentity.title%"
       },
       {
         "command": "AndreaNovelHelper.openSetupWizard",
-        "title": "打开小说助手配置向导"
+  "title": "%command.openSetupWizard.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.checkGit",
-        "title": "向导: 检查 Git 安装"
+  "title": "%command.wizard.checkGit.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.openGitDownload",
-        "title": "向导: 打开 Git 下载页面"
+  "title": "%command.wizard.openGitDownload.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.checkGitUser",
-        "title": "向导: 检查 Git 用户信息"
+  "title": "%command.wizard.checkGitUser.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.configureGitUser",
-        "title": "向导: 配置 Git 用户信息"
+  "title": "%command.wizard.configureGitUser.title%"
       },
       {
         "command": "AndreaNovelHelper.testGitDownloadLink",
-        "title": "测试 Git 下载链接"
+  "title": "%command.testGitDownloadLink.title%"
       },
       {
         "command": "AndreaNovelHelper.simulateNoGit",
-        "title": "模拟未安装 Git" 
+  "title": "%command.simulateNoGit.title%" 
       }
     ],
     "walkthroughs": [
@@ -510,6 +522,22 @@
           "command": "AndreaNovelHelper.wordCount.paste",
           "group": "5_clip@3"
         }
+        ,
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "command": "AndreaNovelHelper.package.copy",
+          "group": "6_clip@1"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "command": "AndreaNovelHelper.package.cut",
+          "group": "6_clip@2"
+        },
+        {
+          "when": "view == packageManagerView && viewItem == package",
+          "command": "AndreaNovelHelper.package.paste",
+          "group": "6_clip@3"
+        }
       ],
       "editor/title": [
         {
@@ -583,6 +611,11 @@
           "type": "string",
           "default": "novel-helper/outline",
           "description": "%config.outlinePath.description%"
+        },
+        "AndreaNovelHelper.outline.lazyMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.outline.lazyMode.description%"
         },
         "AndreaNovelHelper.minChars": {
           "type": "number",
@@ -660,32 +693,55 @@
           ],
           "description": "%config.timeStats.exitIdleOn.description%"
         },
+        "AndreaNovelHelper.timeStats.persistReadOnlySessions": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.timeStats.persistReadOnlySessions.description%"
+        },
         "AndreaNovelHelper.fileTracker.respectWcignore": {
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.respectWcignore.description%"
         },
+        "AndreaNovelHelper.fileTracker.writeLegacySnapshot": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.fileTracker.writeLegacySnapshot.description%"
+        },
         "AndreaNovelHelper.wordCount.order.showIndexInLabel": {
           "type": "boolean",
           "default": true,
-          "description": "WordCount: 在手动排序模式下在标签前显示索引。"
+          "description": "%config.wordCount.order.showIndexInLabel.description%"
         },
         "AndreaNovelHelper.wordCount.order.step": {
           "type": "number",
           "default": 10,
           "minimum": 1,
-          "description": "WordCount: 初始索引步长。"
+          "description": "%config.wordCount.order.step.description%"
         },
         "AndreaNovelHelper.wordCount.order.padWidth": {
           "type": "number",
           "default": 3,
           "minimum": 0,
-          "description": "WordCount: 索引显示的前导零宽度 (0 表示不补零)。"
+          "description": "%config.wordCount.order.padWidth.description%"
         },
         "AndreaNovelHelper.wordCount.order.autoResequence": {
           "type": "boolean",
           "default": true,
-          "description": "WordCount: 当插入间隙不足时自动重排所有索引。"
+          "description": "%config.wordCount.order.autoResequence.description%"
+        }
+        ,
+        "AndreaNovelHelper.wordCount.displayFormat": {
+          "type": "string",
+          "default": "raw",
+          "enum": ["raw", "wan", "k", "qian"],
+          "enumDescriptions": [
+            "%config.wordCount.displayFormat.raw%",
+            "%config.wordCount.displayFormat.wan%",
+            "%config.wordCount.displayFormat.k%",
+            "%config.wordCount.displayFormat.qian%"
+          ],
+          "description": "%config.wordCount.displayFormat.description%"
         }
       }
     },

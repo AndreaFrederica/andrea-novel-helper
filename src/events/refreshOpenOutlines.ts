@@ -10,6 +10,16 @@ export function refreshOpenOutlines() {
         return;
     }
 
+    // 惰性模式: 仅当存在已打开的 andrea-outline 编辑器时才真正生成/刷新大纲
+    const cfgLazy = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const lazyMode = cfgLazy.get<boolean>('outline.lazyMode', true);
+    if (lazyMode) {
+        const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+        if (!anyOutlineVisible) {
+            return; // 未打开大纲视图, 跳过生成避免无谓磁盘写入/脏分片
+        }
+    }
+
     // —— 1) 复用 openDoubleOutline 逻辑，计算当前文件对应的两条 outline 相对路径 —— 
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const outlineRootRel = cfg.get<string>('outlinePath', 'novel-helper/outline');

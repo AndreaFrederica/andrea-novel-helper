@@ -158,6 +158,13 @@ function getFileStats(filePath: string): FileStats {
 function persistFileStats(filePath: string, stats: FileStats) {
     const totalMinutes = stats.totalMillis / 60000;
     const averageCPM = totalMinutes > 0 ? Math.round(stats.charsAdded / totalMinutes) : 0;
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+    const persistReadOnly = cfg.get<boolean>('persistReadOnlySessions', false);
+    const noCharChange = stats.charsAdded === 0 && stats.charsDeleted === 0;
+    if (noCharChange && !persistReadOnly) {
+        // 纯阅读: 不落盘以避免脏分片；仅更新内存状态栏
+        return;
+    }
     updateFileWritingStats(filePath, {
         totalMillis: stats.totalMillis,
         charsAdded: stats.charsAdded,

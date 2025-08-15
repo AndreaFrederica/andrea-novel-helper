@@ -152,8 +152,12 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 
-    // 启动完成后，检查一下有没有已经打开的“内容文件”，如果有就刷新一次大纲
+    // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
     setTimeout(() => {
+        const cfgLazyBoot = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const lazyMode = cfgLazyBoot.get<boolean>('outline.lazyMode', true);
+        const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+        if (lazyMode && !anyOutlineVisible) return;
         for (const editor of vscode.window.visibleTextEditors) {
             const doc = editor.document;
             if (
@@ -165,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
                 break; // 找到一个就行了，退出循环
             }
         }
-    }, 200); // 延迟下等 VS Code 完全恢复各个 editor
+    }, 200);
 
     let lastWasContentFile = isContentEditor(vscode.window.activeTextEditor);
 
@@ -180,7 +184,12 @@ export function activate(context: vscode.ExtensionContext) {
 
             // 只有在 “上一个也是内容文件” → “这次也是内容文件” 时，才刷新
             if (lastWasContentFile && isContentFile) {
-                refreshOpenOutlines();
+                const cfgLazyEvt = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const lazyMode = cfgLazyEvt.get<boolean>('outline.lazyMode', true);
+                const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+                if (!lazyMode || anyOutlineVisible) {
+                    refreshOpenOutlines();
+                }
             }
 
             // 不管有没有触发，都更新状态给下次用
@@ -192,7 +201,12 @@ export function activate(context: vscode.ExtensionContext) {
             if (doc.uri.scheme === 'file'
                 && ['markdown', 'plaintext'].includes(doc.languageId)
                 && !doc.uri.fsPath.endsWith('_outline.md')) {
-                refreshOpenOutlines();
+                const cfgLazySave = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const lazyMode = cfgLazySave.get<boolean>('outline.lazyMode', true);
+                const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+                if (!lazyMode || anyOutlineVisible) {
+                    refreshOpenOutlines();
+                }
             }
         })
     );
@@ -218,7 +232,14 @@ export function activate(context: vscode.ExtensionContext) {
         if (!editor) return;
         if (outlineFS === undefined) { return; }
         const outline_2raw_file_dir = outlineFS.getSourceFileFsPath();
-        if (outline_2raw_file_dir === undefined && isContentEditor()) { refreshOpenOutlines(); }
+        if (outline_2raw_file_dir === undefined && isContentEditor()) {
+            const cfgLazyPoll = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const lazyMode = cfgLazyPoll.get<boolean>('outline.lazyMode', true);
+            const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+            if (!lazyMode || anyOutlineVisible) {
+                refreshOpenOutlines();
+            }
+        }
 
         const uriStr = editor?.document.uri.toString();
         const now_fsPath = editor?.document.uri.fsPath;
@@ -232,7 +253,12 @@ export function activate(context: vscode.ExtensionContext) {
                     editor.document.languageId === 'plaintext') &&
                 !editor.document.uri.fsPath.endsWith('_outline.md')
             ) {
-                refreshOpenOutlines();
+                const cfgLazyPoll2 = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const lazyMode = cfgLazyPoll2.get<boolean>('outline.lazyMode', true);
+                const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+                if (!lazyMode || anyOutlineVisible) {
+                    refreshOpenOutlines();
+                }
             }
         }
     }, pollingInterval);
@@ -818,7 +844,7 @@ export function activate(context: vscode.ExtensionContext) {
         // 启动后异步检查（避免阻塞激活）
         setTimeout(()=>{
             const wsRoot2 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            if (wsRoot2) { log('开始异步检查 Git 配置'); checkGitConfigAndGuide(wsRoot2).catch(e=>log('Git 配置向导执行异常', e)); }
+            if (wsRoot2) { log('开始异步检查 Git 配置'); checkGitConfigAndGuide(wsRoot2, { silentIfConfigured: true }).catch(e=>log('Git 配置向导执行异常', e)); }
         }, 800);
         log('激活流程结束');
     } catch (e) {
