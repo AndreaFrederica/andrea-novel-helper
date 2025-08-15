@@ -9,6 +9,7 @@ import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { WordCountProvider } from './Provider/view/wordCountProvider';
+import { ensureRegisterOpenWith } from './utils/openWith';
 import { initAhoCorasickManager } from './utils/ahoCorasickManager';
 
 import { addRoleFromSelection } from './commands/addRuleFormSelection';
@@ -413,6 +414,9 @@ export function activate(context: vscode.ExtensionContext) {
     }
     */
 
+    // 确保 openWith 命令注册一次
+    ensureRegisterOpenWith(context);
+
     // Word Count 树视图
     const wordCountProvider = new WordCountProvider(context.workspaceState);
     const treeView = vscode.window.createTreeView('wordCountExplorer', {
@@ -423,10 +427,16 @@ export function activate(context: vscode.ExtensionContext) {
     // 监听树视图展开/折叠事件以保存状态
     context.subscriptions.push(
         treeView.onDidExpandElement(e => {
-            wordCountProvider.onDidExpandElement(e.element);
+            const el: any = e.element;
+            if (el && el.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                wordCountProvider.onDidExpandElement(el as any);
+            }
         }),
         treeView.onDidCollapseElement(e => {
-            wordCountProvider.onDidCollapseElement(e.element);
+            const el: any = e.element;
+            if (el && el.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                wordCountProvider.onDidCollapseElement(el as any);
+            }
         }),
         treeView,
         // 确保 WordCountProvider 能正确清理
@@ -492,6 +502,9 @@ export function activate(context: vscode.ExtensionContext) {
             }
         })
     );
+
+    // 注册字数统计视图的右键菜单命令
+    registerWordCountContextCommands(context, wordCountProvider);
     
     // 初始化全局文件追踪（为备份等功能提供基础）
     // 注意：必须在 timeStats 之前初始化，因为 timeStats 依赖于全局文件追踪
@@ -514,3 +527,115 @@ export function deactivate() {
 }
 
 export { loadRoles };
+
+// —— 新增：注册 WordCount 视图上下文命令 ——
+function registerWordCountContextCommands(context: vscode.ExtensionContext, provider: WordCountProvider) {
+    const ensureDir = (dir: string) => {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    };
+
+    const createFile = async (baseDir: string) => {
+        ensureDir(baseDir);
+        const type = await vscode.window.showQuickPick([
+            { label: 'Markdown (.md)', ext: '.md' },
+            { label: 'Text (.txt)', ext: '.txt' }
+        ], { placeHolder: '选择新文章格式' });
+        if (!type) return;
+        const name = await vscode.window.showInputBox({ prompt: '输入文件名（不含扩展名）', value: '未命名' });
+        if (!name) return;
+        const full = path.join(baseDir, `${name}${type.ext}`);
+        if (fs.existsSync(full)) {
+            vscode.window.showErrorMessage('文件已存在');
+            return;
+        }
+        fs.writeFileSync(full, '');
+        provider.refresh();
+        const doc = await vscode.workspace.openTextDocument(full);
+        await vscode.window.showTextDocument(doc);
+    };
+
+    const createFolder = async (baseDir: string) => {
+        ensureDir(baseDir);
+        const name = await vscode.window.showInputBox({ prompt: '输入文件夹名称', value: '新建文件夹' });
+        if (!name) return;
+        const full = path.join(baseDir, name);
+        if (fs.existsSync(full)) {
+            vscode.window.showErrorMessage('文件夹已存在');
+            return;
+        }
+        fs.mkdirSync(full);
+        provider.refresh();
+    };
+
+    context.subscriptions.push(
+        // 列表末尾按钮点击
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.createNewFile', (node: any) => {
+            const base = node?.baseDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!base) return;
+            createFile(base);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.createNewFolder', (node: any) => {
+            const base = node?.baseDir ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!base) return;
+            createFolder(base);
+        }),
+
+        // 右键菜单：在此处上方/下方新建
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFileAbove', async (node: any) => {
+            const dir = path.dirname(node.resourceUri.fsPath);
+            await createFile(dir);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFileBelow', async (node: any) => {
+            const dir = path.dirname(node.resourceUri.fsPath);
+            await createFile(dir);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFolderAbove', async (node: any) => {
+            const dir = path.dirname(node.resourceUri.fsPath);
+            await createFolder(dir);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFolderBelow', async (node: any) => {
+            const dir = path.dirname(node.resourceUri.fsPath);
+            await createFolder(dir);
+        }),
+
+        // 基础：打开/在资源管理器显示/重命名/删除
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.open', async (node: any) => {
+            const uri = node.resourceUri as vscode.Uri;
+            if (!uri) return;
+            if (fs.existsSync(uri.fsPath) && fs.statSync(uri.fsPath).isDirectory()) return; // 目录无需打开
+            await vscode.commands.executeCommand('vscode.open', uri);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.revealInOS', async (node: any) => {
+            const uri = node.resourceUri as vscode.Uri;
+            if (!uri) return;
+            await vscode.commands.executeCommand('revealFileInOS', uri);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.rename', async (node: any) => {
+            const p = node.resourceUri.fsPath as string;
+            const isDir = fs.statSync(p).isDirectory();
+            const oldName = path.basename(p);
+            const input = await vscode.window.showInputBox({ prompt: `重命名${isDir ? '文件夹' : '文件'}`, value: oldName });
+            if (!input || input === oldName) return;
+            const newPath = path.join(path.dirname(p), input);
+            if (fs.existsSync(newPath)) {
+                vscode.window.showErrorMessage('目标名称已存在');
+                return;
+            }
+            fs.renameSync(p, newPath);
+            provider.refresh();
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.delete', async (node: any) => {
+            const p = node.resourceUri.fsPath as string;
+            const isDir = fs.existsSync(p) && fs.statSync(p).isDirectory();
+            const confirm = await vscode.window.showWarningMessage(`确定删除${isDir ? '文件夹' : '文件'} ${path.basename(p)}?`, { modal: true }, '确定');
+            if (confirm !== '确定') return;
+            try {
+                if (isDir) fs.rmSync(p, { recursive: true, force: true });
+                else fs.unlinkSync(p);
+                provider.refresh();
+            } catch (e) {
+                vscode.window.showErrorMessage(`删除失败: ${e}`);
+            }
+        })
+    );
+}

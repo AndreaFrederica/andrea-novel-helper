@@ -1,0 +1,10 @@
+{
+    "iconDefinitions": {
+        "wcignore": {
+            "iconPath": "./wcignore-sigma.svg"
+        }
+    },
+    "fileNames": {
+        ".wcignore": "wcignore"
+    }
+}

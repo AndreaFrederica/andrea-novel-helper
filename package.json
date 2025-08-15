@@ -178,6 +178,46 @@
       {
         "command": "AndreaNovelHelper.exportTrackingData",
         "title": "%command.exportTrackingData.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.createNewFile",
+        "title": "新建文章"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.createNewFolder",
+        "title": "新建文件夹"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.insertFileAbove",
+        "title": "在上方新建文件"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.insertFileBelow",
+        "title": "在下方新建文件"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.insertFolderAbove",
+        "title": "在上方新建文件夹"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.insertFolderBelow",
+        "title": "在下方新建文件夹"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.open",
+        "title": "打开"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.revealInOS",
+        "title": "在文件资源管理器中显示"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.rename",
+        "title": "重命名"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.delete",
+        "title": "删除"
       }
     ],
     "menus": {
@@ -251,6 +291,61 @@
           "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
           "command": "AndreaNovelHelper.renamePackage",
           "group": "1_modification"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFileAbove",
+          "group": "1_modification@1"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFolderAbove",
+          "group": "1_modification@2"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFileBelow",
+          "group": "1_modification@3"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFolderBelow",
+          "group": "1_modification@4"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.open",
+          "group": "3_open@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.openWith",
+          "group": "3_open@2"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.revealInOS",
+          "group": "3_open@3"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.rename",
+          "group": "2_modification@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.delete",
+          "group": "2_deletion@9"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder)",
+          "command": "AndreaNovelHelper.wordCount.createNewFile",
+          "group": "0_create@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder)",
+          "command": "AndreaNovelHelper.wordCount.createNewFolder",
+          "group": "0_create@2"
         }
       ],
       "editor/title": [
@@ -413,13 +508,15 @@
       "explorer": [
         {
           "id": "wordCountExplorer",
-          "name": "Word Count"
+          "name": "小说助手",
+          "icon": "images/checklist_dark.svg"
         }
       ],
       "AndreaNovelHelperSidebar": [
         {
           "id": "packageManagerView",
-          "name": "包管理器"
+          "name": "包管理器",
+          "icon": "images/checklist_dark.svg"
         }
       ]
     }
