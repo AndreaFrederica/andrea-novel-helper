@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { countAndAnalyze, countWordsMixed, getSupportedExtensions, mergeStats, readTextFileDetectEncoding, TextStats } from '../../utils/utils';
 import { CombinedIgnoreParser } from '../../utils/gitignoreParser';
+import { sortItems } from '../../utils/sorter';
 
 export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem> {
     private _onDidChange = new vscode.EventEmitter<WordCountItem | undefined>();
@@ -121,54 +122,95 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
     async getChildren(element?: WordCountItem): Promise<WordCountItem[]> {
         const root = element
             ? element.resourceUri.fsPath
-            : vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+            : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!root) return [];
 
-        const exts = getSupportedExtensions(); // e.g. ['md','txt','json']
+        const exts = getSupportedExtensions();
 
-        const dirents = await fs.promises.readdir(root, { withFileTypes: true });
-        const items: WordCountItem[] = [];
-
-        for (const d of dirents) {
-            const uri = vscode.Uri.file(path.join(root, d.name));
-            
-            // 检查是否应该被忽略（gitignore 或 wcignore）
-            if (this.ignoreParser && this.ignoreParser.shouldIgnore(uri.fsPath)) {
-                continue;
-            }
-            
-            let item: WordCountItem;
-
-            if (d.isDirectory()) {
-                const stats = await this.analyzeFolder(uri.fsPath, exts);
-                if (stats.total === 0) continue;
-                // 根据保存的状态决定展开状态
-                const isExpanded = this.expandedNodes.has(uri.fsPath);
-                item = new WordCountItem(uri, d.name, stats, 
-                    isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
-            } else {
-                // —— 一定要把文件当“叶子节点” —— 
-                const ext = path.extname(d.name).slice(1).toLowerCase();
-                if (!exts.includes(ext)) continue;
-                const stats = await countAndAnalyze(uri.fsPath);
-                // 这里改为 None！
-                item = new WordCountItem(uri, d.name, stats, vscode.TreeItemCollapsibleState.None);
-            }
-
-            // —— 公共：给每个节点都注册 id 并缓存 —— 
-            item.id = uri.fsPath;
-            this.itemsById.set(item.id, item);
-
-            items.push(item);
+        let dirents: fs.Dirent[] = [];
+        try {
+            dirents = await fs.promises.readdir(root, { withFileTypes: true });
+        } catch (e) {
+            console.error('WordCountProvider: failed to read dir', root, e);
+            return [];
         }
 
-        // 可选：文件夹在前，文件按名称排序
-        items.sort((a, b) => {
-            const aDir = a.collapsibleState !== vscode.TreeItemCollapsibleState.None;
-            const bDir = b.collapsibleState !== vscode.TreeItemCollapsibleState.None;
-            if (aDir !== bDir) return aDir ? -1 : 1;
-            return a.label.localeCompare(b.label, 'zh');
-        });
+        const items: WordCountItem[] = [];
+        let needsAsync = false;
+
+        for (const d of dirents) {
+            const full = path.join(root, d.name);
+            const uri = vscode.Uri.file(full);
+
+            // 忽略规则
+            if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) continue;
+
+            if (d.isDirectory()) {
+                const isExpanded = this.expandedNodes.has(full);
+                const cached = this.statsCache.get(full);
+                if (cached) {
+                    const item = new WordCountItem(
+                        uri,
+                        d.name,
+                        cached.stats,
+                        isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+                        false
+                    );
+                    item.id = full;
+                    this.itemsById.set(item.id, item);
+                    items.push(item);
+                } else {
+                    // 占位符，稍后异步计算
+                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+                    const item = new WordCountItem(
+                        uri,
+                        d.name,
+                        zero,
+                        isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+                        true
+                    );
+                    item.id = full;
+                    this.itemsById.set(item.id, item);
+                    items.push(item);
+                    needsAsync = true;
+                }
+            } else {
+                const ext = path.extname(d.name).slice(1).toLowerCase();
+                if (!exts.includes(ext)) continue;
+
+                const cached = this.statsCache.get(full);
+                if (cached) {
+                    const item = new WordCountItem(uri, d.name, cached.stats, vscode.TreeItemCollapsibleState.None, false);
+                    item.id = full;
+                    this.itemsById.set(item.id, item);
+                    items.push(item);
+                } else {
+                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+                    const item = new WordCountItem(uri, d.name, zero, vscode.TreeItemCollapsibleState.None, true);
+                    item.id = full;
+                    this.itemsById.set(item.id, item);
+                    items.push(item);
+                    needsAsync = true;
+                }
+            }
+        }
+
+        // 目录在前，按名称排序
+        // items.sort((a, b) => {
+        //     const aDir = a.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+        //     const bDir = b.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+        //     if (aDir !== bDir) return aDir ? -1 : 1;
+        //     return a.label.localeCompare(b.label, 'zh');
+        // });
+        sortItems(items);
+
+        // 异步批量计算，分批刷新
+        if (needsAsync) {
+            void this.calculateStatsAsync(root, exts, dirents).then(() => {
+                // 最后统一刷新一次，确保占位符替换为真实统计
+                this.refresh();
+            });
+        }
 
         return items;
     }
@@ -372,8 +414,14 @@ export class WordCountItem extends vscode.TreeItem {
         this.resourceUri = resourceUri;
         
         if (isPlaceholder) {
-            this.description = `(计算中...)`;
+            // 占位阶段：同时在 description 中展示文件名，保证名称可见
+            this.description = `${label} (计算中...)`;
             this.iconPath = new vscode.ThemeIcon('loading~spin');
+            const tip = new vscode.MarkdownString();
+            tip.appendMarkdown(`**路径**: \`${resourceUri.fsPath}\``);
+            tip.appendMarkdown(`\n\n正在计算字数统计...`);
+            tip.isTrusted = true;
+            this.tooltip = tip;
         } else {
             this.description = `(${stats.total})`;
         }
@@ -391,8 +439,6 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`\n\n**总字数**: **${stats.total}**`);
             tip.isTrusted = true;
             this.tooltip = tip;
-        } else {
-            this.tooltip = '正在计算字数统计...';
         }
 
         // 保持文件点击打开
