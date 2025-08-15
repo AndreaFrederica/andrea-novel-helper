@@ -29,6 +29,10 @@ import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/m
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
 import { initializeGlobalFileTracking } from './utils/globalFileTracking';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
+import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/gitConfigWizard';
+import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
+// 避免重复注册相同命令
+let gitCommandRegistered = false;
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -62,6 +66,21 @@ export const _onDidChangeRoles = new vscode.EventEmitter<void>();
 export const onDidChangeRoles = _onDidChangeRoles.event;
 
 export function activate(context: vscode.ExtensionContext) {
+    // 输出通道用于调试激活阶段错误/栈
+    const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
+    context.subscriptions.push(logChannel);
+    const log = (msg: string, err?: any) => {
+        const time = new Date().toISOString();
+        logChannel.appendLine(`[${time}] ${msg}`);
+        if (err) {
+            if (err instanceof Error) {
+                logChannel.appendLine(err.message);
+                if (err.stack) { logChannel.appendLine(err.stack); }
+            } else {
+                try { logChannel.appendLine(JSON.stringify(err)); } catch { logChannel.appendLine(String(err)); }
+            }
+        }
+    };
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
 
@@ -87,12 +106,25 @@ export function activate(context: vscode.ExtensionContext) {
         return;
     }
     const wsRoot = wsFolders[0].uri.fsPath;
-    // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
-    outlineFS = new MemoryOutlineFSProvider(path.join(wsRoot, outlineRel));
-    if (!outlineFS) {
-        vscode.window.showErrorMessage('无法初始化大纲文件系统提供器');
-        return;
-    }
+    // 提前注册 Git 向导命令（即使后续激活流程出错也可用）
+    if (!gitCommandRegistered) {
+        try { registerGitConfigCommand(context); gitCommandRegistered = true; log('Git 配置命令已注册'); } catch (e) { log('注册 Git 配置命令失败', e); }
+    } else { log('Git 配置命令已存在，跳过注册'); }
+    // 注册测试下载链接命令
+    try { registerGitDownloadTestCommand(context); log('Git 下载测试命令已注册'); } catch (e) { log('注册 Git 下载测试命令失败', e); }
+    try { registerGitSimulateNoGitCommand(context); log('Git 未安装模拟命令已注册'); } catch (e) { log('注册 Git 未安装模拟命令失败', e); }
+    try { registerSetupWizardCommands(context); log('配置向导命令已注册'); } catch (e) { log('注册 配置向导命令 失败', e); }
+
+    // 将后续复杂初始化包裹在 try/catch 内，避免单点异常导致整个扩展未激活（从而命令缺失）
+    try {
+        log('开始执行主初始化');
+        // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
+        outlineFS = new MemoryOutlineFSProvider(path.join(wsRoot, outlineRel));
+        if (!outlineFS) {
+            vscode.window.showErrorMessage('无法初始化大纲文件系统提供器');
+            log('outlineFS 初始化失败: outlineFS 为空');
+            return;
+        }
 
     // 注册 andrea-outline:// 文件系统提供器
     context.subscriptions.push(
@@ -782,6 +814,23 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData),
     vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking)
     );
+
+        // 启动后异步检查（避免阻塞激活）
+        setTimeout(()=>{
+            const wsRoot2 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (wsRoot2) { log('开始异步检查 Git 配置'); checkGitConfigAndGuide(wsRoot2).catch(e=>log('Git 配置向导执行异常', e)); }
+        }, 800);
+        log('激活流程结束');
+    } catch (e) {
+        const msg = 'Andrea Novel Helper 激活过程出现错误，部分功能可能不可用：' + (e instanceof Error ? e.message : String(e));
+        vscode.window.showErrorMessage(msg, '查看日志').then(sel=>{ if (sel==='查看日志') { logChannel.show(true); } });
+        log('激活致命错误', e);
+        console.error('[AndreaNovelHelper][activate] Fatal init error:', e);
+        // 兜底再次尝试注册 Git 命令（若前面失败）
+        if (!gitCommandRegistered) {
+            try { registerGitConfigCommand(context); gitCommandRegistered = true; log('兜底重新注册 Git 命令完成'); } catch (e2) { log('兜底注册 Git 命令仍失败', e2); }
+        }
+    }
 }
 
 export function deactivate() {

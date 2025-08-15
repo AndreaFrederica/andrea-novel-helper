@@ -119,11 +119,20 @@ export class FileTrackingDataManager {
     this.ensureDirectoryExists();
     this.ensureDbDir();
     this.database = this.loadDatabase();
+    // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
+    if (!this.database) {
+        this.database = { version: this.DB_VERSION, lastUpdated: Date.now(), files: {}, pathToUuid: {} };
+    } else {
+        (this.database as any).files = this.database.files && typeof this.database.files === 'object' ? this.database.files : {};
+        (this.database as any).pathToUuid = this.database.pathToUuid && typeof this.database.pathToUuid === 'object' ? this.database.pathToUuid : {};
+        if (!this.database.version) { (this.database as any).version = this.DB_VERSION; }
+        if (!this.database.lastUpdated) { (this.database as any).lastUpdated = Date.now(); }
+    }
         this.ensureDirectoryExists();
         // 计算初始数据哈希
         this.lastSavedHash = this.calculateDatabaseHash();
         // 启动时清理遗留的 .git 目录内条目
-        this.purgeGitEntries();
+        try { this.purgeGitEntries(); } catch (e) { console.warn('[FileTracking] purgeGitEntries 失败（忽略）', e); }
     // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
     this.migrateIfNeeded();
     // 加载分片（若已存在）
@@ -139,8 +148,9 @@ export class FileTrackingDataManager {
 
     /** 清理已追踪数据库中遗留的 .git 内条目 */
     private purgeGitEntries(): void {
-        const toRemove: string[] = [];
-        for (const filePath of Object.keys(this.database.pathToUuid)) {
+    if (!this.database || !this.database.pathToUuid) { return; }
+    const toRemove: string[] = [];
+    for (const filePath of Object.keys(this.database.pathToUuid || {})) {
             if (this.isInGitDir(filePath)) { toRemove.push(filePath); }
         }
         if (toRemove.length) {

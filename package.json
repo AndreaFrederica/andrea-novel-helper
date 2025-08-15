@@ -257,6 +257,90 @@
         "command": "AndreaNovelHelper.wordCount.paste",
         "title": "粘贴"
       }
+      ,
+      {
+        "command": "AndreaNovelHelper.setupGitIdentity",
+        "title": "配置 Git 用户信息"
+      },
+      {
+        "command": "AndreaNovelHelper.openSetupWizard",
+        "title": "打开小说助手配置向导"
+      },
+      {
+        "command": "AndreaNovelHelper.wizard.checkGit",
+        "title": "向导: 检查 Git 安装"
+      },
+      {
+        "command": "AndreaNovelHelper.wizard.openGitDownload",
+        "title": "向导: 打开 Git 下载页面"
+      },
+      {
+        "command": "AndreaNovelHelper.wizard.checkGitUser",
+        "title": "向导: 检查 Git 用户信息"
+      },
+      {
+        "command": "AndreaNovelHelper.wizard.configureGitUser",
+        "title": "向导: 配置 Git 用户信息"
+      },
+      {
+        "command": "AndreaNovelHelper.testGitDownloadLink",
+        "title": "测试 Git 下载链接"
+      },
+      {
+        "command": "AndreaNovelHelper.simulateNoGit",
+        "title": "模拟未安装 Git" 
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "andreaNovelHelper.setup",
+        "title": "小说助手配置向导",
+        "description": "通过这些步骤完成 Git 安装与用户信息配置。",
+        "steps": [
+          {
+            "id": "anh.step.open",
+            "title": "开始",
+            "description": "欢迎使用小说助手配置向导。依次完成以下步骤，或直接点击右上角重试。",
+              "media": { "markdown": "media/walkthrough/step0_intro.md" },
+            "completionEvents": ["onCommand:AndreaNovelHelper.openSetupWizard"]
+          },
+          {
+            "id": "anh.step.checkGit",
+            "title": "检查是否已安装 Git",
+            "description": "点击 [立即检查](command:AndreaNovelHelper.wizard.checkGit) 来检测本机是否已安装 Git。",
+              "media": { "markdown": "media/walkthrough/step1_checkGit.md" },
+            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.checkGit"]
+          },
+          {
+            "id": "anh.step.installGit",
+            "title": "安装 Git (若尚未安装)",
+            "description": "若上一步检测未安装，可点击 [打开下载页面](command:AndreaNovelHelper.wizard.openGitDownload) 下载安装后重启 VS Code。",
+              "media": { "markdown": "media/walkthrough/step2_installGit.md" },
+            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.openGitDownload"]
+          },
+          {
+            "id": "anh.step.checkUser",
+            "title": "检查 Git 用户信息",
+            "description": "点击 [检查用户信息](command:AndreaNovelHelper.wizard.checkGitUser) 查看当前生效的 user.name 与 user.email。",
+              "media": { "markdown": "media/walkthrough/step3_checkUser.md" },
+            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.checkGitUser"]
+          },
+          {
+            "id": "anh.step.configureUser",
+            "title": "配置或修改 Git 用户信息",
+            "description": "如未配置或需修改，点击 [配置用户信息](command:AndreaNovelHelper.wizard.configureGitUser) 进行交互式设置。",
+              "media": { "markdown": "media/walkthrough/step4_configUser.md" },
+            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.configureGitUser"]
+          },
+          {
+            "id": "anh.step.recheck",
+            "title": "完成并再次验证",
+            "description": "可再次点击 [重新检查](command:AndreaNovelHelper.wizard.checkGitUser) 验证结果，全部步骤完成后即可开始写作。",
+              "media": { "markdown": "media/walkthrough/step5_recheck.md" },
+            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.checkGitUser"]
+          }
+        ]
+      }
     ],
     "menus": {
       "view/item/context": [
