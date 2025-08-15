@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 import { getTrackingStats, getAllTrackedFiles, getTrackingStatus } from '../utils/globalFileTracking';
+import * as fs from 'fs';
+import * as path from 'path';
+import { getFileTracker } from '../utils/fileTracker';
 
 /**
  * 显示文件追踪统计信息
@@ -157,5 +160,59 @@ export async function exportTrackingData(): Promise<void> {
         }
     } catch (error) {
         vscode.window.showErrorMessage(`导出失败: ${error}`);
+    }
+}
+
+/**
+ * GC：扫描数据库，移除已经不存在的文件/目录（带进度条）
+ */
+export async function gcFileTracking(): Promise<void> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        vscode.window.showWarningMessage('文件追踪器未初始化');
+        return;
+    }
+    const dataManager = tracker.getDataManager();
+    const all = [...Object.keys((dataManager as any).database?.pathToUuid || {})];
+    if (all.length === 0) {
+        vscode.window.showInformationMessage('追踪数据库为空');
+        return;
+    }
+
+    let removed: string[] = [];
+    let checked = 0;
+    const start = Date.now();
+    await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: '文件追踪 GC', cancellable: true }, async (progress, token) => {
+        progress.report({ message: '初始化...', increment: 0 });
+        for (let i = 0; i < all.length; i++) {
+            if (token.isCancellationRequested) { break; }
+            const p = all[i];
+            checked++;
+            if (i % 50 === 0) {
+                const percent = (i / all.length) * 100;
+                progress.report({ message: `检查 ${i}/${all.length}`, increment: (50 / all.length) * 100 });
+            }
+            try {
+                await fs.promises.access(p);
+            } catch {
+                // 不存在，移除
+                const uuid = (dataManager as any).database.pathToUuid[p];
+                if (uuid) {
+                    delete (dataManager as any).database.files[uuid];
+                }
+                delete (dataManager as any).database.pathToUuid[p];
+                removed.push(p);
+            }
+        }
+        if (removed.length) {
+            (dataManager as any).markChanged();
+            (dataManager as any).scheduleSave();
+        }
+    });
+    const dur = Date.now() - start;
+    if (removed.length) {
+        vscode.window.showInformationMessage(`GC 完成：移除 ${removed.length} 项，用时 ${dur}ms`);
+    } else {
+        vscode.window.showInformationMessage(`GC 完成：无过期条目，用时 ${dur}ms`);
     }
 }

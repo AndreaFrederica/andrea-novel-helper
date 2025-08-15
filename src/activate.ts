@@ -28,7 +28,7 @@ import { registerPackageManagerView } from './Provider/view/packageManagerView';
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
 import { initializeGlobalFileTracking } from './utils/globalFileTracking';
-import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData } from './commands/fileTrackingCommands';
+import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -779,7 +779,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.showFileTrackingStats', showFileTrackingStats),
         vscode.commands.registerCommand('AndreaNovelHelper.cleanupMissingFiles', cleanupMissingFiles),
-        vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData)
+    vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData),
+    vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking)
     );
 }
 

@@ -180,6 +180,10 @@
         "title": "%command.exportTrackingData.title%"
       },
       {
+        "command": "AndreaNovelHelper.gcFileTracking",
+        "title": "GC 清理文件追踪数据库"
+      },
+      {
         "command": "AndreaNovelHelper.wordCount.createNewFile",
         "title": "新建文章"
       },

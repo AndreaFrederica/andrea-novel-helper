@@ -2,6 +2,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
+// 仅在需要判断编辑器是否打开数据库文件时才使用 vscode API
+// 避免循环依赖：此文件不被激活阶段直接 import 其它使用本模块的代码
+import * as vscode from 'vscode';
 
 /**
  * 文件追踪数据模型
@@ -68,6 +71,10 @@ export class FileTrackingDataManager {
     private pendingSaves = new Set<string>();
     private saveTimer: NodeJS.Timeout | null = null;
     private readonly SAVE_DEBOUNCE_MS = 1000; // 1秒防抖
+    // 当数据库文件被用户在编辑器里打开时，延迟实际写入，避免频繁外部写入导致编辑器脏/闪烁
+    private readonly SAVE_WHEN_OPEN_DELAY_MS = 2000;
+    private openSkipCount = 0; // 连续因为文件打开而跳过的次数
+    private readonly MAX_OPEN_SKIP = 5; // 最多跳过次数，之后强制写一次，防止无限推迟
     private readonly DB_VERSION = '1.0.0';
     private hasUnsavedChanges = false; // 追踪是否有未保存的变化
     private lastSavedHash: string = ''; // 上次保存时的数据哈希
@@ -76,6 +83,30 @@ export class FileTrackingDataManager {
     private dirtyDirs: Set<string> = new Set();
     private dirHashTimer: NodeJS.Timeout | null = null;
     private readonly DIR_HASH_DEBOUNCE_MS = 500;
+    // 调试统计
+    private stats = {
+        markChanged: 0,
+        scheduleSave: 0,
+        saveCalls: 0,
+        saveSkipNoChange: 0,
+        saveWrite: 0,
+        addOrUpdateCalls: 0,
+        addDir: 0,
+        addFile: 0,
+        skipUnchangedFile: 0,
+        removeFile: 0,
+        renameFile: 0,
+        renameDirChildren: 0,
+        dirHashRuns: 0,
+        dirHashChanged: 0,
+        markAncestorsDirty: 0,
+        maxDirtyBatch: 0,
+        wordCountUpdates: 0,
+        writingStatsUpdates: 0,
+        temporaryCreate: 0,
+        markTemp: 0,
+        markSaved: 0
+    };
 
     constructor(workspaceRoot: string) {
         this.workspaceRoot = workspaceRoot;
@@ -84,6 +115,33 @@ export class FileTrackingDataManager {
         this.ensureDirectoryExists();
         // 计算初始数据哈希
         this.lastSavedHash = this.calculateDatabaseHash();
+        // 启动时清理遗留的 .git 目录内条目
+        this.purgeGitEntries();
+    }
+
+    /** 判断路径是否位于 .git 目录 */
+    private isInGitDir(p: string): boolean {
+        const gitDir = path.resolve(path.join(this.workspaceRoot, '.git'));
+        const rp = path.resolve(p);
+        return rp === gitDir || rp.startsWith(gitDir + path.sep);
+    }
+
+    /** 清理已追踪数据库中遗留的 .git 内条目 */
+    private purgeGitEntries(): void {
+        const toRemove: string[] = [];
+        for (const filePath of Object.keys(this.database.pathToUuid)) {
+            if (this.isInGitDir(filePath)) { toRemove.push(filePath); }
+        }
+        if (toRemove.length) {
+            for (const fp of toRemove) {
+                const uuid = this.database.pathToUuid[fp];
+                if (uuid) { delete this.database.files[uuid]; }
+                delete this.database.pathToUuid[fp];
+            }
+            this.markChanged();
+            this.scheduleSave();
+            console.log(`[FileTracking] 清理 .git 遗留条目 count=${toRemove.length}`);
+        }
     }
 
     /**
@@ -112,6 +170,7 @@ export class FileTrackingDataManager {
      */
     private markChanged(): void {
         this.hasUnsavedChanges = true;
+    this.stats.markChanged++;
     }
     private ensureDirectoryExists(): void {
         const dir = path.dirname(this.dbPath);
@@ -168,6 +227,7 @@ export class FileTrackingDataManager {
      * 保存数据库（防抖）
      */
     private scheduleSave(): void {
+    this.stats.scheduleSave++;
         if (!this.hasUnsavedChanges) {
             return; // 没有变化，不需要保存
         }
@@ -185,27 +245,57 @@ export class FileTrackingDataManager {
     /**
      * 立即保存数据库
      */
-    private saveDatabase(): void {
+    private saveDatabase(force = false): void {
+        const t0 = Date.now();
+        this.stats.saveCalls++;
         try {
-            // 检查是否有实质性变化
+            // 如果不是强制保存，并且数据库文件当前被打开，则延迟保存以避免 VSCode 不断提示文件已在磁盘被修改
+            if (!force && this.isDatabaseFileOpen()) {
+                this.openSkipCount++;
+                if (this.openSkipCount <= this.MAX_OPEN_SKIP) {
+                    // 重新调度一次延迟写
+                    if (this.saveTimer) { clearTimeout(this.saveTimer); }
+                    this.saveTimer = setTimeout(() => {
+                        this.saveDatabase(false);
+                        this.saveTimer = null;
+                    }, this.SAVE_WHEN_OPEN_DELAY_MS);
+                    // 不重置 hasUnsavedChanges，保持待写状态
+                    console.log(`[FileTracking] 打开中延迟保存 skip=${this.openSkipCount}`);
+                    return;
+                } else {
+                    console.log('[FileTracking] 打开中过多跳过，执行强制写入');
+                }
+            } else {
+                // 数据库文件未打开或强制写：重置跳过计数
+                this.openSkipCount = 0;
+            }
             if (!this.hasRealChanges()) {
                 console.log('跳过保存：数据库无实质性变化');
                 this.hasUnsavedChanges = false;
+                this.stats.saveSkipNoChange++;
                 return;
             }
-
             this.database.lastUpdated = Date.now();
             const content = JSON.stringify(this.database, null, 2);
             fs.writeFileSync(this.dbPath, content, 'utf8');
-            
-            // 更新保存状态
             this.lastSavedHash = this.calculateDatabaseHash();
             this.hasUnsavedChanges = false;
-            
-            console.log('文件追踪数据库已保存');
+            const dur = Date.now() - t0;
+            this.stats.saveWrite++;
+            console.log(`[FileTracking] 保存 size=${content.length}B dur=${dur}ms files=${Object.keys(this.database.files).length} stats=${JSON.stringify({markChanged:this.stats.markChanged,scheduleSave:this.stats.scheduleSave,saveCalls:this.stats.saveCalls,saveSkip:this.stats.saveSkipNoChange,dirHashRuns:this.stats.dirHashRuns,dirHashChanged:this.stats.dirHashChanged,addOrUpdate:this.stats.addOrUpdateCalls,skipUnchanged:this.stats.skipUnchangedFile})}`);
         } catch (error) {
             console.error('Failed to save file tracking database:', error);
         }
+    }
+
+    /** 判断数据库文件是否在任一可见编辑器中被打开 */
+    private isDatabaseFileOpen(): boolean {
+        try {
+            const editors = vscode.window.visibleTextEditors;
+            if (!editors || editors.length === 0) { return false; }
+            const target = path.resolve(this.dbPath);
+            return editors.some(ed => path.resolve(ed.document.fileName) === target);
+        } catch { return false; }
     }
 
     /**
@@ -257,6 +347,7 @@ export class FileTrackingDataManager {
 
     /** 更新目录及其祖先目录的聚合哈希 */
     private markAncestorsDirty(startPath: string): void {
+    this.stats.markAncestorsDirty++;
         let dir = path.dirname(startPath);
         const root = this.workspaceRoot;
         while (dir && dir.startsWith(root)) {
@@ -278,6 +369,10 @@ export class FileTrackingDataManager {
 
     private async recomputeDirtyDirHashes(): Promise<void> {
     if (this.dirtyDirs.size === 0) { return; }
+    const batch = this.dirtyDirs.size;
+    if (batch > this.stats.maxDirtyBatch) { this.stats.maxDirtyBatch = batch; }
+        const t0 = Date.now();
+        this.stats.dirHashRuns++;
         // 深度优先：先按路径长度从长到短，确保子目录先算
         const dirs = Array.from(this.dirtyDirs).sort((a,b)=>b.length - a.length);
         this.dirtyDirs.clear();
@@ -294,12 +389,15 @@ export class FileTrackingDataManager {
                 meta.lastTrackedAt = Date.now();
                 this.dirHashCache.set(dir, newHash);
                 changed = true;
+                this.stats.dirHashChanged++;
             }
         }
         if (changed) {
             this.markChanged();
             this.scheduleSave();
         }
+        const dur = Date.now() - t0;
+        console.log(`[FileTracking] 目录哈希重算 batch=${batch} changed=${changed} dur=${dur}ms`);
     }
 
     /**
@@ -358,10 +456,13 @@ export class FileTrackingDataManager {
      * 异步添加或更新文件
      */
     public async addOrUpdateFile(filePath: string): Promise<string> {
+        this.stats.addOrUpdateCalls++;
         // 避免追踪数据库文件自身
         if (filePath === this.dbPath) {
-            throw new Error('Cannot track the database file itself');
+            return this.getFileUuid(filePath) || '';
         }
+    // 完全忽略 .git 目录
+    if (this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
 
         try {
             const stats = await fs.promises.stat(filePath);
@@ -376,6 +477,7 @@ export class FileTrackingDataManager {
             // 如果文件已存在且哈希未变化，不需要任何更新
             if (!isDirectory) { // 仅对普通文件使用哈希短路
                 if (existingFile && existingFile.hash === hash && uuid) {
+                    this.stats.skipUnchangedFile++;
                     return uuid; // 文件内容未变
                 }
             }
@@ -423,8 +525,10 @@ export class FileTrackingDataManager {
             this.scheduleSave();
             // 如果是文件，更新其父目录聚合哈希
             if (!isDirectory) {
+                this.stats.addFile++;
                 this.markAncestorsDirty(filePath);
             } else {
+                this.stats.addDir++;
                 // 初始目录 hash 延迟计算
                 this.dirtyDirs.add(filePath);
                 this.markAncestorsDirty(filePath);
@@ -449,6 +553,7 @@ export class FileTrackingDataManager {
             this.scheduleSave();
             // 更新父目录哈希
             this.markAncestorsDirty(filePath);
+            this.stats.removeFile++;
         }
     }
 
@@ -472,6 +577,7 @@ export class FileTrackingDataManager {
                 this.markChanged();
                 this.scheduleSave();
                 this.markAncestorsDirty(newPath);
+                this.stats.renameFile++;
             }
         }
     }
@@ -508,6 +614,7 @@ export class FileTrackingDataManager {
             this.markChanged();
             this.scheduleSave();
             this.markAncestorsDirty(newDir);
+            this.stats.renameDirChildren++;
         }
     }
 
@@ -545,6 +652,7 @@ export class FileTrackingDataManager {
                 
                 this.markChanged();
                 this.scheduleSave();
+                this.stats.writingStatsUpdates++;
             }
         }
     }
@@ -647,7 +755,7 @@ export class FileTrackingDataManager {
             clearTimeout(this.saveTimer);
             this.saveTimer = null;
         }
-        this.saveDatabase();
+    this.saveDatabase(true); // 关闭时强制写入
     }
 
     /**
@@ -743,6 +851,7 @@ export class FileTrackingDataManager {
         this.scheduleSave();
 
         console.log(`创建临时文件追踪记录: ${filePath} (UUID: ${uuid})`);
+    this.stats.temporaryCreate++;
         return uuid;
     }
 
@@ -758,6 +867,7 @@ export class FileTrackingDataManager {
                 metadata.lastTrackedAt = Date.now();
                 this.markChanged();
                 this.scheduleSave();
+                this.stats.markTemp++;
             }
         }
     }
@@ -774,6 +884,7 @@ export class FileTrackingDataManager {
                 metadata.lastTrackedAt = Date.now();
                 this.markChanged();
                 this.scheduleSave();
+                this.stats.markSaved++;
             }
         }
     }
@@ -797,6 +908,7 @@ export class FileTrackingDataManager {
                 
                 this.markChanged();
                 this.scheduleSave();
+                this.stats.wordCountUpdates++;
             }
         }
     }

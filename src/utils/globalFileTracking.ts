@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { FileTracker, FileChangeEvent, initializeFileTracker, disposeFileTracker, getFileTracker } from './fileTracker';
 import { FileTrackingDataManager, FileMetadata } from './fileTrackingData';
 
@@ -54,8 +55,20 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
         deleteWatcher.onDidDelete((uri) => {
             const filePath = uri.fsPath;
             const dataManager = fileTracker.getDataManager();
-            if (dataManager) {
-                dataManager.handleFileDeleted(filePath);
+            if (!dataManager) { return; }
+            // 过滤内部/忽略目录：.git / novel-helper 数据文件自身
+            const wsRoot = workspaceRoot.uri.fsPath;
+            const gitDir = path.join(wsRoot, '.git');
+            const trackerJson = path.join(wsRoot, 'novel-helper', 'file-tracking.json');
+            const orderJson = path.join(wsRoot, 'novel-helper', 'wordcount-order.json');
+            const resolved = path.resolve(filePath);
+            if (resolved.startsWith(path.resolve(gitDir) + path.sep) ||
+                resolved === path.resolve(gitDir) ||
+                resolved === path.resolve(trackerJson) ||
+                resolved === path.resolve(orderJson)) {
+                return; // 忽略这些内部路径
+            }
+            if (dataManager.handleFileDeleted(filePath)) {
                 console.log(`文件删除事件处理: ${filePath}`);
             }
         });
@@ -65,17 +78,24 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
         // 监听文件重命名（通过创建事件检测）
         deleteWatcher.onDidCreate(async (uri) => {
             const filePath = uri.fsPath;
+            const wsRoot = workspaceRoot.uri.fsPath;
+            const gitDir = path.join(wsRoot, '.git');
+            const trackerJson = path.join(wsRoot, 'novel-helper', 'file-tracking.json');
+            const orderJson = path.join(wsRoot, 'novel-helper', 'wordcount-order.json');
+            const resolved = path.resolve(filePath);
+            if (resolved === path.resolve(trackerJson) || resolved === path.resolve(orderJson) ||
+                resolved === path.resolve(gitDir) || resolved.startsWith(path.resolve(gitDir) + path.sep)) {
+                return; // 忽略内部/ .git 创建
+            }
             const dataManager = fileTracker.getDataManager();
-            
-            // 检查是否为重命名操作（延迟检测）
+            if (!dataManager) { return; }
             setTimeout(async () => {
                 try {
-                    // 触发文件变化事件以重新追踪新路径的文件
                     await fileTracker.handleFileCreated(filePath);
                 } catch (error) {
                     console.error(`处理文件创建事件时出错: ${filePath}`, error);
                 }
-            }, 100); // 短暂延迟确保文件系统操作完成
+            }, 100);
         });
     }
 
