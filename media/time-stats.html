@@ -3,9 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none';
-                 img-src %CSP_SOURCE%;
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none';
+                 img-src %CSP_SOURCE% data:;
                  style-src %CSP_SOURCE% 'unsafe-inline';
                  script-src %CSP_SOURCE%;
                  font-src %CSP_SOURCE%;" />
@@ -67,10 +66,42 @@
             margin-top: 6px;
         }
 
+        /* 
         canvas {
             width: 100%;
             height: 260px;
+        } */
+        .chart {
+            position: relative;
+            width: 100%;
         }
+
+        .h300 {
+            height: 300px;
+        }
+
+        .h260 {
+            height: 260px;
+        }
+
+        .h220 {
+            height: 220px;
+        }
+
+        .h180 {
+            height: 180px;
+        }
+
+        .h140 {
+            height: 140px;
+        }
+
+        .chart>canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
 
         .muted {
             opacity: .7;
@@ -112,25 +143,35 @@
 
     <div class="grid" style="margin-top:16px;">
         <div class="card">
-            <div class="muted">当前文件速度曲线（CPM）</div>
-            <canvas id="lineChart" width="900" height="260"></canvas>
+            <div class="muted">当前文件速度曲线（CPM）- 若无活动文件则为空</div>
+            <div class="chart h300"><canvas id="lineChart"></canvas></div>
         </div>
+
         <div class="card">
             <div class="muted">今日码字（按小时）</div>
-            <canvas id="todayBars" width="600" height="260"></canvas>
+            <div class="chart h260"><canvas id="todayBars"></canvas></div>
         </div>
     </div>
 
     <div class="card" style="margin-top:16px;">
         <div class="muted">今日热力图（24小时 × 4刻钟，共96个时间点）</div>
-        <canvas id="todayHeatmap" width="1000" height="120"></canvas>
+        <div class="chart h140"><canvas id="todayHeatmap"></canvas></div>
     </div>
 
     <div class="card" style="margin-top:16px;">
-        <div class="muted">热力图（最近 52 周，每天码字量）</div>
-        <canvas id="heatmap" width="1000" height="180"></canvas>
+        <div class="muted">本周统计</div>
+        <div class="chart h180"><canvas id="weekBars"></canvas></div>
     </div>
 
+    <div class="card" style="margin-top:16px;">
+        <div class="muted">热力图（最近 一个月，每天码字量）</div>
+        <div class="chart h220"><canvas id="heatmap"></canvas></div>
+    </div>
+
+
+    <!-- Chart.js 库 -->
+    <script src="%CHARTJS_URI%"></script>
+    <script src="%ADAPTER_URI%"></script>
     <!-- 外链脚本占位符，扩展侧用 asWebviewUri 注入真实地址 -->
     <script src="%SCRIPT_URI%" defer></script>
 </body>

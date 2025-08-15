@@ -556,6 +556,50 @@ export class FileTrackingDataManager {
     }
 
     /**
+     * 为未保存的文件创建临时追踪记录
+     * 用于timeStats等需要在文件保存前就开始追踪的场景
+     */
+    public createTemporaryFile(filePath: string): string {
+        // 检查是否已经存在
+        let uuid = this.getFileUuid(filePath);
+        if (uuid) {
+            // 文件已存在，标记为临时状态
+            this.markAsTemporary(filePath);
+            return uuid;
+        }
+
+        // 创建新的临时文件记录
+        uuid = uuidv4();
+        const fileName = path.basename(filePath);
+        const fileExtension = path.extname(filePath).toLowerCase();
+        const now = Date.now();
+
+        const metadata: FileMetadata = {
+            uuid,
+            filePath,
+            fileName,
+            fileExtension,
+            size: 0, // 临时文件大小未知
+            mtime: now,
+            hash: '', // 临时文件没有哈希
+            isTemporary: true,
+            createdAt: now,
+            lastTrackedAt: now,
+            updatedAt: now
+        };
+
+        // 更新数据库
+        this.database.files[uuid] = metadata;
+        this.database.pathToUuid[filePath] = uuid;
+
+        this.markChanged();
+        this.scheduleSave();
+
+        console.log(`创建临时文件追踪记录: ${filePath} (UUID: ${uuid})`);
+        return uuid;
+    }
+
+    /**
      * 标记文件为临时文件（未保存到磁盘）
      */
     public markAsTemporary(filePath: string): void {

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "%extension.name%",
   "description": "%extension.description%",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -447,6 +447,8 @@
     "@types/uuid": "^10.0.0",
     "ahocorasick": "^1.0.2",
     "chardet": "^2.1.0",
+    "chart.js": "^4.5.0",
+    "chartjs-adapter-date-fns": "^3.0.0",
     "iconv": "^3.0.1",
     "iconv-lite": "^0.6.3",
     "jschardet": "^3.1.4",

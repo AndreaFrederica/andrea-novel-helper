@@ -7,6 +7,7 @@ import {
     getGlobalFileTracking,
     updateFileWritingStats
 } from './utils/globalFileTracking';
+import { getFileTracker } from './utils/fileTracker';
 
 // -------------------- 数据结构 --------------------
 interface Bucket {
@@ -37,6 +38,8 @@ let windowFocused = true;
 let isIdle = false; // 新增：追踪空闲状态，空闲时不创建新桶
 // 始终只保留一个
 let statusBarItem: vscode.StatusBarItem | undefined;
+// Webview面板状态管理
+let dashboardPanel: vscode.WebviewPanel | undefined;
 
 // —— IME 友好的去抖计数状态 ——
 interface RuntimeDocState {
@@ -102,12 +105,28 @@ function getOrCreateFileStats(filePath: string): FileStats {
         return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
     }
 
-    const uuid = g.getFileUuid(filePath);
+    let uuid = g.getFileUuid(filePath);
     console.log('TimeStats: File UUID for', filePath, ':', uuid);
 
+    // 如果文件没有UUID（可能是未保存的新文件），创建临时追踪记录
     if (!uuid) {
-        console.log('TimeStats: No UUID found, returning empty stats');
-        return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
+        console.log('TimeStats: No UUID found, creating temporary tracking record');
+        try {
+            // 通过数据管理器创建临时文件记录
+            const tracker = getFileTracker();
+            if (tracker) {
+                const dataManager = tracker.getDataManager();
+                uuid = dataManager.createTemporaryFile(filePath);
+                console.log('TimeStats: Created temporary file record with UUID:', uuid);
+            }
+        } catch (error) {
+            console.error('TimeStats: Failed to create temporary file record:', error);
+        }
+
+        if (!uuid) {
+            console.log('TimeStats: Still no UUID, returning empty stats');
+            return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
+        }
     }
 
     const ws = g.getWritingStats(uuid);
@@ -156,23 +175,23 @@ function bumpBucket(fsEntry: FileStats, timestamp: number, added: number, bucket
     if (added <= 0) {
         return; // 没有新增内容，直接返回
     }
-    
+
     const bucketStart = Math.floor(timestamp / bucketSizeMs) * bucketSizeMs;
     let bucket = fsEntry.buckets.find(b => b.start === bucketStart);
-    
+
     if (!bucket) {
         // 如果用户处于空闲状态，不创建新桶来节省存储空间
         if (isIdle) {
             console.log('TimeStats: Skipping bucket creation due to idle state');
             return;
         }
-        
+
         // 创建新桶
         bucket = { start: bucketStart, end: bucketStart + bucketSizeMs, charsAdded: 0 };
         fsEntry.buckets.push(bucket);
         console.log('TimeStats: Created new bucket at', new Date(bucketStart).toLocaleTimeString());
     }
-    
+
     bucket.charsAdded += added;
 }
 
@@ -279,10 +298,10 @@ function resetIdleTimer(idleThresholdMs: number) {
     if (idleTimer) {
         clearTimeout(idleTimer);
     }
-    
+
     // 重置空闲状态 - 用户有活动
     isIdle = false;
-    
+
     idleTimer = setTimeout(() => {
         console.log('TimeStats: User is now idle, stopping bucket creation');
         isIdle = true; // 设置为空闲状态，停止创建新桶
@@ -294,7 +313,7 @@ function resetIdleTimer(idleThresholdMs: number) {
 // 根据配置决定是否退出空闲状态
 function checkExitIdle(trigger: 'text-change' | 'window-focus' | 'editor-change') {
     const { exitIdleOn } = getConfig();
-    
+
     switch (exitIdleOn) {
         case 'text-change':
             // 只有文本变化时才退出空闲状态
@@ -422,7 +441,7 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
 
     currentDocPath = doc.uri.fsPath;
     startSession();
-    
+
     // 根据配置决定是否退出空闲状态
     if (checkExitIdle('text-change')) {
         resetIdleTimer(idleThresholdMs);
@@ -466,7 +485,7 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
         getOrInitDocState(editor.document);
 
         startSession();
-        
+
         // 根据配置决定是否退出空闲状态
         if (checkExitIdle('editor-change')) {
             resetIdleTimer(idleThresholdMs);
@@ -482,7 +501,7 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
                 updateStatusBar();
             }, idleThresholdMs);
         }
-        
+
         updateStatusBar();
     } else {
         currentDocPath = undefined;
@@ -509,7 +528,7 @@ function handleWindowStateChange(state: vscode.WindowState) {
         const { idleThresholdMs } = getConfig();
         if (currentDocPath) {
             startSession();
-            
+
             // 根据配置决定是否退出空闲状态
             if (checkExitIdle('window-focus')) {
                 console.log('TimeStats: Exiting idle state due to window focus');
@@ -527,11 +546,21 @@ function handleWindowStateChange(state: vscode.WindowState) {
                     updateStatusBar();
                 }, idleThresholdMs);
             }
-            
+
             updateStatusBar();
         }
     }
 }
+function handleDocumentSave(doc: vscode.TextDocument) {
+    const filePath = doc.uri.fsPath;
+    const g = getGlobalFileTracking?.();
+    if (g) {
+        // 标记文件为已保存（不再是临时文件）
+        g.markAsSaved(filePath);
+        console.log('TimeStats: Marked file as saved:', filePath);
+    }
+}
+
 function handleDocumentClose(doc: vscode.TextDocument) {
     if (currentDocPath === doc.uri.fsPath) {
         flushDocStats(doc); // 关闭前冲刷
@@ -596,98 +625,72 @@ async function exportStatsCSV(context: vscode.ExtensionContext) {
 }
 
 // -------------------- 仪表板（独立 HTML） --------------------
-async function openDashboard(context: vscode.ExtensionContext) {
-    if (!currentDocPath) {
-        vscode.window.showInformationMessage('当前没有活动文件');
-        return;
-    }
-
-    // 为了调试，先更新当前文件的统计数据
-    const currentTime = Date.now();
-
-    // 确保当前文件被追踪
-    const globalTracking = getGlobalFileTracking?.();
-    if (globalTracking) {
-        console.log('TimeStats: Ensuring current file is tracked...');
-        const tracker = require('./utils/fileTracker').getFileTracker();
-        if (tracker) {
-            try {
-                await tracker.handleFileCreated(currentDocPath);
-                console.log('TimeStats: File tracking triggered for:', currentDocPath);
-            } catch (error) {
-                console.warn('TimeStats: Failed to trigger file tracking:', error);
-            }
-        }
-    }
-
-    const fsEntry = getFileStats(currentDocPath);
-
-    // 如果没有数据
-    if (fsEntry.buckets.length === 0) {
-        console.log('TimeStats: No existing buckets');
-    }
-
-    const panel = vscode.window.createWebviewPanel(
-        'timeStatsDashboard',
-        '写作统计仪表板',
-        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-        { enableScripts: true, localResourceRoots: [vscode.Uri.file(path.join(context.extensionPath, 'media'))] }
-    );
+async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
+    // 允许脚本 & 本地资源
+    panel.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [
+            vscode.Uri.file(path.join(context.extensionPath, 'media')),
+            vscode.Uri.file(path.join(context.extensionPath, 'node_modules'))
+        ]
+    };
 
     const htmlPath = path.join(context.extensionPath, 'media', 'time-stats.html');
     let html = fs.readFileSync(htmlPath, 'utf8');
 
-    // 生成 webview 可访问的 JS URI
+    // 生成 webview 可访问的 URI
     const scriptUri = panel.webview.asWebviewUri(
         vscode.Uri.file(path.join(context.extensionPath, 'media', 'time-stats.js'))
+    );
+    const chartjsUri = panel.webview.asWebviewUri(
+        vscode.Uri.file(path.join(context.extensionPath, 'node_modules', 'chart.js', 'dist', 'chart.umd.js'))
+    );
+    const chartAdapterUri = panel.webview.asWebviewUri(
+        vscode.Uri.file(path.join(
+            context.extensionPath,
+            'node_modules',
+            'chartjs-adapter-date-fns',
+            'dist',
+            'chartjs-adapter-date-fns.bundle.js'
+        ))
     );
 
     // 替换占位符
     html = html
         .replace(/%CSP_SOURCE%/g, panel.webview.cspSource)
-        .replace(/%SCRIPT_URI%/g, scriptUri.toString());
+        .replace(/%SCRIPT_URI%/g, scriptUri.toString())
+        .replace(/%CHARTJS_URI%/g, chartjsUri.toString())
+        .replace(/%ADAPTER_URI%/g, chartAdapterUri.toString());
 
     panel.webview.html = html;
 
-
-    // 创建一个数据获取API函数
+    // 消息通道
     const getStatsData = () => {
-        if (!currentDocPath) {
-            console.warn('TimeStats: No current document path available');
-            return null;
-        }
-
         console.log('TimeStats: API called to get stats data');
 
         // 准备数据：当前文件 + 跨文件（若可）
         const { bucketSizeMs } = getConfig();
-        const fileStats = getFileStats(currentDocPath);
-        console.log('TimeStats: Current file stats:', {
-            path: currentDocPath,
-            totalMillis: fileStats.totalMillis,
-            charsAdded: fileStats.charsAdded,
-            bucketsCount: fileStats.buckets.length,
-            sessionsCount: fileStats.sessions.length,
-            buckets: fileStats.buckets.slice(0, 3) // 显示前3个桶
-        });
+        
+        // 当前文件的速度曲线数据
+        let perFileLine: { t: number; cpm: number }[] = [];
+        
+        if (currentDocPath) {
+            const fileStats = getFileStats(currentDocPath);
+            console.log('TimeStats: Current file stats:', {
+                path: currentDocPath,
+                totalMillis: fileStats.totalMillis,
+                charsAdded: fileStats.charsAdded,
+                bucketsCount: fileStats.buckets.length,
+                sessionsCount: fileStats.sessions.length,
+                buckets: fileStats.buckets.slice(0, 3) // 显示前3个桶
+            });
 
-        const perFileLine = fileStats.buckets
-            .slice()
-            .sort((a, b) => a.start - b.start)
-            .map(b => ({ t: b.start, cpm: Math.round((b.charsAdded * 60000) / bucketSizeMs) }));
-
-        // 如果没有数据，创建一些测试数据用于调试
-        if (perFileLine.length === 0) {
-            console.log('TimeStats: No bucket data, creating test data');
-            const currentTime = Date.now();
-            const testData = [];
-            for (let i = 0; i < 5; i++) {
-                testData.push({
-                    t: currentTime - (5 - i) * bucketSizeMs,
-                    cpm: Math.floor(Math.random() * 100) + 20
-                });
-            }
-            perFileLine.push(...testData);
+            perFileLine = fileStats.buckets
+                .slice()
+                .sort((a, b) => a.start - b.start)
+                .map(b => ({ t: b.start, cpm: Math.round((b.charsAdded * 60000) / bucketSizeMs) }));
+        } else {
+            console.log('TimeStats: No current document, using empty per-file line data');
         }
 
         console.log('TimeStats: Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
@@ -719,15 +722,22 @@ async function openDashboard(context: vscode.ExtensionContext) {
         }
 
         if (!globalCapable) {
-            // 降级：只用当前文件
-            allStats = [{
-                filePath: currentDocPath,
-                totalMillis: fileStats.totalMillis,
-                charsAdded: fileStats.charsAdded,
-                lastActiveTime: fileStats.lastSeen,
-                buckets: fileStats.buckets,
-                sessions: fileStats.sessions,
-            }];
+            // 降级：只用当前文件（如果有的话）
+            if (currentDocPath) {
+                const fileStats = getFileStats(currentDocPath);
+                allStats = [{
+                    filePath: currentDocPath,
+                    totalMillis: fileStats.totalMillis,
+                    charsAdded: fileStats.charsAdded,
+                    lastActiveTime: fileStats.lastSeen,
+                    buckets: fileStats.buckets,
+                    sessions: fileStats.sessions,
+                }];
+            } else {
+                // 没有当前文件，使用空数据
+                allStats = [];
+                console.log('TimeStats: No current document and no global tracking, using empty stats');
+            }
         }
 
         // 计算：全文件累计时长、今日时长/平均/峰值、热力图（日粒度）、今日按小时柱状图
@@ -803,26 +813,6 @@ async function openDashboard(context: vscode.ExtensionContext) {
         const todayMinutes = todayMillis / 60000;
         const todayAvgCPM = todayMinutes > 0 ? Math.round(todayChars / todayMinutes) : 0;
 
-        // 如果没有今日数据，创建一些测试数据
-        if (todayChars === 0 && todayMillis === 0) {
-            console.log('TimeStats: No today data, creating test data');
-            todayChars = 150;
-            todayMillis = 3600000; // 1小时
-            todayPeakCPM = 120;
-            const currentHour = new Date().getHours();
-            todayHourly[currentHour] = 50;
-            todayHourly[currentHour - 1] = 30;
-            todayHourly[currentHour - 2] = 70;
-
-            // 添加一些15分钟数据
-            for (let i = 0; i < 8; i++) {
-                const idx = currentHour * 4 + (i % 4);
-                if (idx >= 0 && idx < 96) {
-                    todayQuarterHourly[idx] = Math.floor(Math.random() * 20) + 5;
-                }
-            }
-        }
-
         // 重新计算今日平均CPM
         const finalTodayMinutes = todayMillis / 60000;
         const finalTodayAvgCPM = finalTodayMinutes > 0 ? Math.round(todayChars / finalTodayMinutes) : 0;
@@ -865,19 +855,36 @@ async function openDashboard(context: vscode.ExtensionContext) {
             if (message.type === 'get-stats-data') {
                 console.log('TimeStats: API request for stats data');
                 const data = getStatsData();
-                if (data) {
-                    panel.webview.postMessage(data);
-                } else {
-                    panel.webview.postMessage({
-                        type: 'error',
-                        message: 'No current document available'
-                    });
-                }
+                // 总是返回数据，即使没有当前文档也显示全局统计
+                panel.webview.postMessage(data);
             }
         },
         undefined,
         context.subscriptions
     );
+
+    // 关闭时清空引用
+    panel.onDidDispose(() => {
+        dashboardPanel = undefined;
+    });
+}
+
+// 修改 openDashboard 以复用 setupDashboardPanel，并缓存 panel 引用
+async function openDashboard(context: vscode.ExtensionContext) {
+    if (dashboardPanel) {
+        dashboardPanel.reveal(vscode.ViewColumn.Beside, true);
+        return;
+    }
+
+    // 可以在没有活动文件时也打开面板（面板里会显示提示）
+    dashboardPanel = vscode.window.createWebviewPanel(
+        'timeStatsDashboard',
+        '写作统计仪表板',
+        { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+        { enableScripts: true }
+    );
+
+    await setupDashboardPanel(dashboardPanel, context);
 }
 
 // -------------------- 激活/反激活 --------------------
@@ -900,6 +907,7 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
         vscode.window.onDidChangeActiveTextEditor(handleActiveEditorChange),
         vscode.window.onDidChangeWindowState(handleWindowStateChange),
         vscode.workspace.onDidCloseTextDocument(handleDocumentClose),
+        vscode.workspace.onDidSaveTextDocument(handleDocumentSave),
         vscode.workspace.onDidRenameFiles(handleRename),
         vscode.commands.registerCommand('AndreaNovelHelper.openTimeStats', async () => {
             try {
@@ -911,6 +919,20 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.exportTimeStatsCSV', () => exportStatsCSV(context)),
     );
+
+    // 注册反序列化器：支持 VS Code 重启后恢复面板
+    if (vscode.window.registerWebviewPanelSerializer) {
+        const serializer = {
+            async deserializeWebviewPanel(panel: vscode.WebviewPanel, state: any) {
+                dashboardPanel = panel;
+                panel.title = '写作统计仪表板';
+                await setupDashboardPanel(panel, context);
+            }
+        } as vscode.WebviewPanelSerializer;
+        context.subscriptions.push(
+            vscode.window.registerWebviewPanelSerializer('timeStatsDashboard', serializer)
+        );
+    }
 
     // 初始状态栏
     handleActiveEditorChange(vscode.window.activeTextEditor);
