@@ -7,6 +7,7 @@ import { CombinedIgnoreParser } from '../../utils/gitignoreParser';
 import { sortItems } from '../../utils/sorter';
 import { GitGuard } from '../../utils/gitGuard';
 import { getFileTracker } from '../../utils/fileTracker';
+import { WordCountOrderManager } from '../../utils/wordCountOrder';
 
 // 特殊文件（无扩展名但需要显示）
 function isSpecialVisibleFile(name: string): boolean {
@@ -47,14 +48,16 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
     // Git Guard 用于缓存优化
     private gitGuard: GitGuard;
+    private orderManager: WordCountOrderManager | null = null;
 
     // 状态持久化
     private expandedNodes = new Set<string>();
     private memento: vscode.Memento;
 
-    constructor(memento: vscode.Memento) {
+    constructor(memento: vscode.Memento, orderManager?: WordCountOrderManager) {
         this.memento = memento;
         this.gitGuard = new GitGuard();
+        this.orderManager = orderManager ?? null;
 
         // 从工作区状态恢复展开状态
         const savedState = this.memento.get<string[]>('wordCountExpandedNodes', []);
@@ -66,6 +69,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         vscode.workspace.onDidSaveTextDocument((doc) => {
             // 检查是否是 .gitignore 或 .wcignore 文件
             const fileName = path.basename(doc.uri.fsPath);
+            // Add logic to handle orderManager if needed
             if (fileName === '.gitignore' || fileName === '.wcignore') {
                 // 重新初始化忽略解析器
                 this.initIgnoreParser();
@@ -266,9 +270,62 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         //     return a.label.localeCompare(b.label, 'zh');
         // });
         const wordCountItems = items.filter(item => item instanceof WordCountItem) as WordCountItem[];
-        sortItems(wordCountItems);
+        if (this.orderManager) {
+            const parentFolder = element ? element.resourceUri.fsPath : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '');
+            if (parentFolder && this.orderManager.isManual(parentFolder)) {
+                wordCountItems.sort((a,b)=>{
+                    const aIsDir = a.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+                    const bIsDir = b.collapsibleState !== vscode.TreeItemCollapsibleState.None;
+                    if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
+                    const ia = this.orderManager!.getIndex(a.resourceUri.fsPath);
+                    const ib = this.orderManager!.getIndex(b.resourceUri.fsPath);
+                    if (ia !== undefined && ib !== undefined) {
+                        if (ia !== ib) return ia - ib;
+                    } else if (ia !== undefined) {
+                        return -1; // 有 index 的排前
+                    } else if (ib !== undefined) {
+                        return 1;
+                    }
+                    return a.label.localeCompare(b.label,'zh');
+                });
+            } else {
+                sortItems(wordCountItems);
+            }
+        } else {
+            sortItems(wordCountItems);
+        }
 
         // 将排序后的项目重新组合，并在末尾添加新建项目按钮
+        // 在手动模式下：为每个项目前置索引标签（不改真实文件名，只改 label 显示）
+        if (this.orderManager) {
+            const parentFolder = element ? element.resourceUri.fsPath : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '');
+            if (parentFolder && this.orderManager.isManual(parentFolder)) {
+                const showInLabel = vscode.workspace.getConfiguration().get<boolean>('AndreaNovelHelper.wordCount.order.showIndexInLabel', true);
+                for (const it of wordCountItems) {
+                    const idx = this.orderManager.getIndex(it.resourceUri.fsPath);
+                    if (idx !== undefined) {
+                        const tag = this.orderManager.formatIndex(idx);
+                        if (tag) {
+                            if (showInLabel) {
+                                if (!it.label.startsWith('[')) {
+                                    (it as any).label = `[${tag}] ${it.label}`;
+                                }
+                            } else {
+                                // 放入 description 前缀
+                                if (typeof it.description === 'string') {
+                                    if (!it.description.startsWith('[')) {
+                                        it.description = `[${tag}] ${it.description}`;
+                                    }
+                                } else if (!it.description) {
+                                    it.description = `[${tag}]`;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         const sortedItems: (WordCountItem | NewItemNode)[] = [...wordCountItems];
 
         // 在文件夹末尾添加新建文章和新建文件夹按钮
@@ -622,6 +679,17 @@ export class WordCountItem extends vscode.TreeItem {
         }
     }
 }
+
+// —— Order Manager 访问接口 ——
+export interface HasOrderManager {
+    setOrderManager(mgr: WordCountOrderManager): void;
+    getOrderManager(): WordCountOrderManager | null;
+}
+
+// 为 provider 添加访问方法
+export interface WordCountProvider extends HasOrderManager {}
+(WordCountProvider.prototype as any).setOrderManager = function(mgr: WordCountOrderManager){ this.orderManager = mgr; };
+(WordCountProvider.prototype as any).getOrderManager = function(){ return this.orderManager; };
 
 // —— 打开方式工具函数（与包管理器一致）——
 async function executeOpenAction(action: string, uri: vscode.Uri): Promise<void> {

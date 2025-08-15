@@ -218,6 +218,27 @@
       {
         "command": "AndreaNovelHelper.wordCount.delete",
         "title": "删除"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.toggleManualOrdering",
+        "title": "切换手动排序"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.generateIndexFromName",
+        "title": "从名称生成索引"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.clearIndex",
+        "title": "清除索引"
+      }
+      ,
+      {
+        "command": "AndreaNovelHelper.wordCount.setIndexManual",
+        "title": "设置索引(手动)"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
+        "title": "按名称批量重建索引"
       }
     ],
     "menus": {
@@ -346,6 +367,31 @@
           "when": "view == wordCountExplorer && (viewItem == wordCountFolder)",
           "command": "AndreaNovelHelper.wordCount.createNewFolder",
           "group": "0_create@2"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.toggleManualOrdering",
+          "group": "4_order@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.generateIndexFromName",
+          "group": "4_order@2"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.clearIndex",
+          "group": "4_order@3"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.setIndexManual",
+          "group": "4_order@4"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
+          "group": "4_order@5"
         }
       ],
       "editor/title": [
@@ -501,6 +547,28 @@
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.respectWcignore.description%"
+        },
+        "AndreaNovelHelper.wordCount.order.showIndexInLabel": {
+          "type": "boolean",
+          "default": true,
+          "description": "WordCount: 在手动排序模式下在标签前显示索引。"
+        },
+        "AndreaNovelHelper.wordCount.order.step": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "WordCount: 初始索引步长。"
+        },
+        "AndreaNovelHelper.wordCount.order.padWidth": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "description": "WordCount: 索引显示的前导零宽度 (0 表示不补零)。"
+        },
+        "AndreaNovelHelper.wordCount.order.autoResequence": {
+          "type": "boolean",
+          "default": true,
+          "description": "WordCount: 当插入间隙不足时自动重排所有索引。"
         }
       }
     },

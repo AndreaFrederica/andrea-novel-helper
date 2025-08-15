@@ -9,6 +9,7 @@ import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { WordCountProvider } from './Provider/view/wordCountProvider';
+import { WordCountOrderManager } from './utils/wordCountOrder';
 import { ensureRegisterOpenWith } from './utils/openWith';
 import { initAhoCorasickManager } from './utils/ahoCorasickManager';
 
@@ -418,11 +419,143 @@ export function activate(context: vscode.ExtensionContext) {
     ensureRegisterOpenWith(context);
 
     // Word Count 树视图
-    const wordCountProvider = new WordCountProvider(context.workspaceState);
+    // 手动排序管理器
+    let orderManager: WordCountOrderManager | null = null;
+    if (folders1 && folders1.length) {
+        orderManager = new WordCountOrderManager(folders1[0].uri.fsPath);
+        // 应用用户配置
+        const cfg = vscode.workspace.getConfiguration();
+        orderManager.setOptions({
+            step: cfg.get<number>('AndreaNovelHelper.wordCount.order.step', 10),
+            padWidth: cfg.get<number>('AndreaNovelHelper.wordCount.order.padWidth', 3),
+            autoResequence: cfg.get<boolean>('AndreaNovelHelper.wordCount.order.autoResequence', true)
+        });
+    }
+    const wordCountProvider = new WordCountProvider(context.workspaceState, orderManager || undefined);
     const treeView = vscode.window.createTreeView('wordCountExplorer', {
         treeDataProvider: wordCountProvider,
         showCollapseAll: true
     });
+
+    // 拖拽排序控制器
+    const dndController: vscode.TreeDragAndDropController<any> = {
+        dragMimeTypes: ['application/vnd.andrea.wordcount.item'],
+        dropMimeTypes: ['application/vnd.andrea.wordcount.item'],
+        async handleDrag(source, data, token) {
+            const paths = source.filter(s=>s?.resourceUri?.fsPath).map(s=>s.resourceUri.fsPath);
+            data.set('application/vnd.andrea.wordcount.item', new vscode.DataTransferItem(JSON.stringify(paths)));
+        },
+        async handleDrop(target, data, token) {
+            try {
+                const item = data.get('application/vnd.andrea.wordcount.item');
+                if (!item) return;
+                const json = await item.asString();
+                const moved: string[] = JSON.parse(json);
+                if (moved.length === 0) return;
+                const om = (wordCountProvider as any).getOrderManager?.();
+                const targetPath = target?.resourceUri?.fsPath;
+                const parentDir = (targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()) ? targetPath : path.dirname(targetPath || moved[0]);
+                if (!om) return;
+                const manual = om.isManual(parentDir);
+
+                // 判定是否是“同一父目录内部重排”
+                const originalParents = new Set(moved.map(p=>path.dirname(p)));
+                const isPureReorder = originalParents.size === 1 && originalParents.has(parentDir);
+
+                // 如果是跨目录移动，执行物理移动；如果是同目录且自动模式，则提示是否启用手动；否则直接重排
+                if (isPureReorder) {
+                    if (!manual) {
+                        const choice = await vscode.window.showInformationMessage('当前为自动排序。启用手动排序以调整顺序？', '启用', '取消');
+                        if (choice !== '启用') return; // 取消
+                        om.toggleManual(parentDir);
+                    }
+                }
+
+                // 计算目标插入参考（如果 target 是文件，表示插入其后；如果 target 是目录表达放入该目录末尾）。
+                const targetIsDir = targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
+
+                // 跨目录移动：物理移动文件/文件夹
+                if (!isPureReorder) {
+                    for (const p of moved) {
+                        const baseName = path.basename(p);
+                        let dest = targetIsDir ? path.join(parentDir, baseName) : path.join(parentDir, baseName);
+                        if (dest === p) continue; // 同路径无需移动
+                        // 防止移动到子目录造成递归
+                        if (p.startsWith(dest + path.sep)) {
+                            vscode.window.showWarningMessage(`无法将 ${baseName} 移动到其自身的子目录中`);
+                            continue;
+                        }
+                        if (fs.existsSync(dest)) {
+                            vscode.window.showWarningMessage(`目标已存在: ${baseName}，已跳过`);
+                            continue;
+                        }
+                        try { fs.renameSync(p, dest); } catch (e) { vscode.window.showErrorMessage(`移动失败: ${e}`); continue; }
+                        // 更新 moved 集合中的路径以便后续排序
+                        const idx = moved.indexOf(p);
+                        if (idx >=0) moved[idx] = dest;
+                    }
+                }
+
+                // 排序/索引处理：仅当 parentDir 为手动模式才写入索引
+                if (om.isManual(parentDir)) {
+                    // 获取当前 children（移动后状态）
+                    const parentItem = wordCountProvider.getItemById?.(parentDir) || { resourceUri: vscode.Uri.file(parentDir) };
+                    const children = await wordCountProvider.getChildren(parentItem as any) as any[];
+                    let order = children.filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new')).map(c=>c.resourceUri.fsPath);
+                    // 移除已移动项（它们可能旧位置）
+                    order = order.filter(p=>!moved.includes(p));
+                    let insertIndex = -1;
+                    if (targetPath && !targetIsDir) {
+                        insertIndex = order.indexOf(targetPath);
+                    } else {
+                        insertIndex = order.length - 1; // 末尾
+                    }
+                    order.splice(insertIndex+1, 0, ...moved);
+                    om.rewriteSequential(parentDir, order);
+                }
+
+                // 对原始父目录若为手动且发生了跨目录移动，需要刷新原父目录索引
+                if (!isPureReorder) {
+                    for (const op of originalParents) {
+                        if (op !== parentDir && om.isManual(op) && fs.existsSync(op)) {
+                            const parentItemOld = wordCountProvider.getItemById?.(op) || { resourceUri: vscode.Uri.file(op) };
+                            const oldChildren = await wordCountProvider.getChildren(parentItemOld as any) as any[];
+                            const oldOrder = oldChildren.filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new')).map(c=>c.resourceUri.fsPath);
+                            om.rewriteSequential(op, oldOrder);
+                        }
+                    }
+                }
+
+                wordCountProvider.refresh();
+            } catch (e) {
+                vscode.window.showErrorMessage('拖拽排序失败: '+e);
+            }
+        }
+    };
+    (treeView as any).dragAndDropController = dndController;
+    context.subscriptions.push({ dispose: ()=>{ /* no op */ } });
+
+    // 监听配置变化动态更新排序参数
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+        if (!orderManager) return;
+        let changed = false;
+        const cfg = vscode.workspace.getConfiguration();
+        const affects = (k: string) => e.affectsConfiguration(k);
+        if (affects('AndreaNovelHelper.wordCount.order.step') || affects('AndreaNovelHelper.wordCount.order.padWidth') || affects('AndreaNovelHelper.wordCount.order.autoResequence')) {
+            orderManager.setOptions({
+                step: cfg.get<number>('AndreaNovelHelper.wordCount.order.step', 10),
+                padWidth: cfg.get<number>('AndreaNovelHelper.wordCount.order.padWidth', 3),
+                autoResequence: cfg.get<boolean>('AndreaNovelHelper.wordCount.order.autoResequence', true)
+            });
+            changed = true;
+        }
+        if (affects('AndreaNovelHelper.wordCount.order.showIndexInLabel')) {
+            changed = true; // 仅刷新视图
+        }
+        if (changed) {
+            wordCountProvider.refresh();
+        }
+    }));
     
     // 监听树视图展开/折叠事件以保存状态
     context.subscriptions.push(
@@ -534,7 +667,7 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     };
 
-    const createFile = async (baseDir: string) => {
+    const createFile = async (baseDir: string, hintPathForIndex?: { before?: string; after?: string }) => {
         ensureDir(baseDir);
         const type = await vscode.window.showQuickPick([
             { label: 'Markdown (.md)', ext: '.md' },
@@ -549,12 +682,30 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             return;
         }
         fs.writeFileSync(full, '');
+        // 分配索引
+        const om = (provider as any).getOrderManager?.();
+        if (om) {
+            const parent = baseDir;
+            if (om.isManual(parent)) {
+                let idx: number;
+                if (hintPathForIndex) {
+                    const beforeIdx = hintPathForIndex.before ? om.getIndex(hintPathForIndex.before) : undefined;
+                    const afterIdx = hintPathForIndex.after ? om.getIndex(hintPathForIndex.after) : undefined;
+                    idx = om.allocateBetween(parent, beforeIdx, afterIdx);
+                } else {
+                    // 普通新增放在末尾
+                    const siblings = fs.readdirSync(parent).map(n=>path.join(parent,n));
+                    idx = om.nextIndex(parent, siblings);
+                }
+                om.setIndex(full, idx);
+            }
+        }
         provider.refresh();
         const doc = await vscode.workspace.openTextDocument(full);
         await vscode.window.showTextDocument(doc);
     };
 
-    const createFolder = async (baseDir: string) => {
+    const createFolder = async (baseDir: string, hintPathForIndex?: { before?: string; after?: string }) => {
         ensureDir(baseDir);
         const name = await vscode.window.showInputBox({ prompt: '输入文件夹名称', value: '新建文件夹' });
         if (!name) return;
@@ -564,6 +715,23 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             return;
         }
         fs.mkdirSync(full);
+        // 分配索引
+        const om = (provider as any).getOrderManager?.();
+        if (om) {
+            const parent = baseDir;
+            if (om.isManual(parent)) {
+                let idx: number;
+                if (hintPathForIndex) {
+                    const beforeIdx = hintPathForIndex.before ? om.getIndex(hintPathForIndex.before) : undefined;
+                    const afterIdx = hintPathForIndex.after ? om.getIndex(hintPathForIndex.after) : undefined;
+                    idx = om.allocateBetween(parent, beforeIdx, afterIdx);
+                } else {
+                    const siblings = fs.readdirSync(parent).map(n=>path.join(parent,n));
+                    idx = om.nextIndex(parent, siblings);
+                }
+                om.setIndex(full, idx);
+            }
+        }
         provider.refresh();
     };
 
@@ -583,19 +751,64 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
         // 右键菜单：在此处上方/下方新建
         vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFileAbove', async (node: any) => {
             const dir = path.dirname(node.resourceUri.fsPath);
-            await createFile(dir);
+            const om = (provider as any).getOrderManager?.();
+            let before: string | undefined = undefined;
+            if (om && om.isManual(dir)) {
+                // 基于当前 provider 排序
+                const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
+                const children = await provider.getChildren(parentItem as any) as any[];
+                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
+                if (idx>0) before = orderedPaths[idx-1];
+            }
+            await createFile(dir, { before, after: node.resourceUri.fsPath });
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFileBelow', async (node: any) => {
             const dir = path.dirname(node.resourceUri.fsPath);
-            await createFile(dir);
+            const om = (provider as any).getOrderManager?.();
+            let after: string | undefined = undefined;
+            if (om && om.isManual(dir)) {
+                const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
+                const children = await provider.getChildren(parentItem as any) as any[];
+                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
+                if (idx>=0 && idx < orderedPaths.length-1) after = orderedPaths[idx+1];
+            }
+            await createFile(dir, { before: node.resourceUri.fsPath, after });
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFolderAbove', async (node: any) => {
             const dir = path.dirname(node.resourceUri.fsPath);
-            await createFolder(dir);
+            const om = (provider as any).getOrderManager?.();
+            let before: string | undefined = undefined;
+            if (om && om.isManual(dir)) {
+                const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
+                const children = await provider.getChildren(parentItem as any) as any[];
+                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
+                if (idx>0) before = orderedPaths[idx-1];
+            }
+            await createFolder(dir, { before, after: node.resourceUri.fsPath });
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.wordCount.insertFolderBelow', async (node: any) => {
             const dir = path.dirname(node.resourceUri.fsPath);
-            await createFolder(dir);
+            const om = (provider as any).getOrderManager?.();
+            let after: string | undefined = undefined;
+            if (om && om.isManual(dir)) {
+                const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
+                const children = await provider.getChildren(parentItem as any) as any[];
+                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
+                if (idx>=0 && idx < orderedPaths.length-1) after = orderedPaths[idx+1];
+            }
+            await createFolder(dir, { before: node.resourceUri.fsPath, after });
         }),
 
         // 基础：打开/在资源管理器显示/重命名/删除
@@ -622,6 +835,9 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
                 return;
             }
             fs.renameSync(p, newPath);
+            // 迁移索引
+            const om = (provider as any).getOrderManager?.();
+            if (om) om.renamePath(p, newPath);
             provider.refresh();
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.wordCount.delete', async (node: any) => {
@@ -632,10 +848,74 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             try {
                 if (isDir) fs.rmSync(p, { recursive: true, force: true });
                 else fs.unlinkSync(p);
+                const om = (provider as any).getOrderManager?.();
+                if (om) om.removePath(p);
                 provider.refresh();
             } catch (e) {
                 vscode.window.showErrorMessage(`删除失败: ${e}`);
             }
+        }),
+        // 切换手动排序
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.toggleManualOrdering', async (node: any) => {
+            const om = (provider as any).getOrderManager?.();
+            if (!om) return;
+            const folder = node.resourceUri.fsPath as string;
+            const enabled = om.toggleManual(folder);
+            vscode.window.showInformationMessage(`手动排序已${enabled ? '启用' : '关闭'}: ${path.basename(folder)}`);
+            provider.refresh();
+        }),
+        // 根据文件名生成索引（提取数字）
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.generateIndexFromName', async (node: any) => {
+            const om = (provider as any).getOrderManager?.();
+            if (!om) return;
+            const p = node.resourceUri.fsPath as string;
+            const idx = om.generateIndexFromName(p);
+            if (idx !== undefined) {
+                vscode.window.showInformationMessage(`已为 ${path.basename(p)} 生成索引 ${idx}`);
+            } else {
+                vscode.window.showWarningMessage('未在名称中找到数字，未生成索引');
+            }
+            provider.refresh();
+        }),
+        // 清除索引
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.clearIndex', async (node: any) => {
+            const om = (provider as any).getOrderManager?.();
+            if (!om) return;
+            const p = node.resourceUri.fsPath as string;
+            om.clearIndex(p);
+            vscode.window.showInformationMessage(`已清除索引: ${path.basename(p)}`);
+            provider.refresh();
+        }),
+        // 手动输入索引
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.setIndexManual', async (node: any) => {
+            const om = (provider as any).getOrderManager?.();
+            if (!om) return;
+            const p = node.resourceUri.fsPath as string;
+            const old = om.getIndex(p);
+            const input = await vscode.window.showInputBox({ prompt: '输入新的索引数字', value: old !== undefined ? String(old) : '' });
+            if (!input) return;
+            const num = Number(input);
+            if (!Number.isFinite(num)) {
+                vscode.window.showErrorMessage('请输入有效数字');
+                return;
+            }
+            om.setIndex(p, num);
+            provider.refresh();
+        }),
+        // 为文件夹内所有项目按当前名称顺序批量生成索引（重建）
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.bulkGenerateIndices', async (node: any) => {
+            const om = (provider as any).getOrderManager?.();
+            if (!om) return;
+            const folder = node.resourceUri.fsPath as string;
+            const manualEnabled = om.isManual(folder) || om.toggleManual(folder); // 确保开启
+            const entries = fs.readdirSync(folder).map(n=>path.join(folder,n));
+            let idx = 10;
+            for (const p of entries) {
+                om.setIndex(p, idx);
+                idx += 10;
+            }
+            vscode.window.showInformationMessage(`已为 ${path.basename(folder)} 重新生成索引`);
+            provider.refresh();
         })
     );
 }
