@@ -428,7 +428,9 @@ export function activate(context: vscode.ExtensionContext) {
         treeView.onDidCollapseElement(e => {
             wordCountProvider.onDidCollapseElement(e.element);
         }),
-        treeView
+        treeView,
+        // 确保 WordCountProvider 能正确清理
+        { dispose: () => wordCountProvider.dispose() }
     );
 
     // 状态栏提供器 - 已禁用，使用 timeStats 中的状态栏

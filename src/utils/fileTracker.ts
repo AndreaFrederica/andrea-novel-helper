@@ -80,6 +80,17 @@ export class FileTracker {
             return true; // 忽略数据库文件本身
         }
 
+        // 忽略 .git 目录及其子内容
+        const gitDir = path.join(this.config.workspaceRoot, '.git');
+        const resolvedGitDir = path.resolve(gitDir);
+        const resolvedFilePath = path.resolve(filePath);
+        if (
+            resolvedFilePath === resolvedGitDir ||
+            resolvedFilePath.startsWith(resolvedGitDir + path.sep)
+        ) {
+            return true;
+        }
+
         // 检查忽略规则
         if (this.ignoreParser) {
             if (this.config.respectWcignore) {

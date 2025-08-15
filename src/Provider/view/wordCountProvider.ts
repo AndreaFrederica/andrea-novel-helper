@@ -2,9 +2,11 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { countAndAnalyze, countWordsMixed, getSupportedExtensions, mergeStats, readTextFileDetectEncoding, TextStats } from '../../utils/utils';
+import { countAndAnalyze, countWordsMixed, getSupportedExtensions, mergeStats, readTextFileDetectEncoding, TextStats, analyzeText } from '../../utils/utils';
 import { CombinedIgnoreParser } from '../../utils/gitignoreParser';
 import { sortItems } from '../../utils/sorter';
+import { GitGuard } from '../../utils/gitGuard';
+import { getFileTracker } from '../../utils/fileTracker';
 
 export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem> {
     private _onDidChange = new vscode.EventEmitter<WordCountItem | undefined>();
@@ -17,15 +19,23 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
     private pendingRefresh = false;
     private ignoreParser: CombinedIgnoreParser | null = null;
     
+    // Git Guard 用于缓存优化
+    private gitGuard: GitGuard;
+    
     // 状态持久化
     private expandedNodes = new Set<string>();
     private memento: vscode.Memento;
 
     constructor(memento: vscode.Memento) {
         this.memento = memento;
+        this.gitGuard = new GitGuard();
+        
         // 从工作区状态恢复展开状态
         const savedState = this.memento.get<string[]>('wordCountExpandedNodes', []);
         this.expandedNodes = new Set(savedState);
+        
+        // 初始化 GitGuard
+        this.initializeGitGuard();
         
         vscode.workspace.onDidSaveTextDocument((doc) => {
             // 检查是否是 .gitignore 或 .wcignore 文件
@@ -50,6 +60,23 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
         
         // 初始化忽略解析器
         this.initIgnoreParser();
+    }
+
+    private async initializeGitGuard() {
+        try {
+            // 配置 GitGuard，只处理支持的文件类型
+            await this.gitGuard.init({} as vscode.ExtensionContext, {
+                baseline: 'HEAD',
+                contentHashDedupe: true,
+                allowedLanguageIds: ['markdown', 'plaintext'],
+                ignore: (uri) => {
+                    // 使用现有的忽略逻辑
+                    return this.ignoreParser ? this.ignoreParser.shouldIgnore(uri.fsPath) : false;
+                }
+            });
+        } catch (error) {
+            console.warn('GitGuard 初始化失败，将使用传统缓存:', error);
+        }
     }
 
     private initIgnoreParser() {
@@ -327,22 +354,62 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
     }
 
     /**
-     * 获取或计算文件统计（带缓存）
+     * 获取或计算文件统计（带缓存和 Git 优化）
      */
     private async getOrCalculateFileStats(filePath: string): Promise<TextStats> {
         try {
             const stat = await fs.promises.stat(filePath);
             const mtime = stat.mtimeMs;
             
-            // 检查缓存
+            // 1. 检查内存缓存
             const cached = this.statsCache.get(filePath);
             if (cached && cached.mtime === mtime) {
                 return cached.stats;
             }
 
-            // 重新计算
+            // 2. 检查持久化缓存（从文件追踪数据库）
+            const fileTracker = getFileTracker();
+            if (fileTracker) {
+                const dataManager = fileTracker.getDataManager();
+                const fileMetadata = dataManager.getFileByPath(filePath);
+                
+                if (fileMetadata && fileMetadata.wordCountStats) {
+                    // 如果文件的 mtime 没有变化，使用持久化的统计数据
+                    if (fileMetadata.mtime === mtime) {
+                        const stats = fileMetadata.wordCountStats;
+                        // 更新内存缓存
+                        this.statsCache.set(filePath, { stats, mtime });
+                        return stats;
+                    }
+                }
+            }
+
+            // 3. 使用 GitGuard 检查是否需要重新计算
+            const uri = vscode.Uri.file(filePath);
+            const shouldRecalculate = await this.gitGuard.shouldCount(uri);
+            
+            if (!shouldRecalculate && cached) {
+                // Git 认为文件没有变化，使用现有缓存
+                return cached.stats;
+            }
+
+            // 4. 重新计算统计
             const stats = await countAndAnalyze(filePath);
+            
+            // 5. 更新内存缓存
             this.statsCache.set(filePath, { stats, mtime });
+            
+            // 6. 持久化到文件追踪数据库
+            if (fileTracker) {
+                const dataManager = fileTracker.getDataManager();
+                await dataManager.addOrUpdateFile(filePath);
+                dataManager.updateWordCountStats(filePath, stats);
+            }
+            
+            // 7. 通知 GitGuard 已完成统计
+            const content = await readTextFileDetectEncoding(filePath);
+            this.gitGuard.markCounted(uri, content);
+            
             return stats;
         } catch (error) {
             console.error(`Error calculating stats for ${filePath}:`, error);
@@ -351,22 +418,53 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
     }
 
     /**
-     * 获取或计算文件夹统计（带缓存）
+     * 获取或计算文件夹统计（带缓存和 Git 优化）
      */
     private async getOrCalculateFolderStats(folder: string, exts: string[]): Promise<TextStats> {
         try {
             const stat = await fs.promises.stat(folder);
             const mtime = stat.mtimeMs;
             
-            // 检查缓存
+            // 1. 检查内存缓存
             const cached = this.statsCache.get(folder);
             if (cached && cached.mtime === mtime) {
                 return cached.stats;
             }
 
-            // 重新计算
+            // 2. 检查持久化缓存（从文件追踪数据库）
+            const fileTracker = getFileTracker();
+            if (fileTracker) {
+                const dataManager = fileTracker.getDataManager();
+                const fileMetadata = dataManager.getFileByPath(folder);
+                
+                if (fileMetadata && fileMetadata.wordCountStats) {
+                    // 如果文件夹的 mtime 没有变化，使用持久化的统计数据
+                    if (fileMetadata.mtime === mtime) {
+                        const stats = fileMetadata.wordCountStats;
+                        // 更新内存缓存
+                        this.statsCache.set(folder, { stats, mtime });
+                        return stats;
+                    }
+                }
+            }
+
+            // 3. 重新计算统计
             const stats = await this.analyzeFolder(folder, exts);
+            
+            // 4. 更新内存缓存
             this.statsCache.set(folder, { stats, mtime });
+            
+            // 5. 持久化到文件追踪数据库（可选，文件夹统计变化较少）
+            if (fileTracker) {
+                const dataManager = fileTracker.getDataManager();
+                try {
+                    await dataManager.addOrUpdateFile(folder);
+                    dataManager.updateWordCountStats(folder, stats);
+                } catch (error) {
+                    // 文件夹可能无法直接追踪，忽略错误
+                }
+            }
+            
             return stats;
         } catch (error) {
             console.error(`Error calculating folder stats for ${folder}:`, error);
@@ -398,6 +496,13 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem>
     public async getFileWordCount(filePath: string): Promise<number> {
         const stats = await this.getFileStats(filePath);
         return stats ? stats.total : 0;
+    }
+
+    /** 清理资源 */
+    public dispose(): void {
+        if (this.gitGuard) {
+            this.gitGuard.dispose();
+        }
     }
 }
 

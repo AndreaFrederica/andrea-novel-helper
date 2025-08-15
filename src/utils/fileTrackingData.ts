@@ -36,6 +36,14 @@ export interface FileMetadata {
         buckets?: { start: number; end: number; charsAdded: number }[];
         sessions?: { start: number; end: number }[];
     };
+    // 字数统计缓存（供 WordCountProvider 使用）
+    wordCountStats?: {
+        cjkChars: number;
+        asciiChars: number;
+        words: number;
+        nonWSChars: number;
+        total: number;
+    };
     // 最后更新时间
     updatedAt: number;
 }
@@ -625,6 +633,29 @@ export class FileTrackingDataManager {
             if (metadata.isTemporary !== false) { // 只有状态真的改变时才保存
                 metadata.isTemporary = false;
                 metadata.lastTrackedAt = Date.now();
+                this.markChanged();
+                this.scheduleSave();
+            }
+        }
+    }
+
+    /**
+     * 更新文件的字数统计缓存（供 WordCountProvider 使用）
+     */
+    public updateWordCountStats(filePath: string, stats: {
+        cjkChars: number;
+        asciiChars: number;
+        words: number;
+        nonWSChars: number;
+        total: number;
+    }): void {
+        const uuid = this.getFileUuid(filePath);
+        if (uuid) {
+            const metadata = this.database.files[uuid];
+            if (metadata) {
+                metadata.wordCountStats = { ...stats };
+                metadata.updatedAt = Date.now();
+                
                 this.markChanged();
                 this.scheduleSave();
             }

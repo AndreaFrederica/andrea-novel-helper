@@ -25,6 +25,7 @@
 		"theweek",
 		"wcignore",
 		"webp",
+		"WORKTREE",
 		"yarnrc"
 	],
 	"editor.suggestOnTriggerCharacters": false,
