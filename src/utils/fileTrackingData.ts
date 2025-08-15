@@ -16,6 +16,8 @@ export interface FileMetadata {
     size: number;
     mtime: number;
     hash: string;
+    /** 是否为目录 */
+    isDirectory?: boolean;
     /** 是否为临时文件（未保存到磁盘） */
     isTemporary?: boolean;
     /** 文件创建时间 */
@@ -62,14 +64,21 @@ export interface FileTrackingDatabase {
 export class FileTrackingDataManager {
     private dbPath: string;
     private database: FileTrackingDatabase;
+    private workspaceRoot: string;
     private pendingSaves = new Set<string>();
     private saveTimer: NodeJS.Timeout | null = null;
     private readonly SAVE_DEBOUNCE_MS = 1000; // 1秒防抖
     private readonly DB_VERSION = '1.0.0';
     private hasUnsavedChanges = false; // 追踪是否有未保存的变化
     private lastSavedHash: string = ''; // 上次保存时的数据哈希
+    // 目录哈希缓存/异步机制
+    private dirHashCache: Map<string, string> = new Map();
+    private dirtyDirs: Set<string> = new Set();
+    private dirHashTimer: NodeJS.Timeout | null = null;
+    private readonly DIR_HASH_DEBOUNCE_MS = 500;
 
     constructor(workspaceRoot: string) {
+        this.workspaceRoot = workspaceRoot;
         this.dbPath = path.join(workspaceRoot, 'novel-helper', 'file-tracking.json');
         this.database = this.loadDatabase();
         this.ensureDirectoryExists();
@@ -214,6 +223,86 @@ export class FileTrackingDataManager {
     }
 
     /**
+     * 递归聚合目录哈希：对所有深度子文件与子目录的哈希生成结构哈希。
+     * token 格式：F:<relativePath>:<hash> 或 D:<relativePath>:<hash>
+     */
+    private computeDirectoryHash(dirPath: string): string {
+        const tokens: string[] = [];
+        const dirPathNormalized = path.resolve(dirPath);
+        
+        // 完全基于已追踪的数据库条目计算目录哈希，不读取文件系统
+        for (const [filePath, uuid] of Object.entries(this.database.pathToUuid)) {
+            const filePathNormalized = path.resolve(filePath);
+            
+            // 检查文件是否在此目录下（直接子项或深层子项）
+            if (filePathNormalized.startsWith(dirPathNormalized + path.sep) || filePathNormalized === dirPathNormalized) {
+                const meta = this.database.files[uuid];
+                if (meta && meta.hash) {  // 只使用有哈希数据的条目
+                    // 计算相对路径
+                    const relativePath = path.relative(dirPathNormalized, filePathNormalized);
+                    const prefix = meta.isDirectory ? 'D' : 'F';
+                    // 直接使用数据库中已保存的哈希，不重新计算
+                    tokens.push(`${prefix}:${relativePath}:${meta.hash}`);
+                }
+            }
+        }
+        
+        if (tokens.length === 0) { 
+            return ''; 
+        }
+        
+        tokens.sort();
+        return crypto.createHash('sha256').update(tokens.join('|')).digest('hex');
+    }
+
+    /** 更新目录及其祖先目录的聚合哈希 */
+    private markAncestorsDirty(startPath: string): void {
+        let dir = path.dirname(startPath);
+        const root = this.workspaceRoot;
+        while (dir && dir.startsWith(root)) {
+            this.dirtyDirs.add(dir);
+            const parent = path.dirname(dir);
+            if (parent === dir) { break; }
+            dir = parent;
+        }
+        this.scheduleDirHashRecompute();
+    }
+
+    private scheduleDirHashRecompute(): void {
+    if (this.dirHashTimer) { return; }
+        this.dirHashTimer = setTimeout(()=>{
+            this.dirHashTimer = null;
+            void this.recomputeDirtyDirHashes();
+        }, this.DIR_HASH_DEBOUNCE_MS);
+    }
+
+    private async recomputeDirtyDirHashes(): Promise<void> {
+    if (this.dirtyDirs.size === 0) { return; }
+        // 深度优先：先按路径长度从长到短，确保子目录先算
+        const dirs = Array.from(this.dirtyDirs).sort((a,b)=>b.length - a.length);
+        this.dirtyDirs.clear();
+        let changed = false;
+        for (const dir of dirs) {
+            const uuid = this.getFileUuid(dir);
+            if (!uuid) { continue; }
+            const meta = this.database.files[uuid];
+            if (!meta || !meta.isDirectory) { continue; }
+            const newHash = this.computeDirectoryHash(dir);
+            if (meta.hash !== newHash) {
+                meta.hash = newHash;
+                meta.updatedAt = Date.now();
+                meta.lastTrackedAt = Date.now();
+                this.dirHashCache.set(dir, newHash);
+                changed = true;
+            }
+        }
+        if (changed) {
+            this.markChanged();
+            this.scheduleSave();
+        }
+    }
+
+    /**
      * 解析 Markdown 文件的最大标题
      */
     private parseMarkdownHeading(filePath: string): { maxHeading?: string; headingLevel?: number } {
@@ -276,16 +365,19 @@ export class FileTrackingDataManager {
 
         try {
             const stats = await fs.promises.stat(filePath);
-            const hash = await this.calculateFileHash(filePath);
+            const isDirectory = stats.isDirectory();
+            // 目录不做内容哈希，避免 EISDIR
+            const hash = isDirectory ? '' : await this.calculateFileHash(filePath);
             
             // 检查是否已存在
             let uuid = this.getFileUuid(filePath);
             const existingFile = uuid ? this.database.files[uuid] : undefined;
             
             // 如果文件已存在且哈希未变化，不需要任何更新
-            if (existingFile && existingFile.hash === hash && uuid) {
-                // 文件内容没有变化，不需要保存
-                return uuid;
+            if (!isDirectory) { // 仅对普通文件使用哈希短路
+                if (existingFile && existingFile.hash === hash && uuid) {
+                    return uuid; // 文件内容未变
+                }
             }
             
             // 创建新的 UUID（如果不存在）
@@ -314,6 +406,7 @@ export class FileTrackingDataManager {
                 size: stats.size,
                 mtime: stats.mtimeMs,
                 hash,
+                isDirectory,
                 maxHeading,
                 headingLevel,
                 writingStats: existingFile?.writingStats, // 保留现有的写作统计
@@ -328,6 +421,14 @@ export class FileTrackingDataManager {
             
             this.markChanged();
             this.scheduleSave();
+            // 如果是文件，更新其父目录聚合哈希
+            if (!isDirectory) {
+                this.markAncestorsDirty(filePath);
+            } else {
+                // 初始目录 hash 延迟计算
+                this.dirtyDirs.add(filePath);
+                this.markAncestorsDirty(filePath);
+            }
             return uuid;
             
         } catch (error) {
@@ -346,6 +447,8 @@ export class FileTrackingDataManager {
             delete this.database.pathToUuid[filePath];
             this.markChanged();
             this.scheduleSave();
+            // 更新父目录哈希
+            this.markAncestorsDirty(filePath);
         }
     }
 
@@ -368,7 +471,43 @@ export class FileTrackingDataManager {
                 
                 this.markChanged();
                 this.scheduleSave();
+                this.markAncestorsDirty(newPath);
             }
+        }
+    }
+
+    /**
+     * 目录重命名：批量迁移子文件路径映射及元数据
+     */
+    public renameDirectoryChildren(oldDir: string, newDir: string): void {
+        const oldPrefix = path.resolve(oldDir) + path.sep;
+        const newPrefix = path.resolve(newDir) + path.sep;
+        const entries = Object.entries(this.database.pathToUuid);
+        let changed = false;
+        for (const [p, uuid] of entries) {
+            const abs = path.resolve(p);
+            if (abs.startsWith(oldPrefix)) {
+                const rel = abs.substring(oldPrefix.length);
+                const newAbs = path.join(newPrefix, rel);
+                // 更新 pathToUuid 映射
+                delete this.database.pathToUuid[p];
+                this.database.pathToUuid[newAbs] = uuid;
+                // 更新元数据
+                const meta = this.database.files[uuid];
+                if (meta) {
+                    meta.filePath = newAbs;
+                    meta.fileName = path.basename(newAbs);
+                    meta.fileExtension = path.extname(newAbs).toLowerCase();
+                    meta.updatedAt = Date.now();
+                    meta.lastTrackedAt = Date.now();
+                }
+                changed = true;
+            }
+        }
+        if (changed) {
+            this.markChanged();
+            this.scheduleSave();
+            this.markAncestorsDirty(newDir);
         }
     }
 

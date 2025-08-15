@@ -3,11 +3,12 @@ import * as path from 'path';
 
 interface OrderDB {
   version: number;
-  indexes: { [filePath: string]: number }; // 文件或目录索引
-  folderManual: { [folderPath: string]: boolean }; // 是否启用手动排序
+  indexes: { [key: string]: number }; // 键：f:uuid | d:uuid(目录) | dir:absPath(旧) | p:absPath(旧)
+  folderManual: { [folderPath: string]: boolean }; // 是否启用手动排序（仍按路径）
+  dirUuidMap?: { [absPath: string]: string }; // 目录路径 -> 稳定 uuid
 }
 
-const DB_VERSION = 1;
+const DB_VERSION = 3; // v3: 引入目录稳定 uuid (d:uuid) 并迁移旧 dir:/p: 目录键
 
 interface OrderOptions {
   step: number; // 基础步长
@@ -43,14 +44,84 @@ export class WordCountOrderManager {
       if (fs.existsSync(this.dbPath)) {
         const raw = fs.readFileSync(this.dbPath, 'utf8');
         const data = JSON.parse(raw);
-        if (data.version === DB_VERSION) {
-          return data;
+        if (data.version === DB_VERSION) { return data as OrderDB; }
+        // 逐级迁移
+        let working: OrderDB = { version: data.version, indexes: data.indexes || {}, folderManual: data.folderManual || {}, dirUuidMap: data.dirUuidMap || {} };
+        if (working.version === 1) {
+          // v1->v2 （原逻辑：路径键 -> makeKey）
+          const migrated: OrderDB = { version: 2, indexes: {}, folderManual: working.folderManual, dirUuidMap: working.dirUuidMap };
+          for (const oldPath of Object.keys(working.indexes)) {
+            const key = this.makeKey(oldPath);
+            migrated.indexes[key] = working.indexes[oldPath];
+          }
+          working = migrated;
         }
+        if (working.version === 2) {
+          // v2->v3: 分配目录 uuid，将 dir:/p: 的目录键迁移为 d:uuid
+          const migrated: OrderDB = { version: 3, indexes: {}, folderManual: working.folderManual, dirUuidMap: working.dirUuidMap || {} };
+          for (const [k,v] of Object.entries(working.indexes)) {
+            if (k.startsWith('dir:')) {
+              const abs = k.substring(4);
+              const uuid = this.ensureDirUuid(abs, migrated);
+              migrated.indexes['d:'+uuid] = v;
+            } else if (k.startsWith('p:')) {
+              const abs = k.substring(2);
+              if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
+                const uuid = this.ensureDirUuid(abs, migrated);
+                migrated.indexes['d:'+uuid] = v;
+              } else {
+                migrated.indexes[k] = v; // 文件保持 p:
+              }
+            } else {
+              migrated.indexes[k] = v; // f: / 其它保持
+            }
+          }
+          working = migrated;
+        }
+        if (working.version !== DB_VERSION) {
+          working.version = DB_VERSION;
+        }
+        return working;
       }
     } catch (e) {
       console.warn('加载 wordcount-order.json 失败，使用默认', e);
     }
-    return { version: DB_VERSION, indexes: {}, folderManual: {} };
+    return { version: DB_VERSION, indexes: {}, folderManual: {}, dirUuidMap: {} };
+  }
+
+  /** 确保目录有 uuid (存储在给定 db 的 dirUuidMap 中)，返回 uuid */
+  private ensureDirUuid(absPath: string, db?: OrderDB): string {
+    const target = db || this.db;
+    if (!target.dirUuidMap) { target.dirUuidMap = {}; }
+    const resolved = path.resolve(absPath);
+    if (!target.dirUuidMap[resolved]) {
+      // 通过 require uuid 包（项目已有 @types/uuid）
+      const { v4: uuidv4 } = require('uuid');
+      target.dirUuidMap[resolved] = uuidv4();
+      console.log(`[WordCountOrder] Created UUID for directory: ${resolved} -> ${target.dirUuidMap[resolved]}`);
+      // 立即保存以确保持久化
+      if (target === this.db) {
+        console.log(`[WordCountOrder] Scheduling save after creating directory UUID`);
+        this.scheduleSave();
+      }
+    }
+    return target.dirUuidMap[resolved];
+  }
+
+  private makeKey(p: string): string {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+        const abs = path.resolve(p);
+        const uuid = this.ensureDirUuid(abs);
+        return 'd:' + uuid;
+      }
+    } catch { /* ignore */ }
+    try {
+      const { getFileUuid } = require('./globalFileTracking');
+      const uuid = getFileUuid(p);
+      if (uuid) { return 'f:' + uuid; }
+    } catch { /* ignore */ }
+    return 'p:' + path.resolve(p);
   }
 
   private scheduleSave() {
@@ -63,6 +134,7 @@ export class WordCountOrderManager {
   private saveNow() {
     try {
       this.ensureDir();
+      console.log(`[WordCountOrder] Saving database with ${Object.keys(this.db.dirUuidMap || {}).length} directory UUIDs`);
       fs.writeFileSync(this.dbPath, JSON.stringify(this.db, null, 2), 'utf8');
     } catch (e) {
       console.error('保存 wordcount-order.json 失败', e);
@@ -84,38 +156,23 @@ export class WordCountOrderManager {
     return now;
   }
 
-  public getIndex(p: string): number | undefined { return this.db.indexes[p]; }
+  public getIndex(p: string): number | undefined { return this.db.indexes[this.makeKey(p)]; }
 
   public setIndex(p: string, idx: number) {
     if (Number.isFinite(idx)) {
-      this.db.indexes[p] = idx;
+      const key = this.makeKey(p);
+      this.db.indexes[key] = idx;
       this.scheduleSave();
     }
   }
 
-  public clearIndex(p: string) { if (this.db.indexes[p] !== undefined) { delete this.db.indexes[p]; this.scheduleSave(); } }
+  public clearIndex(p: string) { const key = this.makeKey(p); if (this.db.indexes[key] !== undefined) { delete this.db.indexes[key]; this.scheduleSave(); } }
 
   /** 重命名路径时迁移索引与手动标记（若为文件夹且路径层级变化） */
   public renamePath(oldPath: string, newPath: string) {
-    if (this.db.indexes[oldPath] !== undefined) {
-      this.db.indexes[newPath] = this.db.indexes[oldPath];
-      delete this.db.indexes[oldPath];
-    }
-    if (this.db.folderManual[oldPath]) {
-      this.db.folderManual[newPath] = true;
-      delete this.db.folderManual[oldPath];
-    }
-    // 迁移所有子项索引（文件夹移动）
+    // 迁移 folderManual 标记
+    if (this.db.folderManual[oldPath]) { this.db.folderManual[newPath] = true; delete this.db.folderManual[oldPath]; }
     const prefix = oldPath + path.sep;
-    const newPrefix = newPath + path.sep;
-    for (const key of Object.keys(this.db.indexes)) {
-      if (key.startsWith(prefix)) {
-        const rel = key.substring(prefix.length);
-        const newChild = path.join(newPath, rel);
-        this.db.indexes[newChild] = this.db.indexes[key];
-        delete this.db.indexes[key];
-      }
-    }
     for (const key of Object.keys(this.db.folderManual)) {
       if (key.startsWith(prefix)) {
         const rel = key.substring(prefix.length);
@@ -124,28 +181,58 @@ export class WordCountOrderManager {
         delete this.db.folderManual[key];
       }
     }
+    // 更新 dirUuidMap 中的路径键
+    if (this.db.dirUuidMap) {
+      const oldRes = path.resolve(oldPath);
+      const newRes = path.resolve(newPath);
+      const updated: { [k:string]: string } = {};
+      for (const [p, u] of Object.entries(this.db.dirUuidMap)) {
+        if (p === oldRes || p.startsWith(oldRes + path.sep)) {
+          const rel = p.substring(oldRes.length);
+          updated[path.join(newRes, rel)] = u;
+          delete this.db.dirUuidMap[p];
+        }
+      }
+      Object.assign(this.db.dirUuidMap, updated);
+    }
+    // 索引迁移：d:uuid 无需改；旧残留 dir:/p: 路径键仍处理（理论上迁移后不应再出现）
+    const oldDirResolved = path.resolve(oldPath) + path.sep;
+    const newDirResolved = path.resolve(newPath) + path.sep;
+    const fix: { [k:string]: number } = {};
+    for (const [k,v] of Object.entries(this.db.indexes)) {
+      if (k.startsWith('dir:')) {
+        const abs = k.substring(4);
+        if (abs === oldDirResolved.slice(0,-1) || abs.startsWith(oldDirResolved)) {
+          const rel = abs.substring(oldDirResolved.length);
+          const newAbs = path.join(newDirResolved, rel);
+          const newKey = 'dir:' + newAbs;
+          delete this.db.indexes[k];
+          fix[newKey] = v;
+        }
+      } else if (k.startsWith('p:')) {
+        const abs = k.substring(2);
+        if (abs.startsWith(oldDirResolved)) {
+          const rel = abs.substring(oldDirResolved.length);
+          const newAbs = path.join(newDirResolved, rel);
+          const newKey = 'p:' + newAbs;
+          delete this.db.indexes[k];
+          fix[newKey] = v;
+        }
+      }
+    }
+    Object.assign(this.db.indexes, fix);
     this.scheduleSave();
   }
 
   /** 删除路径清理索引 */
   public removePath(targetPath: string) {
-    if (this.db.indexes[targetPath] !== undefined) {
-      delete this.db.indexes[targetPath];
-    }
-    if (this.db.folderManual[targetPath]) {
-      delete this.db.folderManual[targetPath];
-    }
-    // 清理子项
+    const key = this.makeKey(targetPath);
+  if (this.db.indexes[key] !== undefined) { delete this.db.indexes[key]; }
+  if (this.db.folderManual[targetPath]) { delete this.db.folderManual[targetPath]; }
     const prefix = targetPath + path.sep;
-    for (const key of Object.keys(this.db.indexes)) {
-      if (key.startsWith(prefix)) {
-        delete this.db.indexes[key];
-      }
-    }
-    for (const key of Object.keys(this.db.folderManual)) {
-      if (key.startsWith(prefix)) {
-        delete this.db.folderManual[key];
-      }
+    // 删除子文件夹 manual 标记
+    for (const fm of Object.keys(this.db.folderManual)) {
+      if (fm.startsWith(prefix)) { delete this.db.folderManual[fm]; }
     }
     this.scheduleSave();
   }
@@ -153,7 +240,7 @@ export class WordCountOrderManager {
   public nextIndex(folder: string, children: string[]): number {
     let max = 0;
     for (const c of children) {
-      const v = this.db.indexes[c];
+      const v = this.getIndex(c);
       if (typeof v === 'number' && v > max) {
         max = v;
       }
@@ -185,8 +272,8 @@ export class WordCountOrderManager {
   let i = this.options.step;
     for (const p of sorted) {
       if (this.getIndex(p) !== undefined) {
-        this.db.indexes[p] = i;
-    i += this.options.step;
+        this.setIndex(p, i);
+        i += this.options.step;
       }
     }
     this.scheduleSave();
@@ -235,14 +322,5 @@ export class WordCountOrderManager {
   }
 
   /** 按给定顺序整体重写索引（步长递增） */
-  public rewriteSequential(folder: string, orderedPaths: string[]) {
-    let i = this.options.step;
-    for (const p of orderedPaths) {
-      if (this.getIndex(p) !== undefined || true) { // 即便无索引也写入
-        this.db.indexes[p] = i;
-        i += this.options.step;
-      }
-    }
-    this.scheduleSave();
-  }
+  public rewriteSequential(folder: string, orderedPaths: string[]) { let i = this.options.step; for (const p of orderedPaths) { this.setIndex(p, i); i += this.options.step; } this.scheduleSave(); }
 }

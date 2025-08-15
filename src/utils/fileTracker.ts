@@ -80,6 +80,12 @@ export class FileTracker {
             return true; // 忽略数据库文件本身
         }
 
+        // 忽略 wordcount-order.json（手动排序索引文件）
+        const orderPath = path.join(this.config.workspaceRoot, 'novel-helper', 'wordcount-order.json');
+        if (path.resolve(filePath) === path.resolve(orderPath)) {
+            return true;
+        }
+
         // 忽略 .git 目录及其子内容
         const gitDir = path.join(this.config.workspaceRoot, '.git');
         const resolvedGitDir = path.resolve(gitDir);
@@ -178,19 +184,42 @@ export class FileTracker {
         // 将处理任务加入队列，避免阻塞 UI
         this.processingQueue = this.processingQueue.then(async () => {
             try {
-                // 更新数据库
+                // 目录与文件分开处理，避免对目录做文件哈希导致 EISDIR
                 let uuid: string | undefined;
-                
+                let statsInfo: { size: number; mtime: number } | null = null;
                 if (type === 'delete') {
                     this.dataManager.removeFile(filePath);
                 } else if (type === 'rename' && oldPath) {
-                    this.dataManager.renameFile(oldPath, filePath);
-                    uuid = this.dataManager.getFileUuid(filePath);
+                            this.dataManager.renameFile(oldPath, filePath);
+                            // 如果是目录重命名，批量迁移子项
+                            try {
+                                const stat = await fs.promises.stat(filePath);
+                                if (stat.isDirectory()) {
+                                    this.dataManager.renameDirectoryChildren(oldPath, filePath);
+                                }
+                            } catch {/* ignore */}
+                            uuid = this.dataManager.getFileUuid(filePath);
                 } else {
-                    uuid = await this.dataManager.addOrUpdateFile(filePath);
+                    try {
+                        const stat = await fs.promises.stat(filePath);
+                        if (stat.isDirectory()) {
+                            // 仅登记一次（若需要）
+                            uuid = this.dataManager.getFileUuid(filePath);
+                            if (!uuid) {
+                                // 为目录创建一个临时记录（无内容哈希）
+                                uuid = await this.dataManager.addOrUpdateFile(filePath);
+                            }
+                            statsInfo = { size: stat.size, mtime: stat.mtimeMs };
+                        } else {
+                            uuid = await this.dataManager.addOrUpdateFile(filePath);
+                            statsInfo = await this.getFileStats(filePath);
+                        }
+                    } catch (err) {
+                        console.error('stat error', err);
+                    }
                 }
 
-                const stats = await this.getFileStats(filePath);
+                const stats = statsInfo;
                 const event: FileChangeEvent = {
                     type,
                     filePath,

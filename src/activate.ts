@@ -432,20 +432,16 @@ export function activate(context: vscode.ExtensionContext) {
         });
     }
     const wordCountProvider = new WordCountProvider(context.workspaceState, orderManager || undefined);
-    const treeView = vscode.window.createTreeView('wordCountExplorer', {
-        treeDataProvider: wordCountProvider,
-        showCollapseAll: true
-    });
 
-    // 拖拽排序控制器
+    // 拖拽排序控制器（需在 createTreeView 选项中声明才能真正启用）
     const dndController: vscode.TreeDragAndDropController<any> = {
         dragMimeTypes: ['application/vnd.andrea.wordcount.item'],
         dropMimeTypes: ['application/vnd.andrea.wordcount.item'],
-        async handleDrag(source, data, token) {
-            const paths = source.filter(s=>s?.resourceUri?.fsPath).map(s=>s.resourceUri.fsPath);
+        async handleDrag(source, data) {
+            const paths = source.filter((s: any)=>s?.resourceUri?.fsPath).map((s:any)=>s.resourceUri.fsPath);
             data.set('application/vnd.andrea.wordcount.item', new vscode.DataTransferItem(JSON.stringify(paths)));
         },
-        async handleDrop(target, data, token) {
+        async handleDrop(target, data) {
             try {
                 const item = data.get('application/vnd.andrea.wordcount.item');
                 if (!item) return;
@@ -532,8 +528,142 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }
     };
-    (treeView as any).dragAndDropController = dndController;
-    context.subscriptions.push({ dispose: ()=>{ /* no op */ } });
+
+    const treeView = vscode.window.createTreeView('wordCountExplorer', {
+        treeDataProvider: wordCountProvider,
+        showCollapseAll: true,
+        dragAndDropController: dndController
+    });
+    context.subscriptions.push(treeView);
+
+    // —— 文件/目录 复制 剪切 粘贴 ——
+    type ClipEntry = { source: string; isDir: boolean };
+    let clipboard: { entries: ClipEntry[]; cut: boolean } | null = null;
+
+    function collectSelectedWordCountPaths(): string[] {
+        const sel = (treeView as any).selection as any[] || [];
+        const paths = sel.filter(s=>s?.resourceUri?.fsPath).map(s=>s.resourceUri.fsPath);
+        return paths.length ? paths : [];
+    }
+
+    context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.copy', (node: any) => {
+        const primary = node?.resourceUri?.fsPath;
+        const paths = new Set<string>(collectSelectedWordCountPaths());
+        if (primary) paths.add(primary);
+        const entries: ClipEntry[] = Array.from(paths).map(p=>({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
+        clipboard = { entries, cut: false };
+    try { const { setCutClipboard } = require('./utils/wordCountCutHelper'); setCutClipboard(null); } catch { /* ignore */ }
+        vscode.window.setStatusBarMessage(`已复制 ${entries.length} 项`, 2000);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.cut', (node: any) => {
+        const primary = node?.resourceUri?.fsPath;
+        const paths = new Set<string>(collectSelectedWordCountPaths());
+        if (primary) paths.add(primary);
+        const entries: ClipEntry[] = Array.from(paths).map(p=>({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
+        clipboard = { entries, cut: true };
+    try { const { setCutClipboard } = require('./utils/wordCountCutHelper'); setCutClipboard(entries.map(e=>e.source)); } catch { /* ignore */ }
+        vscode.window.setStatusBarMessage(`已剪切 ${entries.length} 项`, 2000);
+    // 触发 TreeView 刷新以显示剪切视觉标记
+    wordCountProvider.refresh();
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.paste', async (targetNode: any) => {
+        if (!clipboard || clipboard.entries.length === 0) {
+            vscode.window.showInformationMessage('剪贴板为空');
+            return;
+        }
+        let targetPath = targetNode?.resourceUri?.fsPath;
+        // 支持在空白区域粘贴：默认工作区根
+        if (!targetPath) {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!root) { vscode.window.showWarningMessage('没有工作区，无法粘贴'); return; }
+            targetPath = root;
+        }
+        if (!fs.existsSync(targetPath)) { vscode.window.showWarningMessage('目标不存在'); return; }
+        if (!fs.statSync(targetPath).isDirectory()) {
+            // 若是文件节点，则使用其父目录
+            targetPath = path.dirname(targetPath);
+        }
+        const om = (wordCountProvider as any).getOrderManager?.();
+        const isManual = om ? om.isManual(targetPath) : false;
+        const step = (om as any)?.options?.step || 10;
+        let seqBase = step;
+        if (om && isManual) {
+            // 获取现有 children 用于后续索引
+            const parentItem = wordCountProvider.getItemById?.(targetPath) || { resourceUri: vscode.Uri.file(targetPath) };
+            const children = await wordCountProvider.getChildren(parentItem as any) as any[];
+            const ordered = children.filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new'));
+            for (const c of ordered) {
+                const idxVal = om.getIndex(c.resourceUri.fsPath);
+                if (typeof idxVal === 'number' && idxVal >= seqBase) seqBase = idxVal + step;
+            }
+        }
+        const results: string[] = [];
+        for (const entry of clipboard.entries) {
+            const baseName = path.basename(entry.source);
+            let dest = path.join(targetPath, baseName);
+            if (dest === entry.source) {
+                // 粘贴到自身目录避免覆盖：添加副本后缀
+                const ext = path.extname(baseName);
+                const stem = ext ? baseName.slice(0, -ext.length) : baseName;
+                let i=1;
+                while (fs.existsSync(dest)) {
+                    const newName = `${stem}_copy${i}${ext}`;
+                    dest = path.join(targetPath, newName);
+                    i++;
+                }
+            } else if (fs.existsSync(dest)) {
+                // 目标存在：生成不重复名称
+                const ext = path.extname(baseName);
+                const stem = ext ? baseName.slice(0, -ext.length) : baseName;
+                let i=1; let variant = dest;
+                while (fs.existsSync(variant)) {
+                    variant = path.join(targetPath, `${stem}_copy${i}${ext}`);
+                    i++;
+                }
+                dest = variant;
+            }
+            try {
+                if (clipboard.cut) {
+                    fs.renameSync(entry.source, dest);
+                } else {
+                    if (entry.isDir) {
+                        copyDirectoryRecursive(entry.source, dest);
+                    } else {
+                        fs.copyFileSync(entry.source, dest);
+                    }
+                }
+                results.push(dest);
+                if (om && isManual) {
+                    om.setIndex(dest, seqBase);
+                    seqBase += step;
+                }
+            } catch (e) {
+                vscode.window.showErrorMessage(`粘贴失败: ${e}`);
+            }
+        }
+        if (clipboard.cut) {
+            clipboard = null; // 剪切后清空
+            try { const { setCutClipboard } = require('./utils/wordCountCutHelper'); setCutClipboard(null); } catch { /* ignore */ }
+        }
+        wordCountProvider.refresh();
+        vscode.window.setStatusBarMessage(`粘贴完成: ${results.length} 项`, 3000);
+    }));
+
+    function copyDirectoryRecursive(src: string, dest: string) {
+        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+        const entries = fs.readdirSync(src, { withFileTypes: true });
+        for (const e of entries) {
+            const s = path.join(src, e.name);
+            const d = path.join(dest, e.name);
+            if (e.isDirectory()) {
+                copyDirectoryRecursive(s, d);
+            } else if (e.isFile()) {
+                fs.copyFileSync(s, d);
+            }
+        }
+    }
 
     // 监听配置变化动态更新排序参数
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
@@ -861,6 +991,30 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             if (!om) return;
             const folder = node.resourceUri.fsPath as string;
             const enabled = om.toggleManual(folder);
+            // 启用时为缺少 index 的条目按当前排序生成索引
+            if (enabled) {
+                try {
+                    const children = await provider.getChildren(node) as any[];
+                    // 过滤真实文件/文件夹节点（排除新建按钮）
+                    const real = children.filter(c => c?.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.contextValue?.startsWith('wordCountNew'));
+                    let seq = om['options']?.step || 10; // 从 step 开始
+                    let needsSave = false;
+                    for (const item of real) {
+                        const p = item.resourceUri.fsPath;
+                        if (om.getIndex(p) === undefined) {
+                            om.setIndex(p, seq);
+                            seq += (om['options']?.step || 10);
+                            needsSave = true;
+                        }
+                    }
+                    // 批量操作后统一刷新，避免每次 setIndex 都刷新
+                    if (needsSave) {
+                        // 延迟刷新避免阻塞
+                        setTimeout(() => provider.refresh(), 200);
+                        return; // 跳过下面的立即刷新
+                    }
+                } catch (e) { /* ignore */ }
+            }
             vscode.window.showInformationMessage(`手动排序已${enabled ? '启用' : '关闭'}: ${path.basename(folder)}`);
             provider.refresh();
         }),

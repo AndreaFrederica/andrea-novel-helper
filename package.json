@@ -240,6 +240,19 @@
         "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
         "title": "按名称批量重建索引"
       }
+      ,
+      {
+        "command": "AndreaNovelHelper.wordCount.copy",
+        "title": "复制"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.cut",
+        "title": "剪切"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.paste",
+        "title": "粘贴"
+      }
     ],
     "menus": {
       "view/item/context": [
@@ -392,6 +405,22 @@
           "when": "view == wordCountExplorer && viewItem == wordCountFolder",
           "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
           "group": "4_order@5"
+        }
+        ,
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.copy",
+          "group": "5_clip@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.cut",
+          "group": "5_clip@2"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.paste",
+          "group": "5_clip@3"
         }
       ],
       "editor/title": [

@@ -44,6 +44,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private statsCache = new Map<string, { stats: TextStats; mtime: number }>();
     private isInitializing = false;
     private pendingRefresh = false;
+    private refreshThrottleTimer: NodeJS.Timeout | null = null;
     private ignoreParser: CombinedIgnoreParser | null = null;
 
     // Git Guard 用于缓存优化
@@ -126,15 +127,19 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     }
 
     private refreshDebounced() {
-        if (this.pendingRefresh) return;
-        this.pendingRefresh = true;
-        setTimeout(() => {
-            this.pendingRefresh = false;
+        if (this.refreshThrottleTimer) return;
+        this.refreshThrottleTimer = setTimeout(() => {
+            this.refreshThrottleTimer = null;
             this.refresh();
-        }, 500); // 500ms 防抖
+        }, 800); // 增加到 800ms 防抖避免频繁刷新
     }
 
     refresh() {
+        // 如果正在初始化大量文件，延迟刷新
+        if (this.isInitializing) {
+            this.refreshDebounced();
+            return;
+        }
         this._onDidChange.fire(undefined);
     }
 
@@ -301,25 +306,38 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const parentFolder = element ? element.resourceUri.fsPath : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '');
             if (parentFolder && this.orderManager.isManual(parentFolder)) {
                 const showInLabel = vscode.workspace.getConfiguration().get<boolean>('AndreaNovelHelper.wordCount.order.showIndexInLabel', true);
-                for (const it of wordCountItems) {
-                    const idx = this.orderManager.getIndex(it.resourceUri.fsPath);
-                    if (idx !== undefined) {
-                        const tag = this.orderManager.formatIndex(idx);
-                        if (tag) {
-                            if (showInLabel) {
-                                if (!it.label.startsWith('[')) {
-                                    (it as any).label = `[${tag}] ${it.label}`;
-                                }
-                            } else {
-                                // 放入 description 前缀
-                                if (typeof it.description === 'string') {
-                                    if (!it.description.startsWith('[')) {
-                                        it.description = `[${tag}] ${it.description}`;
-                                    }
-                                } else if (!it.description) {
-                                    it.description = `[${tag}]`;
-                                }
+                // 只有第一项显示索引，其余索引仅在 tooltip
+                // 在手动模式下为所有已排序项显示 [序号] 或 tooltip 索引
+                // 先根据当前显示顺序派生用户可见的序号（忽略没有 index 的项）
+                let visibleSeq = 1;
+                for (let i=0;i<wordCountItems.length;i++) {
+                    const it = wordCountItems[i];
+                    const idxVal = this.orderManager.getIndex(it.resourceUri.fsPath);
+                    if (idxVal === undefined) continue;
+                    const tag = this.orderManager.formatIndex(idxVal);
+                    if (!tag) continue;
+                    const orderDisplay = visibleSeq++; // 连续序号
+                    // tooltip: 显示 原始索引(tag) 与 序号(orderDisplay)
+                    const line = `排序序号: **${orderDisplay}** (索引值: ${tag})`;
+                    if (it.tooltip instanceof vscode.MarkdownString) {
+                        it.tooltip.appendMarkdown(`\n\n${line}`);
+                    } else {
+                        const tip = new vscode.MarkdownString(String(it.tooltip || ''));
+                        tip.appendMarkdown(`\n\n${line}`);
+                        tip.isTrusted = true;
+                        it.tooltip = tip;
+                    }
+                    if (showInLabel) {
+                        if (!(it.label as string).startsWith('[')) {
+                            (it as any).label = `[${orderDisplay}] ${it.label}`;
+                        }
+                    } else {
+                        if (typeof it.description === 'string') {
+                            if (!it.description.startsWith('[')) {
+                                it.description = `[${orderDisplay}] ${it.description}`;
                             }
+                        } else if (!it.description) {
+                            it.description = `[${orderDisplay}]`;
                         }
                     }
                 }
@@ -566,10 +584,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             if (fileTracker) {
                 const dataManager = fileTracker.getDataManager();
                 try {
+                    // 避免重复对目录做深度 stat 引起的 EISDIR；addOrUpdateFile 已能区分目录
                     await dataManager.addOrUpdateFile(folder);
                     dataManager.updateWordCountStats(folder, stats);
                 } catch (error) {
-                    // 文件夹可能无法直接追踪，忽略错误
+                    // 忽略目录追踪异常
                 }
             }
 
@@ -657,6 +676,30 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`\n\n非 ASCII 字符数: **${stats.asciiChars}**`);
             tip.appendMarkdown(`\n\n非空白字符数: **${stats.nonWSChars}**`);
             tip.appendMarkdown(`\n\n**总字数**: **${stats.total}**`);
+            // 附加 UUID（文件或目录）
+            try {
+                const { getFileUuid } = require('../../utils/globalFileTracking');
+                const fUuid = getFileUuid(resourceUri.fsPath);
+                if (fUuid) {
+                    tip.appendMarkdown(`\n\nUUID: \
+\`${fUuid}\``);
+                }
+            } catch { /* ignore */ }
+            // 剪切状态标记（从辅助模块获取剪切集合）
+            try {
+                const { getCutClipboard } = require('../../utils/wordCountCutHelper');
+                const cutSet: Set<string> | undefined = getCutClipboard?.();
+                if (cutSet && cutSet.has(resourceUri.fsPath)) {
+                    tip.appendMarkdown(`\n\n$(scissors) **已剪切 (待粘贴)**`);
+                    if (typeof this.description === 'string') {
+                        if (!this.description.startsWith('✂')) {
+                            this.description = `✂ ${this.description}`;
+                        }
+                    } else if (!this.description) {
+                        this.description = '✂';
+                    }
+                }
+            } catch { /* ignore */ }
             tip.isTrusted = true;
             this.tooltip = tip;
         }
