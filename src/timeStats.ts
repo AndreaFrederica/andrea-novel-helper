@@ -34,6 +34,7 @@ let currentDocUuid: string | undefined;
 let currentSessionStart = 0;
 let idleTimer: NodeJS.Timeout | undefined;
 let windowFocused = true;
+let isIdle = false; // 新增：追踪空闲状态，空闲时不创建新桶
 // 始终只保留一个
 let statusBarItem: vscode.StatusBarItem | undefined;
 
@@ -65,6 +66,7 @@ function getConfig() {
         idleThresholdMs: cfg.get<number>('idleThresholdMs', 30000),
         bucketSizeMs: cfg.get<number>('bucketSizeMs', 60000),
         imeDebounceMs: cfg.get<number>('imeDebounceMs', 350), // IME 去抖时间
+        exitIdleOn: cfg.get<string>('exitIdleOn', 'text-change'), // 退出空闲状态的条件
     };
 }
 
@@ -149,17 +151,29 @@ function persistFileStats(filePath: string, stats: FileStats) {
     });
 }
 
-// 桶聚合
+// 桶聚合 - 空闲时不创建新桶，只更新现有桶
 function bumpBucket(fsEntry: FileStats, timestamp: number, added: number, bucketSizeMs: number) {
+    if (added <= 0) {
+        return; // 没有新增内容，直接返回
+    }
+    
     const bucketStart = Math.floor(timestamp / bucketSizeMs) * bucketSizeMs;
     let bucket = fsEntry.buckets.find(b => b.start === bucketStart);
+    
     if (!bucket) {
+        // 如果用户处于空闲状态，不创建新桶来节省存储空间
+        if (isIdle) {
+            console.log('TimeStats: Skipping bucket creation due to idle state');
+            return;
+        }
+        
+        // 创建新桶
         bucket = { start: bucketStart, end: bucketStart + bucketSizeMs, charsAdded: 0 };
         fsEntry.buckets.push(bucket);
+        console.log('TimeStats: Created new bucket at', new Date(bucketStart).toLocaleTimeString());
     }
-    if (added > 0) {
-        bucket.charsAdded += added;
-    }
+    
+    bucket.charsAdded += added;
 }
 
 function calcAverageCPM(fsEntry: FileStats): number {
@@ -265,10 +279,36 @@ function resetIdleTimer(idleThresholdMs: number) {
     if (idleTimer) {
         clearTimeout(idleTimer);
     }
+    
+    // 重置空闲状态 - 用户有活动
+    isIdle = false;
+    
     idleTimer = setTimeout(() => {
+        console.log('TimeStats: User is now idle, stopping bucket creation');
+        isIdle = true; // 设置为空闲状态，停止创建新桶
         endSession();
         updateStatusBar();
     }, idleThresholdMs);
+}
+
+// 根据配置决定是否退出空闲状态
+function checkExitIdle(trigger: 'text-change' | 'window-focus' | 'editor-change') {
+    const { exitIdleOn } = getConfig();
+    
+    switch (exitIdleOn) {
+        case 'text-change':
+            // 只有文本变化时才退出空闲状态
+            return trigger === 'text-change';
+        case 'window-focus':
+            // 窗口获得焦点或文本变化时退出空闲状态
+            return trigger === 'window-focus' || trigger === 'text-change';
+        case 'editor-change':
+            // 编辑器切换、窗口获得焦点或文本变化时退出空闲状态
+            return trigger === 'editor-change' || trigger === 'window-focus' || trigger === 'text-change';
+        default:
+            // 默认只在文本变化时退出
+            return trigger === 'text-change';
+    }
 }
 
 // -------------------- IME 友好的去抖计数 --------------------
@@ -341,7 +381,9 @@ function setStatusBarTextAndTooltip() {
     const cpmPeak = calcPeakCPM(fsEntry, bucketSizeMs);
     const minutes = Math.floor(fsEntry.totalMillis / 60000);
 
-    statusBarItem.text = `${cpmNow}/${cpmAvg}/${cpmPeak} CPM · ${minutes} min · 码字 ${counts.total}`;
+    // 在空闲状态下显示不同的文本样式
+    const idleIndicator = isIdle ? ' 💤' : '🖋️';
+    statusBarItem.text = `${cpmNow}/${cpmAvg}/${cpmPeak} CPM · ${minutes} min · CJK ${counts.zhChars} 字 ROMA ${counts.enWords} 词  总计 ${counts.total} ${idleIndicator}`;
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = true;
     md.appendMarkdown([
@@ -351,7 +393,11 @@ function setStatusBarTextAndTooltip() {
         `**累计用时**：${minutes} 分钟`,
         `**中文字符**：${counts.zhChars}`,
         `**英文单词**：${counts.enWords}`,
-        `**码字总量**：${counts.total}`
+        `**码字总量**：${counts.total}`,
+        `**文件路径**：${currentDocPath}`,
+        `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
+        `**会话数**：${fsEntry.sessions.length}`,
+        `**状态**：${isIdle ? '离开' : '活跃'}`
     ].join('\n\n'));
     statusBarItem.tooltip = md;
     statusBarItem.show();
@@ -376,7 +422,22 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
 
     currentDocPath = doc.uri.fsPath;
     startSession();
-    resetIdleTimer(idleThresholdMs);
+    
+    // 根据配置决定是否退出空闲状态
+    if (checkExitIdle('text-change')) {
+        resetIdleTimer(idleThresholdMs);
+    } else {
+        // 不退出空闲状态，但仍然重置定时器
+        if (idleTimer) {
+            clearTimeout(idleTimer);
+        }
+        idleTimer = setTimeout(() => {
+            console.log('TimeStats: User is now idle, stopping bucket creation');
+            isIdle = true;
+            endSession();
+            updateStatusBar();
+        }, idleThresholdMs);
+    }
 
     // 关键：去抖，等待 IME 稳定后统一计算净增量
     getOrInitDocState(doc);
@@ -405,7 +466,23 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
         getOrInitDocState(editor.document);
 
         startSession();
-        resetIdleTimer(idleThresholdMs);
+        
+        // 根据配置决定是否退出空闲状态
+        if (checkExitIdle('editor-change')) {
+            resetIdleTimer(idleThresholdMs);
+        } else {
+            // 不退出空闲状态，但仍然启动定时器
+            if (idleTimer) {
+                clearTimeout(idleTimer);
+            }
+            idleTimer = setTimeout(() => {
+                console.log('TimeStats: User is now idle, stopping bucket creation');
+                isIdle = true;
+                endSession();
+                updateStatusBar();
+            }, idleThresholdMs);
+        }
+        
         updateStatusBar();
     } else {
         currentDocPath = undefined;
@@ -417,6 +494,8 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
 function handleWindowStateChange(state: vscode.WindowState) {
     windowFocused = state.focused;
     if (!windowFocused) {
+        console.log('TimeStats: Window lost focus, entering idle state');
+        isIdle = true; // 窗口失焦时进入空闲状态
         if (currentDocPath) {
             const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
             if (doc) {
@@ -426,10 +505,29 @@ function handleWindowStateChange(state: vscode.WindowState) {
         endSession();
         updateStatusBar();
     } else {
+        console.log('TimeStats: Window gained focus');
         const { idleThresholdMs } = getConfig();
         if (currentDocPath) {
             startSession();
-            resetIdleTimer(idleThresholdMs);
+            
+            // 根据配置决定是否退出空闲状态
+            if (checkExitIdle('window-focus')) {
+                console.log('TimeStats: Exiting idle state due to window focus');
+                resetIdleTimer(idleThresholdMs);
+            } else {
+                console.log('TimeStats: Window focused but staying idle until configured trigger');
+                // 不退出空闲状态，启动定时器但保持空闲
+                if (idleTimer) {
+                    clearTimeout(idleTimer);
+                }
+                idleTimer = setTimeout(() => {
+                    console.log('TimeStats: User is now idle, stopping bucket creation');
+                    isIdle = true;
+                    endSession();
+                    updateStatusBar();
+                }, idleThresholdMs);
+            }
+            
             updateStatusBar();
         }
     }

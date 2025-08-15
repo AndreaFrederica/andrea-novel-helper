@@ -387,6 +387,21 @@
           "default": false,
           "description": "%config.timeStats.respectWcignore.description%"
         },
+        "AndreaNovelHelper.timeStats.exitIdleOn": {
+          "type": "string",
+          "default": "text-change",
+          "enum": [
+            "text-change",
+            "window-focus",
+            "editor-change"
+          ],
+          "enumDescriptions": [
+            "%config.timeStats.exitIdleOn.textChange%",
+            "%config.timeStats.exitIdleOn.windowFocus%",
+            "%config.timeStats.exitIdleOn.editorChange%"
+          ],
+          "description": "%config.timeStats.exitIdleOn.description%"
+        },
         "AndreaNovelHelper.fileTracker.respectWcignore": {
           "type": "boolean",
           "default": false,
