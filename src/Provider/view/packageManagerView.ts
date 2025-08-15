@@ -107,7 +107,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
 
             // 扫描真实子项
             const children = fs.readdirSync(base).reduce<PackageNode[]>((nodes, name) => {
-                if (name === 'outline') {
+                if (name === 'outline' || name === '.anh-fsdb') {
                     return nodes;
                 }
                 const full = path.join(base, name);
@@ -153,6 +153,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             const stat = fs.statSync(full);
 
             if (stat.isDirectory()) {
+                if (name === '.anh-fsdb') { return nodes; }
                 // 根据保存的状态决定子目录展开状态
                 const isExpanded = this.expandedNodes.has(full);
                 nodes.push(
@@ -465,6 +466,10 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         
         // 排除 outline 目录
         if (relativePath.startsWith('outline' + path.sep) || relativePath === 'outline') {
+            return false;
+        }
+        // 排除内部数据库目录
+        if (relativePath === '.anh-fsdb' || relativePath.startsWith('.anh-fsdb' + path.sep)) {
             return false;
         }
         

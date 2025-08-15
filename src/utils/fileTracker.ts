@@ -97,6 +97,13 @@ export class FileTracker {
             return true;
         }
 
+        // 忽略新的分片内部数据库目录 .anh-fsdb
+        const shardDir = path.join(this.config.workspaceRoot, 'novel-helper', '.anh-fsdb');
+        const resolvedShard = path.resolve(shardDir);
+        if (resolvedFilePath === resolvedShard || resolvedFilePath.startsWith(resolvedShard + path.sep)) {
+            return true;
+        }
+
         // 检查忽略规则
         if (this.ignoreParser) {
             if (this.config.respectWcignore) {

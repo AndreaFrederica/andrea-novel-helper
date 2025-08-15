@@ -65,8 +65,11 @@ export interface FileTrackingDatabase {
  * 文件追踪数据管理器
  */
 export class FileTrackingDataManager {
-    private dbPath: string;
-    private database: FileTrackingDatabase;
+    private dbPath: string; // 旧单文件（仍用于迁移检测）
+    private database: FileTrackingDatabase; // 内存聚合（加载后）
+    private dbDir: string; // 新的分片目录 .anh-fsdb
+    private indexPath: string; // 索引文件 .anh-fsdb/index.json
+    private useSharded: boolean = true; // 始终启用分片
     private workspaceRoot: string;
     private pendingSaves = new Set<string>();
     private saveTimer: NodeJS.Timeout | null = null;
@@ -110,13 +113,21 @@ export class FileTrackingDataManager {
 
     constructor(workspaceRoot: string) {
         this.workspaceRoot = workspaceRoot;
-        this.dbPath = path.join(workspaceRoot, 'novel-helper', 'file-tracking.json');
-        this.database = this.loadDatabase();
+    this.dbPath = path.join(workspaceRoot, 'novel-helper', 'file-tracking.json');
+    this.dbDir = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb');
+    this.indexPath = path.join(this.dbDir, 'index.json');
+    this.ensureDirectoryExists();
+    this.ensureDbDir();
+    this.database = this.loadDatabase();
         this.ensureDirectoryExists();
         // 计算初始数据哈希
         this.lastSavedHash = this.calculateDatabaseHash();
         // 启动时清理遗留的 .git 目录内条目
         this.purgeGitEntries();
+    // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
+    this.migrateIfNeeded();
+    // 加载分片（若已存在）
+    this.loadShardedFiles();
     }
 
     /** 判断路径是否位于 .git 目录 */
@@ -174,9 +185,10 @@ export class FileTrackingDataManager {
     }
     private ensureDirectoryExists(): void {
         const dir = path.dirname(this.dbPath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
+        if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
+    }
+    private ensureDbDir(): void {
+        if (!fs.existsSync(this.dbDir)) { fs.mkdirSync(this.dbDir, { recursive: true }); }
     }
 
     /**
@@ -201,12 +213,14 @@ export class FileTrackingDataManager {
         }
 
         // 返回默认数据库
-        return {
-            version: this.DB_VERSION,
-            lastUpdated: Date.now(),
-            files: {},
-            pathToUuid: {}
-        };
+        // 若存在分片 index 优先用 index 重建空内存结构（随后 loadShardedFiles 会填充）
+        if (fs.existsSync(this.indexPath)) {
+            try {
+                const idx = JSON.parse(fs.readFileSync(this.indexPath,'utf8')) as {version:string; lastUpdated:number; files:string[]};
+                return { version: this.DB_VERSION, lastUpdated: idx.lastUpdated||Date.now(), files: {}, pathToUuid: {} };
+            } catch {}
+        }
+        return { version: this.DB_VERSION, lastUpdated: Date.now(), files: {}, pathToUuid: {} };
     }
 
     /**
@@ -249,6 +263,10 @@ export class FileTrackingDataManager {
         const t0 = Date.now();
         this.stats.saveCalls++;
         try {
+            // 分片模式：写入增量而不是写整个聚合（除非强制或目录未建立）
+            if (this.useSharded) {
+                this.saveSharded(force);
+            }
             // 如果不是强制保存，并且数据库文件当前被打开，则延迟保存以避免 VSCode 不断提示文件已在磁盘被修改
             if (!force && this.isDatabaseFileOpen()) {
                 this.openSkipCount++;
@@ -275,14 +293,22 @@ export class FileTrackingDataManager {
                 this.stats.saveSkipNoChange++;
                 return;
             }
+            // 仍写一个精简 index（不包含写作统计和 wordCountStats 细节）方便调试；避免 VS Code 打开超大文件
             this.database.lastUpdated = Date.now();
-            const content = JSON.stringify(this.database, null, 2);
+            const slim = {
+                version: this.database.version,
+                lastUpdated: this.database.lastUpdated,
+                totalFiles: Object.keys(this.database.files).length,
+                // 只写基础字段映射用于备份/恢复（可选）
+                files: Object.values(this.database.files).map(f=>({uuid:f.uuid,filePath:f.filePath,isDirectory:f.isDirectory,size:f.size,mtime:f.mtime,hash:f.hash,updatedAt:f.updatedAt}))
+            };
+            const content = JSON.stringify(slim, null, 2);
             fs.writeFileSync(this.dbPath, content, 'utf8');
             this.lastSavedHash = this.calculateDatabaseHash();
             this.hasUnsavedChanges = false;
             const dur = Date.now() - t0;
             this.stats.saveWrite++;
-            console.log(`[FileTracking] 保存 size=${content.length}B dur=${dur}ms files=${Object.keys(this.database.files).length} stats=${JSON.stringify({markChanged:this.stats.markChanged,scheduleSave:this.stats.scheduleSave,saveCalls:this.stats.saveCalls,saveSkip:this.stats.saveSkipNoChange,dirHashRuns:this.stats.dirHashRuns,dirHashChanged:this.stats.dirHashChanged,addOrUpdate:this.stats.addOrUpdateCalls,skipUnchanged:this.stats.skipUnchangedFile})}`);
+            console.log(`[FileTracking] 保存(Index) size=${content.length}B dur=${dur}ms files=${Object.keys(this.database.files).length}`);
         } catch (error) {
             console.error('Failed to save file tracking database:', error);
         }
@@ -756,6 +782,84 @@ export class FileTrackingDataManager {
             this.saveTimer = null;
         }
     this.saveDatabase(true); // 关闭时强制写入
+    }
+
+    // ===== 分片存储逻辑 =====
+    private migrateIfNeeded(): void {
+        if (!fs.existsSync(this.indexPath) && fs.existsSync(this.dbPath)) {
+            try {
+                const raw = fs.readFileSync(this.dbPath,'utf8');
+                const json = JSON.parse(raw);
+                if (json && json.files && json.pathToUuid) {
+                    console.log('[FileTracking] 开始迁移旧 JSON -> 分片');
+                    for (const uuid of Object.keys(json.files)) {
+                        const meta = json.files[uuid];
+                        this.writeShard(meta);
+                    }
+                    this.writeIndex();
+                    try {
+                        fs.unlinkSync(this.dbPath);
+                        console.log('[FileTracking] 迁移完成并删除旧文件 file-tracking.json');
+                    } catch (eDel) {
+                        console.warn('迁移删除旧文件失败', eDel);
+                    }
+                }
+            } catch (e) { console.warn('迁移失败或不需要:', e); }
+        }
+    }
+
+    private shardFilePath(uuid: string): string {
+        const prefix = uuid.slice(0,2);
+        const dir = path.join(this.dbDir, prefix);
+        if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
+        return path.join(dir, uuid + '.json');
+    }
+    private writeShard(meta: FileMetadata): void {
+        try {
+            const p = this.shardFilePath(meta.uuid);
+            const { writingStats, wordCountStats, ...base } = meta;
+            const payload = { ...base, writingStats, wordCountStats };
+            fs.writeFileSync(p, JSON.stringify(payload));
+        } catch (e) { console.warn('写入分片失败', e); }
+    }
+    private loadShardedFiles(): void {
+    if (!fs.existsSync(this.dbDir)) { return; }
+        try {
+            const entries = fs.readdirSync(this.dbDir);
+            for (const sub of entries) {
+                const subPath = path.join(this.dbDir, sub);
+                try {
+                    if (fs.statSync(subPath).isDirectory()) {
+                        const files = fs.readdirSync(subPath);
+                        for (const f of files) {
+                            if (!f.endsWith('.json')) { continue; }
+                            const full = path.join(subPath, f);
+                            try {
+                                const meta = JSON.parse(fs.readFileSync(full,'utf8')) as FileMetadata;
+                                if (meta && meta.uuid) {
+                                    this.database.files[meta.uuid] = meta;
+                                    this.database.pathToUuid[meta.filePath] = meta.uuid;
+                                }
+                            } catch { /* ignore */ }
+                        }
+                    }
+                } catch {/* ignore */}
+            }
+        } catch (e) { console.warn('加载分片失败', e); }
+    }
+    private writeIndex(): void {
+        try {
+            const idx = { version: this.DB_VERSION, lastUpdated: Date.now(), files: Object.keys(this.database.files) };
+            fs.writeFileSync(this.indexPath, JSON.stringify(idx));
+        } catch (e) { console.warn('写入 index 失败', e); }
+    }
+    private saveSharded(force:boolean): void {
+        // 简单策略：当有未保存变化时，全量遍历内存写需要更新的分片（此处先不做脏标记优化）
+    if (!this.hasUnsavedChanges && !force) { return; }
+        for (const meta of Object.values(this.database.files)) {
+            this.writeShard(meta);
+        }
+        this.writeIndex();
     }
 
     /**

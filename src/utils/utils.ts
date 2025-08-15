@@ -283,6 +283,10 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
 			if (entry.name === 'outline') {
 				continue;
 			}
+			// 跳过内部文件追踪数据库目录（拆分后的多 JSON 存储）
+			if (entry.name === '.anh-fsdb') { // 名称稍后在 fileTrackingDataManager 中保持一致
+				continue;
+			}
 			// 递归扫描子目录
 			scanPackageDirectory(entryPath, entryRelativePath);
 		} else if (entry.isFile()) {
