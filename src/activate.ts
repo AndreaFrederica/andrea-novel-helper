@@ -1106,33 +1106,36 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             const om = (provider as any).getOrderManager?.();
             if (!om) return;
             const folder = node.resourceUri.fsPath as string;
-            const enabled = om.toggleManual(folder);
-            // 启用时为缺少 index 的条目按当前排序生成索引
-            if (enabled) {
+            const wasManual = om.isManual(folder);
+            if (!wasManual) {
+                // 准备启用：先获取当前“自动模式”下的可见顺序快照
+                let snapshot: string[] = [];
                 try {
                     const children = await provider.getChildren(node) as any[];
-                    // 过滤真实文件/文件夹节点（排除新建按钮）
-                    const real = children.filter(c => c?.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.contextValue?.startsWith('wordCountNew'));
-                    let seq = om['options']?.step || 10; // 从 step 开始
-                    let needsSave = false;
-                    for (const item of real) {
-                        const p = item.resourceUri.fsPath;
-                        if (om.getIndex(p) === undefined) {
-                            om.setIndex(p, seq);
-                            seq += (om['options']?.step || 10);
-                            needsSave = true;
-                        }
+                    snapshot = children
+                        .filter(c => c?.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.contextValue?.startsWith('wordCountNew'))
+                        .map(c => c.resourceUri.fsPath);
+                } catch { /* ignore */ }
+                const enabled = om.toggleManual(folder); // 现在切换到手动
+                if (enabled) {
+                    // 按自动排序时看到的顺序重新写全量索引（覆盖旧值，保证一致）
+                    const step = om['options']?.step || 10;
+                    let seq = step;
+                    for (const p of snapshot) {
+                        om.setIndex(p, seq);
+                        seq += step;
                     }
-                    // 批量操作后统一刷新，避免每次 setIndex 都刷新
-                    if (needsSave) {
-                        // 延迟刷新避免阻塞
-                        setTimeout(() => provider.refresh(), 200);
-                        return; // 跳过下面的立即刷新
-                    }
-                } catch (e) { /* ignore */ }
+                    // 延迟刷新以批量呈现
+                    setTimeout(()=>provider.refresh(), 150);
+                    vscode.window.showInformationMessage(`手动排序已启用并按当前自动顺序生成索引: ${path.basename(folder)}`);
+                    return;
+                }
+            } else {
+                // 已是手动 -> 切换回自动
+                const enabled = om.toggleManual(folder); // 关闭
+                vscode.window.showInformationMessage(`手动排序已${enabled ? '启用' : '关闭'}: ${path.basename(folder)}`);
+                provider.refresh();
             }
-            vscode.window.showInformationMessage(`手动排序已${enabled ? '启用' : '关闭'}: ${path.basename(folder)}`);
-            provider.refresh();
         }),
         // 根据文件名生成索引（提取数字）
         vscode.commands.registerCommand('AndreaNovelHelper.wordCount.generateIndexFromName', async (node: any) => {
