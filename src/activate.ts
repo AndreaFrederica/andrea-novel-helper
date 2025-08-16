@@ -820,6 +820,16 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('AndreaNovelHelper.refreshWordCount', () => {
             wordCountProvider.refresh();
         }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.forceRecountAll', () => {
+            wordCountProvider.forceRecountAll();
+            vscode.window.showInformationMessage('已强制重算所有字数缓存');
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.forceRecountHere', (node: any) => {
+            const p = node?.resourceUri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+            if (!p) { vscode.window.showWarningMessage('未找到目标路径'); return; }
+            wordCountProvider.forceRecountPath(p);
+            vscode.window.showInformationMessage('已强制重算: ' + p);
+        }),
         vscode.window.onDidChangeActiveTextEditor(async (editor) => {
             if (!editor || !treeView.visible) return;
             const stub = { id: editor.document.uri.fsPath, resourceUri: editor.document.uri } as any;
@@ -827,6 +837,10 @@ export async function activate(context: vscode.ExtensionContext) {
                 await treeView.reveal(stub, { expand: true, select: true, focus: false });
             } catch {
                 // 忽略
+            }
+            // 有 Git 仓库情况下，对刚切换的文件做一次缓存校验（异步）
+            if (editor?.document?.uri?.scheme === 'file') {
+                wordCountProvider.verifyFileCache(editor.document.uri.fsPath).catch(()=>{});
             }
         })
     );
@@ -895,6 +909,25 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             return;
         }
         fs.writeFileSync(full, '');
+        // 确保文件被文件追踪系统立刻追踪以生成稳定 UUID（避免使用 p: 路径键）
+        try {
+            const trackerMod = require('./utils/fileTracker');
+            const tracker = trackerMod.getFileTracker?.();
+            if (tracker?.handleFileCreated) {
+                // handleFileCreated 会内部调用 addOrUpdateFile
+                await tracker.handleFileCreated(full);
+            } else if (tracker?.addOrUpdateFile) {
+                await tracker.addOrUpdateFile(full);
+            }
+        } catch (e) { /* 静默，失败时后续仍会有迁移兜底 */ }
+        // 兜底：稍后再尝试一次单文件键迁移（若当下仍是 p:）
+        try {
+            const om2 = (provider as any).getOrderManager?.();
+            if (om2?.upgradeFileKey) {
+                setTimeout(()=>{ try { om2.upgradeFileKey(full); } catch {} }, 500);
+                setTimeout(()=>{ try { om2.migrateAllFileKeys?.(); } catch {} }, 1500);
+            }
+        } catch { /* ignore */ }
         // 分配索引
         const om = (provider as any).getOrderManager?.();
         if (om) {

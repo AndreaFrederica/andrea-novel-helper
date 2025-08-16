@@ -100,4 +100,7 @@
     "config.wordCount.displayFormat.k": ">=1000 顯示 12.345k (三位小數)",
     "config.wordCount.displayFormat.qian": ">=1000 顯示 12.345千 (三位小數)"
 
+    ,
+    "config.wordCount.debug.description": "WordCount: 啟用詳細除錯日誌 (輸出至主控台)。僅用於診斷問題，可能略微影響效能。"
+
 }

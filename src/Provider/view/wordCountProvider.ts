@@ -14,6 +14,32 @@ function isSpecialVisibleFile(name: string): boolean {
     return name === '.gitignore' || name === '.wcignore';
 }
 
+// 内置始终忽略的目录 / 文件（无需用户在 .gitignore 或 .wcignore 中显式声明）
+// 目的：避免遍历版本库 / 依赖包 等大量无关内容造成性能浪费与大量 0 统计噪声
+const ALWAYS_IGNORE_DIR_NAMES = new Set([
+    '.git', '.svn', '.hg', '.DS_Store', 'node_modules', '.idea', '.vscode-test'
+]);
+
+function alwaysIgnore(fullPath: string, direntName: string, isDir: boolean): boolean {
+    if (ALWAYS_IGNORE_DIR_NAMES.has(direntName)) return true;
+    // 额外保护：如果路径中包含 node_modules/.git 也跳过（防止多工作区嵌套）
+    if (fullPath.includes(`${path.sep}node_modules${path.sep}`)) return true;
+    if (fullPath.includes(`${path.sep}.git${path.sep}`)) return true;
+    return false;
+}
+
+// —— 调试工具 ——
+function wcDebugEnabled(): boolean {
+    try {
+        return vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.debug', false) ?? false;
+    } catch { return false; }
+}
+function wcDebug(...args: any[]) {
+    if (wcDebugEnabled()) {
+        try { console.warn('[WordCount][debug]', ...args); } catch { /* ignore */ }
+    }
+}
+
 // 新建文章/文件夹的特殊节点
 class NewItemNode extends vscode.TreeItem {
     constructor(public readonly baseDir: string, public readonly nodeType: 'newFile' | 'newFolder') {
@@ -42,6 +68,17 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
     // 缓存机制
     private statsCache = new Map<string, { stats: TextStats; mtime: number }>();
+    // 目录临时聚合缓存（仅内存，含时间戳；文件/目录变化、强制重算或 TTL 过期时失效）
+    private dirAggCache = new Map<string, { stats: TextStats; ts: number }>();
+    // 格式化缓存年龄
+    private formatCacheAge(ms: number): string {
+        if (ms < 1000) return '<1s';
+        if (ms < 60_000) return (ms/1000).toFixed(ms < 5000 ? 1 : 0) + 's';
+        const m = Math.floor(ms/60000); const s = Math.floor((ms%60000)/1000);
+        return `${m}m${s > 0 ? s+'s' : ''}`;
+    }
+    // 目录聚合进行中的 Promise，用于并发去重
+    private inFlightDirAgg = new Map<string, Promise<TextStats>>();
     private isInitializing = false;
     private pendingRefresh = false;
     private refreshThrottleTimer: NodeJS.Timeout | null = null;
@@ -50,10 +87,15 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     // Git Guard 用于缓存优化
     private gitGuard: GitGuard;
     private orderManager: WordCountOrderManager | null = null;
+    // 强制重算列表：包含后一次访问时无条件重新计算并跳过持久化缓存
+    private forcedPaths = new Set<string>();
 
     // 状态持久化
     private expandedNodes = new Set<string>();
     private memento: vscode.Memento;
+    private hasGitRepo = false;            // 是否存在 Git 仓库 (.git)
+    private cacheTrusted = false;          // 仅在有 Git 时才认为缓存可信
+    private verifying = new Set<string>(); // 正在校验的文件，避免并发重复
 
     constructor(memento: vscode.Memento, orderManager?: WordCountOrderManager) {
         this.memento = memento;
@@ -79,8 +121,33 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 return;
             }
 
-            // 只刷新保存的文件相关的统计
-            this.invalidateCache(doc.uri.fsPath);
+            const fsPath = doc.uri.fsPath;
+            this.invalidateCache(fsPath);
+            // 尝试从 timeStats 运行时状态复用实时字数（避免依赖全局追踪缓存）
+            let reused = false;
+            try {
+                const timeStats = require('../../timeStats');
+                // 使用 timeStats 全量 analyzeText 结果（computeZhEnCount 已包装）
+                const active = vscode.window.visibleTextEditors.find(ed=>ed.document.uri.fsPath===fsPath);
+                if (active) {
+                    const text = active.document.getText();
+                    const compute = timeStats.computeZhEnCount;
+                    const cnt = compute ? compute(text) : null;
+                    const full: TextStats | null = cnt?.full || null;
+                    if (full) {
+                        this.statsCache.set(fsPath, { stats: full, mtime: fs.statSync(fsPath).mtimeMs });
+                        reused = true;
+                    } else {
+                        // 兜底：强制重算（避免不一致）
+                        console.warn('无法复用实时字数统计，强制重算:', fsPath);
+                        this.forcedPaths.add(path.resolve(fsPath));
+                    }
+                }
+            } catch { /* ignore */ }
+            if (!reused) {
+                // 更新统计数据失败
+                console.error('更新统计数据失败:', fsPath);
+            }
             this.refreshDebounced();
         });
         vscode.workspace.onDidChangeWorkspaceFolders(() => {
@@ -89,8 +156,82 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             this.refresh();
         });
 
+        // 删除事件：失效相关目录聚合缓存与文件缓存
+        vscode.workspace.onDidDeleteFiles(evt => {
+            let changed = false;
+            for (const f of evt.files) {
+                const p = f.fsPath;
+                if (this.statsCache.delete(p)) changed = true;
+                // 删除子文件缓存（目录不缓存文件以外聚合，但存在文件缓存需要移除）
+                for (const key of Array.from(this.statsCache.keys())) {
+                    if (key.startsWith(p + path.sep)) { this.statsCache.delete(key); changed = true; }
+                }
+                // 失效向上目录聚合
+                this.invalidateDirAggUpwards(p);
+                // 删除自身或子目录聚合缓存
+                for (const key of Array.from(this.dirAggCache.keys())) {
+                    if (key === p || key.startsWith(p + path.sep)) { this.dirAggCache.delete(key); changed = true; }
+                }
+            }
+            if (changed) this.refreshDebounced();
+        });
+
+        // 重命名事件：迁移文件缓存并失效涉及目录聚合
+        vscode.workspace.onDidRenameFiles(evt => {
+            let changed = false;
+            for (const { oldUri, newUri } of evt.files) {
+                const oldPath = oldUri.fsPath;
+                const newPath = newUri.fsPath;
+                // 迁移文件缓存
+                const direct = this.statsCache.get(oldPath);
+                if (direct) { this.statsCache.set(newPath, direct); this.statsCache.delete(oldPath); changed = true; }
+                for (const key of Array.from(this.statsCache.keys())) {
+                    if (key.startsWith(oldPath + path.sep)) {
+                        const suffix = key.slice(oldPath.length);
+                        const newKey = newPath + suffix;
+                        const val = this.statsCache.get(key)!;
+                        this.statsCache.set(newKey, val);
+                        this.statsCache.delete(key);
+                        changed = true;
+                    }
+                }
+                // 失效旧/新路径相关目录聚合
+                this.invalidateDirAggUpwards(oldPath);
+                this.invalidateDirAggUpwards(newPath);
+                for (const key of Array.from(this.dirAggCache.keys())) {
+                    if (key === oldPath || key.startsWith(oldPath + path.sep)) { this.dirAggCache.delete(key); changed = true; }
+                }
+            }
+            if (changed) this.refreshDebounced();
+        });
+
         // 初始化忽略解析器
         this.initIgnoreParser();
+
+        // 检测 Git 仓库并处理缓存可信度
+        this.detectGitRepoAndMaybeRescan();
+
+        // 延迟执行一次文件排序键迁移（确保 globalFileTracking 有时间生成 UUID）
+        setTimeout(()=>{
+            try { this.orderManager?.migrateAllFileKeys?.(); } catch { /* ignore */ }
+        }, 1500);
+    }
+
+    private detectGitRepoAndMaybeRescan() {
+        try {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!root) return;
+            this.hasGitRepo = fs.existsSync(path.join(root, '.git'));
+            this.cacheTrusted = this.hasGitRepo; // 只有存在 git 仓库才信任缓存
+            if (!this.hasGitRepo) {
+                // 无 git：立刻强制重扫（即使当前缓存可能为空，以确保逻辑一致）
+                setTimeout(() => {
+                    wcDebug('noGit:forceFullRescan');
+                    this.forceRecountAll();
+                    vscode.window.showInformationMessage('未检测到 Git 仓库，已强制刷新字数缓存。建议在根目录执行 git init 获得更精准的增量统计。');
+                }, 300);
+            }
+        } catch { /* ignore */ }
     }
 
     private async initializeGitGuard() {
@@ -167,17 +308,130 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private clearCache() {
         this.statsCache.clear();
         this.itemsById.clear();
+    this.dirAggCache.clear();
     }
 
     private invalidateCache(filePath: string) {
-        // 删除文件缓存
+        // 仅删除该文件自身缓存（目录不缓存）
         this.statsCache.delete(filePath);
-        // 删除所有父目录缓存（因为文件夹统计依赖子文件）
-        let dir = path.dirname(filePath);
-        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        while (dir && dir !== root && dir !== path.dirname(dir)) {
-            this.statsCache.delete(dir);
-            dir = path.dirname(dir);
+    }
+
+    /**
+     * 强制重算：清空全部缓存+GitGuard哈希并刷新。
+     */
+    public forceRecountAll() {
+        wcDebug('forceRecount:all');
+        this.statsCache.clear();
+    this.dirAggCache.clear();
+        try { (this.gitGuard as any)?.reset?.(); } catch { /* ignore */ }
+    // 仅标记根目录，递归统计时向下传播强制标志，避免重复计算所有叶子
+    const roots = vscode.workspace.workspaceFolders?.map(f=>f.uri.fsPath) || [];
+    for (const r of roots) this.forcedPaths.add(path.resolve(r));
+        this.refresh();
+    }
+
+    /**
+     * 强制重算指定文件（或目录下所有文件）。
+     */
+    public forceRecountPath(targetPath: string) {
+        if (!targetPath) return;
+        wcDebug('forceRecount:path', targetPath);
+        const stat = (()=>{ try { return fs.statSync(targetPath); } catch { return null; } })();
+        if (!stat) return;
+        const affected: string[] = [];
+        if (stat.isDirectory()) {
+            const walk = (dir: string) => {
+                try {
+                    for (const d of fs.readdirSync(dir,{withFileTypes:true})) {
+                        const full = path.join(dir,d.name);
+                        if (d.isDirectory()) walk(full); else affected.push(full); // 仍收集文件用于失效，其统计稍后按需重新计算
+                    }
+                } catch { /* ignore */ }
+            };
+            walk(targetPath);
+            // 仅标记该目录本身；文件通过父目录传播强制重算
+            this.forcedPaths.add(path.resolve(targetPath));
+        } else {
+            affected.push(targetPath);
+        }
+        for (const f of affected) {
+            this.statsCache.delete(f);
+            try { (this.gitGuard as any)?.reset?.(f); } catch { /* ignore */ }
+        }
+        // 失效被操作路径及上层目录聚合缓存
+        this.invalidateDirAggUpwards(targetPath);
+        if (stat.isDirectory()) {
+            for (const key of Array.from(this.dirAggCache.keys())) {
+                if (key === targetPath || key.startsWith(targetPath + path.sep)) this.dirAggCache.delete(key);
+            }
+        }
+        // 目录层级缓存失效
+        for (const f of affected) {
+            this.invalidateCache(f);
+            // 单文件强制时才直接标记文件
+            if (!stat.isDirectory()) this.forcedPaths.add(path.resolve(f));
+        }
+        this.refresh();
+    }
+
+    /**
+     * 在有 Git 仓库的情况下，对刚激活的文件进行缓存校验：
+     *  - 读取缓存（内存或持久化）
+     *  - 新鲜计算一次
+     *  - 若 total 不一致，则认为该文件所在目录缓存不可信 -> 失效该文件与其父层目录缓存
+     *  - 若一致，不写入持久化（避免无意义写 I/O）
+     */
+    public async verifyFileCache(filePath: string) {
+        if (!this.cacheTrusted) return; // 没有 Git 仓库不做校验，直接依赖强制重算策略
+        if (this.verifying.has(filePath)) return;
+        this.verifying.add(filePath);
+        try {
+            const stat = await fs.promises.stat(filePath).catch(()=>null);
+            if (!stat || !stat.isFile()) return;
+            const mtime = stat.mtimeMs;
+
+            // 取基线（内存缓存 或 持久化缓存）
+            let baseline: TextStats | undefined;
+            const mem = this.statsCache.get(filePath);
+            if (mem && mem.mtime === mtime) baseline = mem.stats;
+            if (!baseline) {
+                const ft = getFileTracker();
+                if (ft) {
+                    const dm = ft.getDataManager();
+                    const meta = dm.getFileByPath(filePath);
+                    if (meta?.wordCountStats && meta.mtime === mtime) baseline = meta.wordCountStats;
+                }
+            }
+            if (!baseline) return; // 没有可比对的缓存，无需校验
+
+            // 新鲜计算（不触发持久化写入）
+            const fresh = await countAndAnalyze(filePath);
+            if (fresh.total !== baseline.total) {
+                wcDebug('verification:mismatch', filePath, 'cached', baseline.total, 'fresh', fresh.total);
+                // 更新内存缓存（使 UI 立即正确）
+                this.statsCache.set(filePath, { stats: fresh, mtime });
+                // 失效父目录缓存促使重算聚合
+                this.invalidateCache(filePath);
+                // 可选：立即刷新视图
+                this.refresh();
+                // 更新持久化（确保后续启动正确）
+                const ft = getFileTracker();
+                if (ft) {
+                    try {
+                        const dm = ft.getDataManager();
+                        await dm.addOrUpdateFile(filePath);
+                        dm.updateWordCountStats(filePath, fresh);
+                        wcDebug('verification:persistent-fix', filePath);
+                    } catch { /* ignore */ }
+                }
+            } else {
+                wcDebug('verification:match', filePath, baseline.total);
+                // 若内存没有但持久化有，可填充内存；不写持久化
+                if (!mem) this.statsCache.set(filePath, { stats: baseline, mtime });
+            }
+        } catch { /* ignore */ }
+        finally {
+            this.verifying.delete(filePath);
         }
     }
 
@@ -196,11 +450,14 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!root) return [];
 
+        wcDebug('getChildren:enter', { root, element: element?.resourceUri.fsPath });
+
         const exts = getSupportedExtensions();
 
         let dirents: fs.Dirent[] = [];
         try {
             dirents = await fs.promises.readdir(root, { withFileTypes: true });
+            wcDebug('getChildren:readDir', root, 'entries', dirents.length);
         } catch (e) {
             console.error('WordCountProvider: failed to read dir', root, e);
             return [];
@@ -209,29 +466,54 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         const items: (WordCountItem | NewItemNode)[] = [];
         let needsAsync = false;
 
-        for (const d of dirents) {
+    for (const d of dirents) {
             const full = path.join(root, d.name);
             const uri = vscode.Uri.file(full);
 
             // 忽略规则
-            if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) continue;
+            if (alwaysIgnore(full, d.name, d.isDirectory())) { wcDebug('skip:alwaysIgnore', full); continue; }
+            if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) {
+                wcDebug('skip:ignored', full);
+                continue;
+            }
 
             if (d.isDirectory()) {
                 const isExpanded = this.expandedNodes.has(full);
-                const cached = this.statsCache.get(full);
-                if (cached) {
+                const forced = this.forcedPaths.has(path.resolve(full));
+                const cacheEntry = this.dirAggCache.get(full);
+                const cacheValid = cacheEntry && !forced; // 去除 TTL 约束，仅强制/失效时重算
+                if (cacheValid) {
                     const item = new WordCountItem(
                         uri,
                         d.name,
-                        cached.stats,
+                        cacheEntry!.stats,
                         isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
                         false
                     );
                     item.id = full;
                     this.itemsById.set(item.id, item);
+                    try {
+                        const ageMs = Date.now() - (cacheEntry!.ts);
+                        if (item.tooltip instanceof vscode.MarkdownString) {
+                            item.tooltip.appendMarkdown(`\n\n缓存年龄: **${this.formatCacheAge(ageMs)}**`);
+                        }
+                    } catch { /* ignore */ }
                     items.push(item);
+                } else if (cacheEntry && !cacheValid) {
+                    // 强制：改回占位符显示“计算中”
+                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+                    const item = new WordCountItem(
+                        uri,
+                        d.name,
+                        zero,
+                        isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+                        true
+                    );
+                    item.id = full;
+                    this.itemsById.set(item.id, item);
+                    items.push(item);
+                    needsAsync = true;
                 } else {
-                    // 占位符，稍后异步计算
                     const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
                     const item = new WordCountItem(
                         uri,
@@ -252,11 +534,13 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
                 const cached = this.statsCache.get(full);
                 if (cached) {
+                    wcDebug('use-cache:file', full, 'total', cached.stats.total);
                     const item = new WordCountItem(uri, d.name, cached.stats, vscode.TreeItemCollapsibleState.None, false);
                     item.id = full;
                     this.itemsById.set(item.id, item);
                     items.push(item);
                 } else {
+                    wcDebug('placeholder:file', full);
                     const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
                     const item = new WordCountItem(uri, d.name, zero, vscode.TreeItemCollapsibleState.None, true);
                     item.id = full;
@@ -355,10 +639,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
         sortedItems.push(newFileNode, newFolderNode);
 
-        // 异步批量计算，分批刷新
+        // 异步批量计算（目录动态聚合 + 文件统计）
         if (needsAsync) {
+            wcDebug('getChildren:needsAsyncBatch', root);
             void this.calculateStatsAsync(root, exts, dirents).then(() => {
-                // 最后统一刷新一次，确保占位符替换为真实统计
+                wcDebug('getChildren:asyncBatchComplete', root);
                 this.refresh();
             });
         }
@@ -367,38 +652,61 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     }
 
 
-    /**
-     * 递归分析一个文件夹下所有匹配文件，聚合 TextStats
-     */
-    private async analyzeFolder(folder: string, exts: string[]): Promise<TextStats> {
-        let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
-
-        try {
-            const dirents = await fs.promises.readdir(folder, { withFileTypes: true });
-
-            for (const d of dirents) {
-                const full = path.join(folder, d.name);
-
-                // 检查是否应该被忽略（gitignore 或 wcignore）
-                if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) {
-                    continue;
-                }
-
-                if (d.isDirectory()) {
-                    const child = await this.getOrCalculateFolderStats(full, exts);
-                    agg = mergeStats(agg, child);
-                } else {
-                    const ext = path.extname(d.name).slice(1).toLowerCase();
-                    if (!exts.includes(ext)) continue;
-                    const stats = await this.getOrCalculateFileStats(full);
-                    agg = mergeStats(agg, stats);
-                }
+    // 动态聚合目录：不写缓存；被父目录调用
+    private async analyzeFolderDynamic(folder: string, exts: string[]): Promise<TextStats> {
+        const forced = this.forcedPaths.has(path.resolve(folder));
+        if (!forced) {
+            const hit = this.dirAggCache.get(folder);
+            if (hit) {
+                wcDebug('dirAggCache:hit', folder);
+                return hit.stats;
             }
-        } catch (error) {
-            console.error(`Error analyzing folder ${folder}:`, error);
+            const inflight = this.inFlightDirAgg.get(folder);
+            if (inflight) {
+                wcDebug('dirAgg:reuse-inflight', folder);
+                return inflight;
+            }
+        } else {
+            wcDebug('dirAgg:forced-recompute', folder);
         }
-
-        return agg;
+        const work = (async () => {
+            let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+            try {
+                const dirents = await fs.promises.readdir(folder, { withFileTypes: true });
+                for (const d of dirents) {
+                    const full = path.join(folder, d.name);
+                    if (alwaysIgnore(full, d.name, d.isDirectory())) continue;
+                    if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) continue;
+                    if (d.isDirectory()) {
+                        const child = await this.analyzeFolderDynamic(full, exts);
+                        agg = mergeStats(agg, child);
+                    } else {
+                        const ext = path.extname(d.name).slice(1).toLowerCase();
+                        const special = isSpecialVisibleFile(d.name);
+                        if (!special && !exts.includes(ext)) continue;
+                        const forcedInner = this.forcedPaths.has(path.resolve(folder));
+                        const stats = await this.getOrCalculateFileStats(full, forcedInner);
+                        agg = mergeStats(agg, stats);
+                    }
+                }
+            } catch { /* ignore */ }
+            // 无论是否 forced 都更新缓存（forced 只是本次忽略旧缓存）
+            const now = Date.now();
+            this.dirAggCache.set(folder, { stats: agg, ts: now });
+            wcDebug('dirAggCache:update', folder, 'total', agg.total, 'forced', forced);
+            if (forced) {
+                // 目录强制重算后解除强制标记，避免无限循环“重新计算中”
+                this.forcedPaths.delete(path.resolve(folder));
+                wcDebug('dir:forced-clear', folder);
+            }
+            return agg;
+        })();
+        if (!forced) this.inFlightDirAgg.set(folder, work);
+        try {
+            return await work;
+        } finally {
+            if (!forced) this.inFlightDirAgg.delete(folder);
+        }
     }
 
     /**
@@ -454,7 +762,16 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             }
 
             if (d.isDirectory()) {
-                tasks.push(this.getOrCalculateFolderStats(full, exts).then(() => { }));
+                tasks.push(this.analyzeFolderDynamic(full, exts).then(stats => {
+                    const existing = this.itemsById.get(full);
+                    if (existing && existing instanceof WordCountItem) {
+                        const item = new WordCountItem(vscode.Uri.file(full), path.basename(full), stats,
+                            this.expandedNodes.has(full) ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+                            false);
+                        item.id = full;
+                        this.itemsById.set(full, item);
+                    }
+                }));
             } else {
                 const ext = path.extname(d.name).slice(1).toLowerCase();
                 const special = isSpecialVisibleFile(d.name);
@@ -482,59 +799,92 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     /**
      * 获取或计算文件统计（带缓存和 Git 优化）
      */
-    private async getOrCalculateFileStats(filePath: string): Promise<TextStats> {
+    private async getOrCalculateFileStats(filePath: string, forceOverride = false): Promise<TextStats> {
         try {
             const stat = await fs.promises.stat(filePath);
             const mtime = stat.mtimeMs;
 
             // 1. 检查内存缓存
             const cached = this.statsCache.get(filePath);
-            if (cached && cached.mtime === mtime) {
+            const prevStats: TextStats | undefined = cached?.stats; // 目录不缓存，仅用于文件更新时替换
+            const isForced = forceOverride || this.forcedPaths.has(path.resolve(filePath));
+            if (!isForced && cached && cached.mtime === mtime) {
+                wcDebug('cache-hit:memory:file', filePath, 'mtime', mtime);
                 return cached.stats;
             }
 
             // 2. 检查持久化缓存（从文件追踪数据库）
             const fileTracker = getFileTracker();
-            if (fileTracker) {
+            if (!isForced && fileTracker) {
                 const dataManager = fileTracker.getDataManager();
                 const fileMetadata = dataManager.getFileByPath(filePath);
 
                 if (fileMetadata && fileMetadata.wordCountStats) {
-                    // 如果文件的 mtime 没有变化，使用持久化的统计数据
+                    // 如果文件的 mtime 没有变化，使用持久化的统计数据，并向上失效目录聚合（触发父级重算）
                     if (fileMetadata.mtime === mtime) {
+                        wcDebug('cache-hit:persistent:file', filePath, 'mtime', mtime);
                         const stats = fileMetadata.wordCountStats;
-                        // 更新内存缓存
                         this.statsCache.set(filePath, { stats, mtime });
+                        this.invalidateDirAggUpwards(filePath);
                         return stats;
+                    }
+                    else {
+                        wcDebug('cache-stale:persistent:file', filePath, 'cachedMtime', fileMetadata.mtime, 'current', mtime);
                     }
                 }
             }
 
             // 3. 使用 GitGuard 检查是否需要重新计算
             const uri = vscode.Uri.file(filePath);
-            const shouldRecalculate = await this.gitGuard.shouldCount(uri);
+            const shouldRecalculate = isForced ? true : await this.gitGuard.shouldCount(uri);
+            wcDebug('gitGuard:shouldCount', filePath, shouldRecalculate, 'forced', isForced);
 
             if (!shouldRecalculate && cached) {
                 // Git 认为文件没有变化，使用现有缓存
+                wcDebug('gitGuard-skip-using-stale-memory-cache', filePath);
                 return cached.stats;
             }
 
             // 4. 重新计算统计
+            wcDebug('recount:file:start', filePath);
             const stats = await countAndAnalyze(filePath);
+            wcDebug('recount:file:done', filePath, stats.total);
+            // 同步更新实时写作统计（若开启 writingStats 并存在记录），用于 TreeView 显示与状态栏保持一致
+            try {
+                const { getFileByPath, updateFileWritingStats } = require('../../utils/globalFileTracking');
+                const meta = getFileByPath?.(filePath);
+                if (meta) {
+                    // 仅更新 wordCountStats 与 writingStats 无直接耦合；此处可选择在 wordCountStats 变化时触发刷新
+                    // 若需要，可在此追加其它联动逻辑
+                }
+            } catch { /* ignore */ }
+            if (stats.total === 0) {
+                // 可能是解码失败或全部被识别为空白，调试输出
+                const debug = vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.debug', false);
+                if (debug) {
+                    console.warn('[WordCount][zeroFile]', filePath);
+                }
+            }
 
             // 5. 更新内存缓存
             this.statsCache.set(filePath, { stats, mtime });
+
+            // 文件变更后失效上层目录聚合缓存（回退到旧逻辑）
+            this.invalidateDirAggUpwards(filePath);
 
             // 6. 持久化到文件追踪数据库
             if (fileTracker) {
                 const dataManager = fileTracker.getDataManager();
                 await dataManager.addOrUpdateFile(filePath);
                 dataManager.updateWordCountStats(filePath, stats);
+                wcDebug('persistent-update:file', filePath);
             }
 
             // 7. 通知 GitGuard 已完成统计
             const content = await readTextFileDetectEncoding(filePath);
             this.gitGuard.markCounted(uri, content);
+            wcDebug('gitGuard:markCounted', filePath, 'size', content.length);
+            if (isForced && !forceOverride) this.forcedPaths.delete(path.resolve(filePath));
 
             return stats;
         } catch (error) {
@@ -543,60 +893,25 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         }
     }
 
-    /**
-     * 获取或计算文件夹统计（带缓存和 Git 优化）
-     */
-    private async getOrCalculateFolderStats(folder: string, exts: string[]): Promise<TextStats> {
-        try {
-            const stat = await fs.promises.stat(folder);
-            const mtime = stat.mtimeMs;
+    // 目录聚合通过 dirAggCache 临时缓存，无持久化
 
-            // 1. 检查内存缓存
-            const cached = this.statsCache.get(folder);
-            if (cached && cached.mtime === mtime) {
-                return cached.stats;
-            }
-
-            // 2. 检查持久化缓存（从文件追踪数据库）
-            const fileTracker = getFileTracker();
-            if (fileTracker) {
-                const dataManager = fileTracker.getDataManager();
-                const fileMetadata = dataManager.getFileByPath(folder);
-
-                if (fileMetadata && fileMetadata.wordCountStats) {
-                    // 如果文件夹的 mtime 没有变化，使用持久化的统计数据
-                    if (fileMetadata.mtime === mtime) {
-                        const stats = fileMetadata.wordCountStats;
-                        // 更新内存缓存
-                        this.statsCache.set(folder, { stats, mtime });
-                        return stats;
-                    }
-                }
-            }
-
-            // 3. 重新计算统计
-            const stats = await this.analyzeFolder(folder, exts);
-
-            // 4. 更新内存缓存
-            this.statsCache.set(folder, { stats, mtime });
-
-            // 5. 持久化到文件追踪数据库（可选，文件夹统计变化较少）
-            if (fileTracker) {
-                const dataManager = fileTracker.getDataManager();
-                try {
-                    // 避免重复对目录做深度 stat 引起的 EISDIR；addOrUpdateFile 已能区分目录
-                    await dataManager.addOrUpdateFile(folder);
-                    dataManager.updateWordCountStats(folder, stats);
-                } catch (error) {
-                    // 忽略目录追踪异常
-                }
-            }
-
-            return stats;
-        } catch (error) {
-            console.error(`Error calculating folder stats for ${folder}:`, error);
-            return { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+    /** 失效从文件/目录开始逐级向上的目录聚合缓存 */
+    private invalidateDirAggUpwards(startPath: string) {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+        let dir = path.dirname(startPath);
+        while (dir && dir !== root && dir !== path.dirname(dir)) {
+            if (this.dirAggCache.delete(dir)) wcDebug('dirAggCache:invalidate', dir, 'dueTo', startPath);
+            dir = path.dirname(dir);
         }
+    }
+
+    /** 目录聚合缓存 TTL(ms)，可配置 AndreaNovelHelper.wordCount.dirAggTTL，默认 2000，最小 500 */
+    private getDirAggTTL(): number {
+        try {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const v = cfg.get<number>('wordCount.dirAggTTL', 2000) ?? 2000;
+            return Math.max(500, v);
+        } catch { return 2000; }
     }
 
     /** 通过路径拿到真实的 TreeItem */

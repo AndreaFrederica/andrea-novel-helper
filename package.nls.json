@@ -101,4 +101,9 @@
   "config.wordCount.displayFormat.wan": ">=10000 show 1.234万 (3 decimals)",
   "config.wordCount.displayFormat.k": ">=1000 show 12.345k (3 decimals)",
   "config.wordCount.displayFormat.qian": ">=1000 show 12.345千 (3 decimals)"
+  ,
+  "config.wordCount.debug.description": "WordCount: Enable verbose debug logging (console). Use only for diagnosing issues; may impact performance."
+  ,
+  "command.wordCount.forceRecountAll.title": "Force Recount All",
+  "command.wordCount.forceRecountHere.title": "Force Recount (This File/Folder)"
 }

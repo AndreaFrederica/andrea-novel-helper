@@ -99,4 +99,6 @@
     "config.wordCount.displayFormat.wan": ">=10000 で 1.234万 (小数3桁)",
     "config.wordCount.displayFormat.k": ">=1000 で 12.345k (小数3桁)",
     "config.wordCount.displayFormat.qian": ">=1000 で 12.345千 (小数3桁)"
+    ,
+    "config.wordCount.debug.description": "WordCount: 詳細デバッグログを有効化 (コンソール出力)。問題診断用途のみ; パフォーマンスに僅かな影響の可能性。"
 }

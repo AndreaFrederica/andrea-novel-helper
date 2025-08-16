@@ -338,6 +338,7 @@ TXT 快速格式（示例 `vocabulary.txt`）：
 | timeStats.persistReadOnlySessions | 是否持久化纯阅读会话 |
 | wordCount.order.* | 手动排序显示/索引步长/补零/自动重排 |
 | wordCount.displayFormat | 字数格式转换 |
+| wordCount.debug | 启用字数统计调试日志（编码探测/忽略命中/零结果原因） |
 
 ---
 ## 🛠️ 示例工作流

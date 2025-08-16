@@ -126,6 +126,19 @@ export class GitGuard {
         this.lastCountedHash.clear();
     }
 
+    /**
+     * 重置已记录的内容哈希；用于“强制重算”场景。
+     * @param filePath 仅清除指定文件；未提供则清空全部。
+     */
+    reset(filePath?: string) {
+        if (!filePath) {
+            this.lastCountedHash.clear();
+            return;
+        }
+        const key = filePath.toLowerCase();
+        this.lastCountedHash.delete(key);
+    }
+
     // ———————————————— 内部实现 ————————————————
 
     private toUri(doc: vscode.TextDocument | vscode.Uri): vscode.Uri {

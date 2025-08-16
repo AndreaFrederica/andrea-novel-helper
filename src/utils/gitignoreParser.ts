@@ -60,19 +60,17 @@ export class GitIgnoreParser {
      * 检查文件或目录是否应该被忽略
      */
     public shouldIgnore(filePath: string): boolean {
-        // 获取相对于工作区根目录的路径
         const relativePath = path.relative(this.workspaceRoot, filePath);
-        
-        // 标准化路径分隔符为 /
         const normalizedPath = relativePath.split(path.sep).join('/');
-        
-        // 检查每个模式
         for (const pattern of this.patterns) {
             if (this.matchPattern(normalizedPath, pattern)) {
+                // debug: 仅在配置开启时记录
+                if (process.env.ANH_WC_DEBUG === '1') {
+                    console.log('[Ignore][match]', pattern, '->', normalizedPath);
+                }
                 return true;
             }
         }
-        
         return false;
     }
 

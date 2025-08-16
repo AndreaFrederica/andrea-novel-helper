@@ -7,6 +7,7 @@ import {
     getGlobalFileTracking,
     updateFileWritingStats
 } from './utils/globalFileTracking';
+import { analyzeText, TextStats } from './utils/utils';
 import { getFileTracker } from './utils/fileTracker';
 import { getIgnoredWritingStatsManager } from './utils/ignoredWritingStats';
 
@@ -118,14 +119,16 @@ function ensureDirectoryExists(file: string) {
 
 function now() { return Date.now(); }
 
-// 统一字数统计：中文“字” + 英文“词”
-function computeZhEnCount(text: string): { zhChars: number; enWords: number; total: number } {
-    // CJK：包含常用范围，按需可扩展 CJK 扩展区
-    const zhMatches = text.match(/[\u4E00-\u9FFF\u3400-\u4DBF\uF900-\uFAFF]/g) ?? [];
-    const enMatches = text.match(/[A-Za-z0-9]+/g) ?? [];
-    const zhChars = zhMatches.length;
-    const enWords = enMatches.length;
-    return { zhChars, enWords, total: zhChars + enWords };
+// 统一字数统计：使用与 WordCount 同源的全文分析，确保数据结构统一
+function computeZhEnCount(text: string): { zhChars: number; enWords: number; total: number; full: TextStats } {
+    // analyzeText 返回 TextStats: { cjkChars, asciiChars, words, nonWSChars, total }
+    const stats = analyzeText(text);
+    return {
+        zhChars: stats.cjkChars,
+        enWords: stats.words, // 这里 words 代表英文/数字词数量
+        total: stats.total,
+        full: stats
+    };
 }
 
 // 获取或创建文件统计（接入全局追踪）

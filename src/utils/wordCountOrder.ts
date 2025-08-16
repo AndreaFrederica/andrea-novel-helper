@@ -22,6 +22,8 @@ export class WordCountOrderManager {
   private saveTimer: NodeJS.Timeout | null = null;
   private readonly DEBOUNCE = 600;
   private options: OrderOptions = { step: 10, padWidth: 3, autoResequence: true };
+  // 记录已经安排过一次迁移的文件路径，避免重复 setTimeout
+  private scheduledFileMigrations = new Set<string>();
 
   constructor(workspaceRoot: string) {
     this.dbPath = path.join(workspaceRoot, 'novel-helper', 'wordcount-order.json');
@@ -124,6 +126,59 @@ export class WordCountOrderManager {
     return 'p:' + path.resolve(p);
   }
 
+  /**
+   * 针对单个文件：如果已存在 p: 路径键且获取到稳定 UUID，则迁移到 f:uuid。
+   */
+  public upgradeFileKey(filePath: string) {
+    try {
+      if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) { return; }
+    } catch { return; }
+    try {
+      const { getFileUuid } = require('./globalFileTracking');
+      const uuid = getFileUuid(filePath);
+  if (!uuid) { return; }
+      const abs = path.resolve(filePath);
+      const pathKey = 'p:' + abs;
+      const fileKey = 'f:' + uuid;
+      if (this.db.indexes[pathKey] !== undefined) {
+        if (this.db.indexes[fileKey] === undefined) {
+          this.db.indexes[fileKey] = this.db.indexes[pathKey];
+        }
+        delete this.db.indexes[pathKey];
+        this.scheduleSave();
+      }
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * 全量扫描，将可迁移的 p: 文件键转换为 f:uuid。
+   */
+  public migrateAllFileKeys() {
+    const moved: string[] = [];
+    try {
+      const { getFileUuid } = require('./globalFileTracking');
+      for (const k of Object.keys(this.db.indexes)) {
+  if (!k.startsWith('p:')) { continue; }
+        const abs = k.substring(2);
+        try {
+          if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) { continue; }
+        } catch { continue; }
+        const uuid = getFileUuid(abs);
+  if (!uuid) { continue; }
+        const fileKey = 'f:' + uuid;
+        if (this.db.indexes[fileKey] === undefined) {
+          this.db.indexes[fileKey] = this.db.indexes[k];
+        }
+        delete this.db.indexes[k];
+        moved.push(abs);
+      }
+      if (moved.length) {
+        console.log(`[WordCountOrder] Migrated ${moved.length} file path keys -> uuid keys`);
+        this.scheduleSave();
+      }
+    } catch { /* ignore */ }
+  }
+
   private scheduleSave() {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
@@ -156,7 +211,38 @@ export class WordCountOrderManager {
     return now;
   }
 
-  public getIndex(p: string): number | undefined { return this.db.indexes[this.makeKey(p)]; }
+  public getIndex(p: string): number | undefined {
+    const key = this.makeKey(p);
+    const val = this.db.indexes[key];
+    if (val !== undefined) { return val; }
+    // f:uuid 未找到时，如果存在旧的 p: 路径键，先返回旧值并安排异步迁移
+    if (key.startsWith('f:')) {
+      const abs = path.resolve(p);
+      const legacy = 'p:' + abs;
+      const legacyVal = this.db.indexes[legacy];
+      if (legacyVal !== undefined) {
+        // 安排迁移：将 legacy 复制到新 key，然后删除旧 key
+        if (!this.scheduledFileMigrations.has(abs)) {
+          this.scheduledFileMigrations.add(abs);
+          setTimeout(()=>{
+            try {
+              // 再次确认还未迁移（避免重复）
+              if (this.db.indexes[key] === undefined && this.db.indexes[legacy] !== undefined) {
+                this.db.indexes[key] = this.db.indexes[legacy];
+                delete this.db.indexes[legacy];
+                this.scheduleSave();
+              }
+            } catch { /* ignore */ } finally {
+              // 允许未来如果再次出现（极少）还能重新安排
+              this.scheduledFileMigrations.delete(abs);
+            }
+          }, 400);
+        }
+        return legacyVal; // 立即使用旧索引渲染，避免序号丢失
+      }
+    }
+    return undefined;
+  }
 
   public setIndex(p: string, idx: number) {
     if (Number.isFinite(idx)) {

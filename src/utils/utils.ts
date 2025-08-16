@@ -136,17 +136,57 @@ export function escapeRegExp(str: string): string {
 export async function readTextFileDetectEncoding(filePath: string): Promise<string> {
 	// 1. 读成 Buffer（不做 utf8 强制）
 	const buffer = await fs.promises.readFile(filePath);
+	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+	const debug = cfg.get<boolean>('wordCount.debug', false);
 
-	// 2. 检测最可能的编码
+	// 2. 检测最可能的编码（有时短中文文本会被误判为 ASCII / windows-1252）
 	const detect = chardet.detect(buffer);
-	// jschardet 返回类似 { encoding: 'GB18030', confidence: 0.99 }
-	const encoding = (detect && detect.encoding)
-		? detect.encoding
-		: 'utf-8';
+	const rawEncoding = (detect && detect.encoding) ? detect.encoding : 'utf-8';
+	let encoding = rawEncoding;
+	let text = iconv.decode(buffer, encoding);
 
-	// 3. 用 iconv-lite 解码
-	//    确保 iconv-lite 已经支持了那个编码（常见：GBK/GB18030/ISO-8859-1/UTF-8）
-	const text = iconv.decode(buffer, encoding);
+	// 3. 质量评估：若出现大量替换符 � 或 明显丢失 CJK，则尝试 UTF-8 / GB18030 回退
+	const replacementCount = (text.match(/�/g) || []).length;
+	const cjkCount = (text.match(/[\p{Script=Han}]/gu) || []).length;
+	// 判定条件：
+	//  - 有中文扩展名常见 (.md/.txt) & 文件尺寸 >0
+	//  - (替换符占比 > 2%) 或 (检测编码不是 UTF 系且 cjkCount = 0 且 buffer 中包含 >=2 个 >=0x80 字节)
+	const looksBinary = buffer.every(b => b === 9 || b === 10 || b === 13 || (b >= 32 && b <= 126));
+	if (buffer.length > 0) {
+		const highBytes = buffer.filter(b => b >= 0x80).length;
+		const replRatio = replacementCount / Math.max(1, text.length);
+		const needFallback = (
+			replRatio > 0.02 ||
+			((/^(GB2312|GBK|windows-1252|ISO-8859-1)$/i.test(encoding)) && cjkCount === 0 && highBytes >= 2)
+		);
+		if (needFallback) {
+			// 先试 UTF-8
+			try {
+				const utf8 = iconv.decode(buffer, 'utf-8');
+				const utf8Cjk = (utf8.match(/[\p{Script=Han}]/gu) || []).length;
+				const utf8Repl = (utf8.match(/�/g) || []).length;
+				if (utf8Cjk > cjkCount && utf8Repl / Math.max(1, utf8.length) < replRatio) {
+					text = utf8; encoding = 'utf-8';
+				} else if (/^(GB2312|GBK|windows-1252|ISO-8859-1)$/i.test(rawEncoding)) {
+					// 再试 GB18030（超集编码）
+					const gb18030 = iconv.decode(buffer, 'GB18030');
+					const gbCjk = (gb18030.match(/[\p{Script=Han}]/gu) || []).length;
+					if (gbCjk > cjkCount) { text = gb18030; encoding = 'GB18030'; }
+				}
+			} catch {/* 忽略回退异常 */}
+		}
+	}
+
+	if (debug) {
+		console.log('[WordCount][decode]', path.basename(filePath), {
+			len: buffer.length,
+			encoding: rawEncoding,
+			finalEncoding: encoding,
+			replacementCount,
+			cjkCount: (text.match(/[\p{Script=Han}]/gu) || []).length,
+			looksBinary
+		});
+	}
 
 	return text;
 }

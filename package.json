@@ -246,6 +246,15 @@
       }
       ,
       {
+        "command": "AndreaNovelHelper.wordCount.forceRecountAll",
+        "title": "%command.wordCount.forceRecountAll.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.forceRecountHere",
+        "title": "%command.wordCount.forceRecountHere.title%"
+      }
+      ,
+      {
         "command": "AndreaNovelHelper.wordCount.copy",
   "title": "%command.wordCount.copy.title%"
       },
@@ -509,6 +518,17 @@
         ,
         {
           "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.forceRecountHere",
+          "group": "9_force@1"
+        },
+        {
+          "when": "view == wordCountExplorer",
+          "command": "AndreaNovelHelper.wordCount.forceRecountAll",
+          "group": "9_force@2"
+        },
+        
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
           "command": "AndreaNovelHelper.wordCount.copy",
           "group": "5_clip@1"
         },
@@ -710,7 +730,7 @@
         },
         "AndreaNovelHelper.timeStats.statusBar.priority": {
           "type": "number",
-          "default": 100,
+          "default": 1,
           "minimum": -1000,
           "maximum": 1000,
           "description": "%config.timeStats.statusBar.priority.description%"
@@ -759,6 +779,12 @@
             "%config.wordCount.displayFormat.qian%"
           ],
           "description": "%config.wordCount.displayFormat.description%"
+        }
+        ,
+        "AndreaNovelHelper.wordCount.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.wordCount.debug.description%"
         }
       }
     },
