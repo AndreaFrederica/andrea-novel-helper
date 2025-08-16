@@ -698,6 +698,23 @@
           "default": false,
           "description": "%config.timeStats.persistReadOnlySessions.description%"
         },
+        "AndreaNovelHelper.timeStats.statusBar.alignment": {
+          "type": "string",
+          "default": "left",
+          "enum": ["left", "right"],
+          "enumDescriptions": [
+            "%config.timeStats.statusBar.alignment.left%",
+            "%config.timeStats.statusBar.alignment.right%"
+          ],
+          "description": "%config.timeStats.statusBar.alignment.description%"
+        },
+        "AndreaNovelHelper.timeStats.statusBar.priority": {
+          "type": "number",
+          "default": 100,
+          "minimum": -1000,
+          "maximum": 1000,
+          "description": "%config.timeStats.statusBar.priority.description%"
+        },
         "AndreaNovelHelper.fileTracker.respectWcignore": {
           "type": "boolean",
           "default": false,

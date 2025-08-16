@@ -8,6 +8,7 @@ import {
     updateFileWritingStats
 } from './utils/globalFileTracking';
 import { getFileTracker } from './utils/fileTracker';
+import { getIgnoredWritingStatsManager } from './utils/ignoredWritingStats';
 
 // -------------------- 数据结构 --------------------
 interface Bucket {
@@ -33,6 +34,7 @@ interface FileStats {
 let currentDocPath: string | undefined;
 let currentDocUuid: string | undefined;
 let currentSessionStart = 0;
+let ignoredAggregateSessionStart = 0; // 忽略文件聚合会话开始
 let idleTimer: NodeJS.Timeout | undefined;
 let windowFocused = true;
 let isIdle = false; // 新增：追踪空闲状态，空闲时不创建新桶
@@ -70,7 +72,40 @@ function getConfig() {
         bucketSizeMs: cfg.get<number>('bucketSizeMs', 60000),
         imeDebounceMs: cfg.get<number>('imeDebounceMs', 350), // IME 去抖时间
         exitIdleOn: cfg.get<string>('exitIdleOn', 'text-change'), // 退出空闲状态的条件
+    statusBarAlignment: cfg.get<'left' | 'right'>('statusBar.alignment', 'left'),
+    statusBarPriority: cfg.get<number>('statusBar.priority', 100),
+    respectWcignore: cfg.get<boolean>('respectWcignore', false)
     };
+}
+// 忽略解析器（仅在需要时懒加载）
+let combinedIgnoreParser: any | undefined;
+function ensureIgnoreParser(): void {
+    if (combinedIgnoreParser) { return; }
+    try {
+        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (ws) {
+            // 动态 import 避免循环引用风险
+            const mod = require('./utils/gitignoreParser');
+            if (mod && mod.CombinedIgnoreParser) {
+                combinedIgnoreParser = new mod.CombinedIgnoreParser(ws);
+            }
+        }
+    } catch (e) {
+        console.warn('TimeStats: 初始化忽略解析器失败', e);
+    }
+}
+function isFileIgnoredForTimeStats(filePath: string): boolean {
+    const cfg = getConfig();
+    if (!cfg.respectWcignore) { return false; }
+    ensureIgnoreParser();
+    try {
+        if (combinedIgnoreParser && typeof combinedIgnoreParser.shouldIgnore === 'function') {
+            return combinedIgnoreParser.shouldIgnore(filePath);
+        }
+    } catch (e) {
+        console.warn('TimeStats: 检查忽略失败', e);
+    }
+    return false;
 }
 
 // -------------------- 基础工具 --------------------
@@ -299,6 +334,17 @@ function endSession() {
     }
     currentSessionStart = 0;
 }
+// 结束忽略聚合会话（若存在）并写入聚合时长
+function endIgnoredAggregateSession() {
+    if (ignoredAggregateSessionStart === 0) { return; }
+    const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const mgr = getIgnoredWritingStatsManager(wsRoot);
+    if (mgr) {
+        const duration = now() - ignoredAggregateSessionStart;
+        mgr.update({ deltaMillis: duration, deltaAdded: 0, deltaDeleted: 0, timestamp: now() });
+    }
+    ignoredAggregateSessionStart = 0;
+}
 
 // 空闲定时
 function resetIdleTimer(idleThresholdMs: number) {
@@ -341,6 +387,7 @@ function checkExitIdle(trigger: 'text-change' | 'window-focus' | 'editor-change'
 function flushDocStats(doc: vscode.TextDocument) {
     const { bucketSizeMs } = getConfig();
     const filePath = doc.uri.fsPath;
+    const ignored = isFileIgnoredForTimeStats(filePath);
     const st = docStates.get(filePath);
     if (!st) {
         return;
@@ -350,18 +397,29 @@ function flushDocStats(doc: vscode.TextDocument) {
     const totalNow = computeZhEnCount(doc.getText()).total;   // 整体计算一次
     const delta = totalNow - st.lastCount;                    // 净增量（>0 计新增，<0 计删除）
     if (delta !== 0) {
-        const fsEntry = getFileStats(filePath);
-        if (delta > 0) {
-            fsEntry.charsAdded += delta;
+        if (ignored) {
+            // 忽略文件：记入独立 ignored 写作统计分片（不创建全局写作统计条目）
+            const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            const mgr = getIgnoredWritingStatsManager(wsRoot);
+            if (mgr) {
+                mgr.update({
+                    deltaMillis: 0, // 时间由聚合会话统计
+                    deltaAdded: delta > 0 ? delta : 0,
+                    deltaDeleted: delta < 0 ? -delta : 0,
+                    timestamp: t
+                });
+            }
         } else {
-            fsEntry.charsDeleted += -delta;
+            const fsEntry = getFileStats(filePath);
+            if (delta > 0) {
+                fsEntry.charsAdded += delta;
+            } else {
+                fsEntry.charsDeleted += -delta;
+            }
+            bumpBucket(fsEntry, t, Math.max(0, delta), bucketSizeMs);
+            fsEntry.lastSeen = t;
+            persistFileStats(filePath, fsEntry);
         }
-
-        // 桶只统计正向新增，避免"改候选"拉低 CPM
-        bumpBucket(fsEntry, t, Math.max(0, delta), bucketSizeMs);
-
-        fsEntry.lastSeen = t;
-        persistFileStats(filePath, fsEntry);
     }
 
     st.lastCount = totalNow;
@@ -446,8 +504,26 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
         return;
     }
 
-    currentDocPath = doc.uri.fsPath;
-    startSession();
+    // .wcignore 影响：若启用并匹配忽略，直接不统计
+    // 若被忽略：不进入全局写作统计，但仍允许记录到 ignored 分片（flush 时处理）
+    const ignored = isFileIgnoredForTimeStats(doc.uri.fsPath);
+    if (ignored) {
+        // 保持 currentDocPath 为空，使状态栏不显示；仍跟踪去抖缓存以得到增量
+        if (currentDocPath === doc.uri.fsPath) {
+            endSession();
+            currentDocPath = undefined;
+        }
+    }
+
+    if (!ignored) {
+        // 如果之前有忽略聚合会话，先结束它
+        endIgnoredAggregateSession();
+        currentDocPath = doc.uri.fsPath;
+        startSession();
+    } else {
+        // 忽略文件：如果没有聚合会话则开启
+        if (ignoredAggregateSessionStart === 0) { ignoredAggregateSessionStart = now(); }
+    }
 
     // 根据配置决定是否退出空闲状态
     if (checkExitIdle('text-change')) {
@@ -482,19 +558,32 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     endSession();
 
     if (editor && getConfig().enabledLanguages.includes(editor.document.languageId)) {
-        currentDocPath = editor.document.uri.fsPath;
+        // 如果文件被忽略且启用了 respectWcignore，则不进入统计
+        const ignored = isFileIgnoredForTimeStats(editor.document.uri.fsPath);
+        if (!ignored) {
+            // 切换到非忽略文件，结束聚合会话
+            endIgnoredAggregateSession();
+            currentDocPath = editor.document.uri.fsPath;
+        } else {
+            // 进入忽略文件：结束当前普通会话，启动聚合会话（如未启动）
+            currentDocPath = undefined;
+            if (ignoredAggregateSessionStart === 0) { ignoredAggregateSessionStart = now(); }
+        }
         const g = getGlobalFileTracking?.();
-        if (g) {
+        if (g && currentDocPath) {
             currentDocUuid = g.getFileUuid(currentDocPath);
+        } else {
+            currentDocUuid = undefined;
         }
 
         // 初始化基线计数
-        getOrInitDocState(editor.document);
+    // 无论是否忽略都初始化去抖状态，以便统计 ignored 字数
+    getOrInitDocState(editor.document);
 
-        startSession();
+    if (!ignored) { startSession(); }
 
         // 根据配置决定是否退出空闲状态
-        if (checkExitIdle('editor-change')) {
+    if (!ignored && checkExitIdle('editor-change')) {
             resetIdleTimer(idleThresholdMs);
         } else {
             // 不退出空闲状态，但仍然启动定时器
@@ -504,7 +593,8 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
             idleTimer = setTimeout(() => {
                 console.log('TimeStats: User is now idle, stopping bucket creation');
                 isIdle = true;
-                endSession();
+        endSession();
+        endIgnoredAggregateSession();
                 updateStatusBar();
             }, idleThresholdMs);
         }
@@ -528,7 +618,8 @@ function handleWindowStateChange(state: vscode.WindowState) {
                 flushDocStats(doc); // 失焦时冲刷
             }
         }
-        endSession();
+    endSession();
+    endIgnoredAggregateSession();
         updateStatusBar();
     } else {
         console.log('TimeStats: Window gained focus');
@@ -550,6 +641,7 @@ function handleWindowStateChange(state: vscode.WindowState) {
                     console.log('TimeStats: User is now idle, stopping bucket creation');
                     isIdle = true;
                     endSession();
+                    endIgnoredAggregateSession();
                     updateStatusBar();
                 }, idleThresholdMs);
             }
@@ -897,10 +989,18 @@ async function openDashboard(context: vscode.ExtensionContext) {
 // -------------------- 激活/反激活 --------------------
 export function activateTimeStats(context: vscode.ExtensionContext) {
     // 确保只保留一个状态栏条目
-    if (statusBarItem) { statusBarItem.dispose(); }
-    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-    statusBarItem.command = 'AndreaNovelHelper.openTimeStats';
-    context.subscriptions.push(statusBarItem);
+    function createOrRecreateStatusBarItem() {
+        if (statusBarItem) {
+            statusBarItem.dispose();
+        }
+        const cfg = getConfig();
+        const alignment = cfg.statusBarAlignment === 'right' ? vscode.StatusBarAlignment.Right : vscode.StatusBarAlignment.Left;
+        statusBarItem = vscode.window.createStatusBarItem(alignment, cfg.statusBarPriority);
+        statusBarItem.command = 'AndreaNovelHelper.openTimeStats';
+        context.subscriptions.push(statusBarItem!);
+        updateStatusBar();
+    }
+    createOrRecreateStatusBarItem();
 
     const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (ws) {
@@ -925,6 +1025,19 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
             }
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.exportTimeStatsCSV', () => exportStatsCSV(context)),
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('AndreaNovelHelper.timeStats.statusBar.alignment') ||
+                e.affectsConfiguration('AndreaNovelHelper.timeStats.statusBar.priority') ||
+                e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore')) {
+                if (e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore')) {
+                    // 重置忽略解析器以便重新加载规则
+                    combinedIgnoreParser = undefined;
+                }
+                createOrRecreateStatusBarItem();
+                // 重新评估当前活动文件
+                handleActiveEditorChange(vscode.window.activeTextEditor);
+            }
+        })
     );
 
     // 注册反序列化器：支持 VS Code 重启后恢复面板

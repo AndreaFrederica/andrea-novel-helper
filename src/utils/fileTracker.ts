@@ -144,6 +144,11 @@ export class FileTracker {
         return false;
     }
 
+    /** 公共：判断某文件当前配置下是否会被追踪忽略（含 .git / 可选 .wcignore / 内部数据库与排除规则） */
+    public isFileIgnored(filePath: string): boolean {
+        return this.shouldIgnoreFile(filePath);
+    }
+
     /**
      * 简单的 glob 模式匹配
      */
