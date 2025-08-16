@@ -70,6 +70,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private statsCache = new Map<string, { stats: TextStats; mtime: number }>();
     // 目录临时聚合缓存（仅内存，含时间戳；文件/目录变化、强制重算或 TTL 过期时失效）
     private dirAggCache = new Map<string, { stats: TextStats; ts: number }>();
+    // 目录旧值缓存：当聚合被失效删除时暂存旧值供 UI 显示，直到新值计算完成
+    private previousDirAggCache = new Map<string, { stats: TextStats; ts: number }>();
     // 格式化缓存年龄
     private formatCacheAge(ms: number): string {
         if (ms < 1000) return '<1s';
@@ -513,6 +515,27 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     this.itemsById.set(item.id, item);
                     items.push(item);
                     needsAsync = true;
+                } else if (this.previousDirAggCache.has(full)) {
+                    // 没有现缓存但有旧值：显示旧值 + 旋转图标，不出现“计算中”字样
+                    const prev = this.previousDirAggCache.get(full)!;
+                    const staleItem = new WordCountItem(
+                        uri,
+                        d.name,
+                        prev.stats,
+                        isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+                        false
+                    );
+                    staleItem.id = full;
+                    staleItem.iconPath = new vscode.ThemeIcon('loading~spin');
+                    try {
+                        const ageMs = Date.now() - prev.ts;
+                        if (staleItem.tooltip instanceof vscode.MarkdownString) {
+                            staleItem.tooltip.appendMarkdown(`\n\n旧值年龄: **${this.formatCacheAge(ageMs)}** (重算中)`);
+                        }
+                    } catch { /* ignore */ }
+                    this.itemsById.set(staleItem.id, staleItem);
+                    items.push(staleItem);
+                    needsAsync = true;
                 } else {
                     const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
                     const item = new WordCountItem(
@@ -693,6 +716,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             // 无论是否 forced 都更新缓存（forced 只是本次忽略旧缓存）
             const now = Date.now();
             this.dirAggCache.set(folder, { stats: agg, ts: now });
+                this.previousDirAggCache.delete(folder); // 新结果写入后移除旧值
             wcDebug('dirAggCache:update', folder, 'total', agg.total, 'forced', forced);
             if (forced) {
                 // 目录强制重算后解除强制标记，避免无限循环“重新计算中”
@@ -900,6 +924,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
         let dir = path.dirname(startPath);
         while (dir && dir !== root && dir !== path.dirname(dir)) {
+            const old = this.dirAggCache.get(dir);
+            if (old) this.previousDirAggCache.set(dir, old);
             if (this.dirAggCache.delete(dir)) wcDebug('dirAggCache:invalidate', dir, 'dueTo', startPath);
             dir = path.dirname(dir);
         }
