@@ -110,7 +110,18 @@ function convertToMarkdownList(content: string): string {
     return processedLines.join('\n');
 }
 
-export function createCompletionProvider(roles: Role[]): vscode.Disposable {
+// 新包装：如果未传入 roles 显式参数，则动态引用全局 roles（避免异步加载时旧快照）
+export function createCompletionProvider(rolesParam?: Role[]): vscode.Disposable {
+    // 延迟 require 避免循环依赖（activate -> completionProvider）
+    const getRoles = () => {
+        if (rolesParam) return rolesParam;
+    try {
+            const act = require('../activate');
+            return act.roles as Role[];
+        } catch {
+            return [] as Role[];
+        }
+    };
     return vscode.languages.registerCompletionItemProvider(
         getSupportedLanguages(),
         {
@@ -125,7 +136,7 @@ export function createCompletionProvider(roles: Role[]): vscode.Disposable {
                 const defaultColor = cfg.get<string>('defaultColor')!;
 
                 // 1. 先筛角色，过滤掉类型为 "敏感词" 的
-                const matchedRoles = roles.filter(role => {
+                const matchedRoles = getRoles().filter(role => {
                     if (role.type === "敏感词") return false;
                     const names = [role.name, ...(role.aliases || [])];
                     return names.some(n => n.includes(prefix));

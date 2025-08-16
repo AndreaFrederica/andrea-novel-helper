@@ -53,7 +53,8 @@ export let decorationTypes: Map<string, vscode.TextEditorDecorationType> =
     new Map();
 
 export function cleanRoles() {
-    roles = [];
+    // 改为就地清空，确保引用在异步增量加载过程中保持
+    roles.length = 0;
 }
 
 export let outlineFS: undefined | OutlineFSProvider | MemoryOutlineFSProvider = undefined;
@@ -65,7 +66,7 @@ export let lastEditorScheme = vscode.window.activeTextEditor?.document.uri.schem
 export const _onDidChangeRoles = new vscode.EventEmitter<void>();
 export const onDidChangeRoles = _onDidChangeRoles.event;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     // 输出通道用于调试激活阶段错误/栈
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
     context.subscriptions.push(logChannel);
@@ -335,8 +336,8 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }
 
-    // 初始加载
-    loadRoles();
+    // 初始加载（异步增量）
+    loadRoles(); // 不阻塞激活；内部增量批次触发 _onDidChangeRoles
     initAutomaton();
 
     // 防抖更新
@@ -390,8 +391,8 @@ export function activate(context: vscode.ExtensionContext) {
         )
     );
 
-    // 自动补全提供器
-    createCompletionProvider(roles);
+    // 自动补全提供器（改为内部直接读取全局 roles）
+    createCompletionProvider();
 
     // Hover 和 Definition 提供器
     activateHover(context);

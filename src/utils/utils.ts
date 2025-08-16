@@ -213,6 +213,9 @@ export function mergeStats(a: TextStats, b: TextStats): TextStats {
  * @param changedFiles 指定只更新这些文件（用于增量更新）
  */
 export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]) {
+
+	// 如果传入 changedFiles 仍按原先同步增量路径（保持兼容），否则启动异步批次扫描。
+
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const folders = vscode.workspace.workspaceFolders;
 	if (!folders || !folders.length) {
@@ -239,27 +242,95 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		return;
 	}
 
-	// 如果指定了变化文件列表，进行增量更新
+	// 增量文件更新仍同步处理（避免复杂化调用点）
 	if (changedFiles && changedFiles.length > 0) {
 		console.log(`loadRoles: 增量更新 ${changedFiles.length} 个文件`);
 		performIncrementalUpdate(changedFiles, novelHelperRoot);
-	} else {
-		// 完整扫描
-		if (!forceRefresh) {
-			cleanRoles(); // 只有非强制刷新时才清理角色列表
-		}
-		
-		try {
-			scanPackageDirectory(novelHelperRoot, '');
-			console.log(`loadRoles: 成功加载 ${roles.length} 个角色`);
-		} catch (error) {
-			console.error(`loadRoles: 扫描包目录时出错: ${error}`);
-			vscode.window.showErrorMessage(`加载角色库时出错: ${error}`);
-		}
+		_onDidChangeRoles.fire();
+		generateCSpellDictionary();
+		return;
 	}
 
-	_onDidChangeRoles.fire();
-	generateCSpellDictionary();
+	// 全量异步扫描：分批读取目录，避免阻塞主线程
+	if (!forceRefresh) { cleanRoles(); }
+
+	let pendingDirs: { abs: string; rel: string }[] = [];
+	let processedFiles = 0; // 已处理角色文件数
+	let statusBar: vscode.StatusBarItem | undefined;
+	let statusBarTimer: NodeJS.Timeout | undefined;
+	function ensureStatusBar() {
+		if (!statusBar) {
+			statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+			statusBar.text = '$(sync~spin) 角色加载中…';
+			statusBar.tooltip = '正在异步扫描 novel-helper 角色库';
+			statusBar.show();
+		}
+	}
+	function updateStatusBar(final = false) {
+		if (!statusBar) return;
+		if (final) {
+			statusBar.text = `$(check) 角色加载完成 (${roles.length})`;
+			statusBar.tooltip = `已加载 ${roles.length} 个角色文件项`;
+			// 1.5 秒后移除
+			setTimeout(() => { statusBar?.dispose(); statusBar = undefined; }, 1500);
+		} else {
+			statusBar.text = `$(sync~spin) 角色加载中… 已加载 ${roles.length}`;
+			statusBar.tooltip = `已处理文件 ${processedFiles}，当前累计角色 ${roles.length}，剩余目录队列 ${pendingDirs.length}`;
+		}
+	}
+	if (fs.existsSync(novelHelperRoot)) {
+		pendingDirs.push({ abs: novelHelperRoot, rel: '' });
+	} else {
+		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot} (异步扫描暂停)`);
+		loadTraditionalRoles(forceRefresh, changedFiles); // 仍然尝试传统加载（同步）
+		_onDidChangeRoles.fire();
+		generateCSpellDictionary();
+		return;
+	}
+
+	const BATCH_SIZE = 25; // 每批最多处理的文件/子目录项
+	function processNextBatch() {
+		const start = Date.now();
+		let processed = 0;
+		while (pendingDirs.length && processed < BATCH_SIZE) {
+			const { abs, rel } = pendingDirs.shift()!;
+			if (!fs.existsSync(abs)) continue;
+			let entries: fs.Dirent[] = [];
+			try { entries = fs.readdirSync(abs, { withFileTypes: true }); } catch { continue; }
+			for (const entry of entries) {
+				const entryPath = path.join(abs, entry.name);
+				if (entry.isDirectory()) {
+					if (entry.name === 'outline' || entry.name === '.anh-fsdb') continue;
+					pendingDirs.push({ abs: entryPath, rel: rel ? path.join(rel, entry.name) : entry.name });
+				} else if (entry.isFile()) {
+					if (isRoleFile(entry.name)) {
+						try { loadRoleFile(entryPath, rel, entry.name); processedFiles++; } catch (e) { console.warn('loadRoleFile error', e); }
+					}
+				}
+				processed++;
+				if (processed >= BATCH_SIZE) break;
+			}
+		}
+		// 批次完成后广播（增量通知）
+		if (!statusBar && roles.length === 0) {
+			// 延迟 120ms 再显示，避免极小项目闪烁
+			if (!statusBarTimer) {
+				statusBarTimer = setTimeout(() => { ensureStatusBar(); updateStatusBar(false); }, 120);
+			}
+		} else if (statusBar) {
+			updateStatusBar(false);
+		}
+		_onDidChangeRoles.fire();
+		// 若还有目录未处理，排队下一 microtask / setTimeout(0)
+		if (pendingDirs.length) {
+			setTimeout(processNextBatch, 0);
+		} else {
+			console.log(`loadRoles: 异步扫描完成，累计 ${roles.length} 个角色，用时 ${Date.now() - start}ms (最后批次时间)`);
+			updateStatusBar(true);
+			generateCSpellDictionary();
+		}
+	}
+	processNextBatch();
 }
 
 /**
