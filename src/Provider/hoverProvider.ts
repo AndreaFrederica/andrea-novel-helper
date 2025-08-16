@@ -9,7 +9,7 @@ import { FIELD_ALIASES, getExtensionFields } from '../utils/markdownParser';
 /**
  * 检查内容是否包含 Markdown 格式
  */
-function containsMarkdownFormatting(content: string): boolean {
+export function containsMarkdownFormatting(content: string): boolean {
     if (!content) return false;
     
     // 检查内容是否已经包含 Markdown 格式或列表符号
@@ -23,7 +23,7 @@ function containsMarkdownFormatting(content: string): boolean {
 /**
  * 格式化内容以在 Markdown 中正确显示
  */
-function formatContentForDisplay(content: string): string {
+export function formatContentForDisplay(content: string): string {
     if (!content) return '';
     
     // 检查内容是否已经包含 Markdown 格式或列表符号
@@ -43,7 +43,7 @@ function formatContentForDisplay(content: string): string {
 /**
  * 处理纯文本内容的换行
  */
-function handlePlainTextContent(content: string): string {
+export function handlePlainTextContent(content: string): string {
     const lines = content.split('\n');
     
     // 如果只有一行或两行，直接用硬换行
@@ -84,7 +84,7 @@ function handlePlainTextContent(content: string): string {
 /**
  * 将各种列表格式转换为 Markdown 兼容格式
  */
-function convertToMarkdownList(content: string): string {
+export function convertToMarkdownList(content: string): string {
     let result = content
         // 将 Unicode 列表符号转换为 Markdown 格式
         .replace(/^([\s]*)[•◦▪▫‣⁃∙▸▹▻►⋆★☆♦♧♠♣♡♢]\s*/gm, '$1- ')
@@ -188,6 +188,44 @@ function refreshAll() {
             console.log(`【HoverProvider】文档 ${key} Hover 缓存已移除`);
         }
     }
+}
+
+export function buildRoleMarkdown(r: Role): vscode.MarkdownString {
+    const md = new vscode.MarkdownString('', true);
+    md.isTrusted = true;
+    md.appendMarkdown(`**${r.name}**\n\n`);
+    if (r.description) {
+        const descriptionMd = formatContentForDisplay(r.description);
+        if (containsMarkdownFormatting(r.description)) {
+            md.appendMarkdown(`**描述**:\n\n${descriptionMd}\n\n`);
+        } else {
+            md.appendMarkdown(`**描述**: ${descriptionMd}\n\n`);
+        }
+    }
+    md.appendMarkdown(`**类型**: ${r.type}\n\n`);
+    if (r.affiliation) md.appendMarkdown(`**从属**: ${r.affiliation}\n\n`);
+    if (r.packagePath) md.appendMarkdown(`**包路径**: ${r.packagePath}\n\n`);
+    if (r.sourcePath) {
+        const fileName = r.sourcePath.split(/[/\\]/).pop() || r.sourcePath;
+        md.appendMarkdown(`**源文件**: ${fileName}\n\n`);
+    }
+    const extensionFields = getExtensionFields(r);
+    for (const [fieldName, value] of extensionFields) {
+        const displayName = FIELD_ALIASES[fieldName] || fieldName;
+        const formattedValue = formatContentForDisplay(String(value));
+        if (containsMarkdownFormatting(String(value))) {
+            md.appendMarkdown(`**${displayName}**:\n\n${formattedValue}\n\n`);
+        } else {
+            md.appendMarkdown(`**${displayName}**: ${formattedValue}\n\n`);
+        }
+    }
+    const defaultColor = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor')!;
+    const c = r.color || typeColorMap[r.type] || defaultColor;
+    const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"${c}\"/></svg>`;
+    const b64 = Buffer.from(svg).toString('base64');
+    const uri = `data:image/svg+xml;base64,${b64}`;
+    md.appendMarkdown(`**颜色**: ![](${uri}) \`${c}\``);
+    return md;
 }
 
 export function activateHover(context: vscode.ExtensionContext) {

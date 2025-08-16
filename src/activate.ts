@@ -24,6 +24,9 @@ import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSPr
 import { activateHover } from './Provider/hoverProvider';
 import { activateDef } from './Provider/defProv';
 import { registerPackageManagerView } from './Provider/view/packageManagerView';
+import { registerRoleTreeView } from './Provider/view/roleTreeView';
+import { registerDocRolesTreeView } from './Provider/view/docRolesTreeView';
+import { registerDocRolesExplorerView } from './Provider/view/docRolesExplorerView';
 // import { StatusBarProvider } from './Provider/statusBarProvider'; // 已禁用，使用 timeStats 中的状态栏
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
@@ -269,6 +272,9 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     registerPackageManagerView(context);
+    registerRoleTreeView(context);
+    registerDocRolesTreeView(context);
+    registerDocRolesExplorerView(context);
 
     // 初始化 AhoCorasick 管理器
     initAhoCorasickManager(context);

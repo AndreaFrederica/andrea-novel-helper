@@ -5,6 +5,7 @@ import { Role } from '../extension';
 import { getSupportedLanguages, rangesOverlap, typeColorMap } from '../utils/utils';
 import * as path from 'path';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
+import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../utils/documentRolesCache';
 
 // —— Diagnostics 集合 —— 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
@@ -228,7 +229,7 @@ export function updateDecorations() {
             roleToRanges.get(c.role)!.push(range);
         }
 
-        // 1) 给出现的角色 setRanges
+    // 1) 给出现的角色 setRanges
         for (const [role, ranges] of roleToRanges) {
             const meta = decorationMeta.get(role.name)!;
             editor.setDecorations(meta.deco, ranges);
@@ -239,7 +240,10 @@ export function updateDecorations() {
             if (!appeared) editor.setDecorations(deco, []);
         }
 
-        // —— 敏感词诊断 —— 
+    // 写入缓存供“当前文章角色”视图复用
+    updateDocumentRoleOccurrences(doc, roleToRanges);
+
+    // —— 敏感词诊断 —— 
         const diagnostics: vscode.Diagnostic[] = [];
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
         for (const [role, ranges] of roleToRanges) {
