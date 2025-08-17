@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { getTrackingStats, getAllTrackedFiles, getTrackingStatus } from '../utils/globalFileTracking';
+import { getFileTracker } from '../utils/fileTracker';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getFileTracker } from '../utils/fileTracker';
 
 /**
  * 显示文件追踪统计信息
@@ -91,7 +91,7 @@ function formatFileSize(bytes: number): string {
  * 清理缺失的文件
  */
 export async function cleanupMissingFiles(): Promise<void> {
-    const tracker = require('../utils/globalFileTracking').getFileTracker();
+    const tracker = getFileTracker();
     if (!tracker) {
         vscode.window.showWarningMessage('文件追踪器未初始化');
         return;
@@ -146,10 +146,10 @@ export async function exportTrackingData(): Promise<void> {
         return;
     }
 
-    const exportPath = require('path').join(ws, 'novel-helper', `file-tracking-export-${Date.now()}.json`);
+    const exportPath = path.join(ws, 'novel-helper', `file-tracking-export-${Date.now()}.json`);
     
     try {
-        await require('fs').promises.writeFile(exportPath, JSON.stringify(exportData, null, 2), 'utf8');
+    await fs.promises.writeFile(exportPath, JSON.stringify(exportData, null, 2), 'utf8');
         vscode.window.showInformationMessage(`数据已导出到: ${exportPath}`);
         
         // 在资源管理器中显示文件

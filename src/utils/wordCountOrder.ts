@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { getFileUuid } from './globalFileTracking';
 
 interface OrderDB {
   version: number;
@@ -98,7 +100,6 @@ export class WordCountOrderManager {
     const resolved = path.resolve(absPath);
     if (!target.dirUuidMap[resolved]) {
       // 通过 require uuid 包（项目已有 @types/uuid）
-      const { v4: uuidv4 } = require('uuid');
       target.dirUuidMap[resolved] = uuidv4();
       console.log(`[WordCountOrder] Created UUID for directory: ${resolved} -> ${target.dirUuidMap[resolved]}`);
       // 立即保存以确保持久化
@@ -119,7 +120,6 @@ export class WordCountOrderManager {
       }
     } catch { /* ignore */ }
     try {
-      const { getFileUuid } = require('./globalFileTracking');
       const uuid = getFileUuid(p);
       if (uuid) { return 'f:' + uuid; }
     } catch { /* ignore */ }
@@ -134,7 +134,6 @@ export class WordCountOrderManager {
       if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) { return; }
     } catch { return; }
     try {
-      const { getFileUuid } = require('./globalFileTracking');
       const uuid = getFileUuid(filePath);
   if (!uuid) { return; }
       const abs = path.resolve(filePath);
@@ -156,7 +155,6 @@ export class WordCountOrderManager {
   public migrateAllFileKeys() {
     const moved: string[] = [];
     try {
-      const { getFileUuid } = require('./globalFileTracking');
       for (const k of Object.keys(this.db.indexes)) {
   if (!k.startsWith('p:')) { continue; }
         const abs = k.substring(2);

@@ -7,6 +7,9 @@ import { CombinedIgnoreParser } from '../../utils/gitignoreParser';
 import { sortItems } from '../../utils/sorter';
 import { GitGuard } from '../../utils/gitGuard';
 import { getFileTracker } from '../../utils/fileTracker';
+import * as timeStatsModule from '../../timeStats';
+import { getFileByPath, updateFileWritingStats, getFileUuid } from '../../utils/globalFileTracking';
+import { getCutClipboard } from '../../utils/wordCountCutHelper';
 import { WordCountOrderManager } from '../../utils/wordCountOrder';
 
 // 特殊文件（无扩展名但需要显示）
@@ -133,7 +136,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             // 尝试从 timeStats 运行时状态复用实时字数（避免依赖全局追踪缓存）
             let reused = false;
             try {
-                const timeStats = require('../../timeStats');
+                const timeStats = timeStatsModule;
                 // 使用 timeStats 全量 analyzeText 结果（computeZhEnCount 已包装）
                 const active = vscode.window.visibleTextEditors.find(ed=>ed.document.uri.fsPath===fsPath);
                 if (active) {
@@ -914,7 +917,6 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             wcDebug('recount:file:done', filePath, stats.total);
             // 同步更新实时写作统计（若开启 writingStats 并存在记录），用于 TreeView 显示与状态栏保持一致
             try {
-                const { getFileByPath, updateFileWritingStats } = require('../../utils/globalFileTracking');
                 const meta = getFileByPath?.(filePath);
                 if (meta) {
                     // 仅更新 wordCountStats 与 writingStats 无直接耦合；此处可选择在 wordCountStats 变化时触发刷新

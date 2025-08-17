@@ -6,5 +6,6 @@ export const refreshRoles = () => {
     // 强制刷新所有角色库文件
     loadRoles(true);
     updateDecorations();
-    vscode.window.showInformationMessage('所有库已手动刷新');
+    // 简洁通知（非阻塞）
+    vscode.window.setStatusBarMessage('$(sync) 角色/词汇/敏感词库已刷新', 3000);
 };

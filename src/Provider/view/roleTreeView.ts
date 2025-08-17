@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { roles } from '../../activate';
+import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
 import { buildRoleMarkdown } from '../hoverProvider';
 
@@ -249,7 +249,7 @@ export function registerRoleTreeView(context: vscode.ExtensionContext) {
             }
         } catch {/* ignore */}
     }));
-    const { onDidChangeRoles } = require('../../activate');
+    // 订阅角色变化事件（静态导入）
     context.subscriptions.push(onDidChangeRoles(()=> provider.refresh()));
     // initial expand restore after short delay (tree populated)
     setTimeout(()=>{

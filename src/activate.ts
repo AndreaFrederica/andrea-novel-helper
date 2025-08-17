@@ -31,6 +31,8 @@ import { registerDocRolesExplorerView } from './Provider/view/docRolesExplorerVi
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
 import { initializeGlobalFileTracking } from './utils/globalFileTracking';
+import { setCutClipboard } from './utils/wordCountCutHelper';
+import { getFileTracker } from './utils/fileTracker';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/gitConfigWizard';
 import { projectInitWizardRunning } from './wizard/projectInitWizard';
@@ -148,8 +150,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // 将后续复杂初始化包裹在 try/catch 内，避免单点异常导致整个扩展未激活（从而命令缺失）
     try {
         log('开始执行主初始化');
-    // 统一由独立模块检测并可提示初始化
-    maybePromptProjectInit();
+        // 统一由独立模块检测并可提示初始化
+        maybePromptProjectInit();
         // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
         outlineFS = new MemoryOutlineFSProvider(path.join(wsRoot, outlineRel));
         if (!outlineFS) {
@@ -158,646 +160,646 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-    // 注册 andrea-outline:// 文件系统提供器
-    context.subscriptions.push(
-        vscode.workspace.registerFileSystemProvider('andrea-outline', outlineFS, { isReadonly: false })
-    );
+        // 注册 andrea-outline:// 文件系统提供器
+        context.subscriptions.push(
+            vscode.workspace.registerFileSystemProvider('andrea-outline', outlineFS, { isReadonly: false })
+        );
 
-    // 注册刷新命令
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.refreshOutlineDir', () => {
-            if (!outlineFS) { return; }
-            outlineFS.refreshDir();
-        }),
-        vscode.commands.registerCommand('AndreaNovelHelper.refreshOutlineFile', () => {
-            if (!outlineFS) { return; }
-            outlineFS.refreshFile();
-        })
-    );
+        // 注册刷新命令
+        context.subscriptions.push(
+            vscode.commands.registerCommand('AndreaNovelHelper.refreshOutlineDir', () => {
+                if (!outlineFS) { return; }
+                outlineFS.refreshDir();
+            }),
+            vscode.commands.registerCommand('AndreaNovelHelper.refreshOutlineFile', () => {
+                if (!outlineFS) { return; }
+                outlineFS.refreshFile();
+            })
+        );
 
 
-    // 注册“打开双大纲”命令
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            'AndreaNovelHelper.openDoubleOutline',
-            openDoubleOutline
-        )
-    );
+        // 注册“打开双大纲”命令
+        context.subscriptions.push(
+            vscode.commands.registerCommand(
+                'AndreaNovelHelper.openDoubleOutline',
+                openDoubleOutline
+            )
+        );
 
-    // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
-    setTimeout(() => {
-        const cfgLazyBoot = vscode.workspace.getConfiguration('AndreaNovelHelper');
-        const lazyMode = cfgLazyBoot.get<boolean>('outline.lazyMode', true);
-        const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
-        if (lazyMode && !anyOutlineVisible) return;
-        for (const editor of vscode.window.visibleTextEditors) {
+        // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
+        setTimeout(() => {
+            const cfgLazyBoot = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const lazyMode = cfgLazyBoot.get<boolean>('outline.lazyMode', true);
+            const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+            if (lazyMode && !anyOutlineVisible) return;
+            for (const editor of vscode.window.visibleTextEditors) {
+                const doc = editor.document;
+                if (
+                    doc.uri.scheme === 'file' &&
+                    (doc.languageId === 'markdown' || doc.languageId === 'plaintext') &&
+                    !doc.uri.fsPath.endsWith('_outline.md')
+                ) {
+                    refreshOpenOutlines();
+                    break; // 找到一个就行了，退出循环
+                }
+            }
+        }, 200);
+
+        let lastWasContentFile = isContentEditor(vscode.window.activeTextEditor);
+
+        context.subscriptions.push(
+            vscode.window.onDidChangeActiveTextEditor(editor => {
+                // editor === undefined 时肯定不是我们关心的内容文件，直接跳过
+                if (!editor) {
+                    return;
+                }
+
+                const isContentFile = isContentEditor(editor);
+
+                // 只有在 “上一个也是内容文件” → “这次也是内容文件” 时，才刷新
+                if (lastWasContentFile && isContentFile) {
+                    const cfgLazyEvt = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                    const lazyMode = cfgLazyEvt.get<boolean>('outline.lazyMode', true);
+                    const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+                    if (!lazyMode || anyOutlineVisible) {
+                        refreshOpenOutlines();
+                    }
+                }
+
+                // 不管有没有触发，都更新状态给下次用
+                lastWasContentFile = isContentFile;
+            }),
+
+            vscode.workspace.onDidSaveTextDocument(doc => {
+                // 保存时，只要是普通文件就刷新
+                if (doc.uri.scheme === 'file'
+                    && ['markdown', 'plaintext'].includes(doc.languageId)
+                    && !doc.uri.fsPath.endsWith('_outline.md')) {
+                    const cfgLazySave = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                    const lazyMode = cfgLazySave.get<boolean>('outline.lazyMode', true);
+                    const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+                    if (!lazyMode || anyOutlineVisible) {
+                        refreshOpenOutlines();
+                    }
+                }
+            })
+        );
+
+
+        /** 判断这个 editor 是不是“真实的内容文件” */
+        function isContentEditor(editor?: vscode.TextEditor): boolean {
+            if (!editor) return false;
             const doc = editor.document;
-            if (
+            return (
                 doc.uri.scheme === 'file' &&
                 (doc.languageId === 'markdown' || doc.languageId === 'plaintext') &&
                 !doc.uri.fsPath.endsWith('_outline.md')
-            ) {
-                refreshOpenOutlines();
-                break; // 找到一个就行了，退出循环
-            }
+            );
         }
-    }, 200);
 
-    let lastWasContentFile = isContentEditor(vscode.window.activeTextEditor);
+        // 轮询相关状态
+        const pollingInterval = 1000; // 毫秒
 
-    context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor(editor => {
-            // editor === undefined 时肯定不是我们关心的内容文件，直接跳过
-            if (!editor) {
-                return;
-            }
+        const handle = setInterval(() => {
 
-            const isContentFile = isContentEditor(editor);
-
-            // 只有在 “上一个也是内容文件” → “这次也是内容文件” 时，才刷新
-            if (lastWasContentFile && isContentFile) {
-                const cfgLazyEvt = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                const lazyMode = cfgLazyEvt.get<boolean>('outline.lazyMode', true);
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) return;
+            if (outlineFS === undefined) { return; }
+            const outline_2raw_file_dir = outlineFS.getSourceFileFsPath();
+            if (outline_2raw_file_dir === undefined && isContentEditor()) {
+                const cfgLazyPoll = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const lazyMode = cfgLazyPoll.get<boolean>('outline.lazyMode', true);
                 const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
                 if (!lazyMode || anyOutlineVisible) {
                     refreshOpenOutlines();
                 }
             }
 
-            // 不管有没有触发，都更新状态给下次用
-            lastWasContentFile = isContentFile;
-        }),
+            const uriStr = editor?.document.uri.toString();
+            const now_fsPath = editor?.document.uri.fsPath;
+            // console.log('lastActiveUri:', outline_2raw_file_dir, ' current:', now_fsPath);
+            if (now_fsPath !== outline_2raw_file_dir) {
 
-        vscode.workspace.onDidSaveTextDocument(doc => {
-            // 保存时，只要是普通文件就刷新
-            if (doc.uri.scheme === 'file'
-                && ['markdown', 'plaintext'].includes(doc.languageId)
-                && !doc.uri.fsPath.endsWith('_outline.md')) {
-                const cfgLazySave = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                const lazyMode = cfgLazySave.get<boolean>('outline.lazyMode', true);
-                const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
-                if (!lazyMode || anyOutlineVisible) {
-                    refreshOpenOutlines();
+                // 如果新激活的是“内容文件”，就刷新
+                if (
+                    editor.document.uri.scheme === 'file' &&
+                    (editor.document.languageId === 'markdown' ||
+                        editor.document.languageId === 'plaintext') &&
+                    !editor.document.uri.fsPath.endsWith('_outline.md')
+                ) {
+                    const cfgLazyPoll2 = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                    const lazyMode = cfgLazyPoll2.get<boolean>('outline.lazyMode', true);
+                    const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
+                    if (!lazyMode || anyOutlineVisible) {
+                        refreshOpenOutlines();
+                    }
                 }
             }
-        })
-    );
+        }, pollingInterval);
 
-
-    /** 判断这个 editor 是不是“真实的内容文件” */
-    function isContentEditor(editor?: vscode.TextEditor): boolean {
-        if (!editor) return false;
-        const doc = editor.document;
-        return (
-            doc.uri.scheme === 'file' &&
-            (doc.languageId === 'markdown' || doc.languageId === 'plaintext') &&
-            !doc.uri.fsPath.endsWith('_outline.md')
-        );
-    }
-
-    // 轮询相关状态
-    const pollingInterval = 1000; // 毫秒
-
-    const handle = setInterval(() => {
-
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
-        if (outlineFS === undefined) { return; }
-        const outline_2raw_file_dir = outlineFS.getSourceFileFsPath();
-        if (outline_2raw_file_dir === undefined && isContentEditor()) {
-            const cfgLazyPoll = vscode.workspace.getConfiguration('AndreaNovelHelper');
-            const lazyMode = cfgLazyPoll.get<boolean>('outline.lazyMode', true);
-            const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
-            if (!lazyMode || anyOutlineVisible) {
-                refreshOpenOutlines();
-            }
-        }
-
-        const uriStr = editor?.document.uri.toString();
-        const now_fsPath = editor?.document.uri.fsPath;
-        // console.log('lastActiveUri:', outline_2raw_file_dir, ' current:', now_fsPath);
-        if (now_fsPath !== outline_2raw_file_dir) {
-
-            // 如果新激活的是“内容文件”，就刷新
-            if (
-                editor.document.uri.scheme === 'file' &&
-                (editor.document.languageId === 'markdown' ||
-                    editor.document.languageId === 'plaintext') &&
-                !editor.document.uri.fsPath.endsWith('_outline.md')
-            ) {
-                const cfgLazyPoll2 = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                const lazyMode = cfgLazyPoll2.get<boolean>('outline.lazyMode', true);
-                const anyOutlineVisible = vscode.window.visibleTextEditors.some(ed => ed.document.uri.scheme === 'andrea-outline');
-                if (!lazyMode || anyOutlineVisible) {
-                    refreshOpenOutlines();
-                }
-            }
-        }
-    }, pollingInterval);
-
-    context.subscriptions.push({
-        dispose: () => clearInterval(handle)
-    });
-
-    registerPackageManagerView(context);
-    registerRoleTreeView(context);
-    registerDocRolesTreeView(context);
-    registerDocRolesExplorerView(context);
-
-    // 初始化 AhoCorasick 管理器
-    initAhoCorasickManager(context);
-
-    // 注册缺省角色库缺失提示（避免与项目初始化向导重复）
-    registerMissingRolesBootstrap(context);
-
-    // 初始加载（异步增量）
-    loadRoles(); // 不阻塞激活；内部增量批次触发 _onDidChangeRoles
-    initAutomaton();
-
-    // 防抖更新
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const scheduleUpdate = () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => updateDecorations(), 200);
-    };
-
-    // 角色库变化后：去抖重建自动机 + 刷新装饰（Hover 已在自身模块监听 onDidChangeRoles，无需额外处理；Def 依赖 hoverRangesMap 也会间接更新）
-    let acRebuildTimer: ReturnType<typeof setTimeout> | undefined;
-    const onRolesChanged = onDidChangeRoles(() => {
-        if (acRebuildTimer) clearTimeout(acRebuildTimer);
-        acRebuildTimer = setTimeout(() => {
-            try {
-                initAutomaton(); // 重建 AC 自动机（包含别名）
-            } catch (e) { console.warn('[ANH] initAutomaton after roles change failed', e); }
-            scheduleUpdate(); // 触发装饰刷新
-        }, 150);
-    });
-    context.subscriptions.push(onRolesChanged);
-
-    // 最终一次全量加载完成后：立即重建 & 立即刷新（不再二次防抖），确保拿到完整 roles 状态至少跑一次
-    const onRolesFinishedDisp = onDidFinishRoles(() => {
-        try { initAutomaton(); } catch (e) { console.warn('[ANH] initAutomaton after roles FINISH failed', e); }
-        // 直接调用而非 schedule，避免再等待 200ms
-        updateDecorations();
-    });
-    context.subscriptions.push(onRolesFinishedDisp);
-
-    context.subscriptions.push(
-        // 编辑器切换 / 文档变动 / 保存 文件触发
-        vscode.window.onDidChangeActiveTextEditor(scheduleUpdate),
-        vscode.workspace.onDidChangeTextDocument(scheduleUpdate),
-        vscode.workspace.onDidSaveTextDocument(scheduleUpdate)
-    );
-
-    // 首次执行
-    scheduleUpdate();
-
-    // 配置变更监听
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeConfiguration((e) => {
-            if (
-                e.affectsConfiguration('AndreaNovelHelper.rolesFile') ||
-                e.affectsConfiguration('AndreaNovelHelper.minChars') ||
-                e.affectsConfiguration('AndreaNovelHelper.defaultColor')
-            ) {
-                loadRoles();
-                updateDecorations();
-            }
-        })
-    );
-
-    // 注册命令
-    context.subscriptions.push(
-        vscode.commands.registerCommand(
-            'AndreaNovelHelper.addRoleFromSelection',
-            addRoleFromSelection
-        ),
-        vscode.commands.registerCommand(
-            'AndreaNovelHelper.addSensitiveWord',
-            addSensitiveCmd_obj
-        ),
-        vscode.commands.registerCommand(
-            'AndreaNovelHelper.addVocabulary',
-            addVocabulary
-        ),
-        vscode.commands.registerCommand(
-            'AndreaNovelHelper.refreshRoles',
-            refreshRoles
-        )
-    );
-
-    // 自动补全提供器：使用纯 provider 工厂 + 显式语言列表
-    try {
-        const langs = getSupportedLanguages();
-    const provider = createRoleCompletionProvider();
-        const completionDisposable = vscode.languages.registerCompletionItemProvider(langs, provider);
-        context.subscriptions.push(completionDisposable);
-        log(`Completion provider registered for [${langs.join(', ')}], initial roles=${roles.length}`);
-    } catch (e) {
-        log('Completion provider registration FAILED', e);
-    }
-
-
-    // Hover 和 Definition 提供器
-    activateHover(context);
-    activateDef(context);
-
-    // Markdown 工具条
-    activateMarkdownToolbar(context);
-
-
-    // 确保 openWith 命令注册一次
-    ensureRegisterOpenWith(context);
-
-    // Word Count 树视图
-    // 手动排序管理器
-    let orderManager: WordCountOrderManager | null = null;
-    if (folders1 && folders1.length) {
-        orderManager = new WordCountOrderManager(folders1[0].uri.fsPath);
-        // 应用用户配置
-        const cfg = vscode.workspace.getConfiguration();
-        orderManager.setOptions({
-            step: cfg.get<number>('AndreaNovelHelper.wordCount.order.step', 10),
-            padWidth: cfg.get<number>('AndreaNovelHelper.wordCount.order.padWidth', 3),
-            autoResequence: cfg.get<boolean>('AndreaNovelHelper.wordCount.order.autoResequence', true)
+        context.subscriptions.push({
+            dispose: () => clearInterval(handle)
         });
-    }
-    const wordCountProvider = new WordCountProvider(context.workspaceState, orderManager || undefined);
 
-    // 拖拽排序控制器（需在 createTreeView 选项中声明才能真正启用）
-    const dndController: vscode.TreeDragAndDropController<any> = {
-        dragMimeTypes: ['application/vnd.andrea.wordcount.item'],
-        dropMimeTypes: ['application/vnd.andrea.wordcount.item'],
-        async handleDrag(source, data) {
-            const paths = source.filter((s: any)=>s?.resourceUri?.fsPath).map((s:any)=>s.resourceUri.fsPath);
-            data.set('application/vnd.andrea.wordcount.item', new vscode.DataTransferItem(JSON.stringify(paths)));
-        },
-        async handleDrop(target, data) {
-            try {
-                const item = data.get('application/vnd.andrea.wordcount.item');
-                if (!item) return;
-                const json = await item.asString();
-                const moved: string[] = JSON.parse(json);
-                if (moved.length === 0) return;
-                const om = (wordCountProvider as any).getOrderManager?.();
-                const targetPath = target?.resourceUri?.fsPath;
-                const parentDir = (targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()) ? targetPath : path.dirname(targetPath || moved[0]);
-                if (!om) return;
-                const manual = om.isManual(parentDir);
+        registerPackageManagerView(context);
+        registerRoleTreeView(context);
+        registerDocRolesTreeView(context);
+        registerDocRolesExplorerView(context);
 
-                // 判定是否是“同一父目录内部重排”
-                const originalParents = new Set(moved.map(p=>path.dirname(p)));
-                const isPureReorder = originalParents.size === 1 && originalParents.has(parentDir);
+        // 初始化 AhoCorasick 管理器
+        initAhoCorasickManager(context);
 
-                // 如果是跨目录移动，执行物理移动；如果是同目录且自动模式，则提示是否启用手动；否则直接重排
-                if (isPureReorder) {
-                    if (!manual) {
-                        const choice = await vscode.window.showInformationMessage('当前为自动排序。启用手动排序以调整顺序？', '启用', '取消');
-                        if (choice !== '启用') return; // 取消
-                        om.toggleManual(parentDir);
-                    }
+        // 注册缺省角色库缺失提示（避免与项目初始化向导重复）
+        registerMissingRolesBootstrap(context);
+
+        // 初始加载（异步增量）
+        loadRoles(); // 不阻塞激活；内部增量批次触发 _onDidChangeRoles
+        initAutomaton();
+
+        // 防抖更新
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const scheduleUpdate = () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => updateDecorations(), 200);
+        };
+
+        // 角色库变化后：去抖重建自动机 + 刷新装饰（Hover 已在自身模块监听 onDidChangeRoles，无需额外处理；Def 依赖 hoverRangesMap 也会间接更新）
+        let acRebuildTimer: ReturnType<typeof setTimeout> | undefined;
+        const onRolesChanged = onDidChangeRoles(() => {
+            if (acRebuildTimer) clearTimeout(acRebuildTimer);
+            acRebuildTimer = setTimeout(() => {
+                try {
+                    initAutomaton(); // 重建 AC 自动机（包含别名）
+                } catch (e) { console.warn('[ANH] initAutomaton after roles change failed', e); }
+                scheduleUpdate(); // 触发装饰刷新
+            }, 150);
+        });
+        context.subscriptions.push(onRolesChanged);
+
+        // 最终一次全量加载完成后：立即重建 & 立即刷新（不再二次防抖），确保拿到完整 roles 状态至少跑一次
+        const onRolesFinishedDisp = onDidFinishRoles(() => {
+            try { initAutomaton(); } catch (e) { console.warn('[ANH] initAutomaton after roles FINISH failed', e); }
+            // 直接调用而非 schedule，避免再等待 200ms
+            updateDecorations();
+        });
+        context.subscriptions.push(onRolesFinishedDisp);
+
+        context.subscriptions.push(
+            // 编辑器切换 / 文档变动 / 保存 文件触发
+            vscode.window.onDidChangeActiveTextEditor(scheduleUpdate),
+            vscode.workspace.onDidChangeTextDocument(scheduleUpdate),
+            vscode.workspace.onDidSaveTextDocument(scheduleUpdate)
+        );
+
+        // 首次执行
+        scheduleUpdate();
+
+        // 配置变更监听
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration((e) => {
+                if (
+                    e.affectsConfiguration('AndreaNovelHelper.rolesFile') ||
+                    e.affectsConfiguration('AndreaNovelHelper.minChars') ||
+                    e.affectsConfiguration('AndreaNovelHelper.defaultColor')
+                ) {
+                    loadRoles();
+                    updateDecorations();
                 }
+            })
+        );
 
-                // 计算目标插入参考（如果 target 是文件，表示插入其后；如果 target 是目录表达放入该目录末尾）。
-                const targetIsDir = targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
+        // 注册命令
+        context.subscriptions.push(
+            vscode.commands.registerCommand(
+                'AndreaNovelHelper.addRoleFromSelection',
+                addRoleFromSelection
+            ),
+            vscode.commands.registerCommand(
+                'AndreaNovelHelper.addSensitiveWord',
+                addSensitiveCmd_obj
+            ),
+            vscode.commands.registerCommand(
+                'AndreaNovelHelper.addVocabulary',
+                addVocabulary
+            ),
+            vscode.commands.registerCommand(
+                'AndreaNovelHelper.refreshRoles',
+                refreshRoles
+            )
+        );
 
-                // 跨目录移动：物理移动文件/文件夹
-                if (!isPureReorder) {
-                    for (const p of moved) {
-                        const baseName = path.basename(p);
-                        let dest = targetIsDir ? path.join(parentDir, baseName) : path.join(parentDir, baseName);
-                        if (dest === p) continue; // 同路径无需移动
-                        // 防止移动到子目录造成递归
-                        if (p.startsWith(dest + path.sep)) {
-                            vscode.window.showWarningMessage(`无法将 ${baseName} 移动到其自身的子目录中`);
-                            continue;
-                        }
-                        if (fs.existsSync(dest)) {
-                            vscode.window.showWarningMessage(`目标已存在: ${baseName}，已跳过`);
-                            continue;
-                        }
-                        try { fs.renameSync(p, dest); } catch (e) { vscode.window.showErrorMessage(`移动失败: ${e}`); continue; }
-                        // 更新 moved 集合中的路径以便后续排序
-                        const idx = moved.indexOf(p);
-                        if (idx >=0) moved[idx] = dest;
-                    }
-                }
-
-                // 排序/索引处理：仅当 parentDir 为手动模式才写入索引
-                if (om.isManual(parentDir)) {
-                    // 获取当前 children（移动后状态）
-                    const parentItem = wordCountProvider.getItemById?.(parentDir) || { resourceUri: vscode.Uri.file(parentDir) };
-                    const children = await wordCountProvider.getChildren(parentItem as any) as any[];
-                    let order = children.filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new')).map(c=>c.resourceUri.fsPath);
-                    // 移除已移动项（它们可能旧位置）
-                    order = order.filter(p=>!moved.includes(p));
-                    let insertIndex = -1;
-                    if (targetPath && !targetIsDir) {
-                        insertIndex = order.indexOf(targetPath);
-                    } else {
-                        insertIndex = order.length - 1; // 末尾
-                    }
-                    order.splice(insertIndex+1, 0, ...moved);
-                    om.rewriteSequential(parentDir, order);
-                }
-
-                // 对原始父目录若为手动且发生了跨目录移动，需要刷新原父目录索引
-                if (!isPureReorder) {
-                    for (const op of originalParents) {
-                        if (op !== parentDir && om.isManual(op) && fs.existsSync(op)) {
-                            const parentItemOld = wordCountProvider.getItemById?.(op) || { resourceUri: vscode.Uri.file(op) };
-                            const oldChildren = await wordCountProvider.getChildren(parentItemOld as any) as any[];
-                            const oldOrder = oldChildren.filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new')).map(c=>c.resourceUri.fsPath);
-                            om.rewriteSequential(op, oldOrder);
-                        }
-                    }
-                }
-
-                wordCountProvider.refresh();
-            } catch (e) {
-                vscode.window.showErrorMessage('拖拽排序失败: '+e);
-            }
+        // 自动补全提供器：使用纯 provider 工厂 + 显式语言列表
+        try {
+            const langs = getSupportedLanguages();
+            const provider = createRoleCompletionProvider();
+            const completionDisposable = vscode.languages.registerCompletionItemProvider(langs, provider);
+            context.subscriptions.push(completionDisposable);
+            log(`Completion provider registered for [${langs.join(', ')}], initial roles=${roles.length}`);
+        } catch (e) {
+            log('Completion provider registration FAILED', e);
         }
-    };
 
-    const treeView = vscode.window.createTreeView('wordCountExplorer', {
-        treeDataProvider: wordCountProvider,
-        showCollapseAll: true,
-        dragAndDropController: dndController
-    });
-    context.subscriptions.push(treeView);
 
-    // —— 文件/目录 复制 剪切 粘贴 ——
-    type ClipEntry = { source: string; isDir: boolean };
-    let clipboard: { entries: ClipEntry[]; cut: boolean } | null = null;
+        // Hover 和 Definition 提供器
+        activateHover(context);
+        activateDef(context);
 
-    function collectSelectedWordCountPaths(): string[] {
-        const sel = (treeView as any).selection as any[] || [];
-        const paths = sel.filter(s=>s?.resourceUri?.fsPath).map(s=>s.resourceUri.fsPath);
-        return paths.length ? paths : [];
-    }
+        // Markdown 工具条
+        activateMarkdownToolbar(context);
 
-    context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.copy', (node: any) => {
-        const primary = node?.resourceUri?.fsPath;
-        const paths = new Set<string>(collectSelectedWordCountPaths());
-        if (primary) paths.add(primary);
-        const entries: ClipEntry[] = Array.from(paths).map(p=>({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
-        clipboard = { entries, cut: false };
-    try { const { setCutClipboard } = require('./utils/wordCountCutHelper'); setCutClipboard(null); } catch { /* ignore */ }
-        vscode.window.setStatusBarMessage(`已复制 ${entries.length} 项`, 2000);
-    }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.cut', (node: any) => {
-        const primary = node?.resourceUri?.fsPath;
-        const paths = new Set<string>(collectSelectedWordCountPaths());
-        if (primary) paths.add(primary);
-        const entries: ClipEntry[] = Array.from(paths).map(p=>({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
-        clipboard = { entries, cut: true };
-    try { const { setCutClipboard } = require('./utils/wordCountCutHelper'); setCutClipboard(entries.map(e=>e.source)); } catch { /* ignore */ }
-        vscode.window.setStatusBarMessage(`已剪切 ${entries.length} 项`, 2000);
-    // 触发 TreeView 刷新以显示剪切视觉标记
-    wordCountProvider.refresh();
-    }));
+        // 确保 openWith 命令注册一次
+        ensureRegisterOpenWith(context);
 
-    context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.paste', async (targetNode: any) => {
-        if (!clipboard || clipboard.entries.length === 0) {
-            vscode.window.showInformationMessage('剪贴板为空');
-            return;
-        }
-        let targetPath = targetNode?.resourceUri?.fsPath;
-        // 支持在空白区域粘贴：默认工作区根
-        if (!targetPath) {
-            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            if (!root) { vscode.window.showWarningMessage('没有工作区，无法粘贴'); return; }
-            targetPath = root;
-        }
-        if (!fs.existsSync(targetPath)) { vscode.window.showWarningMessage('目标不存在'); return; }
-        if (!fs.statSync(targetPath).isDirectory()) {
-            // 若是文件节点，则使用其父目录
-            targetPath = path.dirname(targetPath);
-        }
-        const om = (wordCountProvider as any).getOrderManager?.();
-        const isManual = om ? om.isManual(targetPath) : false;
-        const step = (om as any)?.options?.step || 10;
-        let seqBase = step;
-        if (om && isManual) {
-            // 获取现有 children 用于后续索引
-            const parentItem = wordCountProvider.getItemById?.(targetPath) || { resourceUri: vscode.Uri.file(targetPath) };
-            const children = await wordCountProvider.getChildren(parentItem as any) as any[];
-            const ordered = children.filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new'));
-            for (const c of ordered) {
-                const idxVal = om.getIndex(c.resourceUri.fsPath);
-                if (typeof idxVal === 'number' && idxVal >= seqBase) seqBase = idxVal + step;
-            }
-        }
-        const results: string[] = [];
-        for (const entry of clipboard.entries) {
-            const baseName = path.basename(entry.source);
-            let dest = path.join(targetPath, baseName);
-            if (dest === entry.source) {
-                // 粘贴到自身目录避免覆盖：添加副本后缀
-                const ext = path.extname(baseName);
-                const stem = ext ? baseName.slice(0, -ext.length) : baseName;
-                let i=1;
-                while (fs.existsSync(dest)) {
-                    const newName = `${stem}_copy${i}${ext}`;
-                    dest = path.join(targetPath, newName);
-                    i++;
-                }
-            } else if (fs.existsSync(dest)) {
-                // 目标存在：生成不重复名称
-                const ext = path.extname(baseName);
-                const stem = ext ? baseName.slice(0, -ext.length) : baseName;
-                let i=1; let variant = dest;
-                while (fs.existsSync(variant)) {
-                    variant = path.join(targetPath, `${stem}_copy${i}${ext}`);
-                    i++;
-                }
-                dest = variant;
-            }
-            try {
-                if (clipboard.cut) {
-                    fs.renameSync(entry.source, dest);
-                } else {
-                    if (entry.isDir) {
-                        copyDirectoryRecursive(entry.source, dest);
-                    } else {
-                        fs.copyFileSync(entry.source, dest);
-                    }
-                }
-                results.push(dest);
-                if (om && isManual) {
-                    om.setIndex(dest, seqBase);
-                    seqBase += step;
-                }
-            } catch (e) {
-                vscode.window.showErrorMessage(`粘贴失败: ${e}`);
-            }
-        }
-        if (clipboard.cut) {
-            clipboard = null; // 剪切后清空
-            try { const { setCutClipboard } = require('./utils/wordCountCutHelper'); setCutClipboard(null); } catch { /* ignore */ }
-        }
-        wordCountProvider.refresh();
-        vscode.window.setStatusBarMessage(`粘贴完成: ${results.length} 项`, 3000);
-    }));
-
-    function copyDirectoryRecursive(src: string, dest: string) {
-        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-        const entries = fs.readdirSync(src, { withFileTypes: true });
-        for (const e of entries) {
-            const s = path.join(src, e.name);
-            const d = path.join(dest, e.name);
-            if (e.isDirectory()) {
-                copyDirectoryRecursive(s, d);
-            } else if (e.isFile()) {
-                fs.copyFileSync(s, d);
-            }
-        }
-    }
-
-    // 监听配置变化动态更新排序参数
-    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-        if (!orderManager) return;
-        let changed = false;
-        const cfg = vscode.workspace.getConfiguration();
-        const affects = (k: string) => e.affectsConfiguration(k);
-        if (affects('AndreaNovelHelper.wordCount.order.step') || affects('AndreaNovelHelper.wordCount.order.padWidth') || affects('AndreaNovelHelper.wordCount.order.autoResequence')) {
+        // Word Count 树视图
+        // 手动排序管理器
+        let orderManager: WordCountOrderManager | null = null;
+        if (folders1 && folders1.length) {
+            orderManager = new WordCountOrderManager(folders1[0].uri.fsPath);
+            // 应用用户配置
+            const cfg = vscode.workspace.getConfiguration();
             orderManager.setOptions({
                 step: cfg.get<number>('AndreaNovelHelper.wordCount.order.step', 10),
                 padWidth: cfg.get<number>('AndreaNovelHelper.wordCount.order.padWidth', 3),
                 autoResequence: cfg.get<boolean>('AndreaNovelHelper.wordCount.order.autoResequence', true)
             });
-            changed = true;
         }
-        if (affects('AndreaNovelHelper.wordCount.order.showIndexInLabel')) {
-            changed = true; // 仅刷新视图
+        const wordCountProvider = new WordCountProvider(context.workspaceState, orderManager || undefined);
+
+        // 拖拽排序控制器（需在 createTreeView 选项中声明才能真正启用）
+        const dndController: vscode.TreeDragAndDropController<any> = {
+            dragMimeTypes: ['application/vnd.andrea.wordcount.item'],
+            dropMimeTypes: ['application/vnd.andrea.wordcount.item'],
+            async handleDrag(source, data) {
+                const paths = source.filter((s: any) => s?.resourceUri?.fsPath).map((s: any) => s.resourceUri.fsPath);
+                data.set('application/vnd.andrea.wordcount.item', new vscode.DataTransferItem(JSON.stringify(paths)));
+            },
+            async handleDrop(target, data) {
+                try {
+                    const item = data.get('application/vnd.andrea.wordcount.item');
+                    if (!item) return;
+                    const json = await item.asString();
+                    const moved: string[] = JSON.parse(json);
+                    if (moved.length === 0) return;
+                    const om = (wordCountProvider as any).getOrderManager?.();
+                    const targetPath = target?.resourceUri?.fsPath;
+                    const parentDir = (targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()) ? targetPath : path.dirname(targetPath || moved[0]);
+                    if (!om) return;
+                    const manual = om.isManual(parentDir);
+
+                    // 判定是否是“同一父目录内部重排”
+                    const originalParents = new Set(moved.map(p => path.dirname(p)));
+                    const isPureReorder = originalParents.size === 1 && originalParents.has(parentDir);
+
+                    // 如果是跨目录移动，执行物理移动；如果是同目录且自动模式，则提示是否启用手动；否则直接重排
+                    if (isPureReorder) {
+                        if (!manual) {
+                            const choice = await vscode.window.showInformationMessage('当前为自动排序。启用手动排序以调整顺序？', '启用', '取消');
+                            if (choice !== '启用') return; // 取消
+                            om.toggleManual(parentDir);
+                        }
+                    }
+
+                    // 计算目标插入参考（如果 target 是文件，表示插入其后；如果 target 是目录表达放入该目录末尾）。
+                    const targetIsDir = targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory();
+
+                    // 跨目录移动：物理移动文件/文件夹
+                    if (!isPureReorder) {
+                        for (const p of moved) {
+                            const baseName = path.basename(p);
+                            let dest = targetIsDir ? path.join(parentDir, baseName) : path.join(parentDir, baseName);
+                            if (dest === p) continue; // 同路径无需移动
+                            // 防止移动到子目录造成递归
+                            if (p.startsWith(dest + path.sep)) {
+                                vscode.window.showWarningMessage(`无法将 ${baseName} 移动到其自身的子目录中`);
+                                continue;
+                            }
+                            if (fs.existsSync(dest)) {
+                                vscode.window.showWarningMessage(`目标已存在: ${baseName}，已跳过`);
+                                continue;
+                            }
+                            try { fs.renameSync(p, dest); } catch (e) { vscode.window.showErrorMessage(`移动失败: ${e}`); continue; }
+                            // 更新 moved 集合中的路径以便后续排序
+                            const idx = moved.indexOf(p);
+                            if (idx >= 0) moved[idx] = dest;
+                        }
+                    }
+
+                    // 排序/索引处理：仅当 parentDir 为手动模式才写入索引
+                    if (om.isManual(parentDir)) {
+                        // 获取当前 children（移动后状态）
+                        const parentItem = wordCountProvider.getItemById?.(parentDir) || { resourceUri: vscode.Uri.file(parentDir) };
+                        const children = await wordCountProvider.getChildren(parentItem as any) as any[];
+                        let order = children.filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new')).map(c => c.resourceUri.fsPath);
+                        // 移除已移动项（它们可能旧位置）
+                        order = order.filter(p => !moved.includes(p));
+                        let insertIndex = -1;
+                        if (targetPath && !targetIsDir) {
+                            insertIndex = order.indexOf(targetPath);
+                        } else {
+                            insertIndex = order.length - 1; // 末尾
+                        }
+                        order.splice(insertIndex + 1, 0, ...moved);
+                        om.rewriteSequential(parentDir, order);
+                    }
+
+                    // 对原始父目录若为手动且发生了跨目录移动，需要刷新原父目录索引
+                    if (!isPureReorder) {
+                        for (const op of originalParents) {
+                            if (op !== parentDir && om.isManual(op) && fs.existsSync(op)) {
+                                const parentItemOld = wordCountProvider.getItemById?.(op) || { resourceUri: vscode.Uri.file(op) };
+                                const oldChildren = await wordCountProvider.getChildren(parentItemOld as any) as any[];
+                                const oldOrder = oldChildren.filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new')).map(c => c.resourceUri.fsPath);
+                                om.rewriteSequential(op, oldOrder);
+                            }
+                        }
+                    }
+
+                    wordCountProvider.refresh();
+                } catch (e) {
+                    vscode.window.showErrorMessage('拖拽排序失败: ' + e);
+                }
+            }
+        };
+
+        const treeView = vscode.window.createTreeView('wordCountExplorer', {
+            treeDataProvider: wordCountProvider,
+            showCollapseAll: true,
+            dragAndDropController: dndController
+        });
+        context.subscriptions.push(treeView);
+
+        // —— 文件/目录 复制 剪切 粘贴 ——
+        type ClipEntry = { source: string; isDir: boolean };
+        let clipboard: { entries: ClipEntry[]; cut: boolean } | null = null;
+
+        function collectSelectedWordCountPaths(): string[] {
+            const sel = (treeView as any).selection as any[] || [];
+            const paths = sel.filter(s => s?.resourceUri?.fsPath).map(s => s.resourceUri.fsPath);
+            return paths.length ? paths : [];
         }
-        if (changed) {
+
+        context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.copy', (node: any) => {
+            const primary = node?.resourceUri?.fsPath;
+            const paths = new Set<string>(collectSelectedWordCountPaths());
+            if (primary) paths.add(primary);
+            const entries: ClipEntry[] = Array.from(paths).map(p => ({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
+            clipboard = { entries, cut: false };
+            try { setCutClipboard(null); } catch { /* ignore */ }
+            vscode.window.setStatusBarMessage(`已复制 ${entries.length} 项`, 2000);
+        }));
+
+        context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.cut', (node: any) => {
+            const primary = node?.resourceUri?.fsPath;
+            const paths = new Set<string>(collectSelectedWordCountPaths());
+            if (primary) paths.add(primary);
+            const entries: ClipEntry[] = Array.from(paths).map(p => ({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
+            clipboard = { entries, cut: true };
+            try { setCutClipboard(entries.map(e => e.source)); } catch { /* ignore */ }
+            vscode.window.setStatusBarMessage(`已剪切 ${entries.length} 项`, 2000);
+            // 触发 TreeView 刷新以显示剪切视觉标记
             wordCountProvider.refresh();
-        }
-    }));
-    
-    // 监听树视图展开/折叠事件以保存状态
-    context.subscriptions.push(
-        treeView.onDidExpandElement(e => {
-            const el: any = e.element;
-            if (el && el.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
-                wordCountProvider.onDidExpandElement(el as any);
+        }));
+
+        context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.paste', async (targetNode: any) => {
+            if (!clipboard || clipboard.entries.length === 0) {
+                vscode.window.showInformationMessage('剪贴板为空');
+                return;
             }
-        }),
-        treeView.onDidCollapseElement(e => {
-            const el: any = e.element;
-            if (el && el.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
-                wordCountProvider.onDidCollapseElement(el as any);
+            let targetPath = targetNode?.resourceUri?.fsPath;
+            // 支持在空白区域粘贴：默认工作区根
+            if (!targetPath) {
+                const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                if (!root) { vscode.window.showWarningMessage('没有工作区，无法粘贴'); return; }
+                targetPath = root;
             }
-        }),
-        treeView,
-        // 确保 WordCountProvider 能正确清理
-        { dispose: () => wordCountProvider.dispose() }
-    );
-
-    // 状态栏提供器 - 已禁用，使用 timeStats 中的状态栏
-    // const statusBarProvider = new StatusBarProvider(wordCountProvider);
-    // statusBarProvider.activate(context);
-
-    // 监听 .gitignore 和 .wcignore 文件变化，刷新字数统计
-    if (folders1 && folders1.length) {
-        const rootUri = folders1[0].uri;
-        
-        // 监听 .gitignore 文件
-        const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(rootUri, '.gitignore')
-        );
-        gitignoreWatcher.onDidChange(() => {
-            wordCountProvider.refreshIgnoreParser();
-            vscode.window.showInformationMessage('检测到 .gitignore 变化，已刷新字数统计');
-        });
-        gitignoreWatcher.onDidCreate(() => {
-            wordCountProvider.refreshIgnoreParser();
-            vscode.window.showInformationMessage('检测到 .gitignore 创建，已刷新字数统计');
-        });
-        gitignoreWatcher.onDidDelete(() => {
-            wordCountProvider.refreshIgnoreParser();
-            vscode.window.showInformationMessage('检测到 .gitignore 删除，已刷新字数统计');
-        });
-        context.subscriptions.push(gitignoreWatcher);
-
-        // 监听 .wcignore 文件
-        const wcignoreWatcher = vscode.workspace.createFileSystemWatcher(
-            new vscode.RelativePattern(rootUri, '.wcignore')
-        );
-        wcignoreWatcher.onDidChange(() => {
-            wordCountProvider.refreshIgnoreParser();
-            vscode.window.showInformationMessage('检测到 .wcignore 变化，已刷新字数统计');
-        });
-        wcignoreWatcher.onDidCreate(() => {
-            wordCountProvider.refreshIgnoreParser();
-            vscode.window.showInformationMessage('检测到 .wcignore 创建，已刷新字数统计');
-        });
-        wcignoreWatcher.onDidDelete(() => {
-            wordCountProvider.refreshIgnoreParser();
-            vscode.window.showInformationMessage('检测到 .wcignore 删除，已刷新字数统计');
-        });
-        context.subscriptions.push(wcignoreWatcher);
-    }
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.refreshWordCount', () => {
+            if (!fs.existsSync(targetPath)) { vscode.window.showWarningMessage('目标不存在'); return; }
+            if (!fs.statSync(targetPath).isDirectory()) {
+                // 若是文件节点，则使用其父目录
+                targetPath = path.dirname(targetPath);
+            }
+            const om = (wordCountProvider as any).getOrderManager?.();
+            const isManual = om ? om.isManual(targetPath) : false;
+            const step = (om as any)?.options?.step || 10;
+            let seqBase = step;
+            if (om && isManual) {
+                // 获取现有 children 用于后续索引
+                const parentItem = wordCountProvider.getItemById?.(targetPath) || { resourceUri: vscode.Uri.file(targetPath) };
+                const children = await wordCountProvider.getChildren(parentItem as any) as any[];
+                const ordered = children.filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new'));
+                for (const c of ordered) {
+                    const idxVal = om.getIndex(c.resourceUri.fsPath);
+                    if (typeof idxVal === 'number' && idxVal >= seqBase) seqBase = idxVal + step;
+                }
+            }
+            const results: string[] = [];
+            for (const entry of clipboard.entries) {
+                const baseName = path.basename(entry.source);
+                let dest = path.join(targetPath, baseName);
+                if (dest === entry.source) {
+                    // 粘贴到自身目录避免覆盖：添加副本后缀
+                    const ext = path.extname(baseName);
+                    const stem = ext ? baseName.slice(0, -ext.length) : baseName;
+                    let i = 1;
+                    while (fs.existsSync(dest)) {
+                        const newName = `${stem}_copy${i}${ext}`;
+                        dest = path.join(targetPath, newName);
+                        i++;
+                    }
+                } else if (fs.existsSync(dest)) {
+                    // 目标存在：生成不重复名称
+                    const ext = path.extname(baseName);
+                    const stem = ext ? baseName.slice(0, -ext.length) : baseName;
+                    let i = 1; let variant = dest;
+                    while (fs.existsSync(variant)) {
+                        variant = path.join(targetPath, `${stem}_copy${i}${ext}`);
+                        i++;
+                    }
+                    dest = variant;
+                }
+                try {
+                    if (clipboard.cut) {
+                        fs.renameSync(entry.source, dest);
+                    } else {
+                        if (entry.isDir) {
+                            copyDirectoryRecursive(entry.source, dest);
+                        } else {
+                            fs.copyFileSync(entry.source, dest);
+                        }
+                    }
+                    results.push(dest);
+                    if (om && isManual) {
+                        om.setIndex(dest, seqBase);
+                        seqBase += step;
+                    }
+                } catch (e) {
+                    vscode.window.showErrorMessage(`粘贴失败: ${e}`);
+                }
+            }
+            if (clipboard.cut) {
+                clipboard = null; // 剪切后清空
+                try { setCutClipboard(null); } catch { /* ignore */ }
+            }
             wordCountProvider.refresh();
-        }),
-        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.forceRecountAll', () => {
-            wordCountProvider.forceRecountAll();
-            vscode.window.showInformationMessage('已强制重算所有字数缓存');
-        }),
-        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.forceRecountHere', (node: any) => {
-            const p = node?.resourceUri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
-            if (!p) { vscode.window.showWarningMessage('未找到目标路径'); return; }
-            wordCountProvider.forceRecountPath(p);
-            vscode.window.showInformationMessage('已强制重算: ' + p);
-        }),
-        vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-            if (!editor || !treeView.visible) return;
-            const stub = { id: editor.document.uri.fsPath, resourceUri: editor.document.uri } as any;
-            try {
-                await treeView.reveal(stub, { expand: true, select: true, focus: false });
-            } catch {
-                // 忽略
-            }
-            // 有 Git 仓库情况下，对刚切换的文件做一次缓存校验（异步）
-            if (editor?.document?.uri?.scheme === 'file') {
-                wordCountProvider.verifyFileCache(editor.document.uri.fsPath).catch(()=>{});
-            }
-        })
-    );
+            vscode.window.setStatusBarMessage(`粘贴完成: ${results.length} 项`, 3000);
+        }));
 
-    // 注册字数统计视图的右键菜单命令
-    registerWordCountContextCommands(context, wordCountProvider);
-    
-    // 初始化全局文件追踪（为备份等功能提供基础）
-    // 注意：必须在 timeStats 之前初始化，因为 timeStats 依赖于全局文件追踪
-    initializeGlobalFileTracking(context);
-    
-    activateTimeStats(context);
-    
-    // 注册文件追踪相关命令
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.showFileTrackingStats', showFileTrackingStats),
-        vscode.commands.registerCommand('AndreaNovelHelper.cleanupMissingFiles', cleanupMissingFiles),
-    vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData),
-    vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking)
-    );
+        function copyDirectoryRecursive(src: string, dest: string) {
+            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+            const entries = fs.readdirSync(src, { withFileTypes: true });
+            for (const e of entries) {
+                const s = path.join(src, e.name);
+                const d = path.join(dest, e.name);
+                if (e.isDirectory()) {
+                    copyDirectoryRecursive(s, d);
+                } else if (e.isFile()) {
+                    fs.copyFileSync(s, d);
+                }
+            }
+        }
+
+        // 监听配置变化动态更新排序参数
+        context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
+            if (!orderManager) return;
+            let changed = false;
+            const cfg = vscode.workspace.getConfiguration();
+            const affects = (k: string) => e.affectsConfiguration(k);
+            if (affects('AndreaNovelHelper.wordCount.order.step') || affects('AndreaNovelHelper.wordCount.order.padWidth') || affects('AndreaNovelHelper.wordCount.order.autoResequence')) {
+                orderManager.setOptions({
+                    step: cfg.get<number>('AndreaNovelHelper.wordCount.order.step', 10),
+                    padWidth: cfg.get<number>('AndreaNovelHelper.wordCount.order.padWidth', 3),
+                    autoResequence: cfg.get<boolean>('AndreaNovelHelper.wordCount.order.autoResequence', true)
+                });
+                changed = true;
+            }
+            if (affects('AndreaNovelHelper.wordCount.order.showIndexInLabel')) {
+                changed = true; // 仅刷新视图
+            }
+            if (changed) {
+                wordCountProvider.refresh();
+            }
+        }));
+
+        // 监听树视图展开/折叠事件以保存状态
+        context.subscriptions.push(
+            treeView.onDidExpandElement(e => {
+                const el: any = e.element;
+                if (el && el.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                    wordCountProvider.onDidExpandElement(el as any);
+                }
+            }),
+            treeView.onDidCollapseElement(e => {
+                const el: any = e.element;
+                if (el && el.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                    wordCountProvider.onDidCollapseElement(el as any);
+                }
+            }),
+            treeView,
+            // 确保 WordCountProvider 能正确清理
+            { dispose: () => wordCountProvider.dispose() }
+        );
+
+        // 状态栏提供器 - 已禁用，使用 timeStats 中的状态栏
+        // const statusBarProvider = new StatusBarProvider(wordCountProvider);
+        // statusBarProvider.activate(context);
+
+        // 监听 .gitignore 和 .wcignore 文件变化，刷新字数统计
+        if (folders1 && folders1.length) {
+            const rootUri = folders1[0].uri;
+
+            // 监听 .gitignore 文件
+            const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(rootUri, '.gitignore')
+            );
+            gitignoreWatcher.onDidChange(() => {
+                wordCountProvider.refreshIgnoreParser();
+                vscode.window.showInformationMessage('检测到 .gitignore 变化，已刷新字数统计');
+            });
+            gitignoreWatcher.onDidCreate(() => {
+                wordCountProvider.refreshIgnoreParser();
+                vscode.window.showInformationMessage('检测到 .gitignore 创建，已刷新字数统计');
+            });
+            gitignoreWatcher.onDidDelete(() => {
+                wordCountProvider.refreshIgnoreParser();
+                vscode.window.showInformationMessage('检测到 .gitignore 删除，已刷新字数统计');
+            });
+            context.subscriptions.push(gitignoreWatcher);
+
+            // 监听 .wcignore 文件
+            const wcignoreWatcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(rootUri, '.wcignore')
+            );
+            wcignoreWatcher.onDidChange(() => {
+                wordCountProvider.refreshIgnoreParser();
+                vscode.window.showInformationMessage('检测到 .wcignore 变化，已刷新字数统计');
+            });
+            wcignoreWatcher.onDidCreate(() => {
+                wordCountProvider.refreshIgnoreParser();
+                vscode.window.showInformationMessage('检测到 .wcignore 创建，已刷新字数统计');
+            });
+            wcignoreWatcher.onDidDelete(() => {
+                wordCountProvider.refreshIgnoreParser();
+                vscode.window.showInformationMessage('检测到 .wcignore 删除，已刷新字数统计');
+            });
+            context.subscriptions.push(wcignoreWatcher);
+        }
+
+        context.subscriptions.push(
+            vscode.commands.registerCommand('AndreaNovelHelper.refreshWordCount', () => {
+                wordCountProvider.refresh();
+            }),
+            vscode.commands.registerCommand('AndreaNovelHelper.wordCount.forceRecountAll', () => {
+                wordCountProvider.forceRecountAll();
+                vscode.window.showInformationMessage('已强制重算所有字数缓存');
+            }),
+            vscode.commands.registerCommand('AndreaNovelHelper.wordCount.forceRecountHere', (node: any) => {
+                const p = node?.resourceUri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+                if (!p) { vscode.window.showWarningMessage('未找到目标路径'); return; }
+                wordCountProvider.forceRecountPath(p);
+                vscode.window.showInformationMessage('已强制重算: ' + p);
+            }),
+            vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+                if (!editor || !treeView.visible) return;
+                const stub = { id: editor.document.uri.fsPath, resourceUri: editor.document.uri } as any;
+                try {
+                    await treeView.reveal(stub, { expand: true, select: true, focus: false });
+                } catch {
+                    // 忽略
+                }
+                // 有 Git 仓库情况下，对刚切换的文件做一次缓存校验（异步）
+                if (editor?.document?.uri?.scheme === 'file') {
+                    wordCountProvider.verifyFileCache(editor.document.uri.fsPath).catch(() => { });
+                }
+            })
+        );
+
+        // 注册字数统计视图的右键菜单命令
+        registerWordCountContextCommands(context, wordCountProvider);
+
+        // 初始化全局文件追踪（为备份等功能提供基础）
+        // 注意：必须在 timeStats 之前初始化，因为 timeStats 依赖于全局文件追踪
+        initializeGlobalFileTracking(context);
+
+        activateTimeStats(context);
+
+        // 注册文件追踪相关命令
+        context.subscriptions.push(
+            vscode.commands.registerCommand('AndreaNovelHelper.showFileTrackingStats', showFileTrackingStats),
+            vscode.commands.registerCommand('AndreaNovelHelper.cleanupMissingFiles', cleanupMissingFiles),
+            vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData),
+            vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking)
+        );
 
         // 启动后异步检查（避免阻塞激活）
-        setTimeout(()=>{
+        setTimeout(() => {
             if (projectInitWizardRunning) { return; }
             const wsRoot2 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            if (wsRoot2) { log('开始异步检查 Git 配置'); checkGitConfigAndGuide(wsRoot2, { silentIfConfigured: true }).catch(e=>log('Git 配置向导执行异常', e)); }
+            if (wsRoot2) { log('开始异步检查 Git 配置'); checkGitConfigAndGuide(wsRoot2, { silentIfConfigured: true }).catch(e => log('Git 配置向导执行异常', e)); }
         }, 800);
         log('激活流程结束');
     } catch (e) {
         const msg = 'Andrea Novel Helper 激活过程出现错误，部分功能可能不可用：' + (e instanceof Error ? e.message : String(e));
-        vscode.window.showErrorMessage(msg, '查看日志').then(sel=>{ if (sel==='查看日志') { logChannel.show(true); } });
+        vscode.window.showErrorMessage(msg, '查看日志').then(sel => { if (sel === '查看日志') { logChannel.show(true); } });
         log('激活致命错误', e);
         console.error('[AndreaNovelHelper][activate] Fatal init error:', e);
         // 兜底再次尝试注册 Git 命令（若前面失败）
@@ -838,21 +840,17 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
         fs.writeFileSync(full, '');
         // 确保文件被文件追踪系统立刻追踪以生成稳定 UUID（避免使用 p: 路径键）
         try {
-            const trackerMod = require('./utils/fileTracker');
-            const tracker = trackerMod.getFileTracker?.();
+            const tracker = getFileTracker?.();
             if (tracker?.handleFileCreated) {
-                // handleFileCreated 会内部调用 addOrUpdateFile
                 await tracker.handleFileCreated(full);
-            } else if (tracker?.addOrUpdateFile) {
-                await tracker.addOrUpdateFile(full);
             }
         } catch (e) { /* 静默，失败时后续仍会有迁移兜底 */ }
         // 兜底：稍后再尝试一次单文件键迁移（若当下仍是 p:）
         try {
             const om2 = (provider as any).getOrderManager?.();
             if (om2?.upgradeFileKey) {
-                setTimeout(()=>{ try { om2.upgradeFileKey(full); } catch {} }, 500);
-                setTimeout(()=>{ try { om2.migrateAllFileKeys?.(); } catch {} }, 1500);
+                setTimeout(() => { try { om2.upgradeFileKey(full); } catch { } }, 500);
+                setTimeout(() => { try { om2.migrateAllFileKeys?.(); } catch { } }, 1500);
             }
         } catch { /* ignore */ }
         // 分配索引
@@ -867,7 +865,7 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
                     idx = om.allocateBetween(parent, beforeIdx, afterIdx);
                 } else {
                     // 普通新增放在末尾
-                    const siblings = fs.readdirSync(parent).map(n=>path.join(parent,n));
+                    const siblings = fs.readdirSync(parent).map(n => path.join(parent, n));
                     idx = om.nextIndex(parent, siblings);
                 }
                 om.setIndex(full, idx);
@@ -899,7 +897,7 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
                     const afterIdx = hintPathForIndex.after ? om.getIndex(hintPathForIndex.after) : undefined;
                     idx = om.allocateBetween(parent, beforeIdx, afterIdx);
                 } else {
-                    const siblings = fs.readdirSync(parent).map(n=>path.join(parent,n));
+                    const siblings = fs.readdirSync(parent).map(n => path.join(parent, n));
                     idx = om.nextIndex(parent, siblings);
                 }
                 om.setIndex(full, idx);
@@ -930,11 +928,11 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
                 // 基于当前 provider 排序
                 const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
                 const children = await provider.getChildren(parentItem as any) as any[];
-                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
-                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
-                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const linear = children.filter(c => !(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c => c.resourceUri.fsPath);
                 const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
-                if (idx>0) before = orderedPaths[idx-1];
+                if (idx > 0) before = orderedPaths[idx - 1];
             }
             await createFile(dir, { before, after: node.resourceUri.fsPath });
         }),
@@ -945,11 +943,11 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             if (om && om.isManual(dir)) {
                 const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
                 const children = await provider.getChildren(parentItem as any) as any[];
-                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
-                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
-                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const linear = children.filter(c => !(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c => c.resourceUri.fsPath);
                 const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
-                if (idx>=0 && idx < orderedPaths.length-1) after = orderedPaths[idx+1];
+                if (idx >= 0 && idx < orderedPaths.length - 1) after = orderedPaths[idx + 1];
             }
             await createFile(dir, { before: node.resourceUri.fsPath, after });
         }),
@@ -960,11 +958,11 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             if (om && om.isManual(dir)) {
                 const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
                 const children = await provider.getChildren(parentItem as any) as any[];
-                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
-                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
-                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const linear = children.filter(c => !(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c => c.resourceUri.fsPath);
                 const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
-                if (idx>0) before = orderedPaths[idx-1];
+                if (idx > 0) before = orderedPaths[idx - 1];
             }
             await createFolder(dir, { before, after: node.resourceUri.fsPath });
         }),
@@ -975,11 +973,11 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             if (om && om.isManual(dir)) {
                 const parentItem = provider.getItemById?.(dir) || { resourceUri: vscode.Uri.file(dir) };
                 const children = await provider.getChildren(parentItem as any) as any[];
-                const linear = children.filter(c=>!(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
-                    .filter(c=>c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
-                const orderedPaths = linear.map(c=>c.resourceUri.fsPath);
+                const linear = children.filter(c => !(c instanceof vscode.TreeItem && c.contextValue?.startsWith('wordCountNew')))
+                    .filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath));
+                const orderedPaths = linear.map(c => c.resourceUri.fsPath);
                 const idx = orderedPaths.indexOf(node.resourceUri.fsPath);
-                if (idx>=0 && idx < orderedPaths.length-1) after = orderedPaths[idx+1];
+                if (idx >= 0 && idx < orderedPaths.length - 1) after = orderedPaths[idx + 1];
             }
             await createFolder(dir, { before: node.resourceUri.fsPath, after });
         }),
@@ -1053,7 +1051,7 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
                         seq += step;
                     }
                     // 延迟刷新以批量呈现
-                    setTimeout(()=>provider.refresh(), 150);
+                    setTimeout(() => provider.refresh(), 150);
                     vscode.window.showInformationMessage(`手动排序已启用并按当前自动顺序生成索引: ${path.basename(folder)}`);
                     return;
                 }
@@ -1108,7 +1106,7 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             if (!om) return;
             const folder = node.resourceUri.fsPath as string;
             const manualEnabled = om.isManual(folder) || om.toggleManual(folder); // 确保开启
-            const entries = fs.readdirSync(folder).map(n=>path.join(folder,n));
+            const entries = fs.readdirSync(folder).map(n => path.join(folder, n));
             let idx = 10;
             for (const p of entries) {
                 om.setIndex(p, idx);

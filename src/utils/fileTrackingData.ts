@@ -132,34 +132,34 @@ export class FileTrackingDataManager {
 
     constructor(workspaceRoot: string) {
         this.workspaceRoot = workspaceRoot;
-    this.dbPath = path.join(workspaceRoot, 'novel-helper', 'file-tracking.json');
-    this.dbDir = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb');
-    this.indexPath = path.join(this.dbDir, 'index.json');
-    this.ensureDirectoryExists();
-    this.ensureDbDir();
-    this.database = this.loadDatabase();
-    // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
-    if (!this.database) {
-        this.database = { version: this.DB_VERSION, lastUpdated: Date.now(), files: {}, pathToUuid: {} };
-    } else {
-        (this.database as any).files = this.database.files && typeof this.database.files === 'object' ? this.database.files : {};
-        (this.database as any).pathToUuid = this.database.pathToUuid && typeof this.database.pathToUuid === 'object' ? this.database.pathToUuid : {};
-        if (!this.database.version) { (this.database as any).version = this.DB_VERSION; }
-        if (!this.database.lastUpdated) { (this.database as any).lastUpdated = Date.now(); }
-    }
+        this.dbPath = path.join(workspaceRoot, 'novel-helper', 'file-tracking.json');
+        this.dbDir = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb');
+        this.indexPath = path.join(this.dbDir, 'index.json');
+        this.ensureDirectoryExists();
+        this.ensureDbDir();
+        this.database = this.loadDatabase();
+        // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
+        if (!this.database) {
+            this.database = { version: this.DB_VERSION, lastUpdated: Date.now(), files: {}, pathToUuid: {} };
+        } else {
+            (this.database as any).files = this.database.files && typeof this.database.files === 'object' ? this.database.files : {};
+            (this.database as any).pathToUuid = this.database.pathToUuid && typeof this.database.pathToUuid === 'object' ? this.database.pathToUuid : {};
+            if (!this.database.version) { (this.database as any).version = this.DB_VERSION; }
+            if (!this.database.lastUpdated) { (this.database as any).lastUpdated = Date.now(); }
+        }
         this.ensureDirectoryExists();
         // 计算初始数据哈希
         this.lastSavedHash = this.calculateDatabaseHash();
         // 启动时清理遗留的 .git 目录内条目
         try { this.purgeGitEntries(); } catch (e) { console.warn('[FileTracking] purgeGitEntries 失败（忽略）', e); }
-    // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
-    this.migrateIfNeeded();
-    // 惰性：若存在 index 且开启惰性，则仅加载索引；否则全量加载分片
-    if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
-        this.loadIndexOnly();
-    } else {
-        this.loadShardedFiles();
-    }
+        // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
+        this.migrateIfNeeded();
+        // 惰性：若存在 index 且开启惰性，则仅加载索引；否则全量加载分片
+        if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
+            this.loadIndexOnly();
+        } else {
+            this.loadShardedFiles();
+        }
     }
 
     /** 判断路径是否位于 .git 目录 */
@@ -171,9 +171,9 @@ export class FileTrackingDataManager {
 
     /** 清理已追踪数据库中遗留的 .git 内条目 */
     private purgeGitEntries(): void {
-    if (!this.database || !this.database.pathToUuid) { return; }
-    const toRemove: string[] = [];
-    for (const filePath of Object.keys(this.database.pathToUuid || {})) {
+        if (!this.database || !this.database.pathToUuid) { return; }
+        const toRemove: string[] = [];
+        for (const filePath of Object.keys(this.database.pathToUuid || {})) {
             if (this.isInGitDir(filePath)) { toRemove.push(filePath); }
         }
         if (toRemove.length) {
@@ -214,7 +214,7 @@ export class FileTrackingDataManager {
      */
     private markChanged(): void {
         this.hasUnsavedChanges = true;
-    this.stats.markChanged++;
+        this.stats.markChanged++;
     }
     private ensureDirectoryExists(): void {
         const dir = path.dirname(this.dbPath);
@@ -232,13 +232,13 @@ export class FileTrackingDataManager {
             if (fs.existsSync(this.dbPath)) {
                 const content = fs.readFileSync(this.dbPath, 'utf8');
                 const db = JSON.parse(content) as FileTrackingDatabase;
-                
+
                 // 验证数据库版本
                 if (db.version !== this.DB_VERSION) {
                     console.log(`Migrating file tracking database from ${db.version} to ${this.DB_VERSION}`);
                     return this.migrateDatabase(db);
                 }
-                
+
                 return db;
             }
         } catch (error) {
@@ -249,9 +249,9 @@ export class FileTrackingDataManager {
         // 若存在分片 index 优先用 index 重建空内存结构（随后 loadShardedFiles 会填充）
         if (fs.existsSync(this.indexPath)) {
             try {
-                const idx = JSON.parse(fs.readFileSync(this.indexPath,'utf8')) as {version:string; lastUpdated:number; files:string[]};
-                return { version: this.DB_VERSION, lastUpdated: idx.lastUpdated||Date.now(), files: {}, pathToUuid: {} };
-            } catch {}
+                const idx = JSON.parse(fs.readFileSync(this.indexPath, 'utf8')) as { version: string; lastUpdated: number; files: string[] };
+                return { version: this.DB_VERSION, lastUpdated: idx.lastUpdated || Date.now(), files: {}, pathToUuid: {} };
+            } catch { }
         }
         return { version: this.DB_VERSION, lastUpdated: Date.now(), files: {}, pathToUuid: {} };
     }
@@ -274,7 +274,7 @@ export class FileTrackingDataManager {
      * 保存数据库（防抖）
      */
     private scheduleSave(): void {
-    this.stats.scheduleSave++;
+        this.stats.scheduleSave++;
         if (!this.hasUnsavedChanges) {
             return; // 没有变化，不需要保存
         }
@@ -333,13 +333,13 @@ export class FileTrackingDataManager {
                 lastUpdated: this.database.lastUpdated,
                 totalFiles: Object.keys(this.database.files).length,
                 // 只写基础字段映射用于备份/恢复（可选）
-                files: Object.values(this.database.files).map(f=>({uuid:f.uuid,filePath:f.filePath,isDirectory:f.isDirectory,size:f.size,mtime:f.mtime,hash:f.hash,updatedAt:f.updatedAt}))
+                files: Object.values(this.database.files).map(f => ({ uuid: f.uuid, filePath: f.filePath, isDirectory: f.isDirectory, size: f.size, mtime: f.mtime, hash: f.hash, updatedAt: f.updatedAt }))
             };
             // 根据配置决定是否写 legacy 快照
             let writeLegacy = false;
             try {
                 writeLegacy = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('writeLegacySnapshot', false) === true;
-            } catch {}
+            } catch { }
             let content = '';
             if (writeLegacy) {
                 content = JSON.stringify(slim, null, 2);
@@ -352,7 +352,7 @@ export class FileTrackingDataManager {
             this.hasUnsavedChanges = false;
             const dur = Date.now() - t0;
             this.stats.saveWrite++;
-            console.log(`[FileTracking] 保存(Index) legacy=${writeLegacy?'yes':'no'} size=${content.length}B dur=${dur}ms files=${Object.keys(this.database.files).length}`);
+            console.log(`[FileTracking] 保存(Index) legacy=${writeLegacy ? 'yes' : 'no'} size=${content.length}B dur=${dur}ms files=${Object.keys(this.database.files).length}`);
         } catch (error) {
             console.error('Failed to save file tracking database:', error);
         }
@@ -375,7 +375,7 @@ export class FileTrackingDataManager {
         return new Promise((resolve, reject) => {
             const hash = crypto.createHash('sha256');
             const stream = fs.createReadStream(filePath);
-            
+
             stream.on('data', data => hash.update(data));
             stream.on('end', () => resolve(hash.digest('hex')));
             stream.on('error', reject);
@@ -389,11 +389,11 @@ export class FileTrackingDataManager {
     private computeDirectoryHash(dirPath: string): string {
         const tokens: string[] = [];
         const dirPathNormalized = path.resolve(dirPath);
-        
+
         // 完全基于已追踪的数据库条目计算目录哈希，不读取文件系统
         for (const [filePath, uuid] of Object.entries(this.database.pathToUuid)) {
             const filePathNormalized = path.resolve(filePath);
-            
+
             // 检查文件是否在此目录下（直接子项或深层子项）
             if (filePathNormalized.startsWith(dirPathNormalized + path.sep) || filePathNormalized === dirPathNormalized) {
                 const meta = this.database.files[uuid];
@@ -406,18 +406,18 @@ export class FileTrackingDataManager {
                 }
             }
         }
-        
-        if (tokens.length === 0) { 
-            return ''; 
+
+        if (tokens.length === 0) {
+            return '';
         }
-        
+
         tokens.sort();
         return crypto.createHash('sha256').update(tokens.join('|')).digest('hex');
     }
 
     /** 更新目录及其祖先目录的聚合哈希 */
     private markAncestorsDirty(startPath: string): void {
-    this.stats.markAncestorsDirty++;
+        this.stats.markAncestorsDirty++;
         let dir = path.dirname(startPath);
         const root = this.workspaceRoot;
         while (dir && dir.startsWith(root)) {
@@ -430,21 +430,21 @@ export class FileTrackingDataManager {
     }
 
     private scheduleDirHashRecompute(): void {
-    if (this.dirHashTimer) { return; }
-        this.dirHashTimer = setTimeout(()=>{
+        if (this.dirHashTimer) { return; }
+        this.dirHashTimer = setTimeout(() => {
             this.dirHashTimer = null;
             void this.recomputeDirtyDirHashes();
         }, this.DIR_HASH_DEBOUNCE_MS);
     }
 
     private async recomputeDirtyDirHashes(): Promise<void> {
-    if (this.dirtyDirs.size === 0) { return; }
-    const batch = this.dirtyDirs.size;
-    if (batch > this.stats.maxDirtyBatch) { this.stats.maxDirtyBatch = batch; }
+        if (this.dirtyDirs.size === 0) { return; }
+        const batch = this.dirtyDirs.size;
+        if (batch > this.stats.maxDirtyBatch) { this.stats.maxDirtyBatch = batch; }
         const t0 = Date.now();
         this.stats.dirHashRuns++;
         // 深度优先：先按路径长度从长到短，确保子目录先算
-        const dirs = Array.from(this.dirtyDirs).sort((a,b)=>b.length - a.length);
+        const dirs = Array.from(this.dirtyDirs).sort((a, b) => b.length - a.length);
         this.dirtyDirs.clear();
         let changed = false;
         for (const dir of dirs) {
@@ -477,23 +477,23 @@ export class FileTrackingDataManager {
         try {
             const content = fs.readFileSync(filePath, 'utf8');
             const lines = content.split('\n');
-            
+
             let maxHeading: string | undefined;
             let headingLevel: number | undefined;
-            
+
             for (const line of lines) {
                 const match = line.match(/^(#{1,6})\s+(.+)$/);
                 if (match) {
                     const level = match[1].length;
                     const heading = match[2].trim();
-                    
+
                     if (headingLevel === undefined || level < headingLevel) {
                         headingLevel = level;
                         maxHeading = heading;
                     }
                 }
             }
-            
+
             return { maxHeading, headingLevel };
         } catch (error) {
             return {};
@@ -533,15 +533,15 @@ export class FileTrackingDataManager {
         if (filePath === this.dbPath) {
             return this.getFileUuid(filePath) || '';
         }
-    // 完全忽略 .git 目录
-    if (this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
+        // 完全忽略 .git 目录
+        if (this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
 
         try {
             const stats = await fs.promises.stat(filePath);
             const isDirectory = stats.isDirectory();
             // 目录不做内容哈希，避免 EISDIR
             const hash = isDirectory ? '' : await this.calculateFileHash(filePath);
-            
+
             // 检查是否已存在
             let uuid = this.getFileUuid(filePath);
             let existingFile = uuid ? this.database.files[uuid] : undefined;
@@ -550,7 +550,7 @@ export class FileTrackingDataManager {
                 this.ensureShardLoaded(uuid);
                 existingFile = this.database.files[uuid];
             }
-            
+
             // 如果文件已存在且哈希未变化，不需要任何更新
             if (!isDirectory && existingFile && uuid) {
                 // 进一步比较 size / mtime，降低无意义写入
@@ -574,15 +574,15 @@ export class FileTrackingDataManager {
                 }
                 return uuid;
             }
-            
+
             // 创建新的 UUID（如果不存在）
             if (!uuid) {
                 uuid = uuidv4();
             }
-            
+
             const fileName = path.basename(filePath);
             const fileExtension = path.extname(filePath).toLowerCase();
-            
+
             // 解析 Markdown 标题
             let maxHeading: string | undefined;
             let headingLevel: number | undefined;
@@ -591,7 +591,7 @@ export class FileTrackingDataManager {
                 maxHeading = headingInfo.maxHeading;
                 headingLevel = headingInfo.headingLevel;
             }
-            
+
             const now = Date.now();
             const metadata: FileMetadata = {
                 uuid,
@@ -609,11 +609,11 @@ export class FileTrackingDataManager {
                 lastTrackedAt: now,
                 updatedAt: now
             };
-            
+
             // 更新数据库
             this.database.files[uuid] = metadata;
             this.database.pathToUuid[filePath] = uuid;
-            
+
             this.markChanged();
             this.markShardDirty(uuid, existingFile ? 'recreate metadata (missing shard loaded later)' : 'new file tracked');
             this.scheduleSave();
@@ -628,7 +628,7 @@ export class FileTrackingDataManager {
                 this.markAncestorsDirty(filePath);
             }
             return uuid;
-            
+
         } catch (error) {
             console.error(`Failed to add/update file ${filePath}:`, error);
             throw error;
@@ -664,11 +664,11 @@ export class FileTrackingDataManager {
                 metadata.fileName = path.basename(newPath);
                 metadata.fileExtension = path.extname(newPath).toLowerCase();
                 metadata.updatedAt = Date.now();
-                
+
                 // 更新路径映射
                 delete this.database.pathToUuid[oldPath];
                 this.database.pathToUuid[newPath] = uuid;
-                
+
                 this.markChanged();
                 this.markShardDirty(uuid, 'rename file path/metadata changed');
                 this.scheduleSave();
@@ -755,8 +755,8 @@ export class FileTrackingDataManager {
                 if (stats.sessions !== undefined) { next.sessions = stats.sessions; }
 
                 const simpleChanged = prev.totalMillis !== next.totalMillis || prev.charsAdded !== next.charsAdded || prev.charsDeleted !== next.charsDeleted || prev.sessionsCount !== next.sessionsCount || prev.averageCPM !== next.averageCPM;
-                const bucketsChanged = JSON.stringify(prev.buckets||[]) !== JSON.stringify(next.buckets||[]);
-                const sessionsChanged = JSON.stringify(prev.sessions||[]) !== JSON.stringify(next.sessions||[]);
+                const bucketsChanged = JSON.stringify(prev.buckets || []) !== JSON.stringify(next.buckets || []);
+                const sessionsChanged = JSON.stringify(prev.sessions || []) !== JSON.stringify(next.sessions || []);
                 const lastActiveChangedOnly = !simpleChanged && !bucketsChanged && !sessionsChanged && prev.lastActiveTime !== next.lastActiveTime;
 
                 // 仅 lastActiveTime 变化（纯阅读/聚焦）不写入，避免产生无意义脏分片
@@ -799,7 +799,7 @@ export class FileTrackingDataManager {
         const metadata = this.database.files[uuid];
         if (!metadata) { return; }
         if (!metadata.wordCountStats) {
-            metadata.wordCountStats = { cjkChars:0, asciiChars:0, words:0, nonWSChars:0, total:0 };
+            metadata.wordCountStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
         }
         const prev = metadata.wordCountStats;
         const changed = prev.cjkChars !== stats.cjkChars || prev.asciiChars !== stats.asciiChars || prev.words !== stats.words || prev.nonWSChars !== stats.nonWSChars || prev.total !== stats.total;
@@ -808,7 +808,7 @@ export class FileTrackingDataManager {
         metadata.updatedAt = Date.now();
         metadata.lastTrackedAt = Date.now();
         this.markChanged();
-    this.markShardDirty(uuid, 'wordCountStats changed');
+        this.markShardDirty(uuid, 'wordCountStats changed');
         this.scheduleSave();
         this.stats.wordCountUpdates++;
     }
@@ -824,7 +824,7 @@ export class FileTrackingDataManager {
         meta.updatedAt = Date.now();
         meta.lastTrackedAt = Date.now();
         this.markChanged();
-    this.markShardDirty(uuid, 'mark temporary');
+        this.markShardDirty(uuid, 'mark temporary');
         this.scheduleSave();
         this.stats.markTemp++;
     }
@@ -839,7 +839,7 @@ export class FileTrackingDataManager {
         meta.updatedAt = Date.now();
         meta.lastTrackedAt = Date.now();
         this.markChanged();
-    this.markShardDirty(uuid, 'mark saved');
+        this.markShardDirty(uuid, 'mark saved');
         this.scheduleSave();
         this.stats.markSaved++;
     }
@@ -871,13 +871,13 @@ export class FileTrackingDataManager {
         const files = this.getAllFiles();
         const totalFiles = files.length;
         const totalSize = files.reduce((sum, file) => sum + file.size, 0);
-        
+
         const filesByExtension: { [ext: string]: number } = {};
         files.forEach(file => {
             const ext = file.fileExtension || 'unknown';
             filesByExtension[ext] = (filesByExtension[ext] || 0) + 1;
         });
-        
+
         return {
             totalFiles,
             totalSize,
@@ -921,7 +921,7 @@ export class FileTrackingDataManager {
     public async cleanupMissingFiles(): Promise<string[]> {
         const removedFiles: string[] = [];
         const files = this.getAllFiles();
-        
+
         for (const file of files) {
             try {
                 await fs.promises.access(file.filePath);
@@ -931,7 +931,7 @@ export class FileTrackingDataManager {
                 removedFiles.push(file.filePath);
             }
         }
-        
+
         return removedFiles;
     }
 
@@ -943,14 +943,14 @@ export class FileTrackingDataManager {
             clearTimeout(this.saveTimer);
             this.saveTimer = null;
         }
-    this.saveDatabase(true); // 关闭时强制写入
+        this.saveDatabase(true); // 关闭时强制写入
     }
 
     // ===== 分片存储逻辑 =====
     private migrateIfNeeded(): void {
         if (!fs.existsSync(this.indexPath) && fs.existsSync(this.dbPath)) {
             try {
-                const raw = fs.readFileSync(this.dbPath,'utf8');
+                const raw = fs.readFileSync(this.dbPath, 'utf8');
                 const json = JSON.parse(raw);
                 if (json && json.files && json.pathToUuid) {
                     console.log('[FileTracking] 开始迁移旧 JSON -> 分片');
@@ -971,7 +971,7 @@ export class FileTrackingDataManager {
     }
 
     private shardFilePath(uuid: string): string {
-        const prefix = uuid.slice(0,2);
+        const prefix = uuid.slice(0, 2);
         const dir = path.join(this.dbDir, prefix);
         if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
         return path.join(dir, uuid + '.json');
@@ -997,7 +997,7 @@ export class FileTrackingDataManager {
                             if (!f.endsWith('.json')) { continue; }
                             const full = path.join(subPath, f);
                             try {
-                                const meta = JSON.parse(fs.readFileSync(full,'utf8')) as FileMetadata;
+                                const meta = JSON.parse(fs.readFileSync(full, 'utf8')) as FileMetadata;
                                 if (meta && meta.uuid) {
                                     this.database.files[meta.uuid] = meta;
                                     this.database.pathToUuid[meta.filePath] = meta.uuid;
@@ -1005,7 +1005,7 @@ export class FileTrackingDataManager {
                             } catch { /* ignore */ }
                         }
                     }
-                } catch {/* ignore */}
+                } catch {/* ignore */ }
             }
         } catch (e) { console.warn('加载分片失败', e); }
     }
@@ -1013,7 +1013,7 @@ export class FileTrackingDataManager {
     private loadIndexOnly(): void {
         try {
             if (!fs.existsSync(this.indexPath)) { return; }
-            const raw = fs.readFileSync(this.indexPath,'utf8');
+            const raw = fs.readFileSync(this.indexPath, 'utf8');
             const idx = JSON.parse(raw);
             const entries = idx.entries || idx.files || [];
             for (const ent of entries) {
@@ -1035,7 +1035,7 @@ export class FileTrackingDataManager {
         try {
             const p = this.shardFilePath(uuid);
             if (!fs.existsSync(p)) { return undefined; }
-            return JSON.parse(fs.readFileSync(p,'utf8')) as FileMetadata;
+            return JSON.parse(fs.readFileSync(p, 'utf8')) as FileMetadata;
         } catch { return undefined; }
     }
     private ensureShardLoaded(uuid: string): void {
@@ -1058,16 +1058,16 @@ export class FileTrackingDataManager {
     private writeIndex(): void {
         try {
             // 使用 pathToUuid 保证即便尚未加载分片也能写出索引
-            const entries = Object.entries(this.database.pathToUuid).map(([p,u])=>{
+            const entries = Object.entries(this.database.pathToUuid).map(([p, u]) => {
                 const meta = this.database.files[u];
                 const isDir = meta ? !!meta.isDirectory : this.indexDirFlag.has(u);
-                return {u, p, d: isDir?1:0};
+                return { u, p, d: isDir ? 1 : 0 };
             });
             const idx = { version: this.DB_VERSION + '+idx1', lastUpdated: Date.now(), entries };
             fs.writeFileSync(this.indexPath, JSON.stringify(idx));
         } catch (e) { console.warn('写入 index 失败', e); }
     }
-    private saveSharded(force:boolean): void {
+    private saveSharded(force: boolean): void {
         if (!this.hasUnsavedChanges && !force) { return; }
         if (force && this.dirtyShardUuids.size === 0 && this.removedShardUuids.size === 0) {
             // 全量写入（包括惰性未加载但存在 pathToUuid 的分片 -> 若未加载则跳过，因为没有最新内存副本）
@@ -1083,7 +1083,7 @@ export class FileTrackingDataManager {
             if (meta) { this.writeShard(meta); }
         }
         for (const uuid of this.removedShardUuids) {
-            try { const p = this.shardFilePath(uuid); if (fs.existsSync(p)) { fs.unlinkSync(p); } } catch {/* ignore */}
+            try { const p = this.shardFilePath(uuid); if (fs.existsSync(p)) { fs.unlinkSync(p); } } catch {/* ignore */ }
         }
         this.writeIndex();
         this.dirtyShardUuids.clear();
@@ -1097,11 +1097,11 @@ export class FileTrackingDataManager {
         const uuid = uuidv4();
         const fileName = path.basename(filePath);
         const fileExtension = path.extname(filePath).toLowerCase();
-        const meta: FileMetadata = { uuid, filePath, fileName, fileExtension, size:0, mtime:0, hash:'', isDirectory:false, isTemporary:true, createdAt:now, lastTrackedAt:now, updatedAt:now };
+        const meta: FileMetadata = { uuid, filePath, fileName, fileExtension, size: 0, mtime: 0, hash: '', isDirectory: false, isTemporary: true, createdAt: now, lastTrackedAt: now, updatedAt: now };
         this.database.files[uuid] = meta;
         this.database.pathToUuid[filePath] = uuid;
         this.markChanged();
-    this.markShardDirty(uuid, 'create temporary file');
+        this.markShardDirty(uuid, 'create temporary file');
         this.scheduleSave();
         this.stats.temporaryCreate++;
         return uuid;

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { getFileByPath } from '../utils/globalFileTracking';
 import { WordCountProvider } from './view/wordCountProvider';
 
@@ -174,7 +175,7 @@ export class StatusBarProvider {
             realCPM = Math.round(wordCount / totalMinutesFloat);
         }
 
-        const fileName = require('path').basename(this.currentFilePath);
+    const fileName = path.basename(this.currentFilePath);
         
         const message = [
             `文档：${fileName}`,

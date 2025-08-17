@@ -158,7 +158,7 @@ function ensureDirectoryExists(file: string) {
 function now() { return Date.now(); }
 
 // 统一字数统计：使用与 WordCount 同源的全文分析，确保数据结构统一
-function computeZhEnCount(text: string): { zhChars: number; enWords: number; total: number; full: TextStats } {
+export function computeZhEnCount(text: string): { zhChars: number; enWords: number; total: number; full: TextStats } {
     // analyzeText 返回 TextStats: { cjkChars, asciiChars, words, nonWSChars, total }
     const stats = analyzeText(text);
     return {

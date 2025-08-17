@@ -15,20 +15,21 @@ export const addRoleFromSelection = async () => {
     if (!root1) return;
     const fullPath1 = path.join(root1, rolesFile);
     if (!fs.existsSync(fullPath1)) {
-        await vscode.window.showInformationMessage(
-            `角色库 "${rolesFile}" 不存在，先创建一个示例再继续…`,
+        const action = await vscode.window.showInformationMessage(
+            `角色库 "${rolesFile}" 不存在，是否创建示例角色库？`,
             { modal: true },
-            '关闭'
+            '创建示例',
+            '取消'
         );
-    // 复用示例创建逻辑（静态导入）
-    const example = generateExampleRoleList();
+        if (action !== '创建示例') return; // 放弃操作
+        const example = generateExampleRoleList();
         const txtPath = fullPath1.replace(/\.[^/.]+$/, ".txt");
         if (!fs.existsSync(txtPath)) {
             fs.writeFileSync(txtPath, example.map(i => i.name).join('\n'), 'utf8');
         }
         fs.mkdirSync(path.dirname(fullPath1), { recursive: true });
         fs.writeFileSync(fullPath1, JSON5.stringify(example, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已初始化示例角色库：${rolesFile}`, { modal: true }, '关闭');
+        vscode.window.showInformationMessage(`已初始化示例角色库：${rolesFile}`);
     }
 
     const editor = vscode.window.activeTextEditor;
@@ -77,7 +78,7 @@ export const addRoleFromSelection = async () => {
 
     arr.push(newRole);
     fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已添加角色 "${name}" 到 ${file}`, { modal: true }, '关闭');
+    vscode.window.showInformationMessage(`已添加角色 "${name}" 到 ${file}`);
 
     // 刷新
     loadRoles();
