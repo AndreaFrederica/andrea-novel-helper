@@ -39,9 +39,11 @@ function ensureDecorationTypes() {
     const defaultColor = cfg.get<string>('defaultColor')!;
     // 1) 计算每个角色当前应有的 propsHash
     const newHashMap = new Map<string, string>();
+    const rangeBehavior = vscode.DecorationRangeBehavior.ClosedClosed; // 两端关闭：避免尾部输入继续扩展已匹配角色着色
     for (const r of roles) {
         const color = r.color ?? typeColorMap[r.type] ?? defaultColor;
-        const props = JSON.stringify({ color, type: r.type });
+        // 将 rangeBehavior 纳入哈希，变更策略时强制重建 decorationType
+        const props = JSON.stringify({ color, type: r.type, rb: 'ClosedClosed' });
         newHashMap.set(r.name, props);
     }
 
@@ -53,7 +55,7 @@ function ensureDecorationTypes() {
             const color = JSON.parse(propsHash).color as string;
             const deco = vscode.window.createTextEditorDecorationType({
                 color,
-                rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen // 末尾关闭：在尾部继续输入不扩展装饰
+                rangeBehavior // 末尾不扩展，修复“新打字继承上一次角色颜色”问题
             });
             decorationMeta.set(roleName, { deco, propsHash });
         }
