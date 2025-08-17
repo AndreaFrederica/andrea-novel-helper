@@ -318,6 +318,19 @@ export async function activate(context: vscode.ExtensionContext) {
         timer = setTimeout(() => updateDecorations(), 200);
     };
 
+    // 角色库变化后：去抖重建自动机 + 刷新装饰（Hover 已在自身模块监听 onDidChangeRoles，无需额外处理；Def 依赖 hoverRangesMap 也会间接更新）
+    let acRebuildTimer: ReturnType<typeof setTimeout> | undefined;
+    const onRolesChanged = onDidChangeRoles(() => {
+        if (acRebuildTimer) clearTimeout(acRebuildTimer);
+        acRebuildTimer = setTimeout(() => {
+            try {
+                initAutomaton(); // 重建 AC 自动机（包含别名）
+            } catch (e) { console.warn('[ANH] initAutomaton after roles change failed', e); }
+            scheduleUpdate(); // 触发装饰刷新
+        }, 150);
+    });
+    context.subscriptions.push(onRolesChanged);
+
     context.subscriptions.push(
         // 编辑器切换 / 文档变动 / 保存 文件触发
         vscode.window.onDidChangeActiveTextEditor(scheduleUpdate),

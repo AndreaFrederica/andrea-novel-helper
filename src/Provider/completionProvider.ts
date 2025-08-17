@@ -133,9 +133,10 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                     } catch {}
                 }
 
-                // 1. 先筛角色，过滤掉类型为 "敏感词" 的
+                // 1. 先筛角色，过滤掉类型为 "敏感词" 的（多重保障：后面还会再二次剔除）
+                const skippedSensitive: string[] = [];
                 const matchedRoles = roles.filter(role => {
-                    if (role.type === "敏感词") return false;
+                    if (role.type === '敏感词') { skippedSensitive.push(role.name); return false; }
                     const names = [role.name, ...(role.aliases || [])];
                     return names.some(n => n.includes(prefix));
                 });
@@ -242,8 +243,16 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                     roleIdx++;
                 }
 
-                if (debug) console.log(`[ANH][Completion] emit items count=${items.length} distinctRoles=${matchedRoles.length}`);
-                return new vscode.CompletionList(items, /* isIncomplete */ true);
+                // 3. 终极保险：再次剔除敏感词（若异步期间类型刚写入导致 race）
+                const finalItems = items.filter(it => !/类型: .*敏感词/.test(it.detail || ''));
+                if (debug) {
+                    const removed = items.length - finalItems.length;
+                    console.log(`[ANH][Completion] emit items count=${finalItems.length} distinctRoles=${matchedRoles.length} removedSensitive=${removed} initiallySkippedSensitive=${skippedSensitive.length}`);
+                    if (removed || skippedSensitive.length) {
+                        console.log('[ANH][Completion] sensitiveSkippedList=', skippedSensitive.slice(0,20));
+                    }
+                }
+                return new vscode.CompletionList(finalItems, /* isIncomplete */ true);
         }
     };
 }
