@@ -51,7 +51,10 @@ function ensureDecorationTypes() {
         if (!prev || prev.propsHash !== propsHash) {
             prev?.deco.dispose();
             const color = JSON.parse(propsHash).color as string;
-            const deco = vscode.window.createTextEditorDecorationType({ color });
+            const deco = vscode.window.createTextEditorDecorationType({
+                color,
+                rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen // 末尾关闭：在尾部继续输入不扩展装饰
+            });
             decorationMeta.set(roleName, { deco, propsHash });
         }
     }
@@ -278,9 +281,10 @@ export async function updateDecorations() {
                 (meta as any)[key] = hash;
             }
         }
-        // 2) 给没出现的角色 clear（仅当之前有内容）
+        // 2) 给没出现的角色 clear（按名称判定）
+        const presentNames = new Set(Array.from(roleToRanges.keys()).map(r => r.name));
         for (const [roleName, { deco }] of decorationMeta) {
-            if (!roleToRanges.has([...roleToRanges.keys()].find(r => r.name === roleName)!)) {
+            if (!presentNames.has(roleName)) {
                 editor.setDecorations(deco, []);
                 (decorationMeta.get(roleName)! as any)[`${roleName}::hash`] = '';
             }

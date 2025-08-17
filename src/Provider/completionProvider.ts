@@ -2,7 +2,9 @@
 // src/completionProvider.ts
 import * as vscode from 'vscode';
 import { Role } from '../extension';
-import { getPrefix, getSupportedLanguages, typeColorMap } from '../utils/utils';
+import { getPrefix, typeColorMap } from '../utils/utils';
+// 直接使用 activate.ts 中导出的全局 roles（通过就地清空+push 异步增量保持引用最新）
+import { roles } from '../activate';
 import { FIELD_ALIASES, getExtensionFields } from '../utils/markdownParser';
 
 /**
@@ -110,38 +112,37 @@ function convertToMarkdownList(content: string): string {
     return processedLines.join('\n');
 }
 
-// 新包装：如果未传入 roles 显式参数，则动态引用全局 roles（避免异步加载时旧快照）
-export function createCompletionProvider(rolesParam?: Role[]): vscode.Disposable {
-    // 延迟 require 避免循环依赖（activate -> completionProvider）
-    const getRoles = () => {
-        if (rolesParam) return rolesParam;
-    try {
-            const act = require('../activate');
-            return act.roles as Role[];
-        } catch {
-            return [] as Role[];
-        }
-    };
-    return vscode.languages.registerCompletionItemProvider(
-        getSupportedLanguages(),
-        {
-            provideCompletionItems(document, position) {
+// 导出一个纯净的 CompletionItemProvider，调用方传入 roles 引用
+export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
+    return {
+        provideCompletionItems(document, position) {
                 const line = document.lineAt(position).text.slice(0, position.character);
                 const prefix = getPrefix(line);
                 if (!prefix) return;
 
                 const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
                 const min = cfg.get<number>('minChars')!;
+                const debug = cfg.get<boolean>('debug.completionLog', false);
                 if (prefix.length < min) return;
                 const defaultColor = cfg.get<string>('defaultColor')!;
 
+                if (debug) {
+                    try {
+                        const totalRoles = roles.length;
+                        console.log(`[ANH][Completion] invoke prefix='${prefix}' len=${prefix.length} min=${min} rolesTotal=${totalRoles}`);
+                    } catch {}
+                }
+
                 // 1. 先筛角色，过滤掉类型为 "敏感词" 的
-                const matchedRoles = getRoles().filter(role => {
+                const matchedRoles = roles.filter(role => {
                     if (role.type === "敏感词") return false;
                     const names = [role.name, ...(role.aliases || [])];
                     return names.some(n => n.includes(prefix));
                 });
-                if (!matchedRoles.length) return;
+                if (!matchedRoles.length) {
+                    if (debug) console.log(`[ANH][Completion] no matched roles for prefix='${prefix}'`);
+                    return;
+                }
 
                 // 2. 生成所有名称的 CompletionItem
                 const items: vscode.CompletionItem[] = [];
@@ -241,8 +242,8 @@ export function createCompletionProvider(rolesParam?: Role[]): vscode.Disposable
                     roleIdx++;
                 }
 
+                if (debug) console.log(`[ANH][Completion] emit items count=${items.length} distinctRoles=${matchedRoles.length}`);
                 return new vscode.CompletionList(items, /* isIncomplete */ true);
-            }
         }
-    );
+    };
 }

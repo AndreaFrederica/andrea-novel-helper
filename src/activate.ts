@@ -5,8 +5,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { Role } from './extension';
-import { getSupportedLanguages, loadRoles } from './utils/utils';
-import { createCompletionProvider } from './Provider/completionProvider';
+import { getSupportedLanguages, loadRoles, getPrefix } from './utils/utils';
+import { createRoleCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { WordCountProvider } from './Provider/view/wordCountProvider';
 import { WordCountOrderManager } from './utils/wordCountOrder';
@@ -362,8 +362,17 @@ export async function activate(context: vscode.ExtensionContext) {
         )
     );
 
-    // 自动补全提供器（改为内部直接读取全局 roles）
-    createCompletionProvider();
+    // 自动补全提供器：使用纯 provider 工厂 + 显式语言列表
+    try {
+        const langs = getSupportedLanguages();
+    const provider = createRoleCompletionProvider();
+        const completionDisposable = vscode.languages.registerCompletionItemProvider(langs, provider);
+        context.subscriptions.push(completionDisposable);
+        log(`Completion provider registered for [${langs.join(', ')}], initial roles=${roles.length}`);
+    } catch (e) {
+        log('Completion provider registration FAILED', e);
+    }
+
 
     // Hover 和 Definition 提供器
     activateHover(context);
@@ -372,78 +381,6 @@ export async function activate(context: vscode.ExtensionContext) {
     // Markdown 工具条
     activateMarkdownToolbar(context);
 
-    // 注释掉传统的文件监听，改为由包管理器统一处理
-    // 监听所有库文件变更（包括 JSON5 和 TXT）
-    /*
-    if (folders1 && folders1.length) {
-        const rootUri = folders1[0].uri;
-        const fileKeys = [
-            { key: 'rolesFile', label: '角色库' },
-            { key: 'sensitiveWordsFile', label: '敏感词库' },
-            { key: 'vocabularyFile', label: '词汇库' }
-        ];
-
-        for (const { key, label } of fileKeys) {
-            const fileSetting = cfg1.get<string>(key)!;
-            const absPath = path.isAbsolute(fileSetting)
-                ? fileSetting
-                : path.join(rootUri.fsPath, fileSetting);
-
-            let relPath = path.relative(rootUri.fsPath, absPath).split(path.sep).join('/');
-            const txtPath = relPath.replace(/\.[^/.]+$/, '.txt');
-
-            const watcherJson = vscode.workspace.createFileSystemWatcher(
-                new vscode.RelativePattern(rootUri, relPath)
-            );
-            watcherJson.onDidChange(() => {
-                loadRoles();
-                updateDecorations();
-                vscode.window.showInformationMessage(`${label}（JSON5）已自动刷新`);
-            });
-            watcherJson.onDidCreate(() => {
-                loadRoles();
-                updateDecorations();
-                vscode.window.showInformationMessage(
-                    `${label}（JSON5）文件已创建，已刷新`
-                );
-            });
-            watcherJson.onDidDelete(() => {
-                roles = [];
-                loadRoles();
-                updateDecorations();
-                vscode.window.showWarningMessage(
-                    `${label}（JSON5）文件已删除，已清空列表`
-                );
-            });
-            context.subscriptions.push(watcherJson);
-
-            const watcherTxt = vscode.workspace.createFileSystemWatcher(
-                new vscode.RelativePattern(rootUri, txtPath)
-            );
-            watcherTxt.onDidChange(() => {
-                loadRoles();
-                updateDecorations();
-                vscode.window.showInformationMessage(`${label}（TXT）已自动刷新`);
-            });
-            watcherTxt.onDidCreate(() => {
-                loadRoles();
-                updateDecorations();
-                vscode.window.showInformationMessage(
-                    `${label}（TXT）文件已创建，已刷新`
-                );
-            });
-            watcherTxt.onDidDelete(() => {
-                roles = [];
-                loadRoles();
-                updateDecorations();
-                vscode.window.showWarningMessage(
-                    `${label}（TXT）文件已删除，已清空列表`
-                );
-            });
-            context.subscriptions.push(watcherTxt);
-        }
-    }
-    */
 
     // 确保 openWith 命令注册一次
     ensureRegisterOpenWith(context);

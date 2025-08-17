@@ -888,6 +888,11 @@
           "type": "boolean",
           "default": false,
           "description": "%config.wordCount.debug.description%"
+        },
+        "AndreaNovelHelper.debug.completionLog": {
+          "type": "boolean",
+          "default": false,
+          "description": "补全: 输出前缀/匹配数调试日志 (可能影响性能)。"
         }
       }
     },
