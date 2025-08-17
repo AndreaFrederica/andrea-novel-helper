@@ -701,30 +701,47 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
             try {
                 const dirents = await fs.promises.readdir(folder, { withFileTypes: true });
+                // 分离文件与子目录，避免深度递归串行阻塞
+                const subDirs: fs.Dirent[] = [];
+                const files: fs.Dirent[] = [];
                 for (const d of dirents) {
-                    const full = path.join(folder, d.name);
-                    if (alwaysIgnore(full, d.name, d.isDirectory())) continue;
-                    if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) continue;
-                    if (d.isDirectory()) {
-                        const child = await this.analyzeFolderDynamic(full, exts);
-                        agg = mergeStats(agg, child);
-                    } else {
+                    if (alwaysIgnore(path.join(folder, d.name), d.name, d.isDirectory())) continue;
+                    if (this.ignoreParser && this.ignoreParser.shouldIgnore(path.join(folder, d.name))) continue;
+                    if (d.isDirectory()) subDirs.push(d); else files.push(d);
+                }
+                const forcedInner = this.forcedPaths.has(path.resolve(folder));
+                // 先处理文件（并发批次）
+                const fileBatchSize = 6;
+                for (let i=0;i<files.length;i+=fileBatchSize) {
+                    const batch = files.slice(i,i+fileBatchSize);
+                    const statsArr = await Promise.all(batch.map(async d => {
+                        const full = path.join(folder, d.name);
                         const ext = path.extname(d.name).slice(1).toLowerCase();
                         const special = isSpecialVisibleFile(d.name);
-                        if (!special && !exts.includes(ext)) continue;
-                        const forcedInner = this.forcedPaths.has(path.resolve(folder));
-                        const stats = await this.getOrCalculateFileStats(full, forcedInner);
-                        agg = mergeStats(agg, stats);
-                    }
+                        if (!special && !exts.includes(ext)) return null;
+                        try { return await this.getOrCalculateFileStats(full, forcedInner); } catch { return null; }
+                    }));
+                    for (const st of statsArr) if (st) agg = mergeStats(agg, st);
+                    // 让出事件循环，避免长任务
+                    await new Promise(r=>setTimeout(r,0));
+                }
+                // 再处理子目录（并发+分批）
+                const dirBatchSize = 2; // 控制递归并发
+                for (let i=0;i<subDirs.length;i+=dirBatchSize) {
+                    const batch = subDirs.slice(i,i+dirBatchSize);
+                    const subStats = await Promise.all(batch.map(async d => {
+                        const full = path.join(folder, d.name);
+                        try { return await this.analyzeFolderDynamic(full, exts); } catch { return null; }
+                    }));
+                    for (const st of subStats) if (st) agg = mergeStats(agg, st);
+                    await new Promise(r=>setTimeout(r,0));
                 }
             } catch { /* ignore */ }
-            // 无论是否 forced 都更新缓存（forced 只是本次忽略旧缓存）
             const now = Date.now();
             this.dirAggCache.set(folder, { stats: agg, ts: now });
-                this.previousDirAggCache.delete(folder); // 新结果写入后移除旧值
+            this.previousDirAggCache.delete(folder);
             wcDebug('dirAggCache:update', folder, 'total', agg.total, 'forced', forced);
             if (forced) {
-                // 目录强制重算后解除强制标记，避免无限循环“重新计算中”
                 this.forcedPaths.delete(path.resolve(folder));
                 wcDebug('dir:forced-clear', folder);
             }

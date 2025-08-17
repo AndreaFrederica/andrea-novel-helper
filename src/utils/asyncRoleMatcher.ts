@@ -15,6 +15,8 @@ class AsyncRoleMatcher {
   private disposables: vscode.Disposable[] = [];
   private lastBuildSerial = 0;
   private buildWaiters: Array<() => void> = [];
+  private handleConfigChangeDisposable?: vscode.Disposable;
+  private lastBuiltRoles?: Array<{ name: string; aliases?: string[]; wordSegmentFilter?: any }>;
 
   constructor() {
     this.spawn();
@@ -24,6 +26,16 @@ class AsyncRoleMatcher {
       if (timer) { clearTimeout(timer); }
       timer = setTimeout(()=> this.build(), 100);
     }));
+    // 监听配置变化（分词相关），触发重建
+    this.handleConfigChangeDisposable = vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('AndreaNovelHelper.enableWordSegmentFilter') ||
+          e.affectsConfiguration('AndreaNovelHelper.wordSegment.autoFilterMaxLength')) {
+        // 仅当已有构建角色缓存时才重建
+        if (this.lastBuiltRoles) {
+          this.build(this.lastBuiltRoles);
+        }
+      }
+    });
   }
   private spawn() {
   if (this.worker) { return; }
@@ -64,12 +76,19 @@ class AsyncRoleMatcher {
       }
     }
   }
-  build() {
+  build(explicitRoles?: Array<{ name: string; aliases?: string[]; wordSegmentFilter?: any }>) {
   if (!this.worker || !this.ready) { return; }
   if (this.building) { return; }
     this.building = true;
-    const simpleRoles = roles.map(r=>({ name: r.name, aliases: r.aliases, wordSegmentFilter: (r as any).wordSegmentFilter }));
-    this.worker.postMessage({ type:'build', roles: simpleRoles });
+    const simpleRoles = explicitRoles || roles.map(r=>({ name: r.name, aliases: r.aliases, wordSegmentFilter: (r as any).wordSegmentFilter }));
+    this.lastBuiltRoles = simpleRoles;
+  let enableWordSegmentFilter = true; let autoFilterMaxLength = 1;
+    try {
+      const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+      enableWordSegmentFilter = cfg.get<boolean>('enableWordSegmentFilter', true) ?? true;
+      autoFilterMaxLength = cfg.get<number>('wordSegment.autoFilterMaxLength', 1) ?? 1;
+    } catch {/* ignore */}
+  this.worker.postMessage({ type:'build', roles: simpleRoles, config: { enableWordSegmentFilter, autoFilterMaxLength } });
   }
   async search(text: string, docVersion?: number): Promise<WorkerMatch[]> {
     if (!this.worker) { return []; }
@@ -108,6 +127,7 @@ class AsyncRoleMatcher {
   for (const d of this.disposables) { d.dispose(); }
     if (this.worker) { this.worker.terminate(); }
     this.pending.clear();
+  this.handleConfigChangeDisposable?.dispose();
   }
 }
 

@@ -32,19 +32,14 @@ export function findCompleteWords(text: string, target: string): Array<{ start: 
  * @returns 是否使用分词过滤
  */
 export function shouldUseSegmentFilter(roleName: string, roleWordSegmentFilter?: boolean): boolean {
-    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const globalEnabled = cfg.get<boolean>('enableWordSegmentFilter', true);
-    
-    // 如果全局关闭，则不使用
-    if (!globalEnabled) {
-        return false;
+    try {
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const globalEnabled = cfg.get<boolean>('enableWordSegmentFilter', true);
+    if (!globalEnabled) { return false; }
+    if (roleWordSegmentFilter !== undefined) { return roleWordSegmentFilter; } // 角色覆盖
+        const maxAuto = cfg.get<number>('wordSegment.autoFilterMaxLength', 1) ?? 1;
+        return roleName.length <= Math.max(1, maxAuto);
+    } catch {
+        return roleName.length === 1; // 兜底与旧逻辑保持
     }
-    
-    // 如果角色明确设置了，以角色设置为准
-    if (roleWordSegmentFilter !== undefined) {
-        return roleWordSegmentFilter;
-    }
-    
-    // 默认策略：单字角色名启用分词过滤，多字角色名不启用
-    return roleName.length === 1;
 }

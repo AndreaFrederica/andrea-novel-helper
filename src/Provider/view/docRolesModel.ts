@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ahoCorasickManager } from '../../utils/ahoCorasickManager';
-import { isHugeFile } from '../../utils/utils';
+import { isHugeFile, getSupportedLanguages } from '../../utils/utils';
 import { getRoleMatches } from '../../utils/roleAsyncShared';
 import { getDocumentRoleOccurrences } from '../../utils/documentRolesCache';
 import { Role } from '../../extension';
@@ -79,8 +79,14 @@ class DocumentRolesModel {
     }
 
     private buildFromDocument(doc: vscode.TextDocument): RoleHierarchyAffiliationGroup[] {
-        if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) {
-            return [];
+        // 使用用户设置的 supportedFileTypes，而不是硬编码 markdown/plaintext
+        const supported = getSupportedLanguages();
+        if (!supported.includes(doc.languageId)) {
+            // 兜底：某些 JSON5 插件语言 id 可能不是 json5，但扩展名为 .json5，且用户已允许 json5
+            const lower = doc.fileName.toLowerCase();
+            if (!(lower.endsWith('.json5') && supported.includes('json5'))) {
+                return [];
+            }
         }
         try {
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
