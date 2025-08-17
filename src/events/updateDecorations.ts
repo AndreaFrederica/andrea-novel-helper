@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import { hoverRanges, roles, setHoverRanges } from '../activate';
 import { Role } from '../extension';
-import { getSupportedLanguages, rangesOverlap, typeColorMap, isHugeFile } from '../utils/utils';
+import { getSupportedLanguages, getSupportedExtensions, rangesOverlap, typeColorMap, isHugeFile } from '../utils/utils';
 import * as path from 'path';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
 import { getRoleMatches } from '../utils/roleAsyncShared';
@@ -12,6 +12,11 @@ import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
 // uri.fsPath -> 上次的 Diagnostic 数组
 const prevDiagnostics = new Map<string, vscode.Diagnostic[]>();
+
+// —— 装饰刷新完成事件 ——
+export interface DecorationsUpdatedEvent { uri: vscode.Uri; rolesHighlighted: number; ranges: number; tookMs?: number; }
+export const _onDidUpdateDecorations = new vscode.EventEmitter<DecorationsUpdatedEvent>();
+export const onDidUpdateDecorations = _onDidUpdateDecorations.event;
 
 // —— 装饰器元数据：角色名 → { deco, propsHash } —— 
 interface DecoMeta {
@@ -90,8 +95,15 @@ export async function updateDecorations() {
             }
             continue;
         }
-        // 过滤语言 & 词库文件
-        if (!getSupportedLanguages().includes(doc.languageId)) continue;
+        // 过滤语言 & 词库文件（支持通过配置的语言 ID 或文件扩展名）
+        const supportedLangs = getSupportedLanguages();
+        const supportedExts = new Set(getSupportedExtensions().map(e=>e.toLowerCase()));
+        const fileNameLower = doc.fileName.toLowerCase();
+        const extMatch = fileNameLower.match(/\.([a-z0-9_\-]+)$/);
+        const ext = extMatch ? extMatch[1] : '';
+        if (!supportedLangs.includes(doc.languageId) && !supportedExts.has(ext)) {
+            continue;
+        }
         const folders = vscode.workspace.workspaceFolders;
         if (folders?.length) {
             const root = folders[0].uri.fsPath;
@@ -132,8 +144,8 @@ export async function updateDecorations() {
             const rawHits = ahoCorasickManager.search(fullText);
             hits = rawHits.map(([endIdx, pat]) => [ endIdx, Array.isArray(pat) ? pat : [pat] ]);
         }
-        const acCost = Date.now() - startMs;
-        console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
+    const acCost = Date.now() - startMs;
+    console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
 
         // 预构建 pattern -> role 映射（包含别名），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
         const patternRoleMap = new Map<string, Role>();
@@ -350,5 +362,15 @@ export async function updateDecorations() {
                 : diagnosticCollection.delete(doc.uri);
             prevDiagnostics.set(key, diagnostics.map(d => d));
         }
+
+        // 触发“该文档装饰完成”事件
+        try {
+            _onDidUpdateDecorations.fire({
+                uri: doc.uri,
+                rolesHighlighted: roleToRanges.size,
+                ranges: Array.from(roleToRanges.values()).reduce((s, arr) => s + arr.length, 0),
+                tookMs: Date.now() - startMs
+            });
+        } catch {}
     }
 }

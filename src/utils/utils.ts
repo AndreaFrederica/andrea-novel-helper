@@ -68,7 +68,8 @@ export const typeColorMap: Record<string, string> = {
  */
 export const getSupportedLanguages = (): string[] => {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext'])!;
+	// 默认包含 markdown / plaintext / json5
+	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5'])!;
 	return fileTypes.map((t: string): string =>
 		t === 'txt' ? 'plaintext' : t
 	);

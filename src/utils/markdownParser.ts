@@ -84,6 +84,10 @@ function getStandardFieldName(fieldName: string): string {
  */
 export function parseMarkdownRoles(content: string, filePath: string, packagePath: string, defaultType: string): Role[] {
     const roles: Role[] = [];
+    // 统一结尾：无论原文件是否已有换行，解析前强制追加两个空行（即末尾出现两个空白行）。
+    // 这样可以给最后一个字段与内部段落一个明确的“终止哨兵”，避免需手动补行。
+    // 做法：去掉末尾空白后追加 "\n\n\n" (三个换行符 -> 两个空白行)。
+    content = content.replace(/\s*$/,'') + '\n\n\n';
     const lines = content.split(/\r?\n/);
     
     let currentRole: Partial<Role> | null = null;

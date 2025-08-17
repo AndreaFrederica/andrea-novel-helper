@@ -1,6 +1,6 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
-import { getSupportedLanguages, typeColorMap, rangesOverlap, isHugeFile } from '../utils/utils';
+import { getSupportedLanguages, getSupportedExtensions, typeColorMap, rangesOverlap, isHugeFile } from '../utils/utils';
 import { getRoleMatches, clearRoleMatchCacheForClosedDocs } from '../utils/roleAsyncShared';
 import { roles, onDidChangeRoles } from '../activate';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
@@ -266,10 +266,19 @@ export function activateHover(context: vscode.ExtensionContext) {
     );
 
     // 注册 Hover 提供器
+    // 使用宽匹配 { scheme:'file' }，然后在内部按配置语言/扩展再过滤，避免 json5 等语言 id 不匹配时丢失 Hover
     const hoverProv = vscode.languages.registerHoverProvider(
-        getSupportedLanguages(),
+        { scheme: 'file' },
         {
             provideHover(doc, pos) {
+                const supportedLangs = getSupportedLanguages();
+                const supportedExts = new Set(getSupportedExtensions().map(e=>e.toLowerCase()));
+                const fileNameLower = doc.fileName.toLowerCase();
+                const extMatch = fileNameLower.match(/\.([a-z0-9_\-]+)$/);
+                const ext = extMatch ? extMatch[1] : '';
+                if (!supportedLangs.includes(doc.languageId) && !supportedExts.has(ext)) {
+                    return;
+                }
                 const key = doc.uri.toString();
                 const ranges = hoverRangesMap.get(key) || [];
                 const hit = ranges.find(h => h.range.contains(pos));

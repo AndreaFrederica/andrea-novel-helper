@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { getSupportedLanguages } from '../utils/utils';
+import { getSupportedLanguages, getSupportedExtensions } from '../utils/utils';
 import { Role } from '../extension';
 // 从 HoverProvider 模块导入 hoverRangesMap
 import { hoverRangesMap } from './hoverProvider';
@@ -99,9 +99,18 @@ function findDefinitionInFile(role: Role, filePath: string): vscode.Location | n
  */
 export function activateDef(context: vscode.ExtensionContext) {
     const defProv = vscode.languages.registerDefinitionProvider(
-        getSupportedLanguages(),
+        { scheme: 'file' },
         {
             provideDefinition(document, position) {
+                // 语言/扩展双重过滤，保证 json5 等被支持
+                const supportedLangs = getSupportedLanguages();
+                const supportedExts = new Set(getSupportedExtensions().map(e=>e.toLowerCase()));
+                const fileNameLower = document.fileName.toLowerCase();
+                const extMatch = fileNameLower.match(/\.([a-z0-9_\-]+)$/);
+                const ext = extMatch ? extMatch[1] : '';
+                if (!supportedLangs.includes(document.languageId) && !supportedExts.has(ext)) {
+                    return null;
+                }
                 const key = document.uri.toString();
                 const ranges = hoverRangesMap.get(key) || [];
                 const hit = ranges.find(h => h.range.contains(position));

@@ -3,6 +3,7 @@ import { ahoCorasickManager } from '../../utils/ahoCorasickManager';
 import { isHugeFile, getSupportedLanguages } from '../../utils/utils';
 import { getRoleMatches } from '../../utils/roleAsyncShared';
 import { getDocumentRoleOccurrences } from '../../utils/documentRolesCache';
+import { onDidUpdateDecorations } from '../../events/updateDecorations';
 import { Role } from '../../extension';
 
 const UNGROUPED = '(未分组)';
@@ -20,18 +21,21 @@ class DocumentRolesModel {
     private lastDocUri: string | undefined;
     private lastVersion: number | undefined;
     private cachedHierarchy: RoleHierarchyAffiliationGroup[] = [];
-    private rebuildScheduled = false;
-    private pendingAsync = new Set<string>(); // uri -> in-flight async match
+    private rebuildScheduled = false; // 保留兜底机制（极端情况下）
+    private pendingAsync = new Set<string>(); // 异步匹配中的文档
 
     private constructor() {
-        vscode.window.onDidChangeActiveTextEditor(() => this.scheduleRebuild());
-        vscode.workspace.onDidChangeTextDocument(ev => {
+        // 监听装饰刷新完成事件：表示最新的角色命中缓存已写入，可直接重建模型
+        onDidUpdateDecorations(e => {
             const active = vscode.window.activeTextEditor?.document;
             if (!active) { return; }
-            if (ev.document === active) {
-                this.scheduleRebuild();
+            if (e.uri.toString() === active.uri.toString()) {
+                const changed = this.rebuild(true);
+                if (changed) { this._onDidChange.fire(); }
             }
         });
+        // 仍监听主动切换（避免尚未触发装饰的第一次进入）
+        vscode.window.onDidChangeActiveTextEditor(() => this.scheduleRebuild());
     }
 
     private scheduleRebuild() {
@@ -100,39 +104,6 @@ class DocumentRolesModel {
         const seen = new Set<Role>();
         if (occ) {
             for (const r of occ.keys()) { seen.add(r); }
-        } else {
-            // 异步匹配：避免同步 AC 阻塞主线程
-            const uriStr = doc.uri.toString();
-            if (!this.pendingAsync.has(uriStr)) {
-                this.pendingAsync.add(uriStr);
-                const versionAtReq = doc.version;
-                getRoleMatches(doc).then(matches => {
-                    try {
-                        if (doc.isClosed || doc.version !== versionAtReq) { return; }
-                        // 确保 patternMap 已构建
-                        ahoCorasickManager.initAutomaton();
-                        const asyncSeen = new Set<Role>();
-                        for (const m of matches) {
-                            for (const pat of m.pats) {
-                                const r = ahoCorasickManager.getRole(pat.trim().normalize('NFC'));
-                                if (r) { asyncSeen.add(r); }
-                            }
-                        }
-                        // 只有当当前层级为空或角色集合不同才刷新
-                        if (asyncSeen.size) {
-                            const before = this.cachedHierarchy;
-                            const newHier = this.hierarchyFromSeen(asyncSeen);
-                            const changed = JSON.stringify(before) !== JSON.stringify(newHier);
-                            if (changed) {
-                                this.cachedHierarchy = newHier;
-                                this._onDidChange.fire();
-                            }
-                        }
-                    } finally {
-                        this.pendingAsync.delete(uriStr);
-                    }
-                }).catch(()=>{ this.pendingAsync.delete(uriStr); });
-            }
         }
         // 同步阶段仅使用已知（缓存）结果构建层级（若无则为空）
         if (seen.size === 0) { return []; }
