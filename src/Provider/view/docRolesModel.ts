@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ahoCorasickManager } from '../../utils/ahoCorasickManager';
 import { isHugeFile } from '../../utils/utils';
+import { getRoleMatches } from '../../utils/roleAsyncShared';
 import { getDocumentRoleOccurrences } from '../../utils/documentRolesCache';
 import { Role } from '../../extension';
 
@@ -20,6 +21,7 @@ class DocumentRolesModel {
     private lastVersion: number | undefined;
     private cachedHierarchy: RoleHierarchyAffiliationGroup[] = [];
     private rebuildScheduled = false;
+    private pendingAsync = new Set<string>(); // uri -> in-flight async match
 
     private constructor() {
         vscode.window.onDidChangeActiveTextEditor(() => this.scheduleRebuild());
@@ -93,17 +95,45 @@ class DocumentRolesModel {
         if (occ) {
             for (const r of occ.keys()) { seen.add(r); }
         } else {
-            // 回退：若缓存还未生成（可能首次还未触发装饰），做一次轻量匹配
-            const text = doc.getText();
-            const hits = ahoCorasickManager.search(text);
-            for (const [, pats] of hits) {
-                const arr = Array.isArray(pats) ? pats : [pats];
-                for (const p of arr) {
-                    const r = ahoCorasickManager.getRole(p.trim().normalize('NFC'));
-                    if (r) { seen.add(r); }
-                }
+            // 异步匹配：避免同步 AC 阻塞主线程
+            const uriStr = doc.uri.toString();
+            if (!this.pendingAsync.has(uriStr)) {
+                this.pendingAsync.add(uriStr);
+                const versionAtReq = doc.version;
+                getRoleMatches(doc).then(matches => {
+                    try {
+                        if (doc.isClosed || doc.version !== versionAtReq) { return; }
+                        // 确保 patternMap 已构建
+                        ahoCorasickManager.initAutomaton();
+                        const asyncSeen = new Set<Role>();
+                        for (const m of matches) {
+                            for (const pat of m.pats) {
+                                const r = ahoCorasickManager.getRole(pat.trim().normalize('NFC'));
+                                if (r) { asyncSeen.add(r); }
+                            }
+                        }
+                        // 只有当当前层级为空或角色集合不同才刷新
+                        if (asyncSeen.size) {
+                            const before = this.cachedHierarchy;
+                            const newHier = this.hierarchyFromSeen(asyncSeen);
+                            const changed = JSON.stringify(before) !== JSON.stringify(newHier);
+                            if (changed) {
+                                this.cachedHierarchy = newHier;
+                                this._onDidChange.fire();
+                            }
+                        }
+                    } finally {
+                        this.pendingAsync.delete(uriStr);
+                    }
+                }).catch(()=>{ this.pendingAsync.delete(uriStr); });
             }
         }
+        // 同步阶段仅使用已知（缓存）结果构建层级（若无则为空）
+        if (seen.size === 0) { return []; }
+        return this.hierarchyFromSeen(seen);
+    }
+
+    private hierarchyFromSeen(seen: Set<Role>): RoleHierarchyAffiliationGroup[] {
         const affMap = new Map<string, Map<string, Role[]>>();
         for (const r of seen) {
             const aff = r.affiliation?.trim() || UNGROUPED;
@@ -123,8 +153,8 @@ class DocumentRolesModel {
             typeGroups.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
             affGroups.push({ affiliation: aff, types: typeGroups });
         }
-        affGroups.sort((a,b)=>a.affiliation.localeCompare(b.affiliation,'zh-Hans',{numeric:true,sensitivity:'base'}));
-        return affGroups;
+    affGroups.sort((a,b)=>a.affiliation.localeCompare(b.affiliation,'zh-Hans',{numeric:true,sensitivity:'base'}));
+    return affGroups;
     }
 }
 

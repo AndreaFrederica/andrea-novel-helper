@@ -1,6 +1,7 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
 import { getSupportedLanguages, typeColorMap, rangesOverlap, isHugeFile } from '../utils/utils';
+import { getRoleMatches, clearRoleMatchCacheForClosedDocs } from '../utils/roleAsyncShared';
 import { roles, onDidChangeRoles } from '../activate';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
 import { Role } from '../extension';
@@ -171,30 +172,44 @@ function hoverInfoEqual(a: HoverInfo[], b: HoverInfo[]): boolean {
 /**
  * 增量刷新：仅在变更时更新 hoverRangesMap，并打印日志
  */
-function refreshAll() {
+async function refreshAll() {
     console.log('【HoverProvider】开始增量刷新 Hover 信息');
     const currentKeys = new Set<string>();
-    for (const editor of vscode.window.visibleTextEditors) {
-        const key = editor.document.uri.toString();
+    const editors = vscode.window.visibleTextEditors.slice();
+    for (const editor of editors) {
+        const doc = editor.document;
+        const key = doc.uri.toString();
         currentKeys.add(key);
-        const newInfos = scanDocumentForHover(editor.document);
-        const oldInfos = hoverRangesMap.get(key) || [];
-        // if (!hoverInfoEqual(oldInfos, newInfos))
-        // if (!hoverInfoEqual(oldInfos, newInfos))
-        // if (!hoverInfoEqual(oldInfos, newInfos)) {
-        //TODO 这里的Diff有问题 以后修
-        if (true) {
-            hoverRangesMap.set(key, newInfos);
-            console.log(
-                `【HoverProvider】文档 ${key} Hover 信息更新：${oldInfos.length} → ${newInfos.length}`
-            );
+        // huge skip
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+        if (isHugeFile(doc, hugeTh)) { hoverRangesMap.set(key, []); continue; }
+        const versionAtReq = doc.version;
+        const t0 = Date.now();
+        try {
+            const matches = await getRoleMatches(doc);
+            if (doc.version !== versionAtReq) { continue; }
+            let infos = matches.flatMap(m => m.pats.map(p => {
+                const role = roles.find(r=> r.name === p || r.aliases?.includes(p));
+                if (!role) return undefined;
+                const end = m.end + 1; const start = end - p.length;
+                return { range: new vscode.Range(doc.positionAt(start), doc.positionAt(end)), role };
+            }).filter(Boolean) as HoverInfo[]);
+            // 若异步结果为空但仍有角色，尝试同步 fallback（可能构建尚未真正完成）
+            if (infos.length === 0 && roles.length > 0) {
+                console.log('【HoverProvider】异步空结果，执行同步 fallback');
+                infos = scanDocumentForHover(doc);
+            }
+            hoverRangesMap.set(key, infos);
+            console.log(`【HoverProvider】异步匹配 ${key} v${versionAtReq} 用时 ${Date.now()-t0}ms 命中 ${infos.length}`);
+        } catch (e) {
+            console.warn('【HoverProvider】异步匹配失败 fallback', e);
+            hoverRangesMap.set(key, scanDocumentForHover(doc));
         }
     }
+    clearRoleMatchCacheForClosedDocs(new Set(editors.map(e=> e.document.uri.fsPath)));
     for (const key of Array.from(hoverRangesMap.keys())) {
-        if (!currentKeys.has(key)) {
-            hoverRangesMap.delete(key);
-            console.log(`【HoverProvider】文档 ${key} Hover 缓存已移除`);
-        }
+        if (!currentKeys.has(key)) { hoverRangesMap.delete(key); }
     }
 }
 
@@ -243,13 +258,11 @@ export function activateHover(context: vscode.ExtensionContext) {
     // 监听各类事件触发增量刷新
     context.subscriptions.push(
         // 文档操作：会触发更新对应文档
-        vscode.workspace.onDidOpenTextDocument(refreshAll),
-        vscode.workspace.onDidChangeTextDocument(() => refreshAll()),
-        vscode.workspace.onDidCloseTextDocument(refreshAll),
-        // 切换/分屏：增量刷新可见编辑器
-        vscode.window.onDidChangeVisibleTextEditors(refreshAll),
-        // 角色库改变：触发全量重建 AhoCorasick 与重新扫描
-        onDidChangeRoles(refreshAll)
+    vscode.workspace.onDidOpenTextDocument(()=>refreshAll()),
+    vscode.workspace.onDidChangeTextDocument(()=>refreshAll()),
+    vscode.workspace.onDidCloseTextDocument(()=>refreshAll()),
+    vscode.window.onDidChangeVisibleTextEditors(()=>refreshAll()),
+    onDidChangeRoles(()=>refreshAll())
     );
 
     // 注册 Hover 提供器

@@ -5,6 +5,7 @@ import { Role } from '../extension';
 import { getSupportedLanguages, rangesOverlap, typeColorMap, isHugeFile } from '../utils/utils';
 import * as path from 'path';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
+import { getRoleMatches } from '../utils/roleAsyncShared';
 import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../utils/documentRolesCache';
 
 // —— Diagnostics 集合 —— 
@@ -66,7 +67,7 @@ function ensureDecorationTypes() {
 
 /** 遍历所有可见编辑器，更新装饰 & 诊断 */
 let hugeWarnedFiles = new Set<string>();
-export function updateDecorations() {
+export async function updateDecorations() {
     // 先确保 DecorationType 同步最新
     ensureDecorationTypes();
 
@@ -103,13 +104,31 @@ export function updateDecorations() {
         // 重置 hoverRanges
         setHoverRanges([]);
 
-        // 1. 处理普通角色（AC自动机）
-        initAutomaton();
-        const text = doc.getText();
-        const rawHits = ahoCorasickManager.search(text);
-        const hits: Array<[number, string[]]> = rawHits.map(([endIdx, pat]) => [
-            endIdx, Array.isArray(pat) ? pat : [pat]
-        ]);
+        // 预先仅在需要时获取全文（延迟到 regex 或 fallback 使用）
+        let fullText: string | undefined;
+        const versionAtReq = doc.version;
+        const startMs = Date.now();
+        let hits: Array<[number, string[]]> = [];
+        try {
+            const matches = await getRoleMatches(doc); // 内部可能已 doc.getText()
+            if (versionAtReq === doc.version) {
+                hits = matches.map(m => [m.end, m.pats]);
+            }
+            if (hits.length === 0 && roles.length > 0) {
+                // 可能是构建 race / 词数过少；同步 fallback
+                console.log('[Decorations] 异步空结果 fallback 同步');
+                fullText = doc.getText();
+                const rawHits = ahoCorasickManager.search(fullText);
+                hits = rawHits.map(([endIdx, pat]) => [ endIdx, Array.isArray(pat) ? pat : [pat] ]);
+            }
+        } catch (e) {
+            console.warn('[Decorations] 异步匹配失败 fallback 同步', e);
+            fullText = doc.getText();
+            const rawHits = ahoCorasickManager.search(fullText);
+            hits = rawHits.map(([endIdx, pat]) => [ endIdx, Array.isArray(pat) ? pat : [pat] ]);
+        }
+        const acCost = Date.now() - startMs;
+        console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
 
         // 收集并去重普通角色 Candidate
         type Candidate = { role: Role; text: string; start: number; end: number; priority: number };
@@ -131,37 +150,43 @@ export function updateDecorations() {
             }
         }
 
-        // 2. 处理正则表达式角色（正则表达式优先级设为500+，确保低于普通角色）
-        for (const role of roles) {
-            if (role.type === '正则表达式' && role.regex) {
-                try {
-                    const regex = new RegExp(role.regex, role.regexFlags || 'g');
-                    let match;
-                    
-                    // 重置正则表达式的lastIndex（防止全局匹配状态影响）
-                    regex.lastIndex = 0;
-                    
-                    while ((match = regex.exec(text)) !== null) {
-                        const start = match.index;
-                        const end = start + match[0].length;
-                        
-                        candidates.push({
-                            role,
-                            text: match[0],
-                            start,
-                            end,
-                            priority: (role.priority ?? 500) + 500 // 正则表达式角色优先级+500，确保低于普通角色
-                        });
-                        
-                        // 防止无限循环（如果正则表达式匹配空字符串）
-                        if (match[0].length === 0) {
-                            regex.lastIndex++;
+        // 2. 处理正则表达式角色（优先级低） — 分片执行，避免一次性长阻塞
+        const regexRoles = roles.filter(r => r.type === '正则表达式' && r.regex);
+        if (regexRoles.length) {
+            if (!fullText) fullText = doc.getText();
+            const regexStart = Date.now();
+            const sliceBatch = async () => {
+                const deadline = Date.now() + 12; // 每批最多占用 ~12ms
+                while (regexRoles.length && Date.now() < deadline) {
+                    const role = regexRoles.shift()!;
+                    try {
+                        const regex = new RegExp(role.regex!, role.regexFlags || 'g');
+                        regex.lastIndex = 0;
+                        let m: RegExpExecArray | null;
+                        while ((m = regex.exec(fullText!)) !== null) {
+                            const start = m.index;
+                            const end = start + m[0].length;
+                            candidates.push({
+                                role,
+                                text: m[0],
+                                start,
+                                end,
+                                priority: (role.priority ?? 500) + 500
+                            });
+                            if (m[0].length === 0) regex.lastIndex++;
                         }
+                    } catch (err) {
+                        console.warn(`[Decorations] 正则角色 ${role.name} 无效`, err);
                     }
-                } catch (error) {
-                    console.warn(`正则表达式角色 "${role.name}" 的模式无效:`, error);
                 }
-            }
+                if (regexRoles.length) {
+                    // 让出事件循环，下一帧继续
+                    await new Promise(r => setTimeout(r, 0));
+                    return sliceBatch();
+                }
+            };
+            await sliceBatch();
+            console.log('[Decorations] Regex阶段耗时', Date.now()-regexStart, 'ms');
         }
 
         // 按优先级和长度排序：优先级高的先处理，同优先级按长度倒序
@@ -184,7 +209,7 @@ export function updateDecorations() {
                     if (segment.end > segment.start) { // 确保片段有效
                         selected.push({
                             role: c.role,
-                            text: text.substring(segment.start, segment.end),
+                            text: (fullText || '').substring(segment.start, segment.end),
                             start: segment.start,
                             end: segment.end,
                             priority: c.priority
@@ -232,7 +257,7 @@ export function updateDecorations() {
             return segments;
         }
 
-        // 生成 role → ranges
+        // 生成 role → ranges （并做最小化 setDecorations：如果范围未变则跳过）
         const roleToRanges = new Map<Role, vscode.Range[]>();
         for (const c of selected) {
             const range = new vscode.Range(doc.positionAt(c.start), doc.positionAt(c.end));
@@ -241,15 +266,24 @@ export function updateDecorations() {
             roleToRanges.get(c.role)!.push(range);
         }
 
-    // 1) 给出现的角色 setRanges
+        // 1) 给出现的角色 setRanges（若与上次相同则跳过）
         for (const [role, ranges] of roleToRanges) {
             const meta = decorationMeta.get(role.name)!;
-            editor.setDecorations(meta.deco, ranges);
+            // VSCode 没有直接获取已设置 ranges，简单策略：存一份哈希
+            const key = `${role.name}::hash`;
+            const prev = (meta as any)[key] as string | undefined;
+            const hash = ranges.map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`).join('|');
+            if (prev !== hash) {
+                editor.setDecorations(meta.deco, ranges);
+                (meta as any)[key] = hash;
+            }
         }
-        // 2) 给没出现的角色 clear
+        // 2) 给没出现的角色 clear（仅当之前有内容）
         for (const [roleName, { deco }] of decorationMeta) {
-            const appeared = [...roleToRanges.keys()].some(r => r.name === roleName);
-            if (!appeared) editor.setDecorations(deco, []);
+            if (!roleToRanges.has([...roleToRanges.keys()].find(r => r.name === roleName)!)) {
+                editor.setDecorations(deco, []);
+                (decorationMeta.get(roleName)! as any)[`${roleName}::hash`] = '';
+            }
         }
 
     // 写入缓存供“当前文章角色”视图复用
