@@ -1,6 +1,10 @@
 # Andrea Novel Helper
 
 一个围绕“设定集 / 资料集”组织写作资产的 VS Code 小说写作增强扩展。核心理念：把你的世界观、角色、敏感词、专业词汇、正则高亮规则和章节文件放进一个“包”（Package），由“包管理器”统一可视化管理与快速生成。
+## 反馈和交流
+- Github Issues
+- [QQ群【小说助手用户反馈和交流】](https://qm.qq.com/q/SG5A3XLoSQ)
+
 ## 🚀 核心亮点概览
 
 1. 包管理器（设定集中心）：图形化管理 `novel-helper/` 下的“包”与资源文件（JSON5 / Markdown / TXT）。
