@@ -133,7 +133,17 @@ export async function updateDecorations() {
         const acCost = Date.now() - startMs;
         console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
 
-        // 收集并去重普通角色 Candidate
+        // 预构建 pattern -> role 映射（包含别名），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
+        const patternRoleMap = new Map<string, Role>();
+        for (const r of roles) {
+            patternRoleMap.set(r.name.trim().normalize('NFC'), r);
+            for (const al of r.aliases || []) {
+                if (!al) continue;
+                patternRoleMap.set(al.trim().normalize('NFC'), r);
+            }
+        }
+
+        // 收集并去重普通角色 Candidate（AC / 异步 worker 返回的 pats 可能是主名也可能是别名）
         type Candidate = { role: Role; text: string; start: number; end: number; priority: number };
         const candidates: Candidate[] = [];
         
@@ -141,14 +151,24 @@ export async function updateDecorations() {
         for (const [endIdx, arr] of hits) {
             for (const raw of arr) {
                 const pat = raw.trim().normalize('NFC');
-                const role = ahoCorasickManager.getRole(pat);
-                if (!role) continue;
+                // 先用预构建映射（含别名）获取角色；若失败再尝试 AC（理论上不应再缺失）
+                let role = patternRoleMap.get(pat) || ahoCorasickManager.getRole(pat);
+                if (!role) {
+                    // 别名丢失兜底：线性扫描（极少发生，日志观测）
+                    role = roles.find(r => r.name === pat || r.aliases?.includes(pat));
+                }
+                if (!role) {
+                    // 调试日志（避免噪音，仅在开发者控制台）
+                    // console.log('[Decorations] 未解析到匹配角色(可能为过期缓存) pattern=', pat);
+                    continue;
+                }
                 candidates.push({ 
                     role, 
                     text: pat, 
                     start: endIdx - pat.length + 1, 
                     end: endIdx + 1,
-                    priority: role.priority ?? 100 // 普通角色默认优先级为100
+                    // 优先级：数值越小越先处理；敏感词默认最高优先级，其次普通角色；regex 在后面单独加 500 偏移
+                    priority: role.priority ?? (role.type === '敏感词' ? 0 : 100) // 敏感词默认0，其它普通默认100
                 });
             }
         }
