@@ -120,7 +120,17 @@ export function registerDocRolesTreeView(context: vscode.ExtensionContext) {
 		try {
 			const doc = await vscode.workspace.openTextDocument(role.sourcePath);
 			const editor = await vscode.window.showTextDocument(doc, { preview: true });
-			const txt = doc.getText();
+			const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+			const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+			let txt = '';
+			if (doc.getText().length * 1.8 > hugeTh) {
+				console.warn('[DocRolesTreeView] skip huge file full search', doc.uri.fsPath);
+				// 仅取前 8KB 做一次定位尝试
+				const slice = doc.getText().slice(0, 8*1024);
+				txt = slice;
+			} else {
+				txt = doc.getText();
+			}
 			let idx = txt.indexOf(role.name);
 			if (idx < 0) { idx = txt.search(new RegExp(role.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))); }
 			if (idx >= 0) {

@@ -101,71 +101,71 @@
       },
       {
         "command": "AndreaNovelHelper.openFile",
-  "title": "%command.openFile.title%"
+        "title": "%command.openFile.title%"
       },
       {
         "command": "AndreaNovelHelper.deleteNode",
-  "title": "%command.deleteNode.title%"
+        "title": "%command.deleteNode.title%"
       },
       {
         "command": "AndreaNovelHelper.createCharacterGallery",
-  "title": "%command.createCharacterGallery.title%"
+        "title": "%command.createCharacterGallery.title%"
       },
       {
         "command": "AndreaNovelHelper.createSensitiveWords",
-  "title": "%command.createSensitiveWords.title%"
+        "title": "%command.createSensitiveWords.title%"
       },
       {
         "command": "AndreaNovelHelper.createVocabulary",
-  "title": "%command.createVocabulary.title%"
+        "title": "%command.createVocabulary.title%"
       },
       {
         "command": "AndreaNovelHelper.createSubPackage",
-  "title": "%command.createSubPackage.title%"
+        "title": "%command.createSubPackage.title%"
       },
       {
         "command": "AndreaNovelHelper.renamePackage",
-  "title": "%command.renamePackage.title%"
+        "title": "%command.renamePackage.title%"
       },
       {
         "command": "AndreaNovelHelper.createMarkdownFile",
-  "title": "%command.createMarkdownFile.title%"
+        "title": "%command.createMarkdownFile.title%"
       },
       {
         "command": "AndreaNovelHelper.createCharacterGalleryMd",
-  "title": "%command.createCharacterGalleryMd.title%"
+        "title": "%command.createCharacterGalleryMd.title%"
       },
       {
         "command": "AndreaNovelHelper.createSensitiveWordsMd",
-  "title": "%command.createSensitiveWordsMd.title%"
+        "title": "%command.createSensitiveWordsMd.title%"
       },
       {
         "command": "AndreaNovelHelper.createVocabularyMd",
-  "title": "%command.createVocabularyMd.title%"
+        "title": "%command.createVocabularyMd.title%"
       },
       {
         "command": "AndreaNovelHelper.createRegexPatterns",
-  "title": "%command.createRegexPatterns.title%"
+        "title": "%command.createRegexPatterns.title%"
       },
       {
         "command": "AndreaNovelHelper.openWith",
-  "title": "%command.openWith.title%"
+        "title": "%command.openWith.title%"
       },
       {
         "command": "AndreaNovelHelper.revealInExplorer",
-  "title": "%command.revealInExplorer.title%"
+        "title": "%command.revealInExplorer.title%"
       },
       {
         "command": "AndreaNovelHelper.toggleMarkdownToolbar",
-  "title": "%command.toggleMarkdownToolbar.title%"
+        "title": "%command.toggleMarkdownToolbar.title%"
       },
       {
         "command": "AndreaNovelHelper.showMarkdownFormatMenu",
-  "title": "%command.showMarkdownFormatMenu.title%"
+        "title": "%command.showMarkdownFormatMenu.title%"
       },
       {
         "command": "AndreaNovelHelper.applyMarkdownFormat",
-  "title": "%command.applyMarkdownFormat.title%"
+        "title": "%command.applyMarkdownFormat.title%"
       },
       {
         "command": "AndreaNovelHelper.showFileTrackingStats",
@@ -181,70 +181,68 @@
       },
       {
         "command": "AndreaNovelHelper.gcFileTracking",
-  "title": "%command.gcFileTracking.title%"
+        "title": "%command.gcFileTracking.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.createNewFile",
-  "title": "%command.wordCount.createNewFile.title%"
+        "title": "%command.wordCount.createNewFile.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.createNewFolder",
-  "title": "%command.wordCount.createNewFolder.title%"
+        "title": "%command.wordCount.createNewFolder.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFileAbove",
-  "title": "%command.wordCount.insertFileAbove.title%"
+        "title": "%command.wordCount.insertFileAbove.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFileBelow",
-  "title": "%command.wordCount.insertFileBelow.title%"
+        "title": "%command.wordCount.insertFileBelow.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFolderAbove",
-  "title": "%command.wordCount.insertFolderAbove.title%"
+        "title": "%command.wordCount.insertFolderAbove.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.insertFolderBelow",
-  "title": "%command.wordCount.insertFolderBelow.title%"
+        "title": "%command.wordCount.insertFolderBelow.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.open",
-  "title": "%command.wordCount.open.title%"
+        "title": "%command.wordCount.open.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.revealInOS",
-  "title": "%command.wordCount.revealInOS.title%"
+        "title": "%command.wordCount.revealInOS.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.rename",
-  "title": "%command.wordCount.rename.title%"
+        "title": "%command.wordCount.rename.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.delete",
-  "title": "%command.wordCount.delete.title%"
+        "title": "%command.wordCount.delete.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.toggleManualOrdering",
-  "title": "%command.wordCount.toggleManualOrdering.title%"
+        "title": "%command.wordCount.toggleManualOrdering.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.generateIndexFromName",
-  "title": "%command.wordCount.generateIndexFromName.title%"
+        "title": "%command.wordCount.generateIndexFromName.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.clearIndex",
-  "title": "%command.wordCount.clearIndex.title%"
-      }
-      ,
+        "title": "%command.wordCount.clearIndex.title%"
+      },
       {
         "command": "AndreaNovelHelper.wordCount.setIndexManual",
-  "title": "%command.wordCount.setIndexManual.title%"
+        "title": "%command.wordCount.setIndexManual.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
-  "title": "%command.wordCount.bulkGenerateIndices.title%"
-      }
-      ,
+        "title": "%command.wordCount.bulkGenerateIndices.title%"
+      },
       {
         "command": "AndreaNovelHelper.wordCount.forceRecountAll",
         "title": "%command.wordCount.forceRecountAll.title%"
@@ -252,64 +250,62 @@
       {
         "command": "AndreaNovelHelper.wordCount.forceRecountHere",
         "title": "%command.wordCount.forceRecountHere.title%"
-      }
-      ,
+      },
       {
         "command": "AndreaNovelHelper.wordCount.copy",
-  "title": "%command.wordCount.copy.title%"
+        "title": "%command.wordCount.copy.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.cut",
-  "title": "%command.wordCount.cut.title%"
+        "title": "%command.wordCount.cut.title%"
       },
       {
         "command": "AndreaNovelHelper.wordCount.paste",
-  "title": "%command.wordCount.paste.title%"
-      }
-      ,
+        "title": "%command.wordCount.paste.title%"
+      },
       {
         "command": "AndreaNovelHelper.package.copy",
-  "title": "%command.package.copy.title%"
+        "title": "%command.package.copy.title%"
       },
       {
         "command": "AndreaNovelHelper.package.cut",
-  "title": "%command.package.cut.title%"
+        "title": "%command.package.cut.title%"
       },
       {
         "command": "AndreaNovelHelper.package.paste",
-  "title": "%command.package.paste.title%"
+        "title": "%command.package.paste.title%"
       },
       {
         "command": "AndreaNovelHelper.setupGitIdentity",
-  "title": "%command.setupGitIdentity.title%"
+        "title": "%command.setupGitIdentity.title%"
       },
       {
         "command": "AndreaNovelHelper.openSetupWizard",
-  "title": "%command.openSetupWizard.title%"
+        "title": "%command.openSetupWizard.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.checkGit",
-  "title": "%command.wizard.checkGit.title%"
+        "title": "%command.wizard.checkGit.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.openGitDownload",
-  "title": "%command.wizard.openGitDownload.title%"
+        "title": "%command.wizard.openGitDownload.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.checkGitUser",
-  "title": "%command.wizard.checkGitUser.title%"
+        "title": "%command.wizard.checkGitUser.title%"
       },
       {
         "command": "AndreaNovelHelper.wizard.configureGitUser",
-  "title": "%command.wizard.configureGitUser.title%"
+        "title": "%command.wizard.configureGitUser.title%"
       },
       {
         "command": "AndreaNovelHelper.testGitDownloadLink",
-  "title": "%command.testGitDownloadLink.title%"
+        "title": "%command.testGitDownloadLink.title%"
       },
       {
         "command": "AndreaNovelHelper.simulateNoGit",
-  "title": "%command.simulateNoGit.title%" 
+        "title": "%command.simulateNoGit.title%"
       }
     ],
     "walkthroughs": [
@@ -322,43 +318,67 @@
             "id": "anh.step.open",
             "title": "开始",
             "description": "欢迎使用小说助手配置向导。依次完成以下步骤，或直接点击右上角重试。",
-              "media": { "markdown": "media/walkthrough/step0_intro.md" },
-            "completionEvents": ["onCommand:AndreaNovelHelper.openSetupWizard"]
+            "media": {
+              "markdown": "media/walkthrough/step0_intro.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.openSetupWizard"
+            ]
           },
           {
             "id": "anh.step.checkGit",
             "title": "检查是否已安装 Git",
             "description": "点击 [立即检查](command:AndreaNovelHelper.wizard.checkGit) 来检测本机是否已安装 Git。",
-              "media": { "markdown": "media/walkthrough/step1_checkGit.md" },
-            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.checkGit"]
+            "media": {
+              "markdown": "media/walkthrough/step1_checkGit.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.wizard.checkGit"
+            ]
           },
           {
             "id": "anh.step.installGit",
             "title": "安装 Git (若尚未安装)",
             "description": "若上一步检测未安装，可点击 [打开下载页面](command:AndreaNovelHelper.wizard.openGitDownload) 下载安装后重启 VS Code。",
-              "media": { "markdown": "media/walkthrough/step2_installGit.md" },
-            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.openGitDownload"]
+            "media": {
+              "markdown": "media/walkthrough/step2_installGit.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.wizard.openGitDownload"
+            ]
           },
           {
             "id": "anh.step.checkUser",
             "title": "检查 Git 用户信息",
             "description": "点击 [检查用户信息](command:AndreaNovelHelper.wizard.checkGitUser) 查看当前生效的 user.name 与 user.email。",
-              "media": { "markdown": "media/walkthrough/step3_checkUser.md" },
-            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.checkGitUser"]
+            "media": {
+              "markdown": "media/walkthrough/step3_checkUser.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.wizard.checkGitUser"
+            ]
           },
           {
             "id": "anh.step.configureUser",
             "title": "配置或修改 Git 用户信息",
             "description": "如未配置或需修改，点击 [配置用户信息](command:AndreaNovelHelper.wizard.configureGitUser) 进行交互式设置。",
-              "media": { "markdown": "media/walkthrough/step4_configUser.md" },
-            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.configureGitUser"]
+            "media": {
+              "markdown": "media/walkthrough/step4_configUser.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.wizard.configureGitUser"
+            ]
           },
           {
             "id": "anh.step.recheck",
             "title": "完成并再次验证",
             "description": "可再次点击 [重新检查](command:AndreaNovelHelper.wizard.checkGitUser) 验证结果，全部步骤完成后即可开始写作。",
-              "media": { "markdown": "media/walkthrough/step5_recheck.md" },
-            "completionEvents": ["onCommand:AndreaNovelHelper.wizard.checkGitUser"]
+            "media": {
+              "markdown": "media/walkthrough/step5_recheck.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.wizard.checkGitUser"
+            ]
           }
         ]
       }
@@ -514,8 +534,7 @@
           "when": "view == wordCountExplorer && viewItem == wordCountFolder",
           "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
           "group": "4_order@5"
-        }
-        ,
+        },
         {
           "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
           "command": "AndreaNovelHelper.wordCount.forceRecountHere",
@@ -526,7 +545,6 @@
           "command": "AndreaNovelHelper.wordCount.forceRecountAll",
           "group": "9_force@2"
         },
-        
         {
           "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
           "command": "AndreaNovelHelper.wordCount.copy",
@@ -541,8 +559,7 @@
           "when": "view == wordCountExplorer && viewItem == wordCountFolder",
           "command": "AndreaNovelHelper.wordCount.paste",
           "group": "5_clip@3"
-        }
-        ,
+        },
         {
           "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
           "command": "AndreaNovelHelper.package.copy",
@@ -672,6 +689,18 @@
           ],
           "description": "%config.timeStats.enabledLanguages.description%"
         },
+        "AndreaNovelHelper.hugeFile.thresholdBytes": {
+          "type": "number",
+          "default": 51200,
+          "minimum": 1024,
+          "maximum": 10485760,
+          "description": "超过该大小(字节)的文件视为超大文件，将关闭正则/自动机着色等高成本功能，仅保留 TimeStats 近似统计并弹出提示。"
+        },
+        "AndreaNovelHelper.hugeFile.suppressWarning": {
+          "type": "boolean",
+          "default": false,
+          "description": "不再弹出超大文件提示。"
+        },
         "AndreaNovelHelper.timeStats.idleThresholdMs": {
           "type": "number",
           "default": 30000,
@@ -713,6 +742,47 @@
           ],
           "description": "%config.timeStats.exitIdleOn.description%"
         },
+        "AndreaNovelHelper.timeStats.largeFile.thresholdBytes": {
+          "type": "number",
+          "default": 65536,
+          "minimum": 4096,
+          "description": "TimeStats: 触发大文件近似实时统计的字节阈值。超过后用增量估算并后台校准。"
+        },
+        "AndreaNovelHelper.timeStats.largeFile.approximate": {
+          "type": "boolean",
+          "default": true,
+          "description": "TimeStats: 是否启用大文件增量近似统计以提升输入流畅度。"
+        },
+        "AndreaNovelHelper.timeStats.largeFile.accurateEveryChanges": {
+          "type": "number",
+          "default": 80,
+          "minimum": 5,
+          "description": "TimeStats: 大文件近似模式下累计多少次文本变更后触发一次精确校准。"
+        },
+        "AndreaNovelHelper.timeStats.largeFile.accurateEveryMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 5000,
+          "description": "TimeStats: 大文件近似模式下与上次精确校准的最小时间间隔 (毫秒)。"
+        },
+        "AndreaNovelHelper.timeStats.debug": {
+          "type": "boolean",
+          "default": false,
+          "description": "TimeStats: 输出详细调试日志 (可能影响性能)。"
+        },
+        "AndreaNovelHelper.wordCount.largeFileThreshold": {
+          "type": "number",
+          "default": 51200,
+          "minimum": 1024,
+          "description": "大文件快速估算字数阈值 (字节)。超过该大小先显示估算字数，后台再进行精确统计。"
+        },
+        "AndreaNovelHelper.wordCount.largeFileAvgBytesPerChar": {
+          "type": "number",
+          "default": 1.6,
+          "minimum": 0.5,
+          "maximum": 10,
+          "description": "大文件估算阶段使用的平均字节/字符比值 (字节 ÷ 字符)。例如 1.6 代表 1.6 字节≈1 个字符。"
+        },
         "AndreaNovelHelper.timeStats.persistReadOnlySessions": {
           "type": "boolean",
           "default": false,
@@ -721,7 +791,10 @@
         "AndreaNovelHelper.timeStats.statusBar.alignment": {
           "type": "string",
           "default": "left",
-          "enum": ["left", "right"],
+          "enum": [
+            "left",
+            "right"
+          ],
           "enumDescriptions": [
             "%config.timeStats.statusBar.alignment.left%",
             "%config.timeStats.statusBar.alignment.right%"
@@ -766,12 +839,16 @@
           "type": "boolean",
           "default": true,
           "description": "%config.wordCount.order.autoResequence.description%"
-        }
-        ,
+        },
         "AndreaNovelHelper.wordCount.displayFormat": {
           "type": "string",
           "default": "raw",
-          "enum": ["raw", "wan", "k", "qian"],
+          "enum": [
+            "raw",
+            "wan",
+            "k",
+            "qian"
+          ],
           "enumDescriptions": [
             "%config.wordCount.displayFormat.raw%",
             "%config.wordCount.displayFormat.wan%",
@@ -779,8 +856,7 @@
             "%config.wordCount.displayFormat.qian%"
           ],
           "description": "%config.wordCount.displayFormat.description%"
-        }
-        ,
+        },
         "AndreaNovelHelper.wordCount.debug": {
           "type": "boolean",
           "default": false,
@@ -831,13 +907,14 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
+    "@types/node": "^20.19.11",
     "@types/vscode": "^1.101.0",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.25.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {

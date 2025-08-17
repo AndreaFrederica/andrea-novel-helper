@@ -86,6 +86,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private refreshThrottleTimer: NodeJS.Timeout | null = null;
     private ignoreParser: CombinedIgnoreParser | null = null;
 
+    // 大文件异步精确统计支持
+    private largeApproxPending = new Set<string>(); // 仍为估算结果等待精确统计
+    private largeProcessingQueue: string[] = []; // 等待后台处理队列
+    private largeProcessingRunning = false; // 是否在运行队列
+
     // Git Guard 用于缓存优化
     private gitGuard: GitGuard;
     private orderManager: WordCountOrderManager | null = null;
@@ -827,14 +832,31 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         try {
             const stat = await fs.promises.stat(filePath);
             const mtime = stat.mtimeMs;
+            const size = stat.size;
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const largeThreshold = cfg.get<number>('wordCount.largeFileThreshold', 50 * 1024) ?? 50 * 1024;
+            const avgBytesPerChar = cfg.get<number>('wordCount.largeFileAvgBytesPerChar', 1.6) ?? 1.6;
 
             // 1. 检查内存缓存
             const cached = this.statsCache.get(filePath);
             const prevStats: TextStats | undefined = cached?.stats; // 目录不缓存，仅用于文件更新时替换
             const isForced = forceOverride || this.forcedPaths.has(path.resolve(filePath));
-            if (!isForced && cached && cached.mtime === mtime) {
+            if (!isForced && cached && cached.mtime === mtime && !this.largeApproxPending.has(filePath)) {
                 wcDebug('cache-hit:memory:file', filePath, 'mtime', mtime);
                 return cached.stats;
+            }
+
+            // 1.5 大文件快速估算路径（若无精确缓存或缓存为过期）
+            if (!isForced && size > largeThreshold && !this.largeApproxPending.has(filePath)) {
+                // 生成估算结果（只估 total，其余置 0）
+                const estimatedTotal = Math.max(1, Math.floor(size / Math.max(0.1, avgBytesPerChar)));
+                const est: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: estimatedTotal };
+                this.statsCache.set(filePath, { stats: est, mtime });
+                this.largeApproxPending.add(filePath);
+                wcDebug('largeFile:estimated', filePath, 'size', size, 'estTotal', estimatedTotal);
+                // 加入后台精确统计队列
+                this.scheduleLargeAccurate(filePath);
+                return est;
             }
 
             // 2. 检查持久化缓存（从文件追踪数据库）
@@ -915,6 +937,43 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             console.error(`Error calculating stats for ${filePath}:`, error);
             return { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
         }
+    }
+
+    /** 将大文件加入精确统计后台队列 */
+    private scheduleLargeAccurate(filePath: string) {
+        if (this.largeProcessingQueue.includes(filePath)) return;
+        this.largeProcessingQueue.push(filePath);
+        this.runLargeProcessing();
+    }
+
+    /** 后台串行处理大文件精确统计，避免阻塞主线程 */
+    private async runLargeProcessing() {
+        if (this.largeProcessingRunning) return;
+        this.largeProcessingRunning = true;
+        while (this.largeProcessingQueue.length) {
+            const fp = this.largeProcessingQueue.shift()!;
+            if (!this.largeApproxPending.has(fp)) continue; // 已经被其它途径精确统计
+            try {
+                wcDebug('largeFile:processing:start', fp);
+                const stat = await fs.promises.stat(fp).catch(()=>null);
+                if (!stat || !stat.isFile()) { this.largeApproxPending.delete(fp); continue; }
+                const mtime = stat.mtimeMs;
+                const stats = await countAndAnalyze(fp);
+                this.statsCache.set(fp, { stats, mtime });
+                this.largeApproxPending.delete(fp);
+                // 失效目录聚合缓存以触发刷新
+                this.invalidateDirAggUpwards(fp);
+                wcDebug('largeFile:processing:done', fp, 'total', stats.total);
+                this.refreshDebounced();
+            } catch (e) {
+                wcDebug('largeFile:processing:error', fp, e);
+                // 出错也移除，避免无限循环
+                this.largeApproxPending.delete(fp);
+            }
+            // 小延迟让出事件循环，避免长时间占用
+            await new Promise(res=>setTimeout(res, 5));
+        }
+        this.largeProcessingRunning = false;
     }
 
     // 目录聚合通过 dirAggCache 临时缓存，无持久化

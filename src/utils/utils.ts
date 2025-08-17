@@ -74,6 +74,21 @@ export const getSupportedExtensions = (): string[] => {
 		.filter((ext): ext is string => !!ext);
 };
 
+// 判定是否为超大文件
+export function isHugeFile(doc: vscode.TextDocument | { getText(): string }, threshold?: number): boolean {
+	try {
+		const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+		const th = threshold ?? cfg.get<number>('hugeFile.thresholdBytes', 50 * 1024)!;
+		// 使用 UTF-16 length 近似; 更精确可用 Buffer.byteLength 但多一次分配
+		const len = doc.getText().length; // 对大文件 doc.getText 仍然可能昂贵, 但 VSCode 已经把内容载入内存
+		// 估算字节: 绝大多数中文占 3 bytes UTF-8, 英文 1 byte; 用平均 1.8 做一个快速估计避免再次编码
+		const approxBytes = Math.round(len * 1.8);
+		return approxBytes > th;
+	} catch {
+		return false;
+	}
+}
+
 // 分词函数：处理罗马字、英文、拼音等混合格式
 export function tokenizeComplexNames(name: string): string[] {
 	const tokens: string[] = [];

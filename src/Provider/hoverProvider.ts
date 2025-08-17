@@ -1,6 +1,6 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
-import { getSupportedLanguages, typeColorMap, rangesOverlap } from '../utils/utils';
+import { getSupportedLanguages, typeColorMap, rangesOverlap, isHugeFile } from '../utils/utils';
 import { roles, onDidChangeRoles } from '../activate';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
 import { Role } from '../extension';
@@ -122,6 +122,14 @@ export const hoverRangesMap = new Map<string, HoverInfo[]>();
  * 扫描文档，生成 Hover 信息列表
  */
 function scanDocumentForHover(doc: vscode.TextDocument): HoverInfo[] {
+    try {
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+        if (isHugeFile(doc, hugeTh)) {
+            console.warn('[HoverProvider] skip huge file hover AC scan', doc.uri.fsPath);
+            return [];
+        }
+    } catch {/* ignore */}
     const text = doc.getText();
     const rawHits = ahoCorasickManager.search(text);
     type Candidate = { role: Role; start: number; end: number };

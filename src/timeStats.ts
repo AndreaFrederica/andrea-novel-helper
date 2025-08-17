@@ -8,6 +8,7 @@ import {
     updateFileWritingStats
 } from './utils/globalFileTracking';
 import { analyzeText, TextStats } from './utils/utils';
+import { isHugeFile } from './utils/utils';
 import { getFileTracker } from './utils/fileTracker';
 import { getIgnoredWritingStatsManager } from './utils/ignoredWritingStats';
 
@@ -44,12 +45,28 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 // Webview面板状态管理
 let dashboardPanel: vscode.WebviewPanel | undefined;
 
+// 调试开关读取
+function tsDebugEnabled(): boolean {
+    try { return vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats').get<boolean>('debug', false) ?? false; } catch { return false; }
+}
+function tsDebug(tag: string, ...rest: any[]) {
+    if (!tsDebugEnabled()) { return; }
+    try { console.warn('[TimeStats][debug]', tag, ...rest); } catch { /* ignore */ }
+}
+
 // —— IME 友好的去抖计数状态 ——
 interface RuntimeDocState {
     lastCount: number;            // 上次稳定时的"码字总量"（computeZhEnCount 的 total）
     lastVersion: number;          // 上次稳定时的文档版本
     debounce?: NodeJS.Timeout;    // 去抖定时器
     lastFlushTs: number;          // 上次冲刷时间
+    // —— 大文件近似模式字段 ——
+    isLarge?: boolean;            // 是否为大文件并启用近似模式
+    pendingDelta?: number;        // 自上次冲刷以来累计的近似增量
+    approxChanges?: number;       // 近似增量累计次数
+    lastAccurateTs?: number;      // 最近一次精确校准时间
+    lastFullStats?: TextStats;    // 最近一次精确统计的完整 TextStats（小文件或大文件校准时更新）
+    pendingFlushCore?: boolean;   // 是否已有异步 flushCore 排队
 }
 const docStates = new Map<string, RuntimeDocState>();
 
@@ -57,8 +74,24 @@ function getOrInitDocState(doc: vscode.TextDocument): RuntimeDocState {
     const fp = doc.uri.fsPath;
     let st = docStates.get(fp);
     if (!st) {
-        const base = computeZhEnCount(doc.getText()).total;
-        st = { lastCount: base, lastVersion: doc.version, lastFlushTs: now() };
+        const cfg = getConfig();
+        const text = doc.getText();
+        const size = Buffer.byteLength(text, 'utf8');
+        const isLarge = cfg.largeApproximate && size > cfg.largeThresholdBytes;
+        // 超大文件提示（避免重复弹出）
+        try {
+            const hugeCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const hugeTh = hugeCfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+            const suppress = hugeCfg.get<boolean>('hugeFile.suppressWarning', false)!;
+            if (size > hugeTh && !suppress && !docStates.has('__hugewarn__'+fp)) {
+                docStates.set('__hugewarn__'+fp, { lastCount:0, lastVersion:0, lastFlushTs:0 });
+                vscode.window.showInformationMessage('该大文件已启用 TimeStats 近似统计，其他高成本高亮功能已被跳过。');
+            }
+        } catch {/* ignore */}
+        // 首次仍做一次精确统计建立基线
+    const baseFull = computeZhEnCount(text);
+    st = { lastCount: baseFull.total, lastVersion: doc.version, lastFlushTs: now(), isLarge, pendingDelta: 0, approxChanges: 0, lastAccurateTs: now(), lastFullStats: baseFull.full };
+    tsDebug('initDocState', { file: fp, isLarge, size, base: baseFull.total });
         docStates.set(fp, st);
     }
     return st;
@@ -73,9 +106,14 @@ function getConfig() {
         bucketSizeMs: cfg.get<number>('bucketSizeMs', 60000),
         imeDebounceMs: cfg.get<number>('imeDebounceMs', 350), // IME 去抖时间
         exitIdleOn: cfg.get<string>('exitIdleOn', 'text-change'), // 退出空闲状态的条件
-    statusBarAlignment: cfg.get<'left' | 'right'>('statusBar.alignment', 'left'),
-    statusBarPriority: cfg.get<number>('statusBar.priority', 100),
-    respectWcignore: cfg.get<boolean>('respectWcignore', false)
+        statusBarAlignment: cfg.get<'left' | 'right'>('statusBar.alignment', 'left'),
+        statusBarPriority: cfg.get<number>('statusBar.priority', 100),
+        respectWcignore: cfg.get<boolean>('respectWcignore', false),
+        // 大文件估算相关
+        largeThresholdBytes: cfg.get<number>('largeFile.thresholdBytes', 64 * 1024),
+        largeApproximate: cfg.get<boolean>('largeFile.approximate', true),
+        largeAccurateEveryChanges: cfg.get<number>('largeFile.accurateEveryChanges', 80),
+        largeAccurateEveryMs: cfg.get<number>('largeFile.accurateEveryMs', 60_000)
     };
 }
 // 忽略解析器（仅在需要时懒加载）
@@ -387,26 +425,37 @@ function checkExitIdle(trigger: 'text-change' | 'window-focus' | 'editor-change'
 }
 
 // -------------------- IME 友好的去抖计数 --------------------
-function flushDocStats(doc: vscode.TextDocument) {
-    const { bucketSizeMs } = getConfig();
+// 核心冲刷（可能执行重计算），不直接调用，使用 flushDocStats 异步调度
+function flushDocStatsCore(doc: vscode.TextDocument) {
+    const { bucketSizeMs, largeApproximate, largeAccurateEveryChanges, largeAccurateEveryMs } = getConfig();
     const filePath = doc.uri.fsPath;
     const ignored = isFileIgnoredForTimeStats(filePath);
     const st = docStates.get(filePath);
-    if (!st) {
-        return;
-    }
+    if (!st) { return; }
 
     const t = now();
-    const totalNow = computeZhEnCount(doc.getText()).total;   // 整体计算一次
-    const delta = totalNow - st.lastCount;                    // 净增量（>0 计新增，<0 计删除）
+    let totalNow: number;
+    let delta: number;
+    if (st.isLarge && largeApproximate) {
+        delta = st.pendingDelta || 0;
+        if (delta === 0) { st.lastFlushTs = t; tsDebug('flushCore:skip-no-delta', filePath); return; }
+        totalNow = st.lastCount + delta;
+    } else {
+        const full = computeZhEnCount(doc.getText());
+        totalNow = full.total;
+        delta = totalNow - st.lastCount;
+        if (delta === 0) { st.lastFlushTs = t; tsDebug('flushCore:skip-no-change', filePath); return; }
+        st.lastFullStats = full.full;
+    }
+    tsDebug('flushCore:delta', { file: filePath, delta, totalNow, isLarge: st.isLarge });
+
     if (delta !== 0) {
         if (ignored) {
-            // 忽略文件：记入独立 ignored 写作统计分片（不创建全局写作统计条目）
             const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             const mgr = getIgnoredWritingStatsManager(wsRoot);
             if (mgr) {
                 mgr.update({
-                    deltaMillis: 0, // 时间由聚合会话统计
+                    deltaMillis: 0,
                     deltaAdded: delta > 0 ? delta : 0,
                     deltaDeleted: delta < 0 ? -delta : 0,
                     timestamp: t
@@ -422,13 +471,59 @@ function flushDocStats(doc: vscode.TextDocument) {
             bumpBucket(fsEntry, t, Math.max(0, delta), bucketSizeMs);
             fsEntry.lastSeen = t;
             persistFileStats(filePath, fsEntry);
+            tsDebug('flushCore:updateFileStats', { file: filePath, charsAdded: fsEntry.charsAdded, charsDeleted: fsEntry.charsDeleted });
         }
     }
 
     st.lastCount = totalNow;
     st.lastVersion = doc.version;
     st.lastFlushTs = t;
+    if (st.isLarge) { st.pendingDelta = 0; }
     updateStatusBar();
+
+    // 大文件近似模式：按时间或次数触发后台精确校准
+    if (st.isLarge && largeApproximate) {
+        const needAccurateByTime = (t - (st.lastAccurateTs || 0)) >= largeAccurateEveryMs;
+        const needAccurateByChanges = (st.approxChanges || 0) >= largeAccurateEveryChanges;
+        if (needAccurateByTime || needAccurateByChanges) {
+            tsDebug('scheduleAccurate', { file: filePath, needAccurateByTime, needAccurateByChanges, approxChanges: st.approxChanges, sinceLastMs: t - (st.lastAccurateTs || 0) });
+            const versionAtSchedule = doc.version;
+            setTimeout(()=>{
+                try {
+                    const full = computeZhEnCount(doc.getText());
+                    const adjust = full.total - st.lastCount;
+                    if (adjust !== 0) {
+                        const fsEntry = getFileStats(filePath);
+                        if (adjust > 0) { fsEntry.charsAdded += adjust; } else { fsEntry.charsDeleted += -adjust; }
+                        bumpBucket(fsEntry, now(), Math.max(0, adjust), bucketSizeMs);
+                        fsEntry.lastSeen = now();
+                        persistFileStats(filePath, fsEntry);
+                        st.lastCount = full.total;
+                        st.lastFullStats = full.full;
+                        tsDebug('accurateAdjust', { file: filePath, adjust, newTotal: st.lastCount });
+                    }
+                    st.lastAccurateTs = now();
+                    st.approxChanges = 0;
+                    if (versionAtSchedule === doc.version) { updateStatusBar(); }
+                } catch {/* ignore */}
+            }, 0);
+        }
+    }
+}
+
+// 异步调度包装，确保所有重计算离开事件调用栈
+function flushDocStats(doc: vscode.TextDocument) {
+    const st = getOrInitDocState(doc);
+    if (st.pendingFlushCore) { tsDebug('flushDebounce:alreadyPending', doc.uri.fsPath); return; }
+    st.pendingFlushCore = true; tsDebug('flushDebounce:queue', doc.uri.fsPath);
+    setTimeout(() => {
+        const start = Date.now();
+        try { flushDocStatsCore(doc); } finally {
+            const cost = Date.now() - start;
+            tsDebug('flushDebounce:done', { file: doc.uri.fsPath, costMs: cost });
+            st.pendingFlushCore = false;
+        }
+    }, 0);
 }
 
 function scheduleFlush(doc: vscode.TextDocument) {
@@ -456,11 +551,19 @@ function setStatusBarTextAndTooltip() {
         statusBarItem.hide();
         return;
     }
-
-    const { bucketSizeMs } = getConfig();
-    const doc = vscode.window.activeTextEditor?.document;
-    const docText = doc?.getText() ?? '';
-    const counts = computeZhEnCount(docText);
+    const { bucketSizeMs, largeApproximate } = getConfig();
+    const st = docStates.get(currentDocPath);
+    // 使用缓存的 lastFullStats，避免同步重算；大文件近似模式下 total 可能含 pendingDelta
+    let fullStats: TextStats | undefined = st?.lastFullStats;
+    let displayTotal = st?.lastCount || 0;
+    let approxFlag = false;
+    if (st?.isLarge && largeApproximate) {
+    if (st.pendingDelta && st.pendingDelta !== 0) { displayTotal = st.lastCount + st.pendingDelta; }
+        approxFlag = true;
+    }
+    if (!fullStats) {
+        fullStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: displayTotal };
+    }
 
     const fsEntry = getFileStats(currentDocPath);
     const cpmNow = calcCurrentCPM(fsEntry, bucketSizeMs);
@@ -470,7 +573,8 @@ function setStatusBarTextAndTooltip() {
 
     // 在空闲状态下显示不同的文本样式
     const idleIndicator = isIdle ? ' 💤' : '🖋️';
-    statusBarItem.text = `${cpmNow}/${cpmAvg}/${cpmPeak} CPM · ${minutes} min · CJK ${counts.zhChars} 字 ROMA ${counts.enWords} 词  总计 ${counts.total} ${idleIndicator}`;
+    const approxMark = approxFlag ? '≈' : '';
+    statusBarItem.text = `${cpmNow}/${cpmAvg}/${cpmPeak} CPM · ${minutes} min · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${displayTotal} ${idleIndicator}`;
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = true;
     md.appendMarkdown([
@@ -478,9 +582,9 @@ function setStatusBarTextAndTooltip() {
         `**平均速度**：${cpmAvg} CPM`,
         `**峰值速度**：${cpmPeak} CPM`,
         `**累计用时**：${minutes} 分钟`,
-        `**中文字符**：${counts.zhChars}`,
-        `**英文单词**：${counts.enWords}`,
-        `**码字总量**：${counts.total}`,
+        `**中文字符**：${fullStats.cjkChars}${approxFlag ? ' (近似可能滞后)' : ''}`,
+        `**英文单词**：${fullStats.words}${approxFlag ? ' (近似可能滞后)' : ''}`,
+        `**码字总量**：${approxMark}${displayTotal}${approxFlag ? ' (估算/待校准)' : ''}`,
         `**文件路径**：${currentDocPath}`,
         `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
         `**会话数**：${fsEntry.sessions.length}`,
@@ -498,6 +602,7 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
     const { enabledLanguages, idleThresholdMs } = getConfig();
     const doc = e.document;
     if (!enabledLanguages.includes(doc.languageId)) {
+        tsDebug('textChange:skip-lang', { file: doc.uri.fsPath, lang: doc.languageId, enabledLanguages });
         return;
     }
     if (!vscode.window.activeTextEditor || vscode.window.activeTextEditor.document !== doc) {
@@ -544,8 +649,19 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
         }, idleThresholdMs);
     }
 
-    // 关键：去抖，等待 IME 稳定后统一计算净增量
-    getOrInitDocState(doc);
+    // 关键：去抖，等待 IME 稳定后统一计算净增量（大文件采用增量估算）
+    const st = getOrInitDocState(doc);
+    if (st.isLarge && e.contentChanges.length) {
+        let deltaSum = 0;
+        for (const c of e.contentChanges) {
+            const added = c.text.length;
+            const removed = (c as any).rangeLength !== undefined ? (c as any).rangeLength : c.range.end.character - c.range.start.character;
+            deltaSum += (added - removed);
+        }
+        st.pendingDelta = (st.pendingDelta || 0) + deltaSum;
+        st.approxChanges = (st.approxChanges || 0) + 1;
+        tsDebug('textChange:largeAccum', { file: doc.uri.fsPath, deltaSum, pendingDelta: st.pendingDelta, approxChanges: st.approxChanges });
+    }
     scheduleFlush(doc);
 }
 
@@ -560,6 +676,12 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     }
     endSession();
 
+    if (editor) {
+        const langOk = getConfig().enabledLanguages.includes(editor.document.languageId);
+        if (!langOk) {
+            tsDebug('editorChange:skip-lang', { file: editor.document.uri.fsPath, lang: editor.document.languageId, enabledLanguages: getConfig().enabledLanguages });
+        }
+    }
     if (editor && getConfig().enabledLanguages.includes(editor.document.languageId)) {
         // 如果文件被忽略且启用了 respectWcignore，则不进入统计
         const ignored = isFileIgnoredForTimeStats(editor.document.uri.fsPath);

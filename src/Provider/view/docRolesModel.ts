@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ahoCorasickManager } from '../../utils/ahoCorasickManager';
+import { isHugeFile } from '../../utils/utils';
 import { getDocumentRoleOccurrences } from '../../utils/documentRolesCache';
 import { Role } from '../../extension';
 
@@ -79,6 +80,14 @@ class DocumentRolesModel {
         if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) {
             return [];
         }
+        try {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+            if (isHugeFile(doc, hugeTh)) {
+                console.warn('[DocRolesModel] skip huge file', doc.uri.fsPath, 'sizeApprox>', hugeTh);
+                return [];
+            }
+        } catch {/* ignore */}
         const occ = getDocumentRoleOccurrences(doc);
         const seen = new Set<Role>();
         if (occ) {

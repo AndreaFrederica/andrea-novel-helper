@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import { hoverRanges, roles, setHoverRanges } from '../activate';
 import { Role } from '../extension';
-import { getSupportedLanguages, rangesOverlap, typeColorMap } from '../utils/utils';
+import { getSupportedLanguages, rangesOverlap, typeColorMap, isHugeFile } from '../utils/utils';
 import * as path from 'path';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
 import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../utils/documentRolesCache';
@@ -65,6 +65,7 @@ function ensureDecorationTypes() {
 }
 
 /** 遍历所有可见编辑器，更新装饰 & 诊断 */
+let hugeWarnedFiles = new Set<string>();
 export function updateDecorations() {
     // 先确保 DecorationType 同步最新
     ensureDecorationTypes();
@@ -72,6 +73,17 @@ export function updateDecorations() {
     // 每个可见编辑器单独处理
     for (const editor of vscode.window.visibleTextEditors) {
         const doc = editor.document;
+    const bigCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const hugeTh = bigCfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+    const suppress = bigCfg.get<boolean>('hugeFile.suppressWarning', false)!;
+        if (isHugeFile(doc, hugeTh)) {
+            // 跳过高成本标注
+            if (!suppress && !hugeWarnedFiles.has(doc.uri.fsPath)) {
+                hugeWarnedFiles.add(doc.uri.fsPath);
+                vscode.window.showInformationMessage('该文件体积较大，已关闭自动机角色高亮与敏感词正则扫描，仅保留基础统计 (可在设置中修改 hugeFile.thresholdBytes)。');
+            }
+            continue;
+        }
         // 过滤语言 & 词库文件
         if (!getSupportedLanguages().includes(doc.languageId)) continue;
         const folders = vscode.workspace.workspaceFolders;
