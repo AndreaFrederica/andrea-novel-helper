@@ -380,7 +380,16 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		if (pendingDirs.length) {
 			setTimeout(processNextBatch, 0);
 		} else {
+			// 扫描已全部完成
 			console.log(`loadRoles: 异步扫描完成，累计 ${roles.length} 个角色，用时 ${Date.now() - start}ms (最后批次时间)`);
+			// 如果最终状态栏尚未创建（例如极小/空目录，扫描在 120ms 延迟前完成），需立即创建再显示完成状态
+			if (statusBarTimer) {
+				clearTimeout(statusBarTimer);
+				statusBarTimer = undefined;
+			}
+			if (!statusBar) {
+				ensureStatusBar();
+			}
 			updateStatusBar(true);
 			generateCSpellDictionary();
 		}
