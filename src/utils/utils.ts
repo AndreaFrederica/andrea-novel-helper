@@ -7,7 +7,7 @@ import JSON5 from 'json5';
 
 /* eslint-disable curly */
 import { Role, segmenter } from "../extension";
-import { _onDidChangeRoles, cleanRoles, roles } from '../activate';
+import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles } from '../activate';
 import { globalFileCache } from './fileCache';
 import { parseMarkdownRoles } from './markdownParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
@@ -415,6 +415,8 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 			}
 			updateStatusBar(true);
 			generateCSpellDictionary();
+			// 触发“全量完成”事件（供最终一次装饰/自动机重建）
+			_onDidFinishRoles.fire();
 		}
 	}
 	processNextBatch();

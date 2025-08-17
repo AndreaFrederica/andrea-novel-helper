@@ -73,6 +73,9 @@ export let lastEditorScheme = vscode.window.activeTextEditor?.document.uri.schem
 // 用于发布“角色列表已变更”的事件
 export const _onDidChangeRoles = new vscode.EventEmitter<void>();
 export const onDidChangeRoles = _onDidChangeRoles.event;
+// 角色全量加载完成事件（一次完整扫描结束时触发）
+export const _onDidFinishRoles = new vscode.EventEmitter<void>();
+export const onDidFinishRoles = _onDidFinishRoles.event;
 
 export async function activate(context: vscode.ExtensionContext) {
     // 输出通道用于调试激活阶段错误/栈
@@ -330,6 +333,14 @@ export async function activate(context: vscode.ExtensionContext) {
         }, 150);
     });
     context.subscriptions.push(onRolesChanged);
+
+    // 最终一次全量加载完成后：立即重建 & 立即刷新（不再二次防抖），确保拿到完整 roles 状态至少跑一次
+    const onRolesFinishedDisp = onDidFinishRoles(() => {
+        try { initAutomaton(); } catch (e) { console.warn('[ANH] initAutomaton after roles FINISH failed', e); }
+        // 直接调用而非 schedule，避免再等待 200ms
+        updateDecorations();
+    });
+    context.subscriptions.push(onRolesFinishedDisp);
 
     context.subscriptions.push(
         // 编辑器切换 / 文档变动 / 保存 文件触发

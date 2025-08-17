@@ -187,8 +187,16 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                         // documentation - 显示完整信息
                         const md = new vscode.MarkdownString();
                         
+                        // 颜色显示与 Hover 保持一致：使用内联 SVG 小方块，确保在不同主题下可见
                         const color = role.color || typeColorMap[role.type] || defaultColor;
-                        md.appendMarkdown(`**颜色**: <span style="color:${color}">■</span> \`${color}\``);
+                        try {
+                            const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"${color}\"/></svg>`;
+                            const b64 = Buffer.from(svg).toString('base64');
+                            const uri = `data:image/svg+xml;base64,${b64}`;
+                            md.appendMarkdown(`**颜色**: ![](${uri}) \`${color}\``);
+                        } catch {
+                            md.appendMarkdown(`**颜色**: \`${color}\``);
+                        }
                         md.appendMarkdown(`\n\n**类型**: ${role.type}`);
                         if (role.affiliation) md.appendMarkdown(`\n\n**从属**: ${role.affiliation}`);
                         
