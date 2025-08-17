@@ -24,5 +24,8 @@ export default [{
         eqeqeq: "warn",
         "no-throw-literal": "warn",
         semi: "warn",
+    // 禁止再使用 CommonJS require
+    "@typescript-eslint/no-var-requires": "error",
+    "@typescript-eslint/no-require-imports": "error",
     },
 }];

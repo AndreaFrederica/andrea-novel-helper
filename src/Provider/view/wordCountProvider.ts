@@ -1122,17 +1122,14 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`\n\n**总字数**: **${stats.total}**`);
             // 附加 UUID（文件或目录）
             try {
-                const { getFileUuid } = require('../../utils/globalFileTracking');
                 const fUuid = getFileUuid(resourceUri.fsPath);
                 if (fUuid) {
-                    tip.appendMarkdown(`\n\nUUID: \
-\`${fUuid}\``);
+                    tip.appendMarkdown(`\n\nUUID: \`${fUuid}\``);
                 }
             } catch { /* ignore */ }
             // 剪切状态标记（从辅助模块获取剪切集合）
             try {
-                const { getCutClipboard } = require('../../utils/wordCountCutHelper');
-                const cutSet: Set<string> | undefined = getCutClipboard?.();
+                const cutSet: Set<string> | null | undefined = getCutClipboard?.();
                 if (cutSet && cutSet.has(resourceUri.fsPath)) {
                     tip.appendMarkdown(`\n\n$(scissors) **已剪切 (待粘贴)**`);
                     if (typeof this.description === 'string') {

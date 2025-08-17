@@ -107,15 +107,13 @@ export async function updateDecorations() {
         const folders = vscode.workspace.workspaceFolders;
         if (folders?.length) {
             const root = folders[0].uri.fsPath;
-            const fileB = path.join(root, vscode.workspace
-                .getConfiguration('AndreaNovelHelper')
-                .get<string>('sensitiveWordsFile')!);
-            const fileV = path.join(root, vscode.workspace
-                .getConfiguration('AndreaNovelHelper')
-                .get<string>('vocabularyFile')!);
+            const cfgAll = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const fileB = path.join(root, cfgAll.get<string>('sensitiveWordsFile')!);
+            const fileV = path.join(root, cfgAll.get<string>('vocabularyFile')!);
             const txtB = fileB.replace(/\.[^/.]+$/, '.txt');
             const txtV = fileV.replace(/\.[^/.]+$/, '.txt');
-            if ([fileB, fileV, txtB, txtV].includes(doc.uri.fsPath)) continue;
+            const docPathLower = doc.uri.fsPath.toLowerCase();
+            if ([fileB, fileV, txtB, txtV].some(p => p.toLowerCase() === docPathLower)) continue;
         }
 
         // 重置 hoverRanges
@@ -330,22 +328,36 @@ export async function updateDecorations() {
     // —— 敏感词诊断 —— 
         const diagnostics: vscode.Diagnostic[] = [];
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-        for (const [role, ranges] of roleToRanges) {
-            if (role.type === '敏感词' && folders?.length) {
-                const root = folders![0].uri.fsPath;
-                const cspellTxt = path.join(root, '.vscode', 'cspell-roles.txt');
-                if (doc.uri.fsPath !== cspellTxt) {
-                    for (const range of ranges) {
-                        const base = `发现敏感词：${role.name}` +
-                            (role.description ? ` ${role.description}` : '');
-                        const lineNum = range.start.line + 1;
-                        const lineText = doc.lineAt(range.start.line).text.trim();
-                        const msg = `${base}\n第 ${lineNum} 行: ${lineText}`;
-                        const diag = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Warning);
-                        diag.source = 'AndreaNovelHelper';
-                        diagnostics.push(diag);
-                    }
+        // 判断当前文件是否为任意敏感词库定义文件（支持多包多文件）
+        let isSensitiveWordsDefFile = false;
+        try {
+            const docPathLower2 = doc.uri.fsPath.toLowerCase();
+            // 收集所有敏感词角色的来源文件路径
+            const sensitiveSourceSet = new Set<string>();
+            for (const r of roles) {
+                if (r.type === '敏感词' && r.sourcePath) {
+                    sensitiveSourceSet.add(r.sourcePath.toLowerCase());
                 }
+            }
+            if (sensitiveSourceSet.has(docPathLower2)) {
+                isSensitiveWordsDefFile = true;
+            }
+        } catch { /* ignore */ }
+        for (const [role, ranges] of roleToRanges) {
+            if (role.type !== '敏感词') continue;
+            if (!folders?.length) continue;
+            if (isSensitiveWordsDefFile) continue; // 自身文件跳过
+            const root = folders![0].uri.fsPath;
+            const cspellTxt = path.join(root, '.vscode', 'cspell-roles.txt');
+            if (doc.uri.fsPath.toLowerCase() === cspellTxt.toLowerCase()) continue; // 词典文件跳过
+            for (const range of ranges) {
+                const base = `发现敏感词：${role.name}` + (role.description ? ` ${role.description}` : '');
+                const lineNum = range.start.line + 1;
+                const lineText = doc.lineAt(range.start.line).text.trim();
+                const msg = `${base}\n第 ${lineNum} 行: ${lineText}`;
+                const diag = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Warning);
+                diag.source = 'AndreaNovelHelper';
+                diagnostics.push(diag);
             }
         }
         const key = doc.uri.fsPath;

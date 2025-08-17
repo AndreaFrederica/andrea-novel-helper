@@ -11,6 +11,7 @@ import { analyzeText, TextStats } from './utils/utils';
 import { isHugeFile } from './utils/utils';
 import { getFileTracker } from './utils/fileTracker';
 import { getIgnoredWritingStatsManager } from './utils/ignoredWritingStats';
+import { CombinedIgnoreParser } from './utils/gitignoreParser';
 
 // -------------------- 数据结构 --------------------
 interface Bucket {
@@ -116,18 +117,14 @@ function getConfig() {
         largeAccurateEveryMs: cfg.get<number>('largeFile.accurateEveryMs', 60_000)
     };
 }
-// 忽略解析器（仅在需要时懒加载）
-let combinedIgnoreParser: any | undefined;
+// 忽略解析器（按需实例化）
+let combinedIgnoreParser: CombinedIgnoreParser | undefined;
 function ensureIgnoreParser(): void {
     if (combinedIgnoreParser) { return; }
     try {
         const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (ws) {
-            // 动态 import 避免循环引用风险
-            const mod = require('./utils/gitignoreParser');
-            if (mod && mod.CombinedIgnoreParser) {
-                combinedIgnoreParser = new mod.CombinedIgnoreParser(ws);
-            }
+            combinedIgnoreParser = new CombinedIgnoreParser(ws);
         }
     } catch (e) {
         console.warn('TimeStats: 初始化忽略解析器失败', e);
