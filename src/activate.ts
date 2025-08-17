@@ -33,6 +33,7 @@ import { activateTimeStats, deactivateTimeStats } from './timeStats';
 import { initializeGlobalFileTracking } from './utils/globalFileTracking';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/gitConfigWizard';
+import { projectInitWizardRunning } from './wizard/projectInitWizard';
 import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
 import { registerProjectInitWizard } from './wizard/projectInitWizard';
 import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
@@ -828,6 +829,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // 启动后异步检查（避免阻塞激活）
         setTimeout(()=>{
+            if (projectInitWizardRunning) { return; }
             const wsRoot2 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             if (wsRoot2) { log('开始异步检查 Git 配置'); checkGitConfigAndGuide(wsRoot2, { silentIfConfigured: true }).catch(e=>log('Git 配置向导执行异常', e)); }
         }, 800);

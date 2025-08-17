@@ -18,7 +18,9 @@ export const addSensitiveCmd_obj = async () => {
     // 当敏感词库文件不存在时，初始化示例
     if (!fs.existsSync(fullPath)) {
         await vscode.window.showInformationMessage(
-            `敏感词库文件 "${sensitiveFile}" 不存在，先创建一个示例再继续…`
+            `敏感词库文件 "${sensitiveFile}" 不存在，先创建一个示例再继续…`,
+            { modal: true },
+            '关闭'
         );
         const example = [
             {
@@ -37,7 +39,7 @@ export const addSensitiveCmd_obj = async () => {
         // json5库
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
         fs.writeFileSync(fullPath, JSON5.stringify(example, null, 2), 'utf8');
-        vscode.window.showInformationMessage(`已初始化示例敏感词库：${sensitiveFile}`);
+    vscode.window.showInformationMessage(`已初始化示例敏感词库：${sensitiveFile}`, { modal: true }, '关闭');
     }
 
     const editor = vscode.window.activeTextEditor;
@@ -76,7 +78,7 @@ export const addSensitiveCmd_obj = async () => {
 
     arr.push(newSensitive);
     fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已添加敏感词 "${name}" 到 ${sensitiveFile}`);
+    vscode.window.showInformationMessage(`已添加敏感词 "${name}" 到 ${sensitiveFile}`, { modal: true }, '关闭');
 
     // 刷新全局角色列表（包括特殊角色）
     loadRoles();

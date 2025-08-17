@@ -15,7 +15,9 @@ export const addVocabulary = async () => {
 
     if (!fs.existsSync(fullPath)) {
         await vscode.window.showInformationMessage(
-            `词汇库文件 "${vocabFile}" 不存在，先创建一个示例再继续…`
+            `词汇库文件 "${vocabFile}" 不存在，先创建一个示例再继续…`,
+            { modal: true },
+            '关闭'
         );
         const example = [
             {
@@ -34,7 +36,7 @@ export const addVocabulary = async () => {
         // json5库
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
         fs.writeFileSync(fullPath, JSON5.stringify(example, null, 2), 'utf8');
-        vscode.window.showInformationMessage(`已初始化示例词汇库：${vocabFile}`);
+    vscode.window.showInformationMessage(`已初始化示例词汇库：${vocabFile}`, { modal: true }, '关闭');
     }
 
     const editor = vscode.window.activeTextEditor;
@@ -71,7 +73,7 @@ export const addVocabulary = async () => {
 
     arr.push(newVocab);
     fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已添加词汇 "${name}" 到 ${vocabFile}`);
+    vscode.window.showInformationMessage(`已添加词汇 "${name}" 到 ${vocabFile}`, { modal: true }, '关闭');
 
     loadRoles();
     updateDecorations();

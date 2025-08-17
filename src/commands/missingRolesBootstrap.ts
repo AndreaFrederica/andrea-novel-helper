@@ -28,6 +28,7 @@ export function registerMissingRolesBootstrap(context: vscode.ExtensionContext) 
     const showPrompt = async () => {
       const choice = await vscode.window.showInformationMessage(
         `角色库文件 "${rolesFile}" 不存在，是否创建示例角色库？`,
+        { modal: true },
         '创建',
         '跳过'
       );
@@ -43,7 +44,7 @@ export function registerMissingRolesBootstrap(context: vscode.ExtensionContext) 
             fs.writeFileSync(mdExample, generateMarkdownRoleTemplate(), 'utf8');
           }
         } catch { /* ignore */ }
-        vscode.window.showInformationMessage(`已创建示例角色库：${rolesFile} （含 example-role.md）`);
+  vscode.window.showInformationMessage(`已创建示例角色库：${rolesFile} （含 example-role.md）`, { modal: true }, '关闭');
         // 触发重新加载角色（延迟稍许避免与激活阶段竞争）
         setTimeout(() => {
           vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
