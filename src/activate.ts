@@ -34,6 +34,10 @@ import { initializeGlobalFileTracking } from './utils/globalFileTracking';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/gitConfigWizard';
 import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
+import { registerProjectInitWizard } from './wizard/projectInitWizard';
+import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
+import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
+import { generateExampleRoleList } from './templates/templateGenerators';
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
 
@@ -86,6 +90,10 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     };
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    if (cfg1.get<boolean>('workspaceDisabled', false)) {
+        console.log('[ANH] workspaceDisabled=true 跳过激活主体');
+        return;
+    }
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
 
     const outlineRel = cfg1.get<string>('outlinePath', 'novel-helper/outline');
@@ -105,6 +113,8 @@ export async function activate(context: vscode.ExtensionContext) {
     //TODO工作区里的多个文件夹兼容没做(要命)
     if (!ws) return;
     const wsFolders = vscode.workspace.workspaceFolders;
+    // 兼容后续旧代码引用
+    const folders1 = wsFolders;
     if (!wsFolders?.length) {
         vscode.window.showErrorMessage('请先打开一个工作区');
         return;
@@ -118,10 +128,24 @@ export async function activate(context: vscode.ExtensionContext) {
     try { registerGitDownloadTestCommand(context); log('Git 下载测试命令已注册'); } catch (e) { log('注册 Git 下载测试命令失败', e); }
     try { registerGitSimulateNoGitCommand(context); log('Git 未安装模拟命令已注册'); } catch (e) { log('注册 Git 未安装模拟命令失败', e); }
     try { registerSetupWizardCommands(context); log('配置向导命令已注册'); } catch (e) { log('注册 配置向导命令 失败', e); }
+    try { registerProjectInitWizard(context); log('项目初始化向导命令已注册'); } catch (e) { log('注册 项目初始化向导命令 失败', e); }
+    // 注册启用/禁用命令
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.disableWorkspace', async () => {
+            await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', true, vscode.ConfigurationTarget.Workspace);
+            vscode.window.showInformationMessage('已禁用小说助手（本工作区），重新加载窗口后生效。');
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.enableWorkspace', async () => {
+            await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
+            vscode.window.showInformationMessage('已启用小说助手（本工作区），重新加载窗口后生效。');
+        })
+    );
 
     // 将后续复杂初始化包裹在 try/catch 内，避免单点异常导致整个扩展未激活（从而命令缺失）
     try {
         log('开始执行主初始化');
+    // 统一由独立模块检测并可提示初始化
+    maybePromptProjectInit();
         // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
         outlineFS = new MemoryOutlineFSProvider(path.join(wsRoot, outlineRel));
         if (!outlineFS) {
@@ -279,68 +303,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // 初始化 AhoCorasick 管理器
     initAhoCorasickManager(context);
 
-    // 若角色库不存在，提示创建示例
-    const folders1 = vscode.workspace.workspaceFolders;
-    if (folders1 && folders1.length) {
-        const root = folders1[0].uri.fsPath;
-        const fullPath = path.join(root, rolesFile1);
-
-        const createWizard = async () => {
-            const choice = await vscode.window.showInformationMessage(
-                `角色库文件 "${rolesFile1}" 不存在，是否初始化示例角色库？`,
-                '创建',
-                '取消'
-            );
-
-            if (choice === '创建') {
-                const example: Role[] = [
-                    {
-                        name: '示例角色',
-                        type: '配角',
-                        affiliation: '示例阵营',
-                        aliases: ['示例'],
-                        description: '这是一个示例角色，用于说明角色库格式。',
-                        color: '#FFA500'
-                    }
-                ];
-
-                fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-                fs.writeFileSync(fullPath, JSON5.stringify(example, null, 2), 'utf8');
-                vscode.window.showInformationMessage(
-                    `已创建示例角色库：${rolesFile1}`
-                );
-            }
-        };
-
-        // 检查是否存在任何描述文件（角色、敏感词、词汇等）
-        const hasAnyDescriptionFile = () => {
-            const novelHelperDir = path.join(root, 'novel-helper');
-            if (!fs.existsSync(novelHelperDir)) {
-                return false;
-            }
-
-            try {
-                const files = fs.readdirSync(novelHelperDir);
-                // 检查是否有任何相关描述文件
-                return files.some(file => {
-                    const fileName = file.toLowerCase();
-                    const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab/.test(fileName);
-                    const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
-                    return hasKeywords && hasValidExtension;
-                });
-            } catch (error) {
-                return false;
-            }
-        };
-
-        // 只有在默认角色库文件不存在且没有任何描述文件时才提示创建
-        if (!fs.existsSync(fullPath) && !hasAnyDescriptionFile()) {
-            createWizard().then(() => {
-                loadRoles();
-                updateDecorations();
-            });
-        }
-    }
+    // 注册缺省角色库缺失提示（避免与项目初始化向导重复）
+    registerMissingRolesBootstrap(context);
 
     // 初始加载（异步增量）
     loadRoles(); // 不阻塞激活；内部增量批次触发 _onDidChangeRoles

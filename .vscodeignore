@@ -20,3 +20,6 @@ resources/*.html
 resources/*.afdesign
 
 cspell-roles.txt
+novel-helper
+.out-of-code-insights
+.history

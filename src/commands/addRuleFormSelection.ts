@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSON5 from 'json5';
 import { updateDecorations } from '../events/updateDecorations';
+import { generateExampleRoleList } from '../templates/templateGenerators';
 
 export const addRoleFromSelection = async () => {
     // 确保角色库存在
@@ -17,15 +18,8 @@ export const addRoleFromSelection = async () => {
         await vscode.window.showInformationMessage(
             `角色库 "${rolesFile}" 不存在，先创建一个示例再继续…`
         );
-        // 复用示例创建逻辑
-        const example = [{
-            name: "示例角色",
-            type: "配角",
-            affiliation: "示例阵营",
-            aliases: ["示例"],
-            description: "这是一个示例角色，用于说明角色库格式。",
-            color: "#FFA500"
-        }];
+    // 复用示例创建逻辑（静态导入）
+    const example = generateExampleRoleList();
         const txtPath = fullPath1.replace(/\.[^/.]+$/, ".txt");
         if (!fs.existsSync(txtPath)) {
             fs.writeFileSync(txtPath, example.map(i => i.name).join('\n'), 'utf8');

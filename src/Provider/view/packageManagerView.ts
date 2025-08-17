@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
 
 class NewFileNode extends vscode.TreeItem {
@@ -432,8 +433,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             if (fs.existsSync(file)) {
                 vscode.window.showWarningMessage('character-gallery.json5 already exists');
             } else {
-                // 创建空的角色数组而不是空对象
-                fs.writeFileSync(file, '[\n  // 在这里添加角色\n]');
+                fs.writeFileSync(file, generateCharacterGalleryJson5());
                 provider.refresh();
             }
         })
@@ -688,8 +688,16 @@ async function promptForExtension(dir: string, baseName: string): Promise<string
     // 根据文件类型创建合适的初始内容
     let initialContent = '';
     if (ext === 'json5') {
-        // 创建空的角色数组
-        initialContent = '[\n  // 在这里添加角色\n]';
+        if (baseName === 'sensitive-words') {
+            initialContent = generateSensitiveWordsJson5();
+        } else if (baseName === 'vocabulary') {
+            initialContent = generateVocabularyJson5();
+        } else if (baseName === 'character-gallery' || baseName === 'character' || baseName === 'roles') {
+            initialContent = generateCharacterGalleryJson5();
+        } else {
+            // 默认空数组占位
+            initialContent = '[\n  // 新文件\n]';
+        }
     } else if (ext === 'txt') {
         // TXT 文件可以保持空白
         initialContent = '';
@@ -755,7 +763,7 @@ async function createRegexPatternsFile(dir: string): Promise<string | undefined>
         return;
     }
     
-    // 生成模板内容
+    // 生成模板内容（从模板生成器导入）
     const template = generateRegexPatternsTemplate();
     fs.writeFileSync(file, template, 'utf8');
     
@@ -766,53 +774,7 @@ async function createRegexPatternsFile(dir: string): Promise<string | undefined>
     return file;
 }
 
-function generateRegexPatternsTemplate(): string {
-    return `// 正则表达式着色器配置文件
-// 这个文件定义了基于正则表达式的文本着色规则
-[
-  // === 正则表达式角色示例（JSON5 合法）===
-  {
-    name: "中文对话",
-    type: "正则表达式",
-    // 中文引号：U+201C/U+201D
-    regex: "“[^”]*”",
-    regexFlags: "g",
-    color: "#98FB98",
-    priority: 100,
-    description: "匹配中文引号内的对话内容",
-  },
-//   {
-//     name: "英文对话",
-//     type: "正则表达式",
-//     regex: "\"[^\"]*\"",
-//     regexFlags: "g",
-//     color: "#87CEEB",
-//     priority: 100,
-//     description: "匹配英文引号内的对话内容",
-//   },
-  {
-    name: "心理描写",
-    type: "正则表达式",
-    // 全角括号（中文括号）
-    regex: "（[^（）]*）",
-    regexFlags: "g",
-    color: "#DDA0DD",
-    priority: 120,
-    description: "匹配全角括号内的心理描写",
-  },
-  {
-    name: "旁白注释",
-    type: "正则表达式",
-    // 字符串里要放入“反斜杠”，必须写成 \\ 才能到达正则引擎
-    // 目标正则是：\[([^\[\]]*)\]
-    regex: "\\[([^\\[\\]]*)\\]",
-    regexFlags: "g",
-    color: "#F0E68C",
-    priority: 110,
-    description: "匹配方括号内的旁白注释",
-  },
-]`;
-}
+// generateRegexPatternsTemplate 已迁移到 templates/templateGenerators
 
 async function promptForMarkdownFile(dir: string): Promise<string | undefined> {
     // 导入 Markdown 解析器函数

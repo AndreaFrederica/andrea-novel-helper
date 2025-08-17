@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等",
-  "version": "0.2.25",
+  "version": "0.2.26",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -307,6 +307,20 @@
         "command": "AndreaNovelHelper.simulateNoGit",
         "title": "%command.simulateNoGit.title%"
       }
+      ,
+      {
+        "command": "AndreaNovelHelper.projectInitWizard",
+        "title": "%command.projectInitWizard.title%"
+      }
+      ,
+      {
+        "command": "AndreaNovelHelper.disableWorkspace",
+        "title": "%command.disableWorkspace.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.enableWorkspace",
+        "title": "%command.enableWorkspace.title%"
+      }
     ],
     "walkthroughs": [
       {
@@ -329,12 +343,8 @@
             "id": "anh.step.checkGit",
             "title": "检查是否已安装 Git",
             "description": "点击 [立即检查](command:AndreaNovelHelper.wizard.checkGit) 来检测本机是否已安装 Git。",
-            "media": {
-              "markdown": "media/walkthrough/step1_checkGit.md"
-            },
-            "completionEvents": [
-              "onCommand:AndreaNovelHelper.wizard.checkGit"
-            ]
+            "media": { "markdown": "media/walkthrough/step1_checkGit.md" },
+            "completionEvents": [ "onCommand:AndreaNovelHelper.wizard.checkGit" ]
           },
           {
             "id": "anh.step.installGit",
@@ -680,6 +690,11 @@
             "json5"
           ],
           "description": "%config.supportedFileTypes.description%"
+        },
+        "AndreaNovelHelper.workspaceDisabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.workspaceDisabled.description%"
         },
         "AndreaNovelHelper.markdownToolbarEnabled": {
           "type": "boolean",
