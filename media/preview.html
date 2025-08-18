@@ -60,6 +60,9 @@
     .reader-pagebar button { background:#0e639c; border:none; color:#fff; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:12px; }
     .reader-pagebar button:hover { background:#1177bb; }
     .reader-pagebar[hidden] { display:none; }
+    body.reader-paged .scroll-spacer { display:none; height:0 !important; }
+    .rp-progress { position:relative; flex:1; height:6px; background:#ffffff33; border-radius:3px; overflow:hidden; min-width:80px; }
+    .rp-progress-inner { position:absolute; left:0; top:0; height:100%; width:0%; background:#0e639c; transition:width .18s ease; }
     .reader-gear-btn { position: fixed; bottom: 16px; right: 16px; z-index: 1200; background:#0e639c; color:#fff; border:none; border-radius:50%; width:42px; height:42px; cursor:pointer; font-size:20px; box-shadow:0 4px 10px #0006; }
     .reader-gear-btn:hover { background:#1177bb; }
     .reader-settings { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.98); background: var(--vscode-editor-background, #222); color: var(--vscode-editor-foreground, #ddd); border:1px solid #5556; border-radius:16px; width:380px; max-width:90vw; max-height:85vh; overflow:auto; padding:20px 22px 26px; box-shadow:0 10px 40px #0009; z-index:2000; display:none; }
@@ -183,6 +186,7 @@
         <div class="rs-row"><label>显示方式</label><div class="rs-mode-group" id="rs-modes"><button data-mode="scroll" class="rs-toggle">滚动</button><button data-mode="paged" class="rs-toggle">分页</button></div></div>
     <div class="rs-row"><label>对齐</label><div class="rs-mode-group" id="rs-aligns"><button data-align="left" class="rs-toggle">左对齐</button><button data-align="justify" class="rs-toggle">两端</button></div></div>
     <div class="rs-row"><label>列数*</label><div class="rs-mode-group" id="rs-cols"><button data-cols="1" class="rs-toggle">1 列</button><button data-cols="2" class="rs-toggle">2 列</button></div></div>
+    <div class="rs-row"><label>同步滚动</label><div class="rs-mode-group" id="rs-sync"><button data-sync="on" class="rs-toggle">开启</button><button data-sync="off" class="rs-toggle">关闭</button></div></div>
         <div class="rs-row"><label>预设</label><div style="flex:1;display:flex;gap:6px;align-items:center;">
             <select id="rs-preset" class="rs-select" style="flex:1;min-width:120px;"></select>
             <button class="rs-toggle" id="rs-savePreset" style="white-space:nowrap;">保存</button>
@@ -205,7 +209,8 @@
     </div>
     <div class="reader-pagebar" id="reader-pagebar" hidden>
         <button id="rp-prev" title="上一页 (PgUp)">◀</button>
-        <span id="rp-info">1 / 1</span>
+    <div class="rp-progress"><div class="rp-progress-inner" id="rp-progress"></div></div>
+    <span id="rp-info">1 / 1</span>
         <button id="rp-next" title="下一页 (PgDn/Space)">▶</button>
     </div>
 
