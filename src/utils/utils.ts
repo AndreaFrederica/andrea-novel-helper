@@ -333,7 +333,8 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	// 全量异步扫描：分批读取目录，避免阻塞主线程
 	if (!forceRefresh) { cleanRoles(); }
 
-	let pendingDirs: { abs: string; rel: string }[] = [];
+	// 支持目录断点续扫：若一个目录在批次末尾被截断，记录下一个起始索引与缓存的 entries
+	let pendingDirs: { abs: string; rel: string; entries?: fs.Dirent[]; index?: number }[] = [];
 	let processedFiles = 0; // 已处理角色文件数
 	let statusBar: vscode.StatusBarItem | undefined;
 	let statusBarTimer: NodeJS.Timeout | undefined;
@@ -358,7 +359,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		}
 	}
 	if (fs.existsSync(novelHelperRoot)) {
-		pendingDirs.push({ abs: novelHelperRoot, rel: '' });
+		pendingDirs.push({ abs: novelHelperRoot, rel: '', index: 0 });
 	} else {
 		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot} (异步扫描暂停)`);
 		loadTraditionalRoles(forceRefresh, changedFiles); // 仍然尝试传统加载（同步）
@@ -372,22 +373,44 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		const start = Date.now();
 		let processed = 0;
 		while (pendingDirs.length && processed < BATCH_SIZE) {
-			const { abs, rel } = pendingDirs.shift()!;
+			const dirTask = pendingDirs.shift()!;
+			const { abs, rel } = dirTask;
 			if (!fs.existsSync(abs)) continue;
-			let entries: fs.Dirent[] = [];
-			try { entries = fs.readdirSync(abs, { withFileTypes: true }); } catch { continue; }
-			for (const entry of entries) {
+			let entries: fs.Dirent[];
+			let startIndex = dirTask.index || 0;
+			if (dirTask.entries) {
+				entries = dirTask.entries;
+			} else {
+				try { entries = fs.readdirSync(abs, { withFileTypes: true }); } catch { continue; }
+			}
+			for (let i = startIndex; i < entries.length; i++) {
+				const entry = entries[i];
 				const entryPath = path.join(abs, entry.name);
+				console.log(`[loadRoles][scan] dir="${abs}" entry="${entry.name}" rel="${rel}" type=${entry.isDirectory()? 'dir':'file'}`);
 				if (entry.isDirectory()) {
 					if (entry.name === 'outline' || entry.name === '.anh-fsdb') continue;
-					pendingDirs.push({ abs: entryPath, rel: rel ? path.join(rel, entry.name) : entry.name });
+					pendingDirs.push({ abs: entryPath, rel: rel ? path.join(rel, entry.name) : entry.name, index: 0 });
 				} else if (entry.isFile()) {
-					if (isRoleFile(entry.name)) {
+					// 需要传入完整路径以便 isRoleFile 进行内容嗅探（Markdown 无关键词场景）
+					const roleCandidate = isRoleFile(entry.name, entryPath);
+					console.log(`[loadRoles][scan] file="${entryPath}" roleCandidate=${roleCandidate}`);
+					if (roleCandidate) {
 						try { loadRoleFile(entryPath, rel, entry.name); processedFiles++; } catch (e) { console.warn('loadRoleFile error', e); }
+					} else if (/\.md$/i.test(entry.name)) {
+						// 调试：记录未命中关键词且嗅探未触发（因为 isRoleFile 返回 false） 的 .md 文件，帮助定位遗漏
+						// （此时 isRoleFile 已做过带路径嗅探；返回 false 说明 header 结构也不符合）
+						console.log('[loadRoles] 跳过 Markdown 文件（未识别为角色库）', entryPath);
 					}
 				}
 				processed++;
-				if (processed >= BATCH_SIZE) break;
+				if (processed >= BATCH_SIZE) {
+					// 目录未扫描完，保存剩余位置以便下批继续
+					if (i < entries.length - 1) {
+						pendingDirs.unshift({ abs, rel, entries, index: i + 1 });
+						console.log(`[loadRoles][scan] pause dir="${abs}" resumeIndex=${i+1}/${entries.length}`);
+					}
+					break;
+				}
 			}
 		}
 		// 批次完成后广播（增量通知）
@@ -450,11 +473,11 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
 			}
 			// 递归扫描子目录
 			scanPackageDirectory(entryPath, entryRelativePath);
-		} else if (entry.isFile()) {
-			// 检查是否是角色文件
-			if (isRoleFile(entry.name)) {
-				loadRoleFile(entryPath, relativePath, entry.name);
-			}
+				} else if (entry.isFile()) {
+					// 检查是否是角色文件（带路径以便内容嗅探）
+					if (isRoleFile(entry.name, entryPath)) {
+						loadRoleFile(entryPath, relativePath, entry.name);
+					}
 		}
 	}
 }
@@ -462,18 +485,22 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
 /**
  * 判断文件是否是角色文件
  */
-function isRoleFile(fileName: string): boolean {
+function isRoleFile(fileName: string, fileFullPath?: string): boolean {
 	const lowerName = fileName.toLowerCase();
+	const debugPrefix = `[isRoleFile] name="${fileName}" path="${fileFullPath || ''}"`;
 	
 	// 正则表达式文件只支持JSON5格式
 	if (lowerName.includes('regex-patterns') || lowerName.includes('regex')) {
-		return lowerName.endsWith('.json5');
+		const ok = lowerName.endsWith('.json5');
+		console.log(`${debugPrefix} keyword=regex -> ${ok}`);
+		return ok;
 	}
 	
 	const validExtensions = ['.json5', '.txt', '.md'];
 	const hasValidExtension = validExtensions.some(ext => lowerName.endsWith(ext));
 	
 	if (!hasValidExtension) {
+		console.log(`${debugPrefix} invalidExt`);
 		return false;
 	}
 
@@ -483,8 +510,46 @@ function isRoleFile(fileName: string): boolean {
 		'sensitive-words', 'sensitive', 'vocabulary', 'vocab',
 		'regex-patterns', 'regex'
 	];
-	
-	return roleKeywords.some(keyword => lowerName.includes(keyword));
+	// 中文常见命名（不区分繁简，简化为包含这些字即可）
+	const zhKeywords = [
+		'角色', '人物', '敏感词', '词汇', '词庫', '词库', '正则', '正則', '正则表达式', '正則表達式'
+	];
+
+	// 命中任一关键词即可
+	if (roleKeywords.some(k => lowerName.includes(k))) { console.log(`${debugPrefix} matchedEnglishKeyword`); return true; }
+	// 中文匹配：用原始（未 toLower 但 toLower 不影响中文）
+	if (zhKeywords.some(k => fileName.includes(k))) { console.log(`${debugPrefix} matchedChineseKeyword`); return true; }
+
+	// 兜底：对于 .md 若包含 “gallery” “list” “lib” 也尝试视为角色文件（常见命名）
+	if (lowerName.endsWith('.md') && /(gallery|list|library)/.test(lowerName)) { console.log(`${debugPrefix} mdFallbackNamePattern`); return true; }
+
+	// 进一步内容嗅探：对于 .md 未命中关键词的，读取前若干行检测结构（性能：只同步读取小文件前 4KB）
+	if (fileFullPath && lowerName.endsWith('.md')) {
+		try {
+			const stat = fs.statSync(fileFullPath);
+			if (stat.size <= 256 * 1024) { // 仅对 <=256KB 做快速嗅探
+				const fd = fs.openSync(fileFullPath, 'r');
+				try {
+					const buf = Buffer.alloc(4096);
+					const bytes = fs.readSync(fd, buf, 0, buf.length, 0);
+					const head = buf.slice(0, bytes).toString('utf8');
+					// 条件：至少一个一级/二级标题，且后续存在“## 描述”/“## 别名”/“## 类型”或英文 counterpart
+					const hasTopHeader = /^#\s+.+/m.test(head) || /^##\s+.+/m.test(head);
+					// 扩展字段词汇，提升嗅探宽容度（包含常见自定义章节）
+					const sniffFieldWords = [
+						'描述','别名','类型','颜色','备注','简介','背景','性格','外貌','关系','标签','地理特征','地理分区','历史沿革','重要国家与地区','自然资源','文化特色',
+						'affiliation','alias','aliases','type','color','description','background','personality','appearance','relationships','tags','notes'
+					];
+					const fieldHeaderRegex = new RegExp('^(#{2,4})\\s+(' + sniffFieldWords.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')\\b','m');
+					const hasFieldHeader = fieldHeaderRegex.test(head);
+					if (hasTopHeader && hasFieldHeader) { console.log(`${debugPrefix} mdSniffMatched hasTopHeader=${hasTopHeader} hasFieldHeader=${hasFieldHeader}`); return true; }
+					else { console.log(`${debugPrefix} mdSniffNoMatch hasTopHeader=${hasTopHeader} hasFieldHeader=${hasFieldHeader}`); }
+				} finally { fs.closeSync(fd); }
+			}
+		} catch { /* ignore sniff errors */ }
+	}
+	console.log(`${debugPrefix} noMatch`);
+	return false;
 }
 
 /**
@@ -797,7 +862,7 @@ function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: strin
 		}
 		
 		const fileName = path.basename(filePath);
-		if (!isRoleFile(fileName)) {
+		if (!isRoleFile(fileName, filePath)) {
 			continue;
 		}
 		

@@ -36,11 +36,13 @@ import { getFileTracker } from './utils/fileTracker';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/gitConfigWizard';
 import { projectInitWizardRunning } from './wizard/projectInitWizard';
+import { clearAllRoleMatchCache } from './utils/roleAsyncShared';
 import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
 import { registerProjectInitWizard } from './wizard/projectInitWizard';
 import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
 import { generateExampleRoleList } from './templates/templateGenerators';
+import { generateCSpellDictionary } from './utils/generateCSpellDictionary';
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
 
@@ -312,8 +314,12 @@ export async function activate(context: vscode.ExtensionContext) {
         // 注册缺省角色库缺失提示（避免与项目初始化向导重复）
         registerMissingRolesBootstrap(context);
 
-        // 初始加载（异步增量）
-        loadRoles(); // 不阻塞激活；内部增量批次触发 _onDidChangeRoles
+    // 角色文件监听：已在 packageManagerView 中实现更全面的 watcher（含目录/文件/保存逻辑与 UI 刷新），
+    // 这里移除原简化 watcher，避免重复触发 loadRoles / _onDidChangeRoles 造成双重扫描与事件抖动。
+    // 若未来需要独立于包管理器的精简模式，可在设置中加开关再恢复。
+
+    // 首次激活：强制全量刷新（清空缓存）再做异步批次扫描，避免潜在遗留缓存/过滤导致的初次缺失
+    loadRoles(true); // 不阻塞激活；内部仍按批次异步触发 _onDidChangeRoles / 完成事件
         initAutomaton();
 
         // 防抖更新
@@ -325,12 +331,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // 角色库变化后：去抖重建自动机 + 刷新装饰（Hover 已在自身模块监听 onDidChangeRoles，无需额外处理；Def 依赖 hoverRangesMap 也会间接更新）
         let acRebuildTimer: ReturnType<typeof setTimeout> | undefined;
-        const onRolesChanged = onDidChangeRoles(() => {
+    const onRolesChanged = onDidChangeRoles(() => {
             if (acRebuildTimer) clearTimeout(acRebuildTimer);
             acRebuildTimer = setTimeout(() => {
                 try {
                     initAutomaton(); // 重建 AC 自动机（包含别名）
                 } catch (e) { console.warn('[ANH] initAutomaton after roles change failed', e); }
+        try { clearAllRoleMatchCache(); } catch {/* ignore */}
                 scheduleUpdate(); // 触发装饰刷新
             }, 150);
         });
@@ -339,6 +346,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // 最终一次全量加载完成后：立即重建 & 立即刷新（不再二次防抖），确保拿到完整 roles 状态至少跑一次
         const onRolesFinishedDisp = onDidFinishRoles(() => {
             try { initAutomaton(); } catch (e) { console.warn('[ANH] initAutomaton after roles FINISH failed', e); }
+            try { clearAllRoleMatchCache(); } catch {/* ignore */}
             // 直接调用而非 schedule，避免再等待 200ms
             updateDecorations();
         });
@@ -362,7 +370,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     e.affectsConfiguration('AndreaNovelHelper.minChars') ||
                     e.affectsConfiguration('AndreaNovelHelper.defaultColor')
                 ) {
-                    loadRoles();
+                    loadRoles(true);
                     updateDecorations();
                 }
             })
@@ -388,16 +396,41 @@ export async function activate(context: vscode.ExtensionContext) {
             )
         );
 
-        // 自动补全提供器：使用纯 provider 工厂 + 显式语言列表
-        try {
-            const langs = getSupportedLanguages();
-            const provider = createRoleCompletionProvider();
-            const completionDisposable = vscode.languages.registerCompletionItemProvider(langs, provider);
-            context.subscriptions.push(completionDisposable);
-            log(`Completion provider registered for [${langs.join(', ')}], initial roles=${roles.length}`);
-        } catch (e) {
-            log('Completion provider registration FAILED', e);
-        }
+        // 自动补全提供器：使用纯 provider 工厂 + 显式语言列表（附加 scheme 与触发字符）
+        let completionDisposable: vscode.Disposable | undefined;
+        const registerCompletion = () => {
+            try {
+                // 基于用户配置获取语言，强制确保 markdown 在列（避免用户误删导致写作主场景失效）
+                const langs = Array.from(new Set([...getSupportedLanguages(), 'markdown']));
+                // 组合成更精确的 document selector：file + untitled 都支持
+                const selector: (string | vscode.DocumentFilter)[] = [];
+                for (const l of langs) {
+                    selector.push({ language: l, scheme: 'file' });
+                    selector.push({ language: l, scheme: 'untitled' });
+                }
+                // 若已有旧的，先释放
+                if (completionDisposable) {
+                    completionDisposable.dispose();
+                }
+                const provider = createRoleCompletionProvider();
+                // 触发字符：常见分隔/结构 & 中西括号等（输入任意文字仍可由 VSCode 自动触发 word-based，再由我们过滤）
+                const triggers = ['#', '!', '[', '(', '（', '【'];
+                completionDisposable = vscode.languages.registerCompletionItemProvider(selector, provider, ...triggers);
+                context.subscriptions.push(completionDisposable);
+                log(`Completion provider registered for selector langs=[${langs.join(', ')}], triggers=${triggers.join('')}, initial roles=${roles.length}`);
+            } catch (e) {
+                log('Completion provider registration FAILED', e);
+            }
+        };
+        registerCompletion();
+        // 监听 supportedFileTypes 等配置变化，动态重新注册
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration(e => {
+                if (e.affectsConfiguration('AndreaNovelHelper.supportedFileTypes')) {
+                    registerCompletion();
+                }
+            })
+        );
 
 
         // Hover 和 Definition 提供器

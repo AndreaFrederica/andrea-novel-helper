@@ -31,3 +31,8 @@ export function clearRoleMatchCacheForClosedDocs(openPaths: Set<string>) {
     if (!openPaths.has(k)) { cache.delete(k); }
   }
 }
+
+// 清空所有文档的匹配缓存（例如角色库发生变化后需要强制重算）
+export function clearAllRoleMatchCache() {
+  cache.clear();
+}

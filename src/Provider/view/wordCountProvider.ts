@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { countAndAnalyze, countWordsMixed, getSupportedExtensions, mergeStats, readTextFileDetectEncoding, TextStats, analyzeText } from '../../utils/utils';
+import { countAndAnalyzeOffThread } from '../../utils/asyncWordCounter';
 import { CombinedIgnoreParser } from '../../utils/gitignoreParser';
 import { sortItems } from '../../utils/sorter';
 import { GitGuard } from '../../utils/gitGuard';
@@ -415,7 +416,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             if (!baseline) return; // 没有可比对的缓存，无需校验
 
             // 新鲜计算（不触发持久化写入）
-            const fresh = await countAndAnalyze(filePath);
+            const fresh = await countAndAnalyzeOffThread(filePath);
             if (fresh.total !== baseline.total) {
                 wcDebug('verification:mismatch', filePath, 'cached', baseline.total, 'fresh', fresh.total);
                 // 更新内存缓存（使 UI 立即正确）
@@ -913,7 +914,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
             // 4. 重新计算统计
             wcDebug('recount:file:start', filePath);
-            const stats = await countAndAnalyze(filePath);
+            const stats = await countAndAnalyzeOffThread(filePath);
             wcDebug('recount:file:done', filePath, stats.total);
             // 同步更新实时写作统计（若开启 writingStats 并存在记录），用于 TreeView 显示与状态栏保持一致
             try {
@@ -977,7 +978,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const stat = await fs.promises.stat(fp).catch(()=>null);
                 if (!stat || !stat.isFile()) { this.largeApproxPending.delete(fp); continue; }
                 const mtime = stat.mtimeMs;
-                const stats = await countAndAnalyze(fp);
+                const stats = await countAndAnalyzeOffThread(fp);
                 this.statsCache.set(fp, { stats, mtime });
                 this.largeApproxPending.delete(fp);
                 // 失效目录聚合缓存以触发刷新
