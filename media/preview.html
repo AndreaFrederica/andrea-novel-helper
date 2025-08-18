@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none';
+             img-src __CSP_SOURCE__ https: data:;
+             style-src __CSP_SOURCE__ 'unsafe-inline';
+             font-src __CSP_SOURCE__;
+             script-src __CSP_SOURCE__ 'nonce-__NONCE__';">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            padding: 12px;
+            font: 13px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0 0 12px 0;
+        }
+
+        [data-line] {
+            scroll-margin-top: 8px;
+        }
+
+        .scroll-spacer {
+            height: 100vh;
+            min-height: 600px;
+        }
+
+        /* TTS */
+        .tts-reading-highlight {
+            background: rgba(255, 215, 0, 0.35);
+            box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.65);
+            border-radius: 3px;
+            transition: background 120ms;
+        }
+
+        .tts-controls {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            background: var(--vscode-editor-background, #1e1e1e);
+            color: var(--vscode-editor-foreground, #d4d4d4);
+            border: 1px solid var(--vscode-panel-border, #3e3e42);
+            border-radius: 6px;
+            padding: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .tts-btn {
+            background: var(--vscode-button-background, #0e639c);
+            color: var(--vscode-button-foreground, #fff);
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            min-width: 50px;
+        }
+
+        .tts-btn:hover {
+            background: var(--vscode-button-hoverBackground, #1177bb);
+        }
+
+        .tts-btn:disabled {
+            background: var(--vscode-button-secondaryBackground, #3a3d41);
+            color: var(--vscode-button-secondaryForeground, #888);
+            cursor: not-allowed;
+        }
+
+        .tts-select {
+            background: var(--vscode-dropdown-background, #3c3c3c);
+            color: var(--vscode-dropdown-foreground, #cccccc);
+            border: 1px solid var(--vscode-dropdown-border, #3e3e42);
+            border-radius: 3px;
+            padding: 2px 4px;
+            font-size: 11px;
+        }
+
+        /* 右键菜单 */
+        .ctx {
+            position: fixed;
+            z-index: 9999;
+            background: var(--vscode-editor-background, #222);
+            color: var(--vscode-editor-foreground, #ddd);
+            border: 1px solid #5556;
+            border-radius: 6px;
+            min-width: 160px;
+            box-shadow: 0 8px 24px #0008;
+            display: none;
+        }
+
+        .ctx ul {
+            list-style: none;
+            margin: 6px 0;
+            padding: 4px 0;
+        }
+
+        .ctx li {
+            padding: 6px 12px;
+            cursor: default;
+        }
+
+        .ctx li:hover {
+            background: #ffffff22;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 你的预览内容：由扩展注入 -->
+    __BODY__
+
+    <!-- TTS 控件 -->
+    <div class="tts-controls">
+        <select class="tts-select" id="tts-voice">
+            <option value="">选择语音</option>
+        </select>
+        <button class="tts-btn" id="tts-play">播放</button>
+        <button class="tts-btn" id="tts-pause">暂停</button>
+        <button class="tts-btn" id="tts-stop">停止</button>
+        <span id="tts-status">就绪</span>
+    </div>
+
+    <div class="scroll-spacer"></div>
+
+    <!-- 右键菜单 -->
+    <div class="ctx" id="ctx">
+        <ul>
+            <li id="ctx-copy">复制纯文本</li>
+            <li id="ctx-tts">朗读选中文本</li>
+        </ul>
+    </div>
+
+    <!-- 外链脚本（带 nonce） -->
+    <script nonce="__NONCE__" src="__SCRIPT_URI__"></script>
+</body>
+
+</html>
