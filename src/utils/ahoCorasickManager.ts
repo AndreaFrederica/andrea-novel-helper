@@ -34,10 +34,23 @@ class AhoCorasickManager {
             patterns.push(nameKey);
             this.patternMap.set(nameKey, r);
             
+            // 处理别名
             for (const alias of r.aliases || []) {
                 const a = alias.trim().normalize('NFC');
                 patterns.push(a);
                 this.patternMap.set(a, r);
+            }
+            
+            // 处理 fixes/fixs 字段（修复候选词也应该被识别为该角色）
+            const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
+            if (Array.isArray(fixesArr)) {
+                for (const fix of fixesArr) {
+                    const f = fix.trim().normalize('NFC');
+                    if (f) { // 确保不是空字符串
+                        patterns.push(f);
+                        this.patternMap.set(f, r);
+                    }
+                }
             }
         }
         

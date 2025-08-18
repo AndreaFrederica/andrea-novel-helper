@@ -233,8 +233,9 @@ export function buildRoleMarkdown(r: Role): vscode.MarkdownString {
         md.appendMarkdown(`**别名**: ${aliasList}\n\n`);
     }
     // 显示修复候选（敏感词替换建议）
-    if (Array.isArray((r as any).fixes) && (r as any).fixes.length > 0) {
-        const fixList = (r as any).fixes.map((f: string) => `\`${f}\``).join('， ');
+    const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
+    if (Array.isArray(fixesArr) && fixesArr.length > 0) {
+        const fixList = fixesArr.map((f: string) => `\`${f}\``).join('， ');
         md.appendMarkdown(`**修复**: ${fixList}\n\n`);
     }
     if (r.packagePath) md.appendMarkdown(`**包路径**: ${r.packagePath}\n\n`);
@@ -316,8 +317,9 @@ export function activateHover(context: vscode.ExtensionContext) {
                     md.appendMarkdown(`**别名**: ${aliasList}\n\n`);
                 }
                 // 修复候选
-                if (Array.isArray((r as any).fixes) && (r as any).fixes.length > 0) {
-                    const fixList = (r as any).fixes.map((f: string) => `\`${f}\``).join('， ');
+                const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
+                if (Array.isArray(fixesArr) && fixesArr.length > 0) {
+                    const fixList = fixesArr.map((f: string) => `\`${f}\``).join('， ');
                     md.appendMarkdown(`**修复**: ${fixList}\n\n`);
                 }
                 

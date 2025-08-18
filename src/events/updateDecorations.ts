@@ -147,13 +147,24 @@ export async function updateDecorations() {
     const acCost = Date.now() - startMs;
     console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
 
-        // 预构建 pattern -> role 映射（包含别名），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
+        // 预构建 pattern -> role 映射（包含别名和fixes），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
         const patternRoleMap = new Map<string, Role>();
         for (const r of roles) {
             patternRoleMap.set(r.name.trim().normalize('NFC'), r);
+            // 添加别名
             for (const al of r.aliases || []) {
                 if (!al) continue;
                 patternRoleMap.set(al.trim().normalize('NFC'), r);
+            }
+            // 添加 fixes/fixs 字段
+            const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
+            if (Array.isArray(fixesArr)) {
+                for (const fix of fixesArr) {
+                    const f = fix.trim().normalize('NFC');
+                    if (f) { // 确保不是空字符串
+                        patternRoleMap.set(f, r);
+                    }
+                }
             }
         }
 
@@ -346,12 +357,24 @@ export async function updateDecorations() {
             const cspellTxt = path.join(root, '.vscode', 'cspell-roles.txt');
             if (doc.uri.fsPath.toLowerCase() === cspellTxt.toLowerCase()) continue; // 词典文件跳过
             for (const range of ranges) {
-                // 若当前匹配文本本身是某个 fixes 值，则视作已修复，跳过诊断
+                // 若当前匹配文本本身是任何角色的 fixes 值，则视作已修复，跳过敏感词诊断
                 let matchedText: string | undefined;
                 try { matchedText = doc.getText(range); } catch { /* ignore */ }
-                const fixesArr: string[] | undefined = (role as any).fixes || (role as any).fixs;
-                if (matchedText && Array.isArray(fixesArr) && fixesArr.includes(matchedText)) {
-                    continue; // 已替换文本不再出警告/修复提示
+                
+                // 检查是否是任何角色的 fixes 值（不仅仅是当前敏感词角色）
+                let isFixesValue = false;
+                if (matchedText) {
+                    for (const anyRole of roles) {
+                        const fixesArr: string[] | undefined = (anyRole as any).fixes || (anyRole as any).fixs;
+                        if (Array.isArray(fixesArr) && fixesArr.includes(matchedText)) {
+                            isFixesValue = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (isFixesValue) {
+                    continue; // 是任何角色的 fixes 值，不触发敏感词警告
                 }
                 const base = `发现敏感词：${role.name}` + (role.description ? ` ${role.description}` : '');
                 const lineNum = range.start.line + 1;
@@ -359,7 +382,12 @@ export async function updateDecorations() {
                 const msg = `${base}\n第 ${lineNum} 行: ${lineText}`;
                 const diag = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Warning);
                 diag.source = 'AndreaNovelHelper';
-                // 不再附加修复选项（用户需求：只着色不加修复/警告提示列表）
+                // 添加修复选项元数据供 CodeAction 提供者使用
+                const currentRoleFixesArr: string[] | undefined = (role as any).fixes || (role as any).fixs;
+                if (Array.isArray(currentRoleFixesArr) && currentRoleFixesArr.length > 0) {
+                    (diag as any).anhFixs = currentRoleFixesArr;
+                    (diag as any).anhSensitiveWord = role.name;
+                }
                 diagnostics.push(diag);
             }
         }
