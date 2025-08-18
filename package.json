@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -83,7 +83,11 @@
     "commands": [
       {
         "command": "myPreview.open",
-        "title": "Open My Preview (Beside)"
+        "title": "Open Preview",
+        "icon": {
+          "light": "images/preview_light.svg",
+          "dark": "images/preview_dark.svg"
+        }
       },
       {
         "command": "myPreview.exportTxt",
@@ -583,6 +587,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "myPreview.open",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation"
+        },
         {
           "command": "AndreaNovelHelper.openDoubleOutline",
           "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",

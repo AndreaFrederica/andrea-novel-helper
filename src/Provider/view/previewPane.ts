@@ -22,6 +22,9 @@ export class PreviewManager {
   private panels = new Map<string, vscode.WebviewPanel>();
   private loopGuard = new Map<string, number>();
   private scrollState = new Map<string, { isScrolling: boolean; lastDirection: 'editor'|'preview' }>();
+  /** 当前被“跟随活动编辑器”复用的主预览面板（用户首次点击按钮后进入跟随模式） */
+  private primaryPanel: vscode.WebviewPanel | undefined;
+  private primaryDocUri: string | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.context.subscriptions.push(
@@ -37,6 +40,11 @@ export class PreviewManager {
         if (!this.panels.has(ev.textEditor.document.uri.toString())) {return;}
         this.throttle(() => this.sendEditorTop(ev.textEditor.document), 100)();
       }),
+      // 跟随活动编辑器：若已经打开过一个预览（primaryPanel），则切换文件时复用该面板显示新文件，并在切换前停止 TTS
+      vscode.window.onDidChangeActiveTextEditor(ed => {
+        if (!ed || !ed.document) {return;}
+        this.handleActiveEditorChange(ed.document);
+      })
     );
   }
 
@@ -46,6 +54,9 @@ export class PreviewManager {
     this.ensurePanelFor(doc).then(panel => {
       panel.reveal(vscode.ViewColumn.Beside);
       this.updatePanel(panel, doc);
+  // 设置为主面板以启用后续自动跟随
+  this.primaryPanel = panel;
+  this.primaryDocUri = doc.uri.toString();
     });
   }
 
@@ -90,7 +101,34 @@ export class PreviewManager {
     panel.onDidDispose(() => this.panels.delete(key), null, this.context.subscriptions);
     panel.webview.onDidReceiveMessage(msg => this.onWebviewMessage(doc, msg), null, this.context.subscriptions);
 
+    // 若这是 primaryPanel，被关闭后重置引用
+    panel.onDidDispose(() => {
+      if (this.primaryPanel === panel) { this.primaryPanel = undefined; this.primaryDocUri = undefined; }
+    });
+
     return panel;
+  }
+
+  /** 处理活动编辑器变化：复用 primaryPanel 展示新文档，切换前先停止旧文档的 TTS */
+  private handleActiveEditorChange(newDoc: vscode.TextDocument) {
+  if (!this.primaryPanel) {return;} // 用户尚未开启任何预览
+  // 仅跟随 markdown / plaintext 且来自本地文件系统的文档
+  if (!(newDoc.uri.scheme === 'file' && (newDoc.languageId === 'markdown' || newDoc.languageId === 'plaintext'))) {return;}
+    const newKey = newDoc.uri.toString();
+    if (this.primaryDocUri === newKey) {return;} // 同一个文档，无需切换
+
+    // 1. 停止旧文档 TTS（发送停止命令即可，webview 内自行判断）
+    try { this.primaryPanel.webview.postMessage({ type: 'ttsControl', command: 'stop' }); } catch {}
+
+    // 2. 更新映射：移除旧 key，添加新 key 复用同一个 panel
+    if (this.primaryDocUri) { this.panels.delete(this.primaryDocUri); }
+    this.panels.set(newKey, this.primaryPanel);
+    this.primaryDocUri = newKey;
+
+    // 3. 用新文档内容刷新 panel
+    this.updatePanel(this.primaryPanel, newDoc);
+    // 4. 同步滚动定位（稍延迟等待渲染）
+    setTimeout(() => this.sendEditorTop(newDoc), 50);
   }
 
   private onWebviewMessage(doc: vscode.TextDocument, msg: any) {
