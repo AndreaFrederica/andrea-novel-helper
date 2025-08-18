@@ -565,3 +565,189 @@ function throttle(fn, ms) {
         }
     };
 }
+
+/* ================== Reader 设置面板与状态 ================== */
+(function initReaderSettings(){
+    var gear = document.getElementById('reader-gear');
+    var panel = document.getElementById('reader-settings');
+    if(!gear || !panel) { return; }
+    var inputs = {
+        font: document.getElementById('rs-font'),
+        line: document.getElementById('rs-line'),
+        para: document.getElementById('rs-para'),
+        pad: document.getElementById('rs-pad'),
+        width: document.getElementById('rs-width'),
+    height: document.getElementById('rs-height'),
+    pageHeight: document.getElementById('rs-pageHeight')
+    };
+    var vals = {
+        font: document.getElementById('rs-font-val'),
+        line: document.getElementById('rs-line-val'),
+        para: document.getElementById('rs-para-val'),
+        pad: document.getElementById('rs-pad-val')
+    };
+    var modeGroup = document.getElementById('rs-modes');
+    var alignGroup = document.getElementById('rs-aligns');
+    var colsGroup = document.getElementById('rs-cols');
+    var themeGroup = document.getElementById('rs-themes');
+    var btnReset = document.getElementById('rs-reset');
+    var presetSelect = document.getElementById('rs-preset');
+    var btnSavePreset = document.getElementById('rs-savePreset');
+    var btnDelPreset = document.getElementById('rs-delPreset');
+    var btnClose = document.getElementById('rs-close');
+    var pageBar = document.getElementById('reader-pagebar');
+    var pageInfo = document.getElementById('rp-info');
+    var btnPrev = document.getElementById('rp-prev');
+    var btnNext = document.getElementById('rp-next');
+
+    var STORE_KEY = 'anhReaderSettings';
+    var PRESET_KEY = 'anhReaderPresets';
+    function loadState(){
+        try{ return JSON.parse(localStorage.getItem(STORE_KEY)||'{}'); }catch(_){ return {}; }
+    }
+    function saveState(s){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }catch(_){} }
+    var state = Object.assign({ font:16, line:1.6, para:8, pad:12, width:720, height:0, pageHeight:0, mode:'scroll', theme:'auto', align:'left', cols:1 }, loadState());
+    var presets = (function(){ try{ return JSON.parse(localStorage.getItem(PRESET_KEY)||'{}'); }catch(_){ return {}; } })();
+
+    function reflect(){
+        inputs.font.value = state.font; vals.font.textContent = state.font;
+        inputs.line.value = state.line; vals.line.textContent = state.line.toFixed(2);
+        inputs.para.value = state.para; vals.para.textContent = state.para;
+        inputs.pad.value = state.pad; vals.pad.textContent = state.pad;
+    inputs.width.value = state.width; inputs.height.value = state.height || ''; inputs.pageHeight.value = state.pageHeight || '';
+        document.documentElement.style.setProperty('--reader-font-size', state.font+'px');
+        document.documentElement.style.setProperty('--reader-line-height', state.line);
+        document.documentElement.style.setProperty('--reader-para-spacing', state.para+'px');
+        document.documentElement.style.setProperty('--reader-page-padding', state.pad+'px');
+        document.documentElement.style.setProperty('--reader-width', state.width+'px');
+        document.documentElement.style.setProperty('--reader-height', state.height>0? state.height+'px':'auto');
+        document.body.classList.toggle('reader-paged', state.mode==='paged');
+        document.body.classList.toggle('reader-align-justify', state.align==='justify');
+        document.documentElement.style.setProperty('--reader-columns', state.cols);
+        var content = document.getElementById('reader-content');
+        if(content){
+            if(state.mode==='scroll'){
+                content.style.columnCount = state.cols>1? state.cols:1;
+                content.style.columnGap = state.cols>1? '48px':'0';
+            }else{
+                content.style.columnCount = 1; content.style.columnGap='0';
+            }
+        }
+        // 主题
+        document.body.classList.remove('reader-theme-light','reader-theme-dark');
+    if(state.theme==='light') { document.body.classList.add('reader-theme-light'); }
+    else if(state.theme==='dark') { document.body.classList.add('reader-theme-dark'); }
+        // 激活按钮样式
+        Array.from(modeGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-mode')===state.mode); });
+    if(alignGroup) { Array.from(alignGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-align')===state.align); }); }
+    if(colsGroup) { Array.from(colsGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', Number(b.getAttribute('data-cols'))===state.cols); }); }
+        Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-theme')===state.theme); });
+        saveState(state);
+        rebuildIndexNow();
+        updatePaging();
+    }
+
+    ['font','line','para','pad'].forEach(function(k){
+        inputs[k].addEventListener('input', function(){ state[k] = k==='line'? parseFloat(this.value): parseInt(this.value,10); reflect(); });
+    });
+    inputs.width.addEventListener('change', function(){ var v=parseInt(this.value,10); if(!isNaN(v)){ state.width=v; reflect(); }});
+    inputs.height.addEventListener('change', function(){ var v=parseInt(this.value,10); state.height = !isNaN(v)&&v>0? v:0; reflect(); });
+    inputs.pageHeight.addEventListener('change', function(){ var v=parseInt(this.value,10); state.pageHeight = !isNaN(v)&&v>0? v:0; reflect(); });
+    modeGroup.addEventListener('click', function(e){ var m=e.target && e.target.getAttribute('data-mode'); if(m){ state.mode=m; reflect(); }});
+    alignGroup && alignGroup.addEventListener('click', function(e){ var a=e.target && e.target.getAttribute('data-align'); if(a){ state.align=a; reflect(); }});
+    colsGroup && colsGroup.addEventListener('click', function(e){ var c=e.target && e.target.getAttribute('data-cols'); if(c){ state.cols=parseInt(c,10)||1; reflect(); }});
+    themeGroup.addEventListener('click', function(e){ var t=e.target && e.target.getAttribute('data-theme'); if(t){ state.theme=t; reflect(); }});
+    btnReset.addEventListener('click', function(){ state={ font:16,line:1.6,para:8,pad:12,width:720,height:0,pageHeight:0,mode:'scroll',theme:'auto',align:'left',cols:1}; reflect(); });
+    gear.addEventListener('click', function(){ panel.classList.add('open'); });
+    btnClose.addEventListener('click', function(){ panel.classList.remove('open'); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && panel.classList.contains('open')){ panel.classList.remove('open'); }});
+
+    reflect();
+    function refreshPresetOptions(){ if(!presetSelect) { return; } presetSelect.innerHTML=''; var keys=Object.keys(presets); if(!keys.length){ var opt=document.createElement('option'); opt.value=''; opt.textContent='(无)'; presetSelect.appendChild(opt); return; } keys.forEach(function(k){ var op=document.createElement('option'); op.value=k; op.textContent=k; presetSelect.appendChild(op); }); }
+    refreshPresetOptions();
+    if(btnSavePreset) {
+        btnSavePreset.addEventListener('click', function(){
+            var name=prompt('预设名称');
+            if(!name) { return; }
+            presets[name]=Object.assign({}, state);
+            try{ localStorage.setItem(PRESET_KEY, JSON.stringify(presets)); }catch(_){ }
+            refreshPresetOptions();
+            if(presetSelect) { presetSelect.value=name; }
+        });
+    }
+    if(btnDelPreset) {
+        btnDelPreset.addEventListener('click', function(){
+            var name=presetSelect && presetSelect.value;
+            if(!name || !presets[name]) { return; }
+            if(!confirm('删除预设: '+name+'?')) { return; }
+            delete presets[name];
+            try{ localStorage.setItem(PRESET_KEY, JSON.stringify(presets)); }catch(_){ }
+            refreshPresetOptions();
+        });
+    }
+    if(presetSelect) {
+        presetSelect.addEventListener('change', function(){
+            var name=this.value;
+            if(!name || !presets[name]) { return; }
+            state=Object.assign({}, presets[name]);
+            reflect();
+        });
+    }
+    /* ---- 分页计算 ---- */
+    function updatePaging(){
+    if(!pageBar || !pageInfo) { return; } 
+        if(state.mode!=='paged') { pageBar.hidden = true; return; }
+        pageBar.hidden = false;
+    var h = state.pageHeight>0? state.pageHeight : (window.innerHeight - 40);
+        var total = Math.max(1, Math.ceil(document.documentElement.scrollHeight / h));
+        var current = Math.min(total, Math.max(1, Math.floor(window.scrollY / h) + 1));
+        pageInfo.textContent = current + ' / ' + total;
+    }
+    window.addEventListener('scroll', throttle(updatePaging, 100));
+    window.addEventListener('resize', throttle(updatePaging, 200));
+    btnPrev && btnPrev.addEventListener('click', function(){ jumpPage(-1); });
+    btnNext && btnNext.addEventListener('click', function(){ jumpPage(1); });
+    function jumpPage(delta){ if(state.mode!=='paged') { return; } var h= state.pageHeight>0? state.pageHeight : (window.innerHeight - 40); window.scrollTo({ top: Math.max(0, window.scrollY + delta * h), behavior:'auto'}); updatePaging(); }
+    document.addEventListener('keydown', function(e){
+        if(state.mode==='paged'){
+            if(['PageDown','ArrowRight',' '].includes(e.key)){ e.preventDefault(); jumpPage(1); }
+            else if(['PageUp','ArrowLeft'].includes(e.key)){ e.preventDefault(); jumpPage(-1); }
+        }
+    });
+})();
+
+/* ================== TTS 自动翻页（分页模式） ================== */
+(function enableTTSAutoPage(){
+    var origLocate = locateAndHighlight;
+    locateAndHighlight = function(startIdx, len, isSel){
+        origLocate(startIdx, len, isSel);
+        try {
+            var bodyPaged = document.body.classList.contains('reader-paged');
+            if(!bodyPaged) { return; }
+            var h = (function(){
+                try{ var st = JSON.parse(localStorage.getItem('anhReaderSettings')||'{}'); return st.pageHeight>0? st.pageHeight : (window.innerHeight - 40); }catch(_){ return window.innerHeight - 40; }
+            })();
+            if(!currentHighlightEl) { return; }
+            var r = currentHighlightEl.getBoundingClientRect();
+            var y = window.scrollY;
+            var topVisible = y;
+            var pageIndex = Math.floor(topVisible / h);
+            var highlightPage = Math.floor((r.top + y - 10) / h); // 给一点上方缓冲
+            if(highlightPage > pageIndex){
+                window.scrollTo({ top: highlightPage * h, behavior:'smooth' });
+            }
+        } catch(_){}
+    };
+})();
+
+/* ================== 多列滚动定位优化 ================== */
+(function fixColumnScroll(){
+    var origScrollToLine = scrollToLine;
+    scrollToLine = function(line, smooth, scrollRatio, totalLines){
+        var content = document.getElementById('reader-content');
+        if(content && getComputedStyle(content).columnCount !== '1'){
+            // 在多列模式中，浏览器仍使用垂直滚动，因此直接调用原逻辑即可；若未来使用水平分页，可在此添加特殊逻辑。
+        }
+        return origScrollToLine(line, smooth, scrollRatio, totalLines);
+    };
+})();
