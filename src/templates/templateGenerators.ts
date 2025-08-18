@@ -248,18 +248,18 @@ const EXAMPLE_ROLE: Role = {
 
 export function generateExampleRoleList(): Role[] {
     // 返回副本，防止外部修改内部常量
-    return [ { ...EXAMPLE_ROLE, aliases: [...(EXAMPLE_ROLE.aliases||[])] } ];
+    return [{ ...EXAMPLE_ROLE, aliases: [...(EXAMPLE_ROLE.aliases || [])] }];
 }
 
 /** 角色库 JSON5 初始模板（含 1 个示例，可删除） */
 export function generateCharacterGalleryJson5(): string {
-        return `[
+    return `[
     // === 示例角色（可删除）===
     {
         name: "${EXAMPLE_ROLE.name}",
         type: "${EXAMPLE_ROLE.type}",
         affiliation: "${EXAMPLE_ROLE.affiliation}",
-        aliases: [${(EXAMPLE_ROLE.aliases||[]).map(a=>`"${a}"`).join(', ')}],
+        aliases: [${(EXAMPLE_ROLE.aliases || []).map(a => `"${a}"`).join(', ')}],
         color: "${EXAMPLE_ROLE.color}",
         description: "${EXAMPLE_ROLE.description}"
     }
@@ -268,14 +268,15 @@ export function generateCharacterGalleryJson5(): string {
 
 /** 示例敏感词 JSON5 模板（字符串形式，直接写入文件） */
 export function generateSensitiveWordsJson5(): string {
-        return `[
+    return `[
     // === 示例敏感词（可删除或新增）===
     {
         name: "禁用词",
         type: "敏感词",
         color: "#FF4D4F", // 可选：用于高亮
         description: "需要避免使用的词汇，成稿前需替换。",
-        aliases: ["替换候选1"],
+        aliases: ["禁用词2"],
+        fixes: ["不是禁用"],
         category: "内容安全", // 自定义分类字段
         severity: "high"      // 自定义严重级别字段
     },
@@ -287,12 +288,13 @@ export function generateSensitiveWordsJson5(): string {
         category: "剧情",
         severity: "medium"
     }
-]`;
+]
+`;
 }
 
 /** 示例词汇 JSON5 模板（字符串形式，直接写入文件） */
 export function generateVocabularyJson5(): string {
-        return `[
+    return `[
     // === 示例专业词汇 ===
     {
         name: "灵能",

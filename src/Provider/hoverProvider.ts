@@ -173,7 +173,7 @@ function hoverInfoEqual(a: HoverInfo[], b: HoverInfo[]): boolean {
  * 增量刷新：仅在变更时更新 hoverRangesMap，并打印日志
  */
 async function refreshAll() {
-    console.log('【HoverProvider】开始增量刷新 Hover 信息');
+    console.log('[HoverProvider]开始增量刷新 Hover 信息');
     const currentKeys = new Set<string>();
     const editors = vscode.window.visibleTextEditors.slice();
     for (const editor of editors) {
@@ -197,13 +197,13 @@ async function refreshAll() {
             }).filter(Boolean) as HoverInfo[]);
             // 若异步结果为空但仍有角色，尝试同步 fallback（可能构建尚未真正完成）
             if (infos.length === 0 && roles.length > 0) {
-                console.log('【HoverProvider】异步空结果，执行同步 fallback');
+                console.log('[HoverProvider]异步空结果，执行同步 fallback');
                 infos = scanDocumentForHover(doc);
             }
             hoverRangesMap.set(key, infos);
-            console.log(`【HoverProvider】异步匹配 ${key} v${versionAtReq} 用时 ${Date.now()-t0}ms 命中 ${infos.length}`);
+            console.log(`[HoverProvider]异步匹配 ${key} v${versionAtReq} 用时 ${Date.now()-t0}ms 命中 ${infos.length}`);
         } catch (e) {
-            console.warn('【HoverProvider】异步匹配失败 fallback', e);
+            console.warn('[HoverProvider]异步匹配失败 fallback', e);
             hoverRangesMap.set(key, scanDocumentForHover(doc));
         }
     }

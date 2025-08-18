@@ -44,15 +44,20 @@ class AhoCorasickManager {
             // 处理 fixes/fixs 字段（修复候选词也应该被识别为该角色）
             const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
             if (Array.isArray(fixesArr)) {
+                console.log(`[AhoCorasick] 角色 "${r.name}" 的 fixes:`, fixesArr);
                 for (const fix of fixesArr) {
                     const f = fix.trim().normalize('NFC');
                     if (f) { // 确保不是空字符串
                         patterns.push(f);
                         this.patternMap.set(f, r);
+                        console.log(`[AhoCorasick] 添加 fixes 模式: "${f}" -> 角色 "${r.name}"`);
                     }
                 }
             }
         }
+        
+        console.log(`[AhoCorasick] 总共加载模式数量: ${patterns.length}`);
+        console.log(`[AhoCorasick] PatternMap 大小: ${this.patternMap.size}`);
         
         // @ts-ignore
         this.ac = new AhoCorasick(patterns);

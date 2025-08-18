@@ -146,6 +146,7 @@ export async function updateDecorations() {
         }
     const acCost = Date.now() - startMs;
     console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
+    console.log('[Decorations] 找到的匹配:', hits.slice(0, 5)); // 只显示前5个匹配，避免日志过长
 
         // 预构建 pattern -> role 映射（包含别名和fixes），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
         const patternRoleMap = new Map<string, Role>();
@@ -184,9 +185,14 @@ export async function updateDecorations() {
                 }
                 if (!role) {
                     // 调试日志（避免噪音，仅在开发者控制台）
-                    // console.log('[Decorations] 未解析到匹配角色(可能为过期缓存) pattern=', pat);
+                    console.log('[Decorations] 未解析到匹配角色(可能为过期缓存) pattern=', pat);
                     continue;
                 }
+                
+                // 添加调试信息：显示找到的匹配
+                const startPos = endIdx - pat.length + 1;
+                console.log(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx+1}) -> 角色 "${role.name}"`);
+                
                 candidates.push({ 
                     role, 
                     text: pat, 
