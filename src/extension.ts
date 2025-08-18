@@ -30,6 +30,8 @@ export interface Role {
 	regexFlags?: string;
 	/** 着色器优先级（数字越小优先级越高，默认为999） */
 	priority?: number;
+	/** 敏感词可替换修复候选（仅对 type==='敏感词' 使用；别名不自动补全，修复项需要可补全） */
+	fixes?: string[]; // 修复 (向后兼容旧字段 fixs)
 }
 
 

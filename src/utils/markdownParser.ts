@@ -54,7 +54,13 @@ export const FIELD_ALIASES: { [key: string]: string } = {
     'family': '家庭',
     'education': '教育',
     'hobby': '爱好',
-    'hobbies': '爱好'
+    'hobbies': '爱好',
+    // 敏感词修复候选（标准字段：fixes；兼容旧 fixs）
+    'fixes': '修复',
+    'fixs': '修复',
+    'fix': '修复',
+    'replacements': '修复',
+    'replacement': '修复'
 };
 
 /**
@@ -274,7 +280,7 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
         case 'type':
             role.type = stripMarkdown(processedContent);
             break;
-        case 'color':
+        case 'color': {
             // 提取和验证颜色格式
             const colorText = stripMarkdown(processedContent);
             const extractedColor = extractColor(colorText);
@@ -282,6 +288,24 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
                 role.color = extractedColor;
             }
             break;
+        }
+    case 'fixes':
+    case 'fixs': // 兼容旧字段
+    case 'fix':
+    case 'replacements':
+    case 'replacement': {
+            // 解析修复候选：支持
+            // 1) 逗号/中文逗号/顿号/分号/空格 分隔
+            // 2) 换行分隔
+            const raw = stripMarkdown(processedContent);
+            const fixTokens = raw.split(/[，,;；\n\r\t\s·、]+/)
+                .map(t => t.trim())
+                .filter(t => t.length > 0);
+            if (fixTokens.length > 0) {
+                (role as any).fixes = Array.from(new Set(fixTokens));
+            }
+            break;
+        }
         case 'affiliation':
             role.affiliation = stripMarkdown(processedContent);
             break;
@@ -649,7 +673,7 @@ export function generateDefaultFileName(roleType: string): string {
  * 获取角色的扩展字段（除了基础字段之外的字段）
  */
 export function getExtensionFields(role: Role): Array<[string, any]> {
-    const baseFields = new Set(['name', 'description', 'type', 'color', 'affiliation', 'aliases', 'packagePath', 'sourcePath']);
+    const baseFields = new Set(['name', 'description', 'type', 'color', 'affiliation', 'aliases', 'fixes', 'packagePath', 'sourcePath']);
     const extensionFields: Array<[string, any]> = [];
     
     for (const [key, value] of Object.entries(role)) {

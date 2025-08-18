@@ -227,6 +227,16 @@ export function buildRoleMarkdown(r: Role): vscode.MarkdownString {
     }
     md.appendMarkdown(`**类型**: ${r.type}\n\n`);
     if (r.affiliation) md.appendMarkdown(`**从属**: ${r.affiliation}\n\n`);
+    // 显示别名
+    if (Array.isArray((r as any).aliases) && (r as any).aliases.length > 0) {
+        const aliasList = (r as any).aliases.map((a: string) => `\`${a}\``).join('， ');
+        md.appendMarkdown(`**别名**: ${aliasList}\n\n`);
+    }
+    // 显示修复候选（敏感词替换建议）
+    if (Array.isArray((r as any).fixes) && (r as any).fixes.length > 0) {
+        const fixList = (r as any).fixes.map((f: string) => `\`${f}\``).join('， ');
+        md.appendMarkdown(`**修复**: ${fixList}\n\n`);
+    }
     if (r.packagePath) md.appendMarkdown(`**包路径**: ${r.packagePath}\n\n`);
     if (r.sourcePath) {
         const fileName = r.sourcePath.split(/[/\\]/).pop() || r.sourcePath;
@@ -300,6 +310,16 @@ export function activateHover(context: vscode.ExtensionContext) {
                 }
                 md.appendMarkdown(`**类型**: ${r.type}\n\n`);
                 if (r.affiliation) md.appendMarkdown(`**从属**: ${r.affiliation}\n\n`);
+                // 别名
+                if (Array.isArray((r as any).aliases) && (r as any).aliases.length > 0) {
+                    const aliasList = (r as any).aliases.map((a: string) => `\`${a}\``).join('， ');
+                    md.appendMarkdown(`**别名**: ${aliasList}\n\n`);
+                }
+                // 修复候选
+                if (Array.isArray((r as any).fixes) && (r as any).fixes.length > 0) {
+                    const fixList = (r as any).fixes.map((f: string) => `\`${f}\``).join('， ');
+                    md.appendMarkdown(`**修复**: ${fixList}\n\n`);
+                }
                 
                 // 显示路径信息
                 if (r.packagePath || r.sourcePath) {

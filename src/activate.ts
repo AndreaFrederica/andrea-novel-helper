@@ -438,6 +438,11 @@ export async function activate(context: vscode.ExtensionContext) {
         // Hover 和 Definition 提供器
         activateHover(context);
         activateDef(context);
+        // 敏感词修复 CodeAction
+        try {
+            const { registerFixsCodeAction } = await import('./Provider/fixsCodeActionProvider.js');
+            registerFixsCodeAction(context);
+        } catch (e) { console.warn('[ANH] 注册 fixs CodeAction 失败', e); }
 
         // Markdown 工具条
         activateMarkdownToolbar(context);

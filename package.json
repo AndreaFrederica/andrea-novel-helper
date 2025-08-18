@@ -403,28 +403,28 @@
       "view/item/context": [
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createSubPackage",
-          "group": "1_modification"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createCharacterGallery",
-          "group": "1_modification"
+          "group": "0_create@1"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createSensitiveWords",
-          "group": "1_modification"
+          "group": "0_create@2"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createVocabulary",
-          "group": "1_modification"
+          "group": "0_create@3"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createRegexPatterns",
-          "group": "1_modification"
+          "group": "0_create@4"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createSubPackage",
+          "group": "1_package@1"
         },
         {
           "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile)",
@@ -449,7 +449,7 @@
         {
           "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
           "command": "AndreaNovelHelper.renamePackage",
-          "group": "1_modification"
+          "group": "1_package@2"
         },
         {
           "when": "view == wordCountExplorer && viewItem == wordCountFolder",
@@ -791,7 +791,7 @@
         },
         "AndreaNovelHelper.wordCount.largeFileAvgBytesPerChar": {
           "type": "number",
-          "default": 1.6,
+          "default": 3,
           "minimum": 0.5,
           "maximum": 10,
           "description": "大文件估算阶段使用的平均字节/字符比值 (字节 ÷ 字符)。例如 1.6 代表 1.6 字节≈1 个字符。"

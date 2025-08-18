@@ -135,9 +135,17 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
 
                 // 1. 先筛角色，过滤掉类型为 "敏感词" 的（多重保障：后面还会再二次剔除）
                 const skippedSensitive: string[] = [];
+                // 预构建敏感词名称+别名集合（用于额外保险过滤）
+                const sensitiveNameSet = new Set<string>();
+                for (const r of roles) if (r.type === '敏感词') {
+                    sensitiveNameSet.add(r.name);
+                    for (const al of r.aliases || []) sensitiveNameSet.add(al);
+                }
                 const matchedRoles = roles.filter(role => {
                     if (role.type === '敏感词') { skippedSensitive.push(role.name); return false; }
                     const names = [role.name, ...(role.aliases || [])];
+                    // 若全部名称都在敏感集合（理论上不该出现，因为已被上面剔除），仍返回 false
+                    if (names.every(n => sensitiveNameSet.has(n))) return false;
                     return names.some(n => n.includes(prefix));
                 });
                 if (!matchedRoles.length) {
@@ -252,7 +260,49 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                 }
 
                 // 3. 终极保险：再次剔除敏感词（若异步期间类型刚写入导致 race）
-                const finalItems = items.filter(it => !/类型: .*敏感词/.test(it.detail || ''));
+                // 4. 为敏感词 fixes 添加替换建议（兼容旧字段 fixs）
+                for (const r of roles) {
+                    const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
+                    if (r.type !== '敏感词' || !Array.isArray(fixesArr)) continue;
+                    for (const fix of fixesArr) {
+                        if (!fix || typeof fix !== 'string') continue;
+                        if (!fix.includes(prefix)) continue; // 简单包含匹配，与普通一致
+                        if (fix.length < min) continue;
+                        // 避免与已有 item 重复
+                        if (items.some(it => typeof it.label === 'string' ? it.label === fix : it.label.label === fix)) continue;
+                        const item = new vscode.CompletionItem(fix, vscode.CompletionItemKind.Snippet);
+                        item.insertText = fix;
+                        item.range = new vscode.Range(
+                            position.line,
+                            position.character - prefix.length,
+                            position.line,
+                            position.character
+                        );
+                        item.filterText = prefix + fix;
+                        item.detail = `修复: 来自敏感词「${r.name}」`;
+                        const md = new vscode.MarkdownString();
+                        md.appendMarkdown(`将敏感词 \`${r.name}\` 替换为: **${fix}**`);
+                        if (r.description) md.appendMarkdown(`\n\n原描述: ${r.description.split('\n')[0]}`);
+                        if (r.sourcePath) {
+                            const fn = r.sourcePath.split(/[/\\]/).pop() || r.sourcePath;
+                            md.appendMarkdown(`\n\n来源: ${fn}`);
+                        }
+                        md.isTrusted = true;
+                        item.documentation = md;
+                        // sortText 放在普通角色之后（使用高序号 999）
+                        item.sortText = `999_fix_${fix}`;
+                        items.push(item);
+                    }
+                }
+
+                const finalItems = items.filter(it => {
+                    if (/类型: .*敏感词/.test(it.detail || '')) return false; // detail 保险
+                    // 直接名称或插入文本命中敏感词集合也剔除（覆盖别名）
+                    const labelStr = typeof it.label === 'string' ? it.label : it.label.label;
+                    if (labelStr && sensitiveNameSet.has(labelStr)) return false;
+                    if (typeof it.insertText === 'string' && sensitiveNameSet.has(it.insertText)) return false;
+                    return true;
+                });
                 if (debug) {
                     const removed = items.length - finalItems.length;
                     console.log(`[ANH][Completion] emit items count=${finalItems.length} distinctRoles=${matchedRoles.length} removedSensitive=${removed} initiallySkippedSensitive=${skippedSensitive.length}`);

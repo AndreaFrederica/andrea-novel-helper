@@ -346,12 +346,20 @@ export async function updateDecorations() {
             const cspellTxt = path.join(root, '.vscode', 'cspell-roles.txt');
             if (doc.uri.fsPath.toLowerCase() === cspellTxt.toLowerCase()) continue; // 词典文件跳过
             for (const range of ranges) {
+                // 若当前匹配文本本身是某个 fixes 值，则视作已修复，跳过诊断
+                let matchedText: string | undefined;
+                try { matchedText = doc.getText(range); } catch { /* ignore */ }
+                const fixesArr: string[] | undefined = (role as any).fixes || (role as any).fixs;
+                if (matchedText && Array.isArray(fixesArr) && fixesArr.includes(matchedText)) {
+                    continue; // 已替换文本不再出警告/修复提示
+                }
                 const base = `发现敏感词：${role.name}` + (role.description ? ` ${role.description}` : '');
                 const lineNum = range.start.line + 1;
                 const lineText = doc.lineAt(range.start.line).text.trim();
                 const msg = `${base}\n第 ${lineNum} 行: ${lineText}`;
                 const diag = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Warning);
                 diag.source = 'AndreaNovelHelper';
+                // 不再附加修复选项（用户需求：只着色不加修复/警告提示列表）
                 diagnostics.push(diag);
             }
         }
