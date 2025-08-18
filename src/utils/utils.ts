@@ -7,7 +7,7 @@ import JSON5 from 'json5';
 
 /* eslint-disable curly */
 import { Role, segmenter } from "../extension";
-import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles } from '../activate';
+import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles, sensitiveSourceFiles } from '../activate';
 import { globalFileCache } from './fileCache';
 import { parseMarkdownRoles } from './markdownParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
@@ -311,6 +311,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	if (forceRefresh) {
 		globalFileCache.clear();
 		cleanRoles();
+		sensitiveSourceFiles.clear();
 	}
 
 	// 检查 novel-helper 目录是否存在
@@ -578,6 +579,10 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 		} else if (fileName.endsWith('.md')) {
 			loadMarkdownRoleFile(content, filePath, packagePath, fileType);
 		}
+		// 记录敏感词库源文件（按解析出的角色类型判定）
+		try {
+			if (fileType === '敏感词') { sensitiveSourceFiles.add(path.resolve(filePath).toLowerCase()); }
+		} catch { /* ignore */ }
 	} catch (error) {
 		console.error(`loadRoleFile: 加载文件失败 ${filePath}: ${error}`);
 		vscode.window.showErrorMessage(`加载角色文件失败: ${fileName} - ${error}`);
@@ -646,7 +651,9 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 			if (!role.type) {
 				role.type = defaultType;
 			}
-			
+			if (role.type === '敏感词') {
+				try { sensitiveSourceFiles.add(path.resolve(filePath).toLowerCase()); } catch { /* ignore */ }
+			}
 			roles.push(role);
 		}
 		
@@ -677,6 +684,9 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 		const markdownRoles = parseMarkdownRoles(content, filePath, packagePath, defaultType);
 		for (const role of markdownRoles) {
 			roles.push(role);
+			if (role.type === '敏感词' && role.sourcePath) {
+				try { sensitiveSourceFiles.add(path.resolve(role.sourcePath).toLowerCase()); } catch { /* ignore */ }
+			}
 		}
 		console.log(`loadMarkdownRoleFile: 从 ${filePath} 加载了 ${markdownRoles.length} 个角色`);
 	} catch (error) {
@@ -712,6 +722,7 @@ function loadTXTRoleFile(content: string, filePath: string, packagePath: string,
 		};
 		if (defaultType === '敏感词') {
 			role.color = '#FF0000';
+			try { sensitiveSourceFiles.add(path.resolve(filePath).toLowerCase()); } catch { /* ignore */ }
 		} else if (defaultType === '正则表达式') {
 			console.warn(`loadTXTRoleFile: 正则表达式类型不支持TXT格式，跳过文件 ${filePath}`);
 			return;

@@ -52,6 +52,8 @@ export let file_outline_url = 'andrea-outline://outline/outline_file.md';
 
 // 全局角色列表
 export let roles: Role[] = [];
+// 敏感词库源文件集合（包含 json5 / md / txt 自定义命名）
+export const sensitiveSourceFiles = new Set<string>();
 
 // 存储当前文档中每个角色出现的范围和对应角色
 export let hoverRanges: { range: vscode.Range; role: Role }[] = [];

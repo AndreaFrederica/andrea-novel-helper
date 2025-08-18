@@ -3,7 +3,8 @@ import * as vscode from 'vscode';
 import { hoverRanges, roles, setHoverRanges } from '../activate';
 import { Role } from '../extension';
 import { getSupportedLanguages, getSupportedExtensions, rangesOverlap, typeColorMap, isHugeFile } from '../utils/utils';
-import * as fs from 'fs';
+// 不再读取文件内容进行敏感词库判断，使用加载阶段记录的集合
+import { sensitiveSourceFiles } from '../activate';
 import * as path from 'path';
 import { ahoCorasickManager } from '../utils/ahoCorasickManager';
 import { getRoleMatches } from '../utils/roleAsyncShared';
@@ -333,43 +334,8 @@ export async function updateDecorations() {
         let isSensitiveWordsDefFile = false;
         try {
             const docPathLower2 = doc.uri.fsPath.toLowerCase();
-            // 1) 精确：role.sourcePath 匹配
-            const sensitiveSourceSet = new Set<string>();
-            for (const r of roles) {
-                if (r.type === '敏感词' && r.sourcePath) {
-                    sensitiveSourceSet.add(r.sourcePath.toLowerCase());
-                }
-            }
-            if (sensitiveSourceSet.has(docPathLower2)) {
+            if (sensitiveSourceFiles.has(docPathLower2)) {
                 isSensitiveWordsDefFile = true;
-            }
-
-            // 2) 启发式：自定义 TXT 词库（未通过配置文件名加载）
-            if (!isSensitiveWordsDefFile) {
-                const base = path.basename(doc.uri.fsPath).toLowerCase();
-                const extL = base.split('.').pop() || '';
-                // 文件名关键字直接判定（避免在词库自身触发诊断噪音）
-                if (/(sensitive|敏感|ban|block|forbid|forbidden|禁用|违禁)/.test(base)) {
-                    isSensitiveWordsDefFile = true;
-                } else if (extL === 'txt') {
-                    // 内容判定：行式词库（大部分行都与敏感词角色集合匹配）
-                    try {
-                        const content = fs.readFileSync(doc.uri.fsPath, 'utf8');
-                        const lines = content.split(/\r?\n/)
-                            .map(l=>l.trim())
-                            .filter(l=>l && !l.startsWith('#') && !l.startsWith('//'));
-                        if (lines.length > 0 && lines.length <= 500) { // 限制规模，避免对正常正文误判
-                            // 预构建敏感词名称集合
-                            const sensitiveNames = new Set<string>(roles.filter(r=>r.type==='敏感词').map(r=>r.name));
-                            let hit = 0;
-                            for (const l of lines) if (sensitiveNames.has(l)) hit++;
-                            // 若 60% 以上行出现在敏感词集合，视为定义文件
-                            if (hit / lines.length >= 0.6) {
-                                isSensitiveWordsDefFile = true;
-                            }
-                        }
-                    } catch { /* ignore */ }
-                }
             }
         } catch { /* ignore */ }
         for (const [role, ranges] of roleToRanges) {
