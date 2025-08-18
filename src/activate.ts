@@ -43,6 +43,7 @@ import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
 import { generateExampleRoleList } from './templates/templateGenerators';
 import { generateCSpellDictionary } from './utils/generateCSpellDictionary';
+import { registerPreviewPane } from './Provider/view/previewPane';
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
 
@@ -189,6 +190,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 openDoubleOutline
             )
         );
+        const manager = registerPreviewPane(context);
 
         // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
         setTimeout(() => {
