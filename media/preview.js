@@ -524,6 +524,8 @@ if ('speechSynthesis' in window) {
     btnPause && btnPause.addEventListener('click', pauseTTS);
     btnStop && btnStop.addEventListener('click', stopTTS);
     updateTTSStatus('就绪');
+    // 关闭 / 刷新 webview 前自动停止，避免残留语音继续播放
+    window.addEventListener('beforeunload', function(){ try { stopTTS(); } catch {} });
 } else {
     updateTTSStatus('不支持TTS');
     Array.from(document.querySelectorAll('.tts-btn')).forEach(function (btn) { btn.disabled = true; });

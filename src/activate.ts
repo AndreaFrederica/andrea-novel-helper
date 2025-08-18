@@ -44,6 +44,7 @@ import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap'
 import { generateExampleRoleList } from './templates/templateGenerators';
 import { generateCSpellDictionary } from './utils/generateCSpellDictionary';
 import { registerPreviewPane } from './Provider/view/previewPane';
+import { stopAllPreviewTTS, PreviewManager } from './Provider/view/previewPane';
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
 
@@ -190,7 +191,9 @@ export async function activate(context: vscode.ExtensionContext) {
                 openDoubleOutline
             )
         );
-        const manager = registerPreviewPane(context);
+    const previewManager: PreviewManager = registerPreviewPane(context);
+    (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
+    _previewManager = previewManager; // 模块级保存
 
         // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
         setTimeout(() => {
@@ -856,7 +859,10 @@ export function deactivate() {
     decorationTypes.forEach((d) => d.dispose());
     deactivateMarkdownToolbar();
     deactivateTimeStats();
+    try { stopAllPreviewTTS(_previewManager); } catch {}
 }
+
+let _previewManager: PreviewManager | undefined;
 
 export { loadRoles };
 

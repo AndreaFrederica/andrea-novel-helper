@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { mdToPlainText } from '../../utils/md_plain';
 
+const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
+
 type Block = { srcLine: number; text: string };
 
 export function registerPreviewPane(context: vscode.ExtensionContext) {
@@ -15,6 +17,8 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('myPreview.ttsPause', () => manager.sendTTSCommand('pause')),
     vscode.commands.registerCommand('myPreview.ttsStop',  () => manager.sendTTSCommand('stop')),
   );
+  // 启动后尝试恢复上次的预览
+  setTimeout(() => manager.restorePrimaryPanel().catch(()=>{}), 150);
   return manager;
 }
 
@@ -57,6 +61,7 @@ export class PreviewManager {
   // 设置为主面板以启用后续自动跟随
   this.primaryPanel = panel;
   this.primaryDocUri = doc.uri.toString();
+  this.persistPrimaryDoc(this.primaryDocUri);
     });
   }
 
@@ -104,6 +109,8 @@ export class PreviewManager {
     // 若这是 primaryPanel，被关闭后重置引用
     panel.onDidDispose(() => {
       if (this.primaryPanel === panel) { this.primaryPanel = undefined; this.primaryDocUri = undefined; }
+  // 清除持久化状态
+  this.persistPrimaryDoc(undefined);
     });
 
     return panel;
@@ -123,7 +130,8 @@ export class PreviewManager {
     // 2. 更新映射：移除旧 key，添加新 key 复用同一个 panel
     if (this.primaryDocUri) { this.panels.delete(this.primaryDocUri); }
     this.panels.set(newKey, this.primaryPanel);
-    this.primaryDocUri = newKey;
+  this.primaryDocUri = newKey;
+  this.persistPrimaryDoc(this.primaryDocUri);
 
     // 3. 用新文档内容刷新 panel
     this.updatePanel(this.primaryPanel, newDoc);
@@ -131,6 +139,35 @@ export class PreviewManager {
     setTimeout(() => this.sendEditorTop(newDoc), 50);
   }
 
+  /** 持久化当前主文档 URI */
+  private persistPrimaryDoc(uri: string | undefined) {
+    try { this.context.workspaceState.update(PREVIEW_STATE_KEY, uri); } catch {}
+  }
+
+  /** 启动时尝试恢复主预览面板 */
+  async restorePrimaryPanel() {
+    const saved = this.context.workspaceState.get<string | undefined>(PREVIEW_STATE_KEY);
+    if (!saved) {return;}
+    try {
+      const uri = vscode.Uri.parse(saved);
+      if (uri.scheme !== 'file') {return;}
+      const doc = await vscode.workspace.openTextDocument(uri);
+      // 仅限制于 markdown / plaintext
+      if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) {return;}
+      const panel = await this.ensurePanelFor(doc);
+      this.primaryPanel = panel; this.primaryDocUri = doc.uri.toString();
+      this.updatePanel(panel, doc);
+      panel.reveal(vscode.ViewColumn.Beside, true);
+      setTimeout(() => this.sendEditorTop(doc), 120);
+    } catch {}
+  }
+
+  /** 停止所有预览中的 TTS（用于停用扩展） */
+  stopAllTTS() {
+    for (const p of this.panels.values()) {
+      try { p.webview.postMessage({ type: 'ttsControl', command: 'stop' }); } catch {}
+    }
+  }
   private onWebviewMessage(doc: vscode.TextDocument, msg: any) {
     const key = doc.uri.toString();
 
@@ -273,4 +310,9 @@ export class PreviewManager {
   private findEditor(doc: vscode.TextDocument){
     return vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === doc.uri.toString());
   }
+}
+
+// 导出便于外部停用时调用
+export function stopAllPreviewTTS(manager?: PreviewManager) {
+  try { manager?.stopAllTTS(); } catch {}
 }
