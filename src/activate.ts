@@ -815,6 +815,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         activateTimeStats(context);
 
+
         // 注册文件追踪相关命令
         context.subscriptions.push(
             vscode.commands.registerCommand('AndreaNovelHelper.showFileTrackingStats', showFileTrackingStats),

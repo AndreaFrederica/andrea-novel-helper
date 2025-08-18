@@ -52,6 +52,11 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
       let gitUserName = '';
       let gitUserEmail = '';
       let gitUserScope: 'global' | 'local' = 'global';
+  let versionControlWritingStats: boolean | undefined = undefined; // 未询问前 undefined
+  // 新增：通用忽略项选择
+  let ignoreHistory = true; // .gitignore:.history/
+  let wcIgnoreVscode = true; // .wcignore:.vscode/
+  let wcIgnoreOutOfInsights = true; // .wcignore:.out-of-code-insights/
 
       // Git 用户配置优先（若安装了 Git）
   if (gitInstalled) {
@@ -97,6 +102,30 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
         if (!structPick) { abort(); } else if (structPick === '创建示例结构与文件') { createStructure = true; }
       }
 
+      // 询问写作统计数据库是否纳入版本控制
+      if (!aborted) {
+        const wcPick = await vscode.window.showQuickPick([
+          '不纳入（推荐，避免提交个人写作行为数据）',
+          '纳入版本控制（可随仓库同步多端写作进度）'
+        ], { placeHolder: '是否将写作统计数据库 (novel-helper/.anh-fsdb) 纳入版本控制？' });
+        if (!wcPick) { abort(); } else { versionControlWritingStats = wcPick.startsWith('纳入') ? true : false; }
+      }
+
+      // 勾选忽略的辅助目录（与写作统计数据库无关，三项默认勾选）
+      if (!aborted) {
+        const picks = await vscode.window.showQuickPick([
+          { label: '忽略 .history (推荐)', picked: true, description: '.gitignore: .history/' },
+          { label: '忽略 .vscode (写作统计扫描排除 - 推荐)', picked: true, description: '.wcignore: .vscode/' },
+          { label: '忽略 .out-of-code-insights (划词注解扩展数据目录 - 推荐)', picked: true, description: '.wcignore: .out-of-code-insights/' }
+        ], { canPickMany: true, placeHolder: '选择需要忽略的辅助目录（推荐全部勾选）' });
+        if (!picks) { abort(); }
+        else {
+          ignoreHistory = picks.some(p => p.label.startsWith('忽略 .history'));
+          wcIgnoreVscode = picks.some(p => p.label.startsWith('忽略 .vscode'));
+          wcIgnoreOutOfInsights = picks.some(p => p.label.includes('.out-of-code-insights'));
+        }
+      }
+
       if (!aborted && gitInstalled && (hasRepo || needInitRepo)) {
         const commitPick = await vscode.window.showQuickPick(['创建初始提交','跳过'], { placeHolder: '是否创建初始提交？(稍后执行)' });
         if (!commitPick) { abort(); } else if (commitPick === '创建初始提交') { wantInitialCommit = true; }
@@ -116,6 +145,11 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
         else if (hasRepo) { summary.push('已有仓库'); }
       } else { summary.push('Git未安装'); }
       if (createStructure) { summary.push('创建示例结构'); }
+  if (versionControlWritingStats === false) { summary.push('忽略写作统计数据库'); }
+  else if (versionControlWritingStats === true) { summary.push('跟踪写作统计数据库'); }
+  if (ignoreHistory) { summary.push('忽略 .history'); }
+  if (wcIgnoreVscode) { summary.push('.wcignore 忽略 .vscode'); }
+  if (wcIgnoreOutOfInsights) { summary.push('.wcignore 忽略 .out-of-code-insights'); }
       if (wantInitialCommit) { summary.push('初始提交'); }
   const confirm = await vscode.window.showInformationMessage(`确认执行: ${summary.join('，')} ?`, { modal: true }, '执行','取消');
   if (confirm !== '执行') { vscode.window.showInformationMessage('已取消执行', { modal: true }, '关闭'); return; }
@@ -163,6 +197,66 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
               fs.writeFileSync(mdPath, generateMarkdownRoleTemplate(), 'utf8');
             }
           } catch { /* ignore markdown creation errors */ }
+        }
+        // 应用写作统计数据库 gitignore 规则
+        if (!aborted && versionControlWritingStats !== undefined) {
+          try {
+            const gitignorePath = path.join(ws, '.gitignore');
+            const ignoreLine = 'novel-helper/.anh-fsdb/';
+            let content = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+            const lines = content.split(/\r?\n/);
+            const hasLine = lines.some(l => l.trim() === ignoreLine);
+            if (versionControlWritingStats === false && !hasLine) {
+              if (content && !content.endsWith('\n')) { content += '\n'; }
+              content += ignoreLine + '\n';
+              fs.writeFileSync(gitignorePath, content);
+              vscode.window.showInformationMessage('已在 .gitignore 添加写作统计数据库忽略条目');
+            } else if (versionControlWritingStats === true && hasLine) {
+              const newContent = lines.filter(l => l.trim() !== ignoreLine).join('\n');
+              fs.writeFileSync(gitignorePath, newContent);
+              vscode.window.showInformationMessage('已从 .gitignore 移除写作统计数据库忽略条目');
+            }
+          } catch (e) {
+            vscode.window.showWarningMessage('处理写作统计数据库 .gitignore 规则失败: ' + (e as any)?.message);
+          }
+        }
+        // 处理通用忽略：.gitignore -> .history
+        if (!aborted) {
+          try {
+            if (ignoreHistory) {
+              const gitignorePath = path.join(ws, '.gitignore');
+              let content = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+              const line = '.history/';
+              if (!content.split(/\r?\n/).some(l => l.trim() === line)) {
+                if (content && !content.endsWith('\n')) { content += '\n'; }
+                content += line + '\n';
+                fs.writeFileSync(gitignorePath, content);
+                vscode.window.showInformationMessage('已在 .gitignore 添加 .history/ 忽略');
+              }
+            }
+          } catch (e) {
+            vscode.window.showWarningMessage('处理 .history 忽略失败: ' + (e as any)?.message);
+          }
+        }
+        // 处理 .wcignore -> .vscode / .out-of-code-insights
+        if (!aborted && (wcIgnoreVscode || wcIgnoreOutOfInsights)) {
+          try {
+            const wcignorePath = path.join(ws, '.wcignore');
+            let content = fs.existsSync(wcignorePath) ? fs.readFileSync(wcignorePath, 'utf8') : '';
+            const ensureLine = (line: string) => {
+              const exists = content.split(/\r?\n/).some(l => l.trim() === line);
+              if (!exists) {
+                if (content && !content.endsWith('\n')) { content += '\n'; }
+                content += line + '\n';
+              }
+            };
+            if (wcIgnoreVscode) { ensureLine('.vscode/'); }
+            if (wcIgnoreOutOfInsights) { ensureLine('.out-of-code-insights/'); }
+            fs.writeFileSync(wcignorePath, content);
+            vscode.window.showInformationMessage('已更新 .wcignore 忽略目录');
+          } catch (e) {
+            vscode.window.showWarningMessage('处理 .wcignore 忽略失败: ' + (e as any)?.message);
+          }
         }
         if (gitInstalled && (hasRepo || needInitRepo) && wantInitialCommit) {
           const addRes = await runGit(['add','.'], ws);

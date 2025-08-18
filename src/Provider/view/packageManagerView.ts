@@ -3,8 +3,26 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate } from '../../templates/templateGenerators';
+import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
+
+// 解析文件名冲突：如果同名存在，则追加 _YYYYMMDD_HHmmss 或递增索引
+function resolveFileConflict(dir: string, baseName: string, ext: string): { path: string; conflicted: boolean; } {
+    let target = path.join(dir, baseName + ext);
+    if (!fs.existsSync(target)) return { path: target, conflicted: false };
+    const timestamp = new Date();
+    const pad = (n:number)=> n.toString().padStart(2,'0');
+    const ts = `${timestamp.getFullYear()}${pad(timestamp.getMonth()+1)}${pad(timestamp.getDate())}_${pad(timestamp.getHours())}${pad(timestamp.getMinutes())}${pad(timestamp.getSeconds())}`;
+    let withTs = path.join(dir, `${baseName}_${ts}${ext}`);
+    if (!fs.existsSync(withTs)) return { path: withTs, conflicted: true };
+    // 如果时间戳也冲突（极少），再加序号
+    let idx = 1;
+    while (true) {
+        const candidate = path.join(dir, `${baseName}_${ts}_${idx}${ext}`);
+        if (!fs.existsSync(candidate)) return { path: candidate, conflicted: true };
+        idx++;
+    }
+}
 
 class NewFileNode extends vscode.TreeItem {
     /**
@@ -425,40 +443,18 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
-    // Command: create character-gallery.json5
+    // 统一创建命令：角色库 / 敏感词库 / 词汇库 （内部选择 json5 / txt / md）
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGallery', async (node: PackageNode) => {
-            const dir = node.resourceUri.fsPath;
-            const file = path.join(dir, 'character-gallery.json5');
-            if (fs.existsSync(file)) {
-                vscode.window.showWarningMessage('character-gallery.json5 already exists');
-            } else {
-                fs.writeFileSync(file, generateCharacterGalleryJson5());
-                provider.refresh();
-            }
-        })
-    );
-
-    // Command: create sensitive-words
-    context.subscriptions.push(
+            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'character-gallery', kind: 'character' });
+            if (file) provider.refresh();
+        }),
         vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWords', async (node: PackageNode) => {
-            const file = await promptForExtension(node.resourceUri.fsPath, 'sensitive-words');
+            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'sensitive-words', kind: 'sensitive' });
             if (file) provider.refresh();
-        })
-    );
-
-    // Command: create vocabulary
-    context.subscriptions.push(
+        }),
         vscode.commands.registerCommand('AndreaNovelHelper.createVocabulary', async (node: PackageNode) => {
-            const file = await promptForExtension(node.resourceUri.fsPath, 'vocabulary');
-            if (file) provider.refresh();
-        })
-    );
-
-    // Command: create markdown files with custom names
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createMarkdownFile', async (node: PackageNode) => {
-            const file = await promptForMarkdownFile(node.resourceUri.fsPath);
+            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'vocabulary', kind: 'vocabulary' });
             if (file) provider.refresh();
         })
     );
@@ -517,27 +513,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         )
     );
 
-    // Command: create specific Markdown files
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGalleryMd', async (node: PackageNode) => {
-            const file = await createSpecificMarkdownFile(node.resourceUri.fsPath, '角色');
-            if (file) provider.refresh();
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWordsMd', async (node: PackageNode) => {
-            const file = await createSpecificMarkdownFile(node.resourceUri.fsPath, '敏感词');
-            if (file) provider.refresh();
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createVocabularyMd', async (node: PackageNode) => {
-            const file = await createSpecificMarkdownFile(node.resourceUri.fsPath, '词汇');
-            if (file) provider.refresh();
-        })
-    );
+    // 旧的单独 md / txt 创建命令已移除，避免菜单冗余
 
     // Command: create regex patterns file
     context.subscriptions.push(
@@ -676,70 +652,40 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     context.subscriptions.push(saveWatcher);
 }
 
-async function promptForExtension(dir: string, baseName: string): Promise<string | undefined> {
-    const ext = await vscode.window.showQuickPick(['json5', 'txt'], { placeHolder: 'Select file format' });
-    if (!ext) return;
-    const file = path.join(dir, `${baseName}.${ext}`);
-    if (fs.existsSync(file)) {
-        vscode.window.showWarningMessage(`${baseName}.${ext} already exists`);
-        return;
-    }
-    
-    // 根据文件类型创建合适的初始内容
+interface ExtensionCustomOptions { defaultBase: string; kind: 'character' | 'sensitive' | 'vocabulary'; }
+async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOptions): Promise<string | undefined> {
+    const baseInput = await vscode.window.showInputBox({ prompt: '输入基础文件名（不含扩展名，留空使用默认）', value: opts.defaultBase });
+    if (baseInput === undefined) return; // 取消
+    const baseNameRaw = (baseInput.trim() || opts.defaultBase).replace(/\s+/g,'-');
+    const extPick = await vscode.window.showQuickPick(['json5','txt','md'], { placeHolder: '选择文件格式 (json5 / txt / md)' });
+    if (!extPick) return;
+    const fileInfo = resolveFileConflict(dir, baseNameRaw, '.'+extPick);
     let initialContent = '';
-    if (ext === 'json5') {
-        if (baseName === 'sensitive-words') {
-            initialContent = generateSensitiveWordsJson5();
-        } else if (baseName === 'vocabulary') {
-            initialContent = generateVocabularyJson5();
-        } else if (baseName === 'character-gallery' || baseName === 'character' || baseName === 'roles') {
-            initialContent = generateCharacterGalleryJson5();
-        } else {
-            // 默认空数组占位
-            initialContent = '[\n  // 新文件\n]';
-        }
-    } else if (ext === 'txt') {
-        // TXT 文件可以保持空白
-        initialContent = '';
+    if (extPick === 'json5') {
+        if (opts.kind === 'sensitive') initialContent = generateSensitiveWordsJson5();
+        else if (opts.kind === 'vocabulary') initialContent = generateVocabularyJson5();
+        else if (opts.kind === 'character') initialContent = generateCharacterGalleryJson5();
+        else initialContent = '[\n  // 新文件\n]';
+    } else if (extPick === 'txt') {
+        if (opts.kind === 'character') initialContent = '# 一行一个角色名称 (支持 # / // 注释)';
+        else if (opts.kind === 'sensitive') initialContent = '# 一行一个敏感词 (支持 # / // 注释)';
+        else if (opts.kind === 'vocabulary') initialContent = '# 一行一个词汇/术语 (支持 # / // 注释)';
+    } else if (extPick === 'md') {
+        if (opts.kind === 'character') initialContent = generateMarkdownRoleTemplate();
+        else if (opts.kind === 'sensitive') initialContent = generateMarkdownSensitiveTemplate();
+        else if (opts.kind === 'vocabulary') initialContent = generateMarkdownVocabularyTemplate();
+        else initialContent = '# 新文件\n';
     }
-    
-    fs.writeFileSync(file, initialContent);
-    return file;
-}
-
-async function createSpecificMarkdownFile(dir: string, roleType: string): Promise<string | undefined> {
-    // 导入 Markdown 解析器函数
-    const { generateMarkdownTemplate, generateDefaultFileName, generateCustomFileName } = await import('../../utils/markdownParser.js');
-    
-    // 询问自定义文件名
-    const customName = await vscode.window.showInputBox({
-        prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
-        placeHolder: '例如: 主要人物、禁用词汇等'
-    });
-    
-    // 生成文件名
-    let fileName: string;
-    if (customName && customName.trim()) {
-        fileName = generateCustomFileName(customName.trim(), roleType);
-    } else {
-        fileName = generateDefaultFileName(roleType);
+    fs.writeFileSync(fileInfo.path, initialContent + (initialContent.endsWith('\n')? '':'\n'), 'utf8');
+    // 自动打开新文件
+    try {
+        const doc = await vscode.workspace.openTextDocument(fileInfo.path);
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (err) {
+        console.warn('自动打开新文件失败: ', err);
     }
-    
-    const file = path.join(dir, `${fileName}.md`);
-    if (fs.existsSync(file)) {
-        vscode.window.showWarningMessage(`文件 ${fileName}.md 已存在`);
-        return;
-    }
-    
-    // 生成模板内容
-    const template = generateMarkdownTemplate(roleType);
-    fs.writeFileSync(file, template, 'utf8');
-    
-    // 打开新创建的文件
-    const document = await vscode.workspace.openTextDocument(file);
-    await vscode.window.showTextDocument(document);
-    
-    return file;
+    if (fileInfo.conflicted) vscode.window.showInformationMessage(`文件已存在，自动使用名称: ${path.basename(fileInfo.path)}`);
+    return fileInfo.path;
 }
 
 async function createRegexPatternsFile(dir: string): Promise<string | undefined> {
@@ -750,73 +696,25 @@ async function createRegexPatternsFile(dir: string): Promise<string | undefined>
     });
     
     // 生成文件名
-    let fileName: string;
+    let fileNameBase: string;
     if (customName && customName.trim()) {
-        fileName = `${customName.trim()}_regex-patterns`;
+        fileNameBase = `${customName.trim()}_regex-patterns`;
     } else {
-        fileName = 'regex-patterns';
+        fileNameBase = 'regex-patterns';
     }
-    
-    const file = path.join(dir, `${fileName}.json5`);
-    if (fs.existsSync(file)) {
-        vscode.window.showWarningMessage(`文件 ${fileName}.json5 已存在`);
-        return;
-    }
+    const fileInfo = resolveFileConflict(dir, fileNameBase, '.json5');
     
     // 生成模板内容（从模板生成器导入）
     const template = generateRegexPatternsTemplate();
-    fs.writeFileSync(file, template, 'utf8');
-    
-    // 打开新创建的文件
-    const document = await vscode.workspace.openTextDocument(file);
+    fs.writeFileSync(fileInfo.path, template, 'utf8');
+    const document = await vscode.workspace.openTextDocument(fileInfo.path);
     await vscode.window.showTextDocument(document);
-    
-    return file;
+    if (fileInfo.conflicted) vscode.window.showInformationMessage(`文件已存在，自动使用名称: ${path.basename(fileInfo.path)}`);
+    return fileInfo.path;
 }
 
 // generateRegexPatternsTemplate 已迁移到 templates/templateGenerators
 
-async function promptForMarkdownFile(dir: string): Promise<string | undefined> {
-    // 导入 Markdown 解析器函数
-    const { generateMarkdownTemplate, generateDefaultFileName, generateCustomFileName } = await import('../../utils/markdownParser.js');
-    
-    // 选择文件类型
-    const roleType = await vscode.window.showQuickPick(
-        ['角色', '敏感词', '词汇'], 
-        { placeHolder: '选择文件类型' }
-    );
-    if (!roleType) return;
-    
-    // 询问自定义文件名
-    const customName = await vscode.window.showInputBox({
-        prompt: '输入自定义文件名（留空使用默认名称）',
-        placeHolder: '例如: 主要人物、禁用词汇等'
-    });
-    
-    // 生成文件名
-    let fileName: string;
-    if (customName && customName.trim()) {
-        fileName = generateCustomFileName(customName.trim(), roleType);
-    } else {
-        fileName = generateDefaultFileName(roleType);
-    }
-    
-    const file = path.join(dir, `${fileName}.md`);
-    if (fs.existsSync(file)) {
-        vscode.window.showWarningMessage(`${fileName}.md already exists`);
-        return;
-    }
-    
-    // 生成模板内容
-    const template = generateMarkdownTemplate(roleType);
-    fs.writeFileSync(file, template);
-    
-    // 打开新创建的文件
-    const uri = vscode.Uri.file(file);
-    await vscode.window.showTextDocument(uri);
-    
-    return file;
-}
 
 async function promptForFileRename(node: PackageNode): Promise<string | undefined> {
     const oldPath = node.resourceUri.fsPath;

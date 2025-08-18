@@ -686,41 +686,47 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 }
 function loadTXTRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-	const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
-	
-	// 如果文件为空，记录日志但不报错
-	if (lines.length === 0) {
-		console.log(`loadTXTRoleFile: ${filePath} 是空文件，跳过加载`);
-		return;
-	}
-	
-	for (const line of lines) {
-		const trimmed = line.trim();
-		if (trimmed === '') continue;
-		
+	const rawLines = content.split(/\r?\n/);
+	let added = 0;
+
+	for (const raw of rawLines) {
+		let line = raw.trim();
+		if (!line) continue; // 空行
+		// 支持注释: # ... 或 // ...
+		if (line.startsWith('#') || line.startsWith('//')) continue;
+		// 行内注释：允许  name  # comment / name // comment
+		const hashIdx = line.indexOf('#');
+		const slashesIdx = line.indexOf('//');
+		let cutIdx = -1;
+		if (hashIdx >= 0 && slashesIdx >= 0) cutIdx = Math.min(hashIdx, slashesIdx);
+		else if (hashIdx >= 0) cutIdx = hashIdx; else if (slashesIdx >= 0) cutIdx = slashesIdx;
+		if (cutIdx >= 0) {
+			line = line.slice(0, cutIdx).trim();
+			if (!line) continue;
+		}
 		const role: Role = {
-			name: trimmed,
+			name: line,
 			type: defaultType,
 			packagePath: packagePath,
 			sourcePath: filePath
 		};
-		
-		// 根据类型设置默认颜色
 		if (defaultType === '敏感词') {
 			role.color = '#FF0000';
 		} else if (defaultType === '正则表达式') {
-			// 正则表达式类型不支持TXT格式，跳过
 			console.warn(`loadTXTRoleFile: 正则表达式类型不支持TXT格式，跳过文件 ${filePath}`);
 			return;
 		} else if (defaultType === '角色') {
 			role.type = 'txt角色';
 			role.color = cfg.get<string>('defaultColor')!;
 		}
-		
 		roles.push(role);
+		added++;
 	}
-	
-	console.log(`loadTXTRoleFile: 从 ${filePath} 加载了 ${lines.length} 个角色`);
+	if (added === 0) {
+		console.log(`loadTXTRoleFile: ${filePath} 无有效条目 (可能全部是注释或空行)`);
+	} else {
+		console.log(`loadTXTRoleFile: 从 ${filePath} 加载了 ${added} 个角色/词条`);
+	}
 }
 
 /**
