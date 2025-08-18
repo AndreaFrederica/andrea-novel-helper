@@ -53,7 +53,26 @@
     .reader-root { margin: 0 auto; padding: var(--reader-page-padding); max-width: var(--reader-width); box-sizing: border-box; }
     .reader-content pre { font-size: var(--reader-font-size); line-height: var(--reader-line-height); margin: 0 0 var(--reader-para-spacing) 0; }
     .reader-content [data-line]:last-child pre { margin-bottom: 0; }
+    /* 分页克隆页内同样应用排版变量 */
+    .reader-pages pre { font-size: var(--reader-font-size); line-height: var(--reader-line-height); margin: 0 0 var(--reader-para-spacing) 0; }
+    .reader-pages .reader-page [data-line]:last-child pre { margin-bottom: 0; }
     body.reader-paged { overflow-y: auto; }
+    /* DOM 切换分页模式（非滚动翻页，通过隐藏/显示激活页） */
+    body.reader-paged.reader-dom-switch { overflow:hidden; }
+    body.reader-paged.reader-dom-switch .reader-pages { position:relative; height: var(--reader-page-height, auto); overflow:hidden; }
+    body.reader-paged.reader-dom-switch .reader-page { position:absolute; inset:0; display:none; overflow:hidden; }
+    body.reader-paged.reader-dom-switch .reader-page.active { display:block; }
+    /* 调试模式样式 */
+    body.reader-debug .reader-page { outline:1px dashed #ff9800; }
+    #reader-measure-debug { position:fixed; top:8px; left:8px; z-index:3000; background:rgba(255,152,0,0.06); outline:1px solid #ff9800; padding:4px 6px; font-size:11px; font-family:monospace; color:#ff9800; border-radius:4px; pointer-events:none; }
+    /* 可视化段落碰撞测量容器（调试） */
+    #reader-collision-debug { position:fixed; top:60px; left:8px; width:320px; max-width:45vw; max-height:60vh; overflow:auto; background:rgba(255,152,0,0.05); outline:1px solid #ff9800; box-shadow:0 0 0 1px #ff9800 inset; padding:6px; z-index:3000; font-size:12px; font-family:monospace; color:#ff9800; }
+    body:not(.reader-debug) #reader-collision-debug { display:none; }
+    /* 真实分页容器 */
+    .reader-pages { margin:0 auto; max-width: var(--reader-width); position:relative; }
+    .reader-page { box-sizing:border-box; padding: var(--reader-page-padding); height: var(--reader-page-height, auto); overflow:hidden; position:relative; background: inherit; }
+    body.reader-paged #reader-content { display:none; }
+    body:not(.reader-paged) .reader-pages { display:none; }
     /* 分页模式仅使用页面高度分割，不再使用多列 */
     body.reader-align-justify .reader-content pre { text-align: justify; text-justify: inter-ideograph; }
     .reader-pagebar { position:fixed; bottom:10px; left:50%; transform:translateX(-50%); background:#000a; color:#fff; padding:4px 10px; border-radius:20px; font-size:12px; display:flex; align-items:center; gap:8px; z-index:1600; backdrop-filter: blur(4px); }
@@ -180,9 +199,24 @@
     <div class="rs-row"><label>宽度</label><input id="rs-width" class="rs-number" type="number" min="320" max="1400" step="10"><span style="font-size:12px;opacity:.7;">px</span></div>
     <div class="rs-row"><label>高度</label><input id="rs-height" class="rs-number" type="number" min="0" max="2000" step="10"><span style="font-size:12px;opacity:.7;">px</span></div>
         <div class="rs-row"><label>页高*</label><input id="rs-pageHeight" class="rs-number" type="number" min="0" max="3000" step="20"><span style="font-size:12px;opacity:.7;">px</span></div>
+        <div class="rs-row"><label>页尺寸</label>
+            <div style="flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                <span id="rs-size-display" style="font-size:11px;opacity:.75;min-width:110px;">---</span>
+                <div class="rs-mode-group" id="rs-widthMode">
+                    <button data-wmode="auto" class="rs-toggle">宽自动</button>
+                    <button data-wmode="manual" class="rs-toggle">宽手动</button>
+                </div>
+                <div class="rs-mode-group" id="rs-heightMode">
+                    <button data-hmode="auto" class="rs-toggle">高自动</button>
+                    <button data-hmode="manual" class="rs-toggle">高手动</button>
+                </div>
+            </div>
+        </div>
         <div class="rs-row"><label>显示方式</label><div class="rs-mode-group" id="rs-modes"><button data-mode="scroll" class="rs-toggle">滚动</button><button data-mode="paged" class="rs-toggle">分页</button></div></div>
     <div class="rs-row"><label>对齐</label><div class="rs-mode-group" id="rs-aligns"><button data-align="left" class="rs-toggle">左对齐</button><button data-align="justify" class="rs-toggle">两端</button></div></div>
     <div class="rs-row"><label>列数*</label><div class="rs-mode-group" id="rs-cols"><button data-cols="1" class="rs-toggle">1 列</button><button data-cols="2" class="rs-toggle">2 列</button></div></div>
+    <div class="rs-row"><label>滚动同步</label><div class="rs-mode-group" id="rs-sync"><button data-sync="on" class="rs-toggle">开启</button><button data-sync="off" class="rs-toggle">关闭</button></div></div>
+    <div class="rs-row"><label>调试</label><div class="rs-mode-group" id="rs-debug"><button data-debug="off" class="rs-toggle">关闭</button><button data-debug="on" class="rs-toggle">开启</button></div></div>
         <div class="rs-row"><label>预设</label><div style="flex:1;display:flex;gap:6px;align-items:center;">
             <select id="rs-preset" class="rs-select" style="flex:1;min-width:120px;"></select>
             <button class="rs-toggle" id="rs-savePreset" style="white-space:nowrap;">保存</button>
