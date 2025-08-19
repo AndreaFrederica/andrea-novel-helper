@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -844,6 +844,11 @@
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.respectWcignore.description%"
+        },
+        "AndreaNovelHelper.fileTracker.trustCallerFilters": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, FileTrackingDataManager will trust that callers already applied ignore/filter rules and skip redundant checks (e.g. .git filtering). Core protections (like avoiding tracking the DB file) are still enforced. Enabling may yield a small performance improvement when callers filter aggressively."
         },
         "AndreaNovelHelper.fileTracker.writeLegacySnapshot": {
           "type": "boolean",

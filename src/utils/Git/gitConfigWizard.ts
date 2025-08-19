@@ -2,10 +2,29 @@ import * as vscode from 'vscode';
 import { exec } from 'child_process';
 import * as path from 'path';
 
-function runGit(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+function runGit(cwd: string, args: string[]): Promise<{ stdout: string; stderr: string; code: number; timedOut?: boolean }> {
     return new Promise(resolve => {
-        const p = exec(`git ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`, { cwd }, (err, stdout, stderr) => {
-            resolve({ stdout: stdout.trim(), stderr: stderr.trim(), code: err ? (err as any).code || 1 : 0 });
+        // 为避免在没有 git 或其它异常情况下长时间挂起，设置超时（ms）
+        const TIMEOUT_MS = 5000;
+        const cmd = `git ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(' ')}`;
+        const p = exec(cmd, { cwd, timeout: TIMEOUT_MS, windowsHide: true }, (err, stdout, stderr) => {
+            const out = (stdout || '').trim();
+            const errout = (stderr || '').trim();
+            // 当 exec 因超时被终止时，err.killed 或 err.signal 会存在
+            if (err) {
+                const anyErr = err as any;
+                // 特殊处理 ENOENT（命令不存在）和超时杀死的情况，返回非零 code
+                const isTimeout = anyErr.killed === true || anyErr.signal === 'SIGTERM' || anyErr.signal === 'SIGKILL';
+                if (isTimeout) {
+                    resolve({ stdout: out, stderr: errout || 'git command timed out', code: 124, timedOut: true });
+                    return;
+                }
+                // 如果没有可用数字 code（如 ENOENT），归一化为 1
+                const numericCode = typeof anyErr.code === 'number' ? anyErr.code : 1;
+                resolve({ stdout: out, stderr: errout, code: numericCode });
+                return;
+            }
+            resolve({ stdout: out, stderr: errout, code: 0 });
         });
     });
 }

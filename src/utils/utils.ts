@@ -8,7 +8,7 @@ import JSON5 from 'json5';
 /* eslint-disable curly */
 import { Role, segmenter } from "../extension";
 import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles, sensitiveSourceFiles } from '../activate';
-import { globalFileCache } from './tracker/fileCache';
+import { globalFileCache } from '../context/fileCache';
 import { parseMarkdownRoles } from './Parser/markdownParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 

@@ -269,6 +269,14 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage('已创建初始提交', { modal: true }, '关闭');
           }
         }
+  // 向导完成：确保工作区配置中没有禁用本扩展（将 workspaceDisabled 设为 false）
+  try {
+    const cfg = vscode.workspace.getConfiguration();
+    // 将 workspaceDisabled 写入工作区级别（false 表示启用）
+    await cfg.update('AndreaNovelHelper.workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
+  } catch (e) {
+    console.warn('无法写入 workspace 配置 AndreaNovelHelper.workspaceDisabled:', (e as any)?.message);
+  }
   vscode.window.showInformationMessage('项目初始化向导已完成', { modal: true }, '关闭');
       } catch (e) {
         vscode.window.showErrorMessage('执行阶段出现错误: '+(e as any)?.message);

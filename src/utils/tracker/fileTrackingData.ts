@@ -71,6 +71,7 @@ export class FileTrackingDataManager {
     private indexPath: string; // 索引文件 .anh-fsdb/index.json
     private useSharded: boolean = true; // 始终启用分片
     private lazyLoadShards: boolean = true; // 启动仅加载索引按需加载
+    private trustCallerFilters: boolean = false; // 如果启用，则信任调用者已应用过滤，可跳过部分重复检查
     private indexDirFlag: Set<string> = new Set();
     private workspaceRoot: string;
     private pendingSaves = new Set<string>();
@@ -137,6 +138,10 @@ export class FileTrackingDataManager {
         this.indexPath = path.join(this.dbDir, 'index.json');
         this.ensureDirectoryExists();
         this.ensureDbDir();
+        // 读取配置：是否信任调用者的过滤器（可略过部分重复检查）
+        try {
+            this.trustCallerFilters = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('trustCallerFilters', false) === true;
+        } catch { this.trustCallerFilters = false; }
         this.database = this.loadDatabase();
         // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
         if (!this.database) {
@@ -533,8 +538,8 @@ export class FileTrackingDataManager {
         if (filePath === this.dbPath) {
             return this.getFileUuid(filePath) || '';
         }
-        // 完全忽略 .git 目录
-        if (this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
+    // 完全忽略 .git 目录（除非信任调用者已完成过滤）
+    if (!this.trustCallerFilters && this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
 
         try {
             const stats = await fs.promises.stat(filePath);
