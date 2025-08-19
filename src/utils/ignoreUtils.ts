@@ -1,14 +1,4 @@
-// 监听配置变更，自动刷新缓存
-if (typeof vscode !== 'undefined' && vscode.workspace && vscode.workspace.onDidChangeConfiguration) {
-    vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('AndreaNovelHelper.supportedFileTypes')) {
-            cachedAllowedFileTypes = undefined;
-            lastConfigReadTime = 0;
-        }
-    });
-}
 import * as path from 'path';
-import * as vscode from 'vscode';
 import { CombinedIgnoreParser } from './Parser/gitignoreParser';
 
 export interface IgnoreConfig {
@@ -93,28 +83,11 @@ export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
     return false;
 }
 
-    // 缓存 VSCode 配置项 supportedFileTypes，避免频繁读取
-    const DEFAULT_ALLOWED_LANGUAGES = ['md', 'txt', 'json', 'json5'];
-    let cachedAllowedFileTypes: string[] | undefined;
-    let lastConfigReadTime = 0;
-    const CONFIG_CACHE_TTL = 10000; // 10秒缓存，可根据实际调整
+const DEFAULT_ALLOWED_LANGUAGES = ['md', 'txt', 'json', 'json5'];
 
-    function getAllowedFileTypes(configAllowed?: string[]): string[] {
-        if (configAllowed) {
-            return configAllowed;
-        }
-        const now = Date.now();
-        if (!cachedAllowedFileTypes || now - lastConfigReadTime > CONFIG_CACHE_TTL) {
-            try {
-                const conf = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                cachedAllowedFileTypes = conf.get<string[]>('supportedFileTypes') ?? undefined;
-                lastConfigReadTime = now;
-            } catch (e) {
-                cachedAllowedFileTypes = undefined;
-            }
-        }
-        return cachedAllowedFileTypes ?? DEFAULT_ALLOWED_LANGUAGES;
-    }
+function getAllowedFileTypes(configAllowed?: string[]): string[] {
+    return configAllowed ?? DEFAULT_ALLOWED_LANGUAGES;
+}
 /**
  * 简单的 glob 模式匹配
  */

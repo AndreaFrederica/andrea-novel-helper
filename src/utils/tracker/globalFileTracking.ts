@@ -56,39 +56,26 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
             const filePath = uri.fsPath;
             const dataManager = fileTracker.getDataManager();
             if (!dataManager) { return; }
-            // 过滤内部/忽略目录：.git / novel-helper 数据文件自身
-            const wsRoot = workspaceRoot.uri.fsPath;
-            const gitDir = path.join(wsRoot, '.git');
-            const trackerJson = path.join(wsRoot, 'novel-helper', 'file-tracking.json');
-            const orderJson = path.join(wsRoot, 'novel-helper', 'wordcount-order.json');
-            const resolved = path.resolve(filePath);
-            if (resolved.startsWith(path.resolve(gitDir) + path.sep) ||
-                resolved === path.resolve(gitDir) ||
-                resolved === path.resolve(trackerJson) ||
-                resolved === path.resolve(orderJson)) {
-                return; // 忽略这些内部路径
+            // 统一过滤：只处理允许类型
+            if (fileTracker.isFileIgnored(filePath)) {
+                return;
             }
             if (dataManager.handleFileDeleted(filePath)) {
                 console.log(`文件删除事件处理: ${filePath}`);
             }
         });
-        
+
         context.subscriptions.push(deleteWatcher);
 
         // 监听文件重命名（通过创建事件检测）
         deleteWatcher.onDidCreate(async (uri) => {
             const filePath = uri.fsPath;
-            const wsRoot = workspaceRoot.uri.fsPath;
-            const gitDir = path.join(wsRoot, '.git');
-            const trackerJson = path.join(wsRoot, 'novel-helper', 'file-tracking.json');
-            const orderJson = path.join(wsRoot, 'novel-helper', 'wordcount-order.json');
-            const resolved = path.resolve(filePath);
-            if (resolved === path.resolve(trackerJson) || resolved === path.resolve(orderJson) ||
-                resolved === path.resolve(gitDir) || resolved.startsWith(path.resolve(gitDir) + path.sep)) {
-                return; // 忽略内部/ .git 创建
-            }
             const dataManager = fileTracker.getDataManager();
             if (!dataManager) { return; }
+            // 统一过滤：只处理允许类型
+            if (fileTracker.isFileIgnored(filePath)) {
+                return;
+            }
             setTimeout(async () => {
                 try {
                     await fileTracker.handleFileCreated(filePath);

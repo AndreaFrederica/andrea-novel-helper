@@ -41,8 +41,6 @@ import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
 import { registerProjectInitWizard } from './wizard/projectInitWizard';
 import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
-import { generateExampleRoleList } from './templates/templateGenerators';
-import { generateCSpellDictionary } from './utils/generateCSpellDictionary';
 import { registerPreviewPane } from './Provider/view/previewPane';
 import { stopAllPreviewTTS, PreviewManager } from './Provider/view/previewPane';
 // 避免重复注册相同命令
@@ -102,18 +100,21 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     };
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const wsDisabled = cfg1.get<boolean>('workspaceDisabled');
+    const wsDisabledInspect = cfg1.inspect<boolean>('workspaceDisabled');
+    const wsDisabled = wsDisabledInspect?.workspaceFolderValue ?? wsDisabledInspect?.workspaceValue;
     if (wsDisabled === undefined) {
-        // 首次激活，弹窗询问
+        // 仅在工作区未设置时弹窗
         const pick = await vscode.window.showInformationMessage(
-            '是否在当前工作区禁用 Andrea Novel Helper？（可随时在设置或命令面板切换）',
-            '禁用本工作区', '启用本工作区'
+            '是否在当前工作区启用 Andrea Novel Helper？（可随时在设置或命令面板切换）',
+            { modal: true, },
+            '启用本工作区', '禁用本工作区'
         );
         if (pick === '禁用本工作区') {
             await cfg1.update('workspaceDisabled', true, vscode.ConfigurationTarget.Workspace);
             vscode.window.showInformationMessage('已禁用小说助手（本工作区），重新加载窗口后生效。');
             return;
-        } else if (pick === '启用本工作区') {
+        } else {
+            // 默认或选择“启用”都视为启用
             await cfg1.update('workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
         }
     } else if (wsDisabled) {
