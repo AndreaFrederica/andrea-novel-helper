@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getAsyncRoleMatcher } from './asyncRoleMatcher';
+import { getAsyncRoleMatcher } from '../utils/asyncRoleMatcher';
 
 export interface RoleMatch { end: number; pats: string[] }
 interface CacheEntry { version: number; promise: Promise<RoleMatch[]> }

@@ -1,6 +1,6 @@
 // Worker: 使用独立的 wordCountCore，避免直接依赖 vscode 模块
 import { parentPort } from 'worker_threads';
-import { countAndAnalyzeRaw } from '../utils/wordCountCore';
+import { countAndAnalyzeRaw } from '../utils/WordCount/wordCountCore';
 
 interface Task { id:number; filePath:string }
 const queue: Task[] = [];

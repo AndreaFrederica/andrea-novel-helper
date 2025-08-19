@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { getFileByPath } from '../utils/globalFileTracking';
+import { getFileByPath } from '../utils/tracker/globalFileTracking';
 import { WordCountProvider } from './view/wordCountProvider';
 
 /**

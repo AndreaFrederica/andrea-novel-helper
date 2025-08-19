@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CombinedIgnoreParser } from './gitignoreParser';
+import { CombinedIgnoreParser } from '../Parser/gitignoreParser';
+import { isFileIgnored, IgnoreConfig } from '../ignoreUtils';
 import { FileTrackingDataManager } from './fileTrackingData';
 
 /**
@@ -74,74 +75,13 @@ export class FileTracker {
      * 检查文件是否应该被忽略
      */
     private shouldIgnoreFile(filePath: string): boolean {
-        // 检查是否为数据库文件本身，避免追踪数据库文件
-        const dbPath = path.join(this.config.workspaceRoot, 'novel-helper', 'file-tracking.json');
-        if (path.resolve(filePath) === path.resolve(dbPath)) {
-            return true; // 忽略数据库文件本身
-        }
-
-        // 忽略 wordcount-order.json（手动排序索引文件）
-        const orderPath = path.join(this.config.workspaceRoot, 'novel-helper', 'wordcount-order.json');
-        if (path.resolve(filePath) === path.resolve(orderPath)) {
-            return true;
-        }
-
-        // 忽略 .git 目录及其子内容
-        const gitDir = path.join(this.config.workspaceRoot, '.git');
-        const resolvedGitDir = path.resolve(gitDir);
-        const resolvedFilePath = path.resolve(filePath);
-        if (
-            resolvedFilePath === resolvedGitDir ||
-            resolvedFilePath.startsWith(resolvedGitDir + path.sep)
-        ) {
-            return true;
-        }
-
-        // 忽略新的分片内部数据库目录 .anh-fsdb
-        const shardDir = path.join(this.config.workspaceRoot, 'novel-helper', '.anh-fsdb');
-        const resolvedShard = path.resolve(shardDir);
-        if (resolvedFilePath === resolvedShard || resolvedFilePath.startsWith(resolvedShard + path.sep)) {
-            return true;
-        }
-
-        // 检查忽略规则
-        if (this.ignoreParser) {
-            if (this.config.respectWcignore) {
-                // 同时检查 git 和 wc 忽略规则
-                if (this.ignoreParser.shouldIgnore(filePath)) {
-                    return true;
-                }
-            } else {
-                // 只检查 git 忽略规则
-                if (this.ignoreParser.shouldIgnoreByGit(filePath)) {
-                    return true;
-                }
-            }
-        }
-
-        // 检查包含模式
-        if (this.config.includePatterns && this.config.includePatterns.length > 0) {
-            const relativePath = path.relative(this.config.workspaceRoot, filePath);
-            const isIncluded = this.config.includePatterns.some(pattern => 
-                this.matchGlob(relativePath, pattern)
-            );
-            if (!isIncluded) {
-                return true;
-            }
-        }
-
-        // 检查排除模式
-        if (this.config.excludePatterns && this.config.excludePatterns.length > 0) {
-            const relativePath = path.relative(this.config.workspaceRoot, filePath);
-            const isExcluded = this.config.excludePatterns.some(pattern => 
-                this.matchGlob(relativePath, pattern)
-            );
-            if (isExcluded) {
-                return true;
-            }
-        }
-
-        return false;
+        return isFileIgnored(filePath, {
+            workspaceRoot: this.config.workspaceRoot,
+            respectWcignore: this.config.respectWcignore,
+            includePatterns: this.config.includePatterns,
+            excludePatterns: this.config.excludePatterns,
+            ignoreParser: this.ignoreParser
+        });
     }
 
     /** 公共：判断某文件当前配置下是否会被追踪忽略（含 .git / 可选 .wcignore / 内部数据库与排除规则） */
@@ -152,16 +92,7 @@ export class FileTracker {
     /**
      * 简单的 glob 模式匹配
      */
-    private matchGlob(filePath: string, pattern: string): boolean {
-        // 转换 glob 模式为正则表达式
-        const regexPattern = pattern
-            .replace(/\./g, '\\.')
-            .replace(/\*/g, '.*')
-            .replace(/\?/g, '.');
-        
-        const regex = new RegExp(`^${regexPattern}$`, 'i');
-        return regex.test(filePath);
-    }
+    // matchGlob 已由 ignoreUtils.ts 提供
 
     /**
      * 获取文件统计信息

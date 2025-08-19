@@ -1,11 +1,11 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
 import { getSupportedLanguages, getSupportedExtensions, typeColorMap, rangesOverlap, isHugeFile } from '../utils/utils';
-import { getRoleMatches, clearRoleMatchCacheForClosedDocs } from '../utils/roleAsyncShared';
+import { getRoleMatches, clearRoleMatchCacheForClosedDocs } from '../context/roleAsyncShared';
 import { roles, onDidChangeRoles } from '../activate';
-import { ahoCorasickManager } from '../utils/ahoCorasickManager';
+import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
 import { Role } from '../extension';
-import { FIELD_ALIASES, getExtensionFields } from '../utils/markdownParser';
+import { FIELD_ALIASES, getExtensionFields } from '../utils/Parser/markdownParser';
 
 /**
  * 检查内容是否包含 Markdown 格式

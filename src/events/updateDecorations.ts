@@ -6,9 +6,9 @@ import { getSupportedLanguages, getSupportedExtensions, rangesOverlap, typeColor
 // 不再读取文件内容进行敏感词库判断，使用加载阶段记录的集合
 import { sensitiveSourceFiles } from '../activate';
 import * as path from 'path';
-import { ahoCorasickManager } from '../utils/ahoCorasickManager';
-import { getRoleMatches } from '../utils/roleAsyncShared';
-import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../utils/documentRolesCache';
+import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
+import { getRoleMatches } from '../context/roleAsyncShared';
+import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../context/documentRolesCache';
 
 // —— Diagnostics 集合 —— 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');

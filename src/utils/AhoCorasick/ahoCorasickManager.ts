@@ -1,7 +1,7 @@
 import AhoCorasick from 'ahocorasick';
-import { Role } from '../extension';
-import { roles, onDidChangeRoles } from '../activate';
-import { findCompleteWords, shouldUseSegmentFilter } from './segmentFilter';
+import { Role } from '../../extension';
+import { roles, onDidChangeRoles } from '../../activate';
+import { findCompleteWords, shouldUseSegmentFilter } from '../segmentFilter';
 
 /**
  * AhoCorasick 自动机管理器

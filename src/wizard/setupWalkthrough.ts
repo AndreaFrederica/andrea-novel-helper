@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
-import { checkGitConfigAndGuide } from '../utils/gitConfigWizard';
+import { checkGitConfigAndGuide } from '../utils/Git/gitConfigWizard';
 
 interface RunGitResult { code: number; stdout: string; stderr: string; enoent?: boolean }
 

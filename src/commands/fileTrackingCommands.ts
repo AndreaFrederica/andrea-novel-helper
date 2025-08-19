@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { getTrackingStats, getAllTrackedFiles, getTrackingStatus } from '../utils/globalFileTracking';
-import { getFileTracker } from '../utils/fileTracker';
+import { getTrackingStats, getAllTrackedFiles, getTrackingStatus } from '../utils/tracker/globalFileTracking';
+import { getFileTracker } from '../utils/tracker/fileTracker';
 import * as fs from 'fs';
 import * as path from 'path';
 

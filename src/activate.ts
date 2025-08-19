@@ -9,9 +9,9 @@ import { getSupportedLanguages, loadRoles, getPrefix } from './utils/utils';
 import { createRoleCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { WordCountProvider } from './Provider/view/wordCountProvider';
-import { WordCountOrderManager } from './utils/wordCountOrder';
-import { ensureRegisterOpenWith } from './utils/openWith';
-import { initAhoCorasickManager } from './utils/ahoCorasickManager';
+import { WordCountOrderManager } from './utils/Order/wordCountOrder';
+import { ensureRegisterOpenWith } from './commands/openWith';
+import { initAhoCorasickManager } from './utils/AhoCorasick/ahoCorasickManager';
 
 import { addRoleFromSelection } from './commands/addRuleFormSelection';
 import { addSensitiveCmd_obj } from './commands/addSensitiveWord';
@@ -30,13 +30,13 @@ import { registerDocRolesExplorerView } from './Provider/view/docRolesExplorerVi
 // import { StatusBarProvider } from './Provider/statusBarProvider'; // 已禁用，使用 timeStats 中的状态栏
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
-import { initializeGlobalFileTracking } from './utils/globalFileTracking';
-import { setCutClipboard } from './utils/wordCountCutHelper';
-import { getFileTracker } from './utils/fileTracker';
+import { initializeGlobalFileTracking } from './utils/tracker/globalFileTracking';
+import { setCutClipboard } from './utils/WordCount/wordCountCutHelper';
+import { getFileTracker } from './utils/tracker/fileTracker';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
-import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/gitConfigWizard';
+import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/Git/gitConfigWizard';
 import { projectInitWizardRunning } from './wizard/projectInitWizard';
-import { clearAllRoleMatchCache } from './utils/roleAsyncShared';
+import { clearAllRoleMatchCache } from './context/roleAsyncShared';
 import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
 import { registerProjectInitWizard } from './wizard/projectInitWizard';
 import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
@@ -102,7 +102,21 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     };
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    if (cfg1.get<boolean>('workspaceDisabled', false)) {
+    const wsDisabled = cfg1.get<boolean>('workspaceDisabled');
+    if (wsDisabled === undefined) {
+        // 首次激活，弹窗询问
+        const pick = await vscode.window.showInformationMessage(
+            '是否在当前工作区禁用 Andrea Novel Helper？（可随时在设置或命令面板切换）',
+            '禁用本工作区', '启用本工作区'
+        );
+        if (pick === '禁用本工作区') {
+            await cfg1.update('workspaceDisabled', true, vscode.ConfigurationTarget.Workspace);
+            vscode.window.showInformationMessage('已禁用小说助手（本工作区），重新加载窗口后生效。');
+            return;
+        } else if (pick === '启用本工作区') {
+            await cfg1.update('workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
+        }
+    } else if (wsDisabled) {
         console.log('[ANH] workspaceDisabled=true 跳过激活主体');
         return;
     }

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { getFileUuid } from './globalFileTracking';
+import { getFileUuid } from '../tracker/globalFileTracking';
 
 interface OrderDB {
   version: number;

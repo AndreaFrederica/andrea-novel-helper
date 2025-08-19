@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { ahoCorasickManager } from '../../utils/ahoCorasickManager';
+import { ahoCorasickManager } from '../../utils/AhoCorasick/ahoCorasickManager';
 import { isHugeFile, getSupportedLanguages } from '../../utils/utils';
-import { getRoleMatches } from '../../utils/roleAsyncShared';
-import { getDocumentRoleOccurrences } from '../../utils/documentRolesCache';
+import { getRoleMatches } from '../../context/roleAsyncShared';
+import { getDocumentRoleOccurrences } from '../../context/documentRolesCache';
 import { onDidUpdateDecorations } from '../../events/updateDecorations';
 import { Role } from '../../extension';
 

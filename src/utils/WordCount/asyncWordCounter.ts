@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
 // 仅在主线程 fallback 时才会调用 utils 中的 countAndAnalyze (带 vscode 配置读取)
-import { countAndAnalyze } from './utils';
+import { countAndAnalyze } from '../utils';
 import { TextStats } from './wordCountCore';
 
 interface Pending { resolve:(s:TextStats)=>void; reject:(e:any)=>void; }

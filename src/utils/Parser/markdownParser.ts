@@ -3,7 +3,7 @@
  * 支持角色表、敏感词表、词汇表的 Markdown 格式解析
  */
 
-import { Role } from '../extension';
+import { Role } from '../../extension';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
@@ -638,7 +638,7 @@ function finalizeRole(role: Partial<Role>, roles: Role[], filePath: string, pack
  * 生成 Markdown 格式的角色模板
  */
 // 迁移模板：改由 templates/templateGenerators 提供
-export { generateMarkdownTemplate } from '../templates/templateGenerators';
+export { generateMarkdownTemplate } from '../../templates/templateGenerators';
 
 /**
  * 验证文件名是否符合要求

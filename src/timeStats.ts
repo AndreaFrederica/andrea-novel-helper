@@ -6,12 +6,12 @@ import {
     unregisterFileChangeCallback,
     getGlobalFileTracking,
     updateFileWritingStats
-} from './utils/globalFileTracking';
+} from './utils/tracker/globalFileTracking';
 import { analyzeText, TextStats } from './utils/utils';
 import { isHugeFile } from './utils/utils';
-import { getFileTracker } from './utils/fileTracker';
-import { getIgnoredWritingStatsManager } from './utils/ignoredWritingStats';
-import { CombinedIgnoreParser } from './utils/gitignoreParser';
+import { getFileTracker } from './utils/tracker/fileTracker';
+import { getIgnoredWritingStatsManager } from './utils/WritingCount/ignoredWritingStats';
+import { CombinedIgnoreParser } from './utils/Parser/gitignoreParser';
 
 // -------------------- 数据结构 --------------------
 interface Bucket {

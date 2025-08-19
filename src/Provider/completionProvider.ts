@@ -5,7 +5,7 @@ import { Role } from '../extension';
 import { getPrefix, typeColorMap } from '../utils/utils';
 // 直接使用 activate.ts 中导出的全局 roles（通过就地清空+push 异步增量保持引用最新）
 import { roles } from '../activate';
-import { FIELD_ALIASES, getExtensionFields } from '../utils/markdownParser';
+import { FIELD_ALIASES, getExtensionFields } from '../utils/Parser/markdownParser';
 
 /**
  * 检查内容是否包含 Markdown 格式

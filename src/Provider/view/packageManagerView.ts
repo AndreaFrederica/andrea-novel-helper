@@ -736,7 +736,7 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
     // 如果是 .md 文件，使用完整的重命名流程
     if (ext === '.md') {
         // 导入 Markdown 解析器函数
-        const { generateCustomFileName, generateDefaultFileName } = await import('../../utils/markdownParser.js');
+        const { generateCustomFileName, generateDefaultFileName } = await import('../../utils/Parser/markdownParser.js');
         
         // 选择文件类型
         const roleType = await vscode.window.showQuickPick(

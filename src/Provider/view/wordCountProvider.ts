@@ -3,33 +3,31 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getSupportedExtensions, mergeStats, readTextFileDetectEncoding, TextStats } from '../../utils/utils';
-import { countAndAnalyzeOffThread } from '../../utils/asyncWordCounter';
-import { CombinedIgnoreParser } from '../../utils/gitignoreParser';
-import { sortItems } from '../../utils/sorter';
-import { GitGuard } from '../../utils/gitGuard';
-import { getFileTracker } from '../../utils/fileTracker';
+import { countAndAnalyzeOffThread } from '../../utils/WordCount/asyncWordCounter';
+import { CombinedIgnoreParser } from '../../utils/Parser/gitignoreParser';
+import { isFileIgnored, IgnoreConfig } from '../../utils/ignoreUtils';
+import { sortItems } from '../../utils/Order/sorter';
+import { GitGuard } from '../../utils/Git/gitGuard';
+import { getFileTracker } from '../../utils/tracker/fileTracker';
 import * as timeStatsModule from '../../timeStats';
-import { getFileByPath, updateFileWritingStats, getFileUuid } from '../../utils/globalFileTracking';
-import { getCutClipboard } from '../../utils/wordCountCutHelper';
-import { WordCountOrderManager } from '../../utils/wordCountOrder';
+import { getFileByPath, updateFileWritingStats, getFileUuid } from '../../utils/tracker/globalFileTracking';
+import { getCutClipboard } from '../../utils/WordCount/wordCountCutHelper';
+import { WordCountOrderManager } from '../../utils/Order/wordCountOrder';
 
 // 特殊文件（无扩展名但需要显示）
 function isSpecialVisibleFile(name: string): boolean {
     return name === '.gitignore' || name === '.wcignore';
 }
 
-// 内置始终忽略的目录 / 文件（无需用户在 .gitignore 或 .wcignore 中显式声明）
-// 目的：避免遍历版本库 / 依赖包 等大量无关内容造成性能浪费与大量 0 统计噪声
-const ALWAYS_IGNORE_DIR_NAMES = new Set([
-    '.git', '.svn', '.hg', '.DS_Store', 'node_modules', '.idea', '.vscode-test'
-]);
-
-function alwaysIgnore(fullPath: string, direntName: string, isDir: boolean): boolean {
-    if (ALWAYS_IGNORE_DIR_NAMES.has(direntName)) return true;
-    // 额外保护：如果路径中包含 node_modules/.git 也跳过（防止多工作区嵌套）
-    if (fullPath.includes(`${path.sep}node_modules${path.sep}`)) return true;
-    if (fullPath.includes(`${path.sep}.git${path.sep}`)) return true;
-    return false;
+// 统一忽略判断工具
+function shouldIgnoreWordCountFile(fullPath: string, ignoreParser: CombinedIgnoreParser | null, config: { workspaceRoot: string, respectWcignore: boolean, includePatterns?: string[], excludePatterns?: string[] }) {
+    return isFileIgnored(fullPath, {
+        workspaceRoot: config.workspaceRoot,
+        respectWcignore: config.respectWcignore,
+        includePatterns: config.includePatterns,
+        excludePatterns: config.excludePatterns,
+        ignoreParser
+    });
 }
 
 // —— 调试工具 ——
@@ -488,12 +486,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const full = path.join(root, d.name);
             const uri = vscode.Uri.file(full);
 
-            // 忽略规则
-            if (alwaysIgnore(full, d.name, d.isDirectory())) { wcDebug('skip:alwaysIgnore', full); continue; }
-            if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) {
-                wcDebug('skip:ignored', full);
-                continue;
-            }
+            // 忽略规则（统一工具）
+            if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
+                workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                respectWcignore: true // 按原逻辑，treeview一般都需要 wcignore
+            })) { wcDebug('skip:ignored', full); continue; }
 
             if (d.isDirectory()) {
                 const isExpanded = this.expandedNodes.has(full);
@@ -716,8 +713,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const subDirs: fs.Dirent[] = [];
                 const files: fs.Dirent[] = [];
                 for (const d of dirents) {
-                    if (alwaysIgnore(path.join(folder, d.name), d.name, d.isDirectory())) continue;
-                    if (this.ignoreParser && this.ignoreParser.shouldIgnore(path.join(folder, d.name))) continue;
+                    if (shouldIgnoreWordCountFile(path.join(folder, d.name), this.ignoreParser, {
+                        workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                        respectWcignore: true
+                    })) continue;
                     if (d.isDirectory()) subDirs.push(d); else files.push(d);
                 }
                 const forcedInner = this.forcedPaths.has(path.resolve(folder));
@@ -775,10 +774,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         for (const d of dirents) {
             const uri = vscode.Uri.file(path.join(root, d.name));
 
-            // 检查是否应该被忽略（gitignore 或 wcignore）
-            if (this.ignoreParser && this.ignoreParser.shouldIgnore(uri.fsPath)) {
-                continue;
-            }
+            // 检查是否应该被忽略（统一工具）
+            if (shouldIgnoreWordCountFile(uri.fsPath, this.ignoreParser, {
+                workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                respectWcignore: true
+            })) { continue; }
 
             if (d.isDirectory()) {
                 const placeholderStats: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
@@ -813,10 +813,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         for (const d of dirents) {
             const full = path.join(root, d.name);
 
-            // 检查是否应该被忽略（gitignore 或 wcignore）
-            if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) {
-                continue;
-            }
+            // 检查是否应该被忽略（统一工具）
+            if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
+                workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                respectWcignore: true
+            })) { continue; }
 
             if (d.isDirectory()) {
                 tasks.push(this.analyzeFolderDynamic(full, exts).then(stats => {
@@ -1051,8 +1052,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const exts = getSupportedExtensions();
             for (const d of dirents) {
                 const full = path.join(dir,d.name);
-                if (alwaysIgnore(full,d.name,d.isDirectory())) continue;
-                if (this.ignoreParser && this.ignoreParser.shouldIgnore(full)) continue;
+                if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
+                    workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                    respectWcignore: true
+                })) continue;
                 if (d.isDirectory()) {
                     const childAgg = this.dirAggCache.get(full)?.stats;
                     if (childAgg) agg = mergeStats(agg, childAgg);
