@@ -28,34 +28,27 @@ class AhoCorasickManager {
     public initAutomaton(): void {
         this.patternMap.clear();
         const patterns: string[] = [];
-        
         for (const r of roles) {
             const nameKey = r.name.trim().normalize('NFC');
             patterns.push(nameKey);
             this.patternMap.set(nameKey, r);
-            
             // 处理别名
             for (const alias of r.aliases || []) {
                 const a = alias.trim().normalize('NFC');
                 patterns.push(a);
                 this.patternMap.set(a, r);
             }
-            
             // 处理 fixes/fixs 字段（修复候选词也应该被识别为该角色）
-            const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
-            if (Array.isArray(fixesArr)) {
-                console.log(`[AhoCorasick] 角色 "${r.name}" 的 fixes:`, fixesArr);
-                for (const fix of fixesArr) {
-                    const f = fix.trim().normalize('NFC');
-                    if (f) { // 确保不是空字符串
-                        patterns.push(f);
-                        this.patternMap.set(f, r);
-                        console.log(`[AhoCorasick] 添加 fixes 模式: "${f}" -> 角色 "${r.name}"`);
-                    }
+            for (const fix of r.fixes || []) {
+                const f = fix.trim().normalize('NFC');
+                if (f) { // 确保不是空字符串
+                    patterns.push(f);
+                    this.patternMap.set(f, r);
+                    console.log(`[AhoCorasick] 添加 fixes 模式: "${f}" -> 角色 "${r.name}"`);
                 }
             }
         }
-        
+
         console.log(`[AhoCorasick] 总共加载模式数量: ${patterns.length}`);
         console.log(`[AhoCorasick] PatternMap 大小: ${this.patternMap.size}`);
         
@@ -71,32 +64,26 @@ class AhoCorasickManager {
         if (!this.isInitialized || !this.ac) {
             this.initAutomaton();
         }
-        
         const rawHits = this.ac!.search(text) as Array<[number, string | string[]]>;
         const filteredHits: Array<[number, string | string[]]> = [];
-        
         for (const [endIdx, patOrArr] of rawHits) {
             const patterns = Array.isArray(patOrArr) ? patOrArr : [patOrArr];
             const validPatterns: string[] = [];
-            
             for (const pattern of patterns) {
                 const role = this.getRole(pattern);
                 if (!role) {
                     continue;
                 }
-                
                 // 检查是否需要分词过滤
                 if (shouldUseSegmentFilter(pattern, role.wordSegmentFilter)) {
                     // 使用分词过滤验证
                     const matches = findCompleteWords(text, pattern);
                     const currentEnd = endIdx + 1;
                     const currentStart = currentEnd - pattern.length;
-                    
                     // 检查当前位置是否在完整词匹配中
                     const isValidMatch = matches.some(match => 
                         match.start === currentStart && match.end === currentEnd
                     );
-                    
                     if (isValidMatch) {
                         validPatterns.push(pattern);
                     }
@@ -105,12 +92,10 @@ class AhoCorasickManager {
                     validPatterns.push(pattern);
                 }
             }
-            
             if (validPatterns.length > 0) {
                 filteredHits.push([endIdx, validPatterns.length === 1 ? validPatterns[0] : validPatterns]);
             }
         }
-        
         return filteredHits;
     }
 
@@ -118,6 +103,7 @@ class AhoCorasickManager {
      * 根据模式获取对应的角色
      */
     public getRole(pattern: string): Role | undefined {
+        // console.log(`[AhoCorasick] 获取角色: "${pattern}"`);
         return this.patternMap.get(pattern.trim().normalize('NFC'));
     }
 

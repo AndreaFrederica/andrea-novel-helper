@@ -157,14 +157,11 @@ export async function updateDecorations() {
                 if (!al) continue;
                 patternRoleMap.set(al.trim().normalize('NFC'), r);
             }
-            // 添加 fixes/fixs 字段
-            const fixesArr: string[] | undefined = (r as any).fixes || (r as any).fixs;
-            if (Array.isArray(fixesArr)) {
-                for (const fix of fixesArr) {
-                    const f = fix.trim().normalize('NFC');
-                    if (f) { // 确保不是空字符串
-                        patternRoleMap.set(f, r);
-                    }
+            // 处理 fixes/fixs 字段（修复候选词也应该被识别为该角色）
+            for (const fix of r.fixes || []) {
+                const f = fix.trim().normalize('NFC');
+                if (f) { // 确保不是空字符串
+                    patternRoleMap.set(f.trim().normalize('NFC'), r);
                 }
             }
         }
@@ -172,7 +169,6 @@ export async function updateDecorations() {
         // 收集并去重普通角色 Candidate（AC / 异步 worker 返回的 pats 可能是主名也可能是别名）
         type Candidate = { role: Role; text: string; start: number; end: number; priority: number };
         const candidates: Candidate[] = [];
-        
         // 添加普通角色匹配（普通角色优先级设为0-499，确保高于正则表达式）
         for (const [endIdx, arr] of hits) {
             for (const raw of arr) {
@@ -188,15 +184,13 @@ export async function updateDecorations() {
                     console.log('[Decorations] 未解析到匹配角色(可能为过期缓存) pattern=', pat);
                     continue;
                 }
-                
                 // 添加调试信息：显示找到的匹配
                 const startPos = endIdx - pat.length + 1;
                 console.log(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx+1}) -> 角色 "${role.name}"`);
-                
-                candidates.push({ 
-                    role, 
-                    text: pat, 
-                    start: endIdx - pat.length + 1, 
+                candidates.push({
+                    role,
+                    text: pat,
+                    start: endIdx - pat.length + 1,
                     end: endIdx + 1,
                     // 优先级：数值越小越先处理；敏感词默认最高优先级，其次普通角色；regex 在后面单独加 500 偏移
                     priority: role.priority ?? (role.type === '敏感词' ? 0 : 100) // 敏感词默认0，其它普通默认100
@@ -252,12 +246,10 @@ export async function updateDecorations() {
         // 智能去重：高优先级的覆盖低优先级的，但允许正则表达式被分割
         const selected: Candidate[] = [];
         const occupiedRanges: Array<{start: number, end: number}> = [];
-        
         for (const c of candidates) {
             if (c.role.type === '正则表达式') {
                 // 对于正则表达式，计算未被占用的片段
                 const freeSegments = calculateFreeSegments(c.start, c.end, occupiedRanges);
-                
                 // 为每个自由片段创建一个候选项
                 for (const segment of freeSegments) {
                     if (segment.end > segment.start) { // 确保片段有效
@@ -285,14 +277,11 @@ export async function updateDecorations() {
             // 找到与当前范围重叠的已占用范围
             const overlapping = occupied.filter(range => rangesOverlap(range.start, range.end, start, end))
                 .sort((a, b) => a.start - b.start);
-            
             if (overlapping.length === 0) {
                 return [{start, end}];
             }
-            
             const segments: Array<{start: number, end: number}> = [];
             let currentPos = start;
-            
             for (const range of overlapping) {
                 // 添加当前位置到重叠范围开始之间的片段
                 if (currentPos < range.start) {
@@ -302,12 +291,10 @@ export async function updateDecorations() {
                 currentPos = Math.max(currentPos, range.end);
                 if (currentPos >= end) break;
             }
-            
             // 添加最后一个片段
             if (currentPos < end) {
                 segments.push({start: currentPos, end});
             }
-            
             return segments;
         }
 
@@ -366,7 +353,6 @@ export async function updateDecorations() {
                 // 若当前匹配文本本身是任何角色的 fixes 值，则视作已修复，跳过敏感词诊断
                 let matchedText: string | undefined;
                 try { matchedText = doc.getText(range); } catch { /* ignore */ }
-                
                 // 检查是否是任何角色的 fixes 值（不仅仅是当前敏感词角色）
                 let isFixesValue = false;
                 if (matchedText) {
@@ -378,7 +364,6 @@ export async function updateDecorations() {
                         }
                     }
                 }
-                
                 if (isFixesValue) {
                     continue; // 是任何角色的 fixes 值，不触发敏感词警告
                 }

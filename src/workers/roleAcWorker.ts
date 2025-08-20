@@ -6,6 +6,7 @@ import AhoCorasick from "ahocorasick";
 interface RoleMini {
     name: string;
     aliases?: string[];
+    fixes?: string[];
     wordSegmentFilter?: any;
 }
 interface SegConfig {
@@ -84,6 +85,13 @@ parentPort?.on("message", (msg: any) => {
                         const a = al.trim().normalize("NFC");
                         patterns.push(a);
                         roleMap.set(a, r);
+                    }
+                }
+                if (r.fixes) {
+                    for (const fix of r.fixes) {
+                        const f = fix.trim().normalize("NFC");
+                        patterns.push(f);
+                        roleMap.set(f, r);
                     }
                 }
             }

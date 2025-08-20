@@ -80,8 +80,14 @@ class AsyncRoleMatcher {
   if (!this.worker || !this.ready) { return; }
   if (this.building) { return; }
     this.building = true;
-    const simpleRoles = explicitRoles || roles.map(r=>({ name: r.name, aliases: r.aliases, wordSegmentFilter: (r as any).wordSegmentFilter }));
-    this.lastBuiltRoles = simpleRoles;
+    // include fixes/fixs so worker can build patterns for fixes as well
+    const simpleRoles = explicitRoles || roles.map(r => ({
+      name: r.name,
+      aliases: r.aliases,
+      fixes: (r as any).fixes || (r as any).fixs,
+      wordSegmentFilter: (r as any).wordSegmentFilter
+    }));
+    this.lastBuiltRoles = simpleRoles as any;
   let enableWordSegmentFilter = true; let autoFilterMaxLength = 1;
     try {
       const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');

@@ -40,7 +40,7 @@ class AsyncWordCounter {
   }
 
   private spawnOne(index: number) {
-    const workerPath = path.join(__dirname, '..', 'workers', 'wordCountWorker.js');
+  const workerPath = path.join(__dirname, '..', '..', 'workers', 'wordCountWorker.js');
     try {
       const worker = new Worker(workerPath);
       const info: WorkerInfo = { worker, ready: false, queue: [] };

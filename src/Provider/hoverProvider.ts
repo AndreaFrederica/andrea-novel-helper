@@ -12,12 +12,10 @@ import { FIELD_ALIASES, getExtensionFields } from '../utils/Parser/markdownParse
  */
 export function containsMarkdownFormatting(content: string): boolean {
     if (!content) return false;
-    
     // 检查内容是否已经包含 Markdown 格式或列表符号
     const hasMarkdownFormatting = /(\*\*|__|\*|_|`|#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^>\s)/m.test(content);
     const hasUnicodeList = /^[\s]*[•◦▪▫‣⁃∙▸▹▻►⋆★☆♦♧♠♣♡♢]\s/m.test(content);
     const hasChineseList = /^[\s]*([一二三四五六七八九十]+[、．]|\d+[、．]|[（(]\d+[）)]|[（(][一二三四五六七八九十]+[）)])\s/m.test(content);
-    
     return hasMarkdownFormatting || hasUnicodeList || hasChineseList;
 }
 
@@ -26,12 +24,10 @@ export function containsMarkdownFormatting(content: string): boolean {
  */
 export function formatContentForDisplay(content: string): string {
     if (!content) return '';
-    
     // 检查内容是否已经包含 Markdown 格式或列表符号
     const hasMarkdownFormatting = /(\*\*|__|\*|_|`|#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^>\s)/m.test(content);
     const hasUnicodeList = /^[\s]*[•◦▪▫‣⁃∙▸▹▻►⋆★☆♦♧♠♣♡♢]\s/m.test(content);
     const hasChineseList = /^[\s]*([一二三四五六七八九十]+[、．]|\d+[、．]|[（(]\d+[）)]|[（(][一二三四五六七八九十]+[）)])\s/m.test(content);
-    
     if (hasMarkdownFormatting || hasUnicodeList || hasChineseList) {
         // 内容已经包含格式，需要转换为 Markdown 兼容格式
         return convertToMarkdownList(content);
@@ -46,39 +42,31 @@ export function formatContentForDisplay(content: string): string {
  */
 export function handlePlainTextContent(content: string): string {
     const lines = content.split('\n');
-    
     // 如果只有一行或两行，直接用硬换行
     if (lines.length <= 2) {
         return content.replace(/\n/g, '  \n');
     }
-    
     // 对于多行内容，检查是否是段落格式
     const processedLines = lines.map((line, index) => {
         const trimmedLine = line.trim();
-        
         // 空行保持空行
         if (trimmedLine === '') {
             return '';
         }
-        
         // 检查当前行是否可能是段落的开始（较长的行）
         const isLongLine = trimmedLine.length > 20;
         const nextLine = index < lines.length - 1 ? lines[index + 1].trim() : '';
         const prevLine = index > 0 ? lines[index - 1].trim() : '';
-        
         // 如果当前行很长，且下一行也很长（可能是连续的段落），则不添加硬换行
         if (isLongLine && nextLine.length > 20 && nextLine !== '') {
             return line;
         }
-        
         // 如果当前行较短，或者是最后一行，或者下一行是空行，则添加硬换行
         if (!isLongLine || index === lines.length - 1 || nextLine === '') {
             return line + '  ';
         }
-        
         return line;
     });
-    
     return processedLines.join('\n');
 }
 
@@ -92,23 +80,19 @@ export function convertToMarkdownList(content: string): string {
         // 将中文编号转换为 Markdown 格式
         .replace(/^([\s]*)([一二三四五六七八九十]+[、．]|\d+[、．])\s*/gm, '$1- ')
         .replace(/^([\s]*)[（(](\d+|[一二三四五六七八九十]+)[）)]\s*/gm, '$1- ');
-    
     // 智能处理换行：只在非列表行之间添加硬换行
     const lines = result.split('\n');
     const processedLines = lines.map((line, index) => {
         const isCurrentLineList = /^[\s]*[-*+]\s/.test(line);
         const isNextLineList = index < lines.length - 1 && /^[\s]*[-*+]\s/.test(lines[index + 1]);
         const isPreviousLineList = index > 0 && /^[\s]*[-*+]\s/.test(lines[index - 1]);
-        
         // 如果当前行是列表项，或者下一行是列表项，或者这是个空行在列表之间，则不添加硬换行
         if (isCurrentLineList || isNextLineList || (line.trim() === '' && (isPreviousLineList || isNextLineList))) {
             return line;
         }
-        
         // 其他情况添加硬换行标记
         return line + '  ';
     });
-    
     return processedLines.join('\n');
 }
 
@@ -190,7 +174,7 @@ async function refreshAll() {
             const matches = await getRoleMatches(doc);
             if (doc.version !== versionAtReq) { continue; }
             let infos = matches.flatMap(m => m.pats.map(p => {
-                const role = roles.find(r=> r.name === p || r.aliases?.includes(p));
+                const role = roles.find(r=> r.name === p || r.aliases?.includes(p) || r.fixes?.includes(p));
                 if (!role) return undefined;
                 const end = m.end + 1; const start = end - p.length;
                 return { range: new vscode.Range(doc.positionAt(start), doc.positionAt(end)), role };
@@ -277,7 +261,7 @@ export function activateHover(context: vscode.ExtensionContext) {
     );
 
     // 注册 Hover 提供器
-    // 使用宽匹配 { scheme:'file' }，然后在内部按配置语言/扩展再过滤，避免 json5 等语言 id 不匹配时丢失 Hover
+    // 使用宽匹配 { scheme: 'file' }，然后在内部按配置语言/扩展再过滤，避免 json5 等语言 id 不匹配时丢失 Hover
     const hoverProv = vscode.languages.registerHoverProvider(
         { scheme: 'file' },
         {

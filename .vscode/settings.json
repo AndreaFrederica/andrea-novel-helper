@@ -57,5 +57,6 @@
 	"github.copilot.enable": {
 		"markdown": true,
 		"plaintext": true
-	}
+	},
+	"AndreaNovelHelper.workspaceDisabled": true
 }
