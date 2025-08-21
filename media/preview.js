@@ -4,6 +4,7 @@
 /* ================== 调试配置 ================== */
 var DEBUG_TTS = true;           // 控制是否在 Webview 控制台输出日志
 var DEBUG_POST_TO_EXT = false;  // 如需把日志发回扩展侧，设为 true
+var PAGE_HEIGHT_RATIO = 0.7;    // 分页模式下页面高度相对于窗口高度的比例
 
 function dlog(tag, payload) {
     if (!DEBUG_TTS) { return; }
@@ -563,6 +564,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var syncGroup = document.getElementById('rs-sync');
     var themeGroup = document.getElementById('rs-themes');
     var heightModeGroup = document.getElementById('rs-heightMode');
+    var widthModeGroup = document.getElementById('rs-widthMode');
     var btnReset = document.getElementById('rs-reset');
     var presetSelect = document.getElementById('rs-preset');
     var btnSavePreset = document.getElementById('rs-savePreset');
@@ -583,7 +585,21 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     }
     function saveStateMeta(m) { try { localStorage.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) { } }
 
-    var DEFAULTS = { font: 16, line: 1.6, para: 8, pad: 12, width: 720, height: 0, heightMode: 'auto', mode: 'scroll', theme: 'auto', align: 'left', cols: 1, sync: 'on' };
+    var DEFAULTS = {
+        font: 16,
+        line: 1.6,
+        para: 8,
+        pad: 12,
+        width: 720,
+        widthMode: 'manual',
+        height: 0,
+        heightMode: 'auto',
+        mode: 'scroll',
+        theme: 'auto',
+        align: 'left',
+        cols: 1,
+        sync: 'on'
+    };
     var PRESET_TEMPLATES = { '__default__': { name: '默认', data: JSON.parse(JSON.stringify(DEFAULTS)) } };
 
     function loadPresets() {
@@ -616,7 +632,14 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             pageInfo.textContent = cur + ' / ' + total;
             if (pageProgress) { pageProgress.style.width = (total > 0 ? (cur / total * 100) : 0) + '%'; }
         } else {
-            var h = (state.heightMode === 'manual' && state.height > 0) ? state.height : (window.innerHeight - 40);
+            var h;
+            // 如果用户选择手动高度并且值有效，则采用用户指定的高度
+            if (state.heightMode === 'manual' && state.height > 0) {
+                h = state.height;
+            } else {
+                // 自动模式：减去固定的 40px 用于控件/边距
+                h = (window.innerHeight) - 40;
+            }
             var total2 = Math.max(1, Math.ceil(document.documentElement.scrollHeight / h));
             var current2 = Math.min(total2, Math.max(1, Math.floor(window.scrollY / h) + 1));
             pageInfo.textContent = current2 + ' / ' + total2;
@@ -707,7 +730,9 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme') === state.theme); });
         if (syncGroup) { Array.from(syncGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sync') === state.sync); }); }
         if (heightModeGroup) { Array.from(heightModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-hmode') === state.heightMode); }); }
-
+        Array.from(widthModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
+            b.classList.toggle('active', b.getAttribute('data-wmode') === state.widthMode);
+        });
         try { presets[activePresetName] = JSON.parse(JSON.stringify(state)); } catch (_) { presets[activePresetName] = Object.assign({}, state); }
         savePresets(presets);
         try { meta.lastPreset = activePresetName; saveStateMeta(meta); } catch (_) { }
@@ -735,7 +760,14 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     if (themeGroup) { themeGroup.addEventListener('click', function (e) { var t = e.target && e.target.getAttribute('data-theme'); if (t) { state.theme = t; reflect(); } }); }
     if (syncGroup) { syncGroup.addEventListener('click', function (e) { var s = e.target && e.target.getAttribute('data-sync'); if (s) { state.sync = s; reflect(); } }); }
     if (heightModeGroup) { heightModeGroup.addEventListener('click', function (e) { var m = e.target && e.target.getAttribute('data-hmode'); if (m) { state.heightMode = m; reflect(); } }); }
-
+    if (widthModeGroup) {
+        widthModeGroup.addEventListener('click', function (e) {
+            var m = e.target && e.target.getAttribute('data-wmode');
+            if (!m) { return; }
+            state.widthMode = m;   // 'auto' 或 'manual'
+            reflect();
+        });
+    }
     if (btnReset) { btnReset.addEventListener('click', function () { state = JSON.parse(JSON.stringify(DEFAULTS)); try { presets[activePresetName] = JSON.parse(JSON.stringify(state)); savePresets(presets); } catch (_) { } reflect(); }); }
     if (gear) { gear.addEventListener('click', function () { panel.classList.add('open'); }); }
     if (btnClose) { btnClose.addEventListener('click', function () { panel.classList.remove('open'); }); }
@@ -939,10 +971,29 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         var pageStarts = [];   // 每页第一个 data-line 的行号（单调）
         var cfg = { pageHeight: 0 };
 
+        function pagerAutoHeight() {
+            var base = window.innerHeight;
+            var reserve = 40; // 原来的固定余量
+
+            try {
+                // 顶部：adjustForTTSControls() 已经把 TTS 高度加到 body.paddingTop
+                reserve += parseInt(getComputedStyle(document.body).paddingTop, 10) || 0;
+
+                // 底部：分页条（显示时再扣）
+                var bar = document.getElementById('reader-pagebar');
+                if (bar && !bar.hidden) {
+                    var r = bar.getBoundingClientRect();
+                    reserve += Math.ceil(r.height + 12); // 再留点间距
+                }
+            } catch (_) { }
+
+            return (Math.max(120, Math.round(base - reserve)) * PAGE_HEIGHT_RATIO);
+        }
+
         function measureAndGroup() {
             var els = Array.from(container.children).filter(function (el) { return el.offsetHeight > 0; });
-            var maxH = cfg.pageHeight > 0 ? cfg.pageHeight : (window.innerHeight - 40);
-            if (maxH < 120) { maxH = window.innerHeight - 40; }
+            var maxH = cfg.pageHeight > 0 ? cfg.pageHeight : pagerAutoHeight();
+            if (maxH < 120) { maxH = pagerAutoHeight(); }
             var groups = []; var cur = []; var hSum = 0;
             els.forEach(function (el) {
                 var h = el.offsetHeight;
@@ -1042,6 +1093,17 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
             if (typeof DomPager === 'undefined') { return; }
 
+            // 本地读取同步开关
+            function isSyncOnLocal() {
+                try {
+                    var meta = JSON.parse(localStorage.getItem('anhReaderSettings') || '{}');
+                    var presets = JSON.parse(localStorage.getItem('anhReaderPresets') || '{}');
+                    var name = (meta && meta.lastPreset) ? meta.lastPreset : '__default__';
+                    var s = (presets && presets[name]) ? presets[name] : {};
+                    return !s.sync || s.sync === 'on';
+                } catch (_) { return true; }
+            }
+
             // 保存原方法
             var _goto = DomPager.goto;
             var _next = DomPager.next;
@@ -1051,7 +1113,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
                 if (!document.body.classList.contains('reader-paged')) { return; }
                 if (!DomPager.isActive || !DomPager.isActive()) { return; }
                 if (!vscode) { return; }
-                if (!isSyncOnLocal()) { return; }   
+                if (!isSyncOnLocal()) { return; }
 
                 // 优先用全局可见区间函数（若稍后 initScrollSync 才绑定，也有本地回退）
                 var vr = (window.__anhVisibleRange && window.__anhVisibleRange());

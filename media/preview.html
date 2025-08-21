@@ -32,6 +32,12 @@
             font: 13px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
         }
 
+        body.reader-paged {
+            box-sizing: border-box;
+            height: 100%;
+        }
+
+
         pre {
             white-space: pre-wrap;
             word-wrap: break-word;
@@ -47,42 +53,262 @@
             min-height: 600px;
         }
 
-    /* Reader 基本布局 */
-    body.reader-theme-light { background: #fafafa; color: #222; }
-    body.reader-theme-dark { background: #1e1f22; color: #ddd; }
-    .reader-root { margin: 0 auto; padding: var(--reader-page-padding); max-width: var(--reader-width); box-sizing: border-box; height: var(--reader-height); }
-    .reader-content pre { font-size: var(--reader-font-size); line-height: var(--reader-line-height); margin: 0 0 var(--reader-para-spacing) 0; }
-    .reader-content [data-line]:last-child pre { margin-bottom: 0; }
-    body.reader-paged { overflow-y: auto; }
-    /* 分页模式仅使用页面高度分割，不再使用多列 */
-    body.reader-align-justify .reader-content pre { text-align: justify; text-justify: inter-ideograph; }
-    .reader-pagebar { position:fixed; bottom:10px; left:50%; transform:translateX(-50%); background:#000a; color:#fff; padding:4px 10px; border-radius:20px; font-size:12px; display:flex; align-items:center; gap:8px; z-index:1600; backdrop-filter: blur(4px); }
-    .reader-pagebar button { background:#0e639c; border:none; color:#fff; padding:2px 8px; border-radius:4px; cursor:pointer; font-size:12px; }
-    .reader-pagebar button:hover { background:#1177bb; }
-    .reader-pagebar[hidden] { display:none; }
-    body.reader-paged .scroll-spacer { display:none; height:0 !important; }
-    .rp-progress { position:relative; flex:1; height:6px; background:#ffffff33; border-radius:3px; overflow:hidden; min-width:80px; }
-    .rp-progress-inner { position:absolute; left:0; top:0; height:100%; width:0%; background:#0e639c; transition:width .18s ease; }
-    .reader-gear-btn { position: fixed; bottom: 16px; right: 16px; z-index: 1200; background:#0e639c; color:#fff; border:none; border-radius:50%; width:42px; height:42px; cursor:pointer; font-size:20px; box-shadow:0 4px 10px #0006; }
-    .reader-gear-btn:hover { background:#1177bb; }
-    .reader-settings { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.98); background: var(--vscode-editor-background, #222); color: var(--vscode-editor-foreground, #ddd); border:1px solid #5556; border-radius:16px; width:380px; max-width:90vw; max-height:85vh; overflow:auto; padding:20px 22px 26px; box-shadow:0 10px 40px #0009; z-index:2000; display:none; }
-    .reader-settings.open { display:block; animation: fadeIn 120ms ease-out; }
-    @keyframes fadeIn { from { opacity:0; transform: translate(-50%, -48%) scale(.96);} to { opacity:1; transform: translate(-50%, -50%) scale(1);} }
-    .rs-row { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
-    .rs-row label { flex:0 0 70px; font-size:12px; opacity:.85; }
-    .rs-row input[type=range] { flex:1; }
-    .rs-row .rs-value { width:40px; text-align:right; font-size:12px; opacity:.8; }
-    .rs-section-title { font-weight:600; margin:4px 0 12px; font-size:13px; }
-    .rs-close { position:absolute; top:8px; right:10px; background:transparent; border:none; color:inherit; cursor:pointer; font-size:20px; line-height:1; }
-    .rs-mode-group, .rs-theme-group { display:flex; gap:12px; }
-    .rs-toggle { padding:4px 10px; border:1px solid #5557; border-radius:6px; background:#333; cursor:pointer; font-size:12px; }
-    .rs-toggle.active { background:#0e639c; border-color:#0e639c; color:#fff; }
-    select.rs-select, input.rs-number { background:#2d2d2d; color:#ddd; border:1px solid #5557; border-radius:6px; padding:4px 6px; font-size:12px; width:70px; }
-    .rs-help { font-size:11px; line-height:1.4; opacity:.7; margin:8px 0 4px; }
-    .rs-footer { text-align:right; margin-top:4px; }
-    .rs-footer button { background:#0e639c; color:#fff; border:none; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:12px; }
-    .rs-footer button:hover { background:#1177bb; }
-    /* TTS */
+        /* Reader 基本布局 */
+        body.reader-theme-light {
+            background: #fafafa;
+            color: #222;
+        }
+
+        body.reader-theme-dark {
+            background: #1e1f22;
+            color: #ddd;
+        }
+
+        .reader-root {
+            margin: 0 auto;
+            padding: var(--reader-page-padding);
+            max-width: var(--reader-width);
+            box-sizing: border-box;
+            height: var(--reader-height);
+        }
+
+        .reader-content pre {
+            font-size: var(--reader-font-size);
+            line-height: var(--reader-line-height);
+            margin: 0 0 var(--reader-para-spacing) 0;
+        }
+
+        .reader-content [data-line]:last-child pre {
+            margin-bottom: 0;
+        }
+
+        body.reader-paged {
+            overflow-y: auto;
+        }
+
+        /* 分页模式仅使用页面高度分割，不再使用多列 */
+        body.reader-align-justify .reader-content pre {
+            text-align: justify;
+            text-justify: inter-ideograph;
+        }
+
+        .reader-pagebar {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #000a;
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1600;
+            backdrop-filter: blur(4px);
+        }
+
+        .reader-pagebar button {
+            background: #0e639c;
+            border: none;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .reader-pagebar button:hover {
+            background: #1177bb;
+        }
+
+        .reader-pagebar[hidden] {
+            display: none;
+        }
+
+        body.reader-paged .scroll-spacer {
+            display: none;
+            height: 0 !important;
+        }
+
+        .rp-progress {
+            position: relative;
+            flex: 1;
+            height: 6px;
+            background: #ffffff33;
+            border-radius: 3px;
+            overflow: hidden;
+            min-width: 80px;
+        }
+
+        .rp-progress-inner {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 0%;
+            background: #0e639c;
+            transition: width .18s ease;
+        }
+
+        .reader-gear-btn {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            z-index: 1200;
+            background: #0e639c;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 4px 10px #0006;
+        }
+
+        .reader-gear-btn:hover {
+            background: #1177bb;
+        }
+
+        .reader-settings {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.98);
+            background: var(--vscode-editor-background, #222);
+            color: var(--vscode-editor-foreground, #ddd);
+            border: 1px solid #5556;
+            border-radius: 16px;
+            width: 380px;
+            max-width: 90vw;
+            max-height: 85vh;
+            overflow: auto;
+            padding: 20px 22px 26px;
+            box-shadow: 0 10px 40px #0009;
+            z-index: 2000;
+            display: none;
+        }
+
+        .reader-settings.open {
+            display: block;
+            animation: fadeIn 120ms ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -48%) scale(.96);
+            }
+
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        .rs-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .rs-row label {
+            flex: 0 0 70px;
+            font-size: 12px;
+            opacity: .85;
+        }
+
+        .rs-row input[type=range] {
+            flex: 1;
+        }
+
+        .rs-row .rs-value {
+            width: 40px;
+            text-align: right;
+            font-size: 12px;
+            opacity: .8;
+        }
+
+        .rs-section-title {
+            font-weight: 600;
+            margin: 4px 0 12px;
+            font-size: 13px;
+        }
+
+        .rs-close {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            background: transparent;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .rs-mode-group,
+        .rs-theme-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        .rs-toggle {
+            padding: 4px 10px;
+            border: 1px solid #5557;
+            border-radius: 6px;
+            background: #333;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .rs-toggle.active {
+            background: #0e639c;
+            border-color: #0e639c;
+            color: #fff;
+        }
+
+        select.rs-select,
+        input.rs-number {
+            background: #2d2d2d;
+            color: #ddd;
+            border: 1px solid #5557;
+            border-radius: 6px;
+            padding: 4px 6px;
+            font-size: 12px;
+            width: 70px;
+        }
+
+        .rs-help {
+            font-size: 11px;
+            line-height: 1.4;
+            opacity: .7;
+            margin: 8px 0 4px;
+        }
+
+        .rs-footer {
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .rs-footer button {
+            background: #0e639c;
+            color: #fff;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .rs-footer button:hover {
+            background: #1177bb;
+        }
+
+        /* TTS */
         .tts-reading-highlight {
             background: rgba(255, 215, 0, 0.35);
             box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.65);
@@ -177,25 +403,70 @@
     <div class="reader-settings" id="reader-settings" aria-modal="true" role="dialog">
         <button class="rs-close" id="rs-close" title="关闭">×</button>
         <div class="rs-section-title">外观</div>
-        <div class="rs-row"><label>字体大小</label><input id="rs-font" type="range" min="12" max="30" step="1"><div class="rs-value" id="rs-font-val"></div></div>
-        <div class="rs-row"><label>行间距</label><input id="rs-line" type="range" min="1.2" max="2.2" step="0.05"><div class="rs-value" id="rs-line-val"></div></div>
-        <div class="rs-row"><label>段落间距</label><input id="rs-para" type="range" min="0" max="32" step="1"><div class="rs-value" id="rs-para-val"></div></div>
-        <div class="rs-row"><label>页面边距</label><input id="rs-pad" type="range" min="0" max="48" step="1"><div class="rs-value" id="rs-pad-val"></div></div>
-    <div class="rs-row"><label>宽度</label><input id="rs-width" class="rs-number" type="number" min="320" max="1600" step="10"><span style="font-size:12px;opacity:.7;">px</span></div>
-    <div class="rs-row"><label>高度*</label><input id="rs-height" class="rs-number" type="number" min="0" max="3000" step="10"><span style="font-size:12px;opacity:.7;">px</span></div>
-    <div class="rs-row"><label>高度模式</label><div class="rs-mode-group" id="rs-heightMode"><button data-hmode="auto" class="rs-toggle">自动</button><button data-hmode="manual" class="rs-toggle">手动</button></div></div>
-        <div class="rs-row"><label>显示方式</label><div class="rs-mode-group" id="rs-modes"><button data-mode="scroll" class="rs-toggle">滚动</button><button data-mode="paged" class="rs-toggle">分页</button></div></div>
-    <div class="rs-row"><label>对齐</label><div class="rs-mode-group" id="rs-aligns"><button data-align="left" class="rs-toggle">左对齐</button><button data-align="justify" class="rs-toggle">两端</button></div></div>
-    <div class="rs-row"><label>列数*</label><div class="rs-mode-group" id="rs-cols"><button data-cols="1" class="rs-toggle">1 列</button><button data-cols="2" class="rs-toggle">2 列</button></div></div>
-    <div class="rs-row"><label>同步滚动</label><div class="rs-mode-group" id="rs-sync"><button data-sync="on" class="rs-toggle">开启</button><button data-sync="off" class="rs-toggle">关闭</button></div></div>
-        <div class="rs-row"><label>预设</label><div style="flex:1;display:flex;gap:6px;align-items:center;">
-            <select id="rs-preset" class="rs-select" style="flex:1;min-width:120px;"></select>
-            <button class="rs-toggle" id="rs-savePreset" style="white-space:nowrap;">保存</button>
-            <button class="rs-toggle" id="rs-newPreset" style="white-space:nowrap;">新建</button>
-            <button class="rs-toggle" id="rs-delPreset" style="white-space:nowrap;">删除</button>
-        </div></div>
-        <div class="rs-row"><label>主题模式</label><div class="rs-theme-group" id="rs-themes"><button data-theme="light" class="rs-toggle">浅色</button><button data-theme="dark" class="rs-toggle">深色</button><button data-theme="auto" class="rs-toggle">跟随</button></div></div>
-    <div class="rs-help">* 高度模式=自动 时忽略高度输入按窗口高度(减去余量)分页；手动时用输入值（高度=0 也视为自动）。分页翻页：PgUp/PgDn/空格/方向键；TTS 自动跨页。列数仅在滚动模式生效。</div>
+        <div class="rs-row"><label>字体大小</label><input id="rs-font" type="range" min="12" max="30" step="1">
+            <div class="rs-value" id="rs-font-val"></div>
+        </div>
+        <div class="rs-row"><label>行间距</label><input id="rs-line" type="range" min="1.2" max="2.2" step="0.05">
+            <div class="rs-value" id="rs-line-val"></div>
+        </div>
+        <div class="rs-row"><label>段落间距</label><input id="rs-para" type="range" min="0" max="32" step="1">
+            <div class="rs-value" id="rs-para-val"></div>
+        </div>
+        <div class="rs-row"><label>页面边距</label><input id="rs-pad" type="range" min="0" max="48" step="1">
+            <div class="rs-value" id="rs-pad-val"></div>
+        </div>
+        <div class="rs-row"><label>高度*</label><input id="rs-height" class="rs-number" type="number" min="0" max="3000"
+                step="10"><span style="font-size:12px;opacity:.7;">px</span></div>
+        <div class="rs-row">
+            <label>宽度</label>
+            <input id="rs-width" class="rs-number" type="number" min="320" max="1600" step="10">
+            <span style="font-size:12px;opacity:.7;">px</span>
+        </div>
+        <div class="rs-row"><label>高度模式</label>
+            <div class="rs-mode-group" id="rs-heightMode"><button data-hmode="auto" class="rs-toggle">自动</button><button
+                    data-hmode="manual" class="rs-toggle">手动</button></div>
+        </div>
+        <div class="rs-row">
+            <label>宽度模式</label>
+            <div class="rs-mode-group" id="rs-widthMode">
+                <button data-wmode="auto" class="rs-toggle">自动</button>
+                <button data-wmode="manual" class="rs-toggle">手动</button>
+            </div>
+        </div>
+
+
+
+        <div class="rs-row"><label>显示方式</label>
+            <div class="rs-mode-group" id="rs-modes"><button data-mode="scroll" class="rs-toggle">滚动</button><button
+                    data-mode="paged" class="rs-toggle">分页</button></div>
+        </div>
+        <div class="rs-row"><label>对齐</label>
+            <div class="rs-mode-group" id="rs-aligns"><button data-align="left" class="rs-toggle">左对齐</button><button
+                    data-align="justify" class="rs-toggle">两端</button></div>
+        </div>
+        <div class="rs-row"><label>列数*</label>
+            <div class="rs-mode-group" id="rs-cols"><button data-cols="1" class="rs-toggle">1 列</button><button
+                    data-cols="2" class="rs-toggle">2 列</button></div>
+        </div>
+        <div class="rs-row"><label>同步滚动</label>
+            <div class="rs-mode-group" id="rs-sync"><button data-sync="on" class="rs-toggle">开启</button><button
+                    data-sync="off" class="rs-toggle">关闭</button></div>
+        </div>
+        <div class="rs-row"><label>预设</label>
+            <div style="flex:1;display:flex;gap:6px;align-items:center;">
+                <select id="rs-preset" class="rs-select" style="flex:1;min-width:120px;"></select>
+                <button class="rs-toggle" id="rs-savePreset" style="white-space:nowrap;">保存</button>
+                <button class="rs-toggle" id="rs-newPreset" style="white-space:nowrap;">新建</button>
+                <button class="rs-toggle" id="rs-delPreset" style="white-space:nowrap;">删除</button>
+            </div>
+        </div>
+        <div class="rs-row"><label>主题模式</label>
+            <div class="rs-theme-group" id="rs-themes"><button data-theme="light" class="rs-toggle">浅色</button><button
+                    data-theme="dark" class="rs-toggle">深色</button><button data-theme="auto"
+                    class="rs-toggle">跟随</button></div>
+        </div>
+        <div class="rs-help">* 高度模式=自动 时忽略高度输入按窗口高度(减去余量)分页；手动时用输入值（高度=0 也视为自动）。分页翻页：PgUp/PgDn/空格/方向键；TTS
+            自动跨页。列数仅在滚动模式生效。</div>
         <div class="rs-footer"><button id="rs-reset">重置默认</button></div>
     </div>
 
@@ -211,8 +482,10 @@
     </div>
     <div class="reader-pagebar" id="reader-pagebar" hidden>
         <button id="rp-prev" title="上一页 (PgUp)">◀</button>
-    <div class="rp-progress"><div class="rp-progress-inner" id="rp-progress"></div></div>
-    <span id="rp-info">1 / 1</span>
+        <div class="rp-progress">
+            <div class="rp-progress-inner" id="rp-progress"></div>
+        </div>
+        <span id="rp-info">1 / 1</span>
         <button id="rp-next" title="下一页 (PgDn/Space)">▶</button>
     </div>
 
@@ -227,13 +500,17 @@
     </div>
 
     <!-- 简易模态对话，用于替代 window.prompt/confirm（webview sandbox 无 allow-modals） -->
-    <div id="anh-modal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;z-index:3000;align-items:center;justify-content:center;">
+    <div id="anh-modal"
+        style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;z-index:3000;align-items:center;justify-content:center;">
         <div id="anh-modal-backdrop" style="position:absolute;left:0;top:0;right:0;bottom:0;background:#000a;"></div>
-        <div id="anh-modal-box" style="position:relative;z-index:3001;background:var(--vscode-editor-background,#222);color:var(--vscode-editor-foreground,#ddd);padding:16px;border-radius:8px;min-width:320px;max-width:90vw;">
+        <div id="anh-modal-box"
+            style="position:relative;z-index:3001;background:var(--vscode-editor-background,#222);color:var(--vscode-editor-foreground,#ddd);padding:16px;border-radius:8px;min-width:320px;max-width:90vw;">
             <div id="anh-modal-title" style="font-weight:600;margin-bottom:8px;"></div>
             <div id="anh-modal-body" style="margin-bottom:12px;"></div>
-            <div id="anh-modal-input-wrap" style="margin-bottom:12px;"><input id="anh-modal-input" style="width:100%;padding:6px;border-radius:4px;border:1px solid #555;"/></div>
-            <div style="text-align:right;"><button id="anh-modal-ok" class="rs-toggle">确定</button><button id="anh-modal-cancel" class="rs-toggle" style="margin-left:8px;">取消</button></div>
+            <div id="anh-modal-input-wrap" style="margin-bottom:12px;"><input id="anh-modal-input"
+                    style="width:100%;padding:6px;border-radius:4px;border:1px solid #555;" /></div>
+            <div style="text-align:right;"><button id="anh-modal-ok" class="rs-toggle">确定</button><button
+                    id="anh-modal-cancel" class="rs-toggle" style="margin-left:8px;">取消</button></div>
         </div>
     </div>
 
