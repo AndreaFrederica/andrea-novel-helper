@@ -60,79 +60,6 @@ function scrollToLine(line, smooth, scrollRatio, totalLines) {
     window.scrollTo({ top: Math.max(0, y - 4), behavior: smooth ? 'smooth' : 'auto' });
 }
 
-function currentTopLine() {
-    if (!index.length) { return 0; }
-    var y = window.scrollY + 1;
-    var lo = 0, hi = index.length - 1, ans = 0;
-    while (lo <= hi) {
-        var mid = (lo + hi) >> 1;
-        if (index[mid].top <= y) { ans = mid; lo = mid + 1; } else { hi = mid - 1; }
-    }
-    return index[ans].line;
-}
-
-function getCurrentScrollRatio() {
-    var docH = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-    var winH = window.innerHeight;
-    var maxTop = docH - winH;
-    if (maxTop <= 0) { return 0; }
-    return Math.min(1, window.scrollY / maxTop);
-}
-
-/* ================== 与扩展通信 ================== */
-var lastScrollFromEditor = 0;
-var enableSyncScroll = true; // 跟随开关，受设置面板控制
-
-window.addEventListener('message', function (ev) {
-    var msg = ev.data;
-    if (msg && msg.type === 'scrollToLine' && Number.isInteger(msg.line)) {
-        // 结合设置同步开关
-        var stRaw; try{ stRaw = JSON.parse(localStorage.getItem('anhReaderSettings')||'{}'); }catch(_){ stRaw = {}; }
-        if(stRaw.sync==='off'){ return; }
-        lastScrollFromEditor = Date.now();
-        // 分页模式下：将目标行所在页翻过去；滚动模式下仍使用比对
-        var bodyPaged = document.body.classList.contains('reader-paged');
-        if(typeof DomPager!=='undefined' && DomPager.isActive() && bodyPaged){
-            // 粗略：先利用 DOM 中 data-line 查找最近元素，推算其所在页
-            var targetLine = msg.line;
-            var candidates = Array.from(document.querySelectorAll('[data-line]'));
-            var best=null, bestDiff=1e9;
-            candidates.forEach(function(el){ var ln=Number(el.getAttribute('data-line')); var d=Math.abs(ln-targetLine); if(d<bestDiff){ bestDiff=d; best=el; } });
-            if(best){
-                var pg = DomPager.pageOfElement(best);
-                if(pg>=0 && pg!==DomPager.currentPage()){ DomPager.goto(pg); }
-            }
-        } else {
-            scrollToLine(msg.line, true, msg.scrollRatio, msg.totalLines);
-        }
-    }
-    if (msg && msg.type === 'rebuildIndex') { rebuildIndex(); }
-    if (msg && msg.type === 'ttsControl') {
-        if (msg.command === 'play') { playTTS(); }
-        if (msg.command === 'pause') { pauseTTS(); }
-        if (msg.command === 'stop') { stopTTS(); }
-    }
-});
-
-document.addEventListener('scroll', throttle(function () {
-    var now = Date.now();
-    if (now - lastScrollFromEditor < 300) { return; }
-    var stRaw; try{ stRaw = JSON.parse(localStorage.getItem('anhReaderSettings')||'{}'); }catch(_){ stRaw = {}; }
-    if (stRaw.sync==='off') { return; }
-    // 分页模式：发送当前页首元素的行号 & 页比率；滚动模式保持原逻辑
-    if(typeof DomPager!=='undefined' && DomPager.isActive() && document.body.classList.contains('reader-paged')){
-        var pageIdx = DomPager.currentPage();
-        var pageEl = document.querySelector('.anh-page[data-page="'+pageIdx+'"]');
-        var firstLine = 0;
-        if(pageEl){ var firstData = pageEl.querySelector('[data-line]'); if(firstData){ firstLine = Number(firstData.getAttribute('data-line'))||0; } }
-        vscode && vscode.postMessage({ type: 'previewTopLine', line: firstLine, scrollRatio: (DomPager.totalPages()? pageIdx/ DomPager.totalPages():0) });
-    } else {
-        var line = currentTopLine();
-        var ratio = getCurrentScrollRatio();
-        vscode && vscode.postMessage({ type: 'previewTopLine', line: line, scrollRatio: ratio });
-    }
-}, 120), { passive: true });
-
 window.addEventListener('load', rebuildIndex);
 new ResizeObserver(rebuildIndex).observe(document.documentElement);
 document.addEventListener('load', rebuildIndex, true);
@@ -403,7 +330,7 @@ function locateAndHighlight(startIdx, len, isSelection) {
         var rect = span.getBoundingClientRect();
         // 滚动模式才自动滚动视图，分页模式保持当前页稳定
         var isPaged = document.body.classList.contains('reader-paged');
-        if(!isPaged){
+        if (!isPaged) {
             if (rect.top < 0 || rect.bottom > window.innerHeight) {
                 span.scrollIntoView({ block: 'center', behavior: 'smooth' });
             }
@@ -588,395 +515,561 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 /* ================== 工具：节流 ================== */
 function throttle(fn, ms) {
     var t, last = 0;
-    return function () {
-        var now = Date.now(), remain = ms - (now - last);
-        var args = arguments, ctx = this;
-        if (remain <= 0) {
-            last = now;
-            fn.apply(ctx, args);
-        } else if (!t) {
-            t = setTimeout(function () { t = undefined; last = Date.now(); fn.apply(ctx, args); }, remain);
-        }
-    };
-}
-
-/* ================== Reader 设置面板与状态 ================== */
-(function initReaderSettings(){
-    var gear = document.getElementById('reader-gear');
-    var panel = document.getElementById('reader-settings');
-    if(!gear || !panel) { return; }
-    var inputs = {
-        font: document.getElementById('rs-font'),
-        line: document.getElementById('rs-line'),
-        para: document.getElementById('rs-para'),
-        pad: document.getElementById('rs-pad'),
-        width: document.getElementById('rs-width'),
-    height: document.getElementById('rs-height'),
-    // removed pageHeight; using height + heightMode
-    };
-    var vals = {
-        font: document.getElementById('rs-font-val'),
-        line: document.getElementById('rs-line-val'),
-        para: document.getElementById('rs-para-val'),
-        pad: document.getElementById('rs-pad-val')
-    };
-    var modeGroup = document.getElementById('rs-modes');
-    var alignGroup = document.getElementById('rs-aligns');
-    var colsGroup = document.getElementById('rs-cols');
-    var syncGroup = document.getElementById('rs-sync');
-    var themeGroup = document.getElementById('rs-themes');
-    var heightModeGroup = document.getElementById('rs-heightMode');
-    var btnReset = document.getElementById('rs-reset');
-    var presetSelect = document.getElementById('rs-preset');
-    var btnSavePreset = document.getElementById('rs-savePreset');
-    var btnDelPreset = document.getElementById('rs-delPreset');
-    var btnClose = document.getElementById('rs-close');
-    var pageBar = document.getElementById('reader-pagebar');
-    var pageInfo = document.getElementById('rp-info');
-    var pageProgress = document.getElementById('rp-progress');
-    var btnPrev = document.getElementById('rp-prev');
-    var btnNext = document.getElementById('rp-next');
-
-    var STORE_KEY = 'anhReaderSettings';
-    var PRESET_KEY = 'anhReaderPresets';
-    function loadState(){
-        try{ return JSON.parse(localStorage.getItem(STORE_KEY)||'{}'); }catch(_){ return {}; }
-    }
-    function saveState(s){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }catch(_){} }
-    var state = Object.assign({ font:16, line:1.6, para:8, pad:12, width:720, height:0, heightMode:'auto', mode:'scroll', theme:'auto', align:'left', cols:1, sync:'on' }, loadState());
-    var presets = (function(){ try{ return JSON.parse(localStorage.getItem(PRESET_KEY)||'{}'); }catch(_){ return {}; } })();
-
-    function reflect(){
-        inputs.font.value = state.font; vals.font.textContent = state.font;
-        inputs.line.value = state.line; vals.line.textContent = state.line.toFixed(2);
-        inputs.para.value = state.para; vals.para.textContent = state.para;
-        inputs.pad.value = state.pad; vals.pad.textContent = state.pad;
-    inputs.width.value = state.width; inputs.height.value = state.height || '';
-        document.documentElement.style.setProperty('--reader-font-size', state.font+'px');
-        document.documentElement.style.setProperty('--reader-line-height', state.line);
-        document.documentElement.style.setProperty('--reader-para-spacing', state.para+'px');
-        document.documentElement.style.setProperty('--reader-page-padding', state.pad+'px');
-        document.documentElement.style.setProperty('--reader-width', state.width+'px');
-        document.documentElement.style.setProperty('--reader-height', state.height>0? state.height+'px':'auto');
-        document.body.classList.toggle('reader-paged', state.mode==='paged');
-        document.body.classList.toggle('reader-align-justify', state.align==='justify');
-        document.documentElement.style.setProperty('--reader-columns', state.cols);
-        var content = document.getElementById('reader-content');
-        if(content){
-            if(state.mode==='scroll'){
-                content.style.columnCount = state.cols>1? state.cols:1;
-                content.style.columnGap = state.cols>1? '48px':'0';
-            }else{
-                content.style.columnCount = 1; content.style.columnGap='0';
-            }
-        }
-        // 主题
-        document.body.classList.remove('reader-theme-light','reader-theme-dark');
-    if(state.theme==='light') { document.body.classList.add('reader-theme-light'); }
-    else if(state.theme==='dark') { document.body.classList.add('reader-theme-dark'); }
-        // 激活按钮样式
-        Array.from(modeGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-mode')===state.mode); });
-    if(alignGroup) { Array.from(alignGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-align')===state.align); }); }
-    if(colsGroup) { Array.from(colsGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', Number(b.getAttribute('data-cols'))===state.cols); }); }
-        Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-theme')===state.theme); });
-    if(syncGroup){ Array.from(syncGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-sync')===state.sync); }); }
-    if(heightModeGroup){ Array.from(heightModeGroup.querySelectorAll('.rs-toggle')).forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-hmode')===state.heightMode); }); }
-        saveState(state);
-        rebuildIndexNow();
-        // 启用或禁用 DOM 分页
-        if(typeof DomPager!=='undefined'){
-            if(state.mode==='paged'){ DomPager.enable({ pageHeight: (state.heightMode==='manual' && state.height>0)? state.height:0 }); }
-            else { DomPager.disable(); }
-        }
-        updatePaging();
-    }
-
-    ['font','line','para','pad'].forEach(function(k){
-        inputs[k].addEventListener('input', function(){ state[k] = k==='line'? parseFloat(this.value): parseInt(this.value,10); reflect(); });
-    });
-    inputs.width.addEventListener('change', function(){ var v=parseInt(this.value,10); if(!isNaN(v)){ state.width=v; reflect(); }});
-    inputs.height.addEventListener('change', function(){ var v=parseInt(this.value,10); state.height = !isNaN(v)&&v>0? v:0; reflect(); });
-    // removed pageHeight input listener
-    modeGroup.addEventListener('click', function(e){ var m=e.target && e.target.getAttribute('data-mode'); if(m){ state.mode=m; reflect(); }});
-    alignGroup && alignGroup.addEventListener('click', function(e){ var a=e.target && e.target.getAttribute('data-align'); if(a){ state.align=a; reflect(); }});
-    colsGroup && colsGroup.addEventListener('click', function(e){ var c=e.target && e.target.getAttribute('data-cols'); if(c){ state.cols=parseInt(c,10)||1; reflect(); }});
-    themeGroup.addEventListener('click', function(e){ var t=e.target && e.target.getAttribute('data-theme'); if(t){ state.theme=t; reflect(); }});
-    syncGroup && syncGroup.addEventListener('click', function(e){ var s=e.target && e.target.getAttribute('data-sync'); if(s){ state.sync=s; reflect(); }});
-    heightModeGroup && heightModeGroup.addEventListener('click', function(e){ var m=e.target && e.target.getAttribute('data-hmode'); if(m){ state.heightMode=m; reflect(); }});
-    btnReset.addEventListener('click', function(){ state={ font:16,line:1.6,para:8,pad:12,width:720,height:0,heightMode:'auto',mode:'scroll',theme:'auto',align:'left',cols:1,sync:'on'}; reflect(); });
-    gear.addEventListener('click', function(){ panel.classList.add('open'); });
-    btnClose.addEventListener('click', function(){ panel.classList.remove('open'); });
-    document.addEventListener('keydown', function(e){ if(e.key==='Escape' && panel.classList.contains('open')){ panel.classList.remove('open'); }});
-
-    reflect();
-    function refreshPresetOptions(){ if(!presetSelect) { return; } presetSelect.innerHTML=''; var keys=Object.keys(presets); if(!keys.length){ var opt=document.createElement('option'); opt.value=''; opt.textContent='(无)'; presetSelect.appendChild(opt); return; } keys.forEach(function(k){ var op=document.createElement('option'); op.value=k; op.textContent=k; presetSelect.appendChild(op); }); }
     refreshPresetOptions();
-    if(btnSavePreset) {
-        btnSavePreset.addEventListener('click', function(){
-            var name=prompt('预设名称');
-            if(!name) { return; }
-            presets[name]=Object.assign({}, state);
-            try{ localStorage.setItem(PRESET_KEY, JSON.stringify(presets)); }catch(_){ }
+    if (btnSavePreset) {
+        btnSavePreset.addEventListener('click', async function () {
+            // If there's an active preset, save to it directly without prompting
+            try {
+                if (activePresetName && presets[activePresetName]) {
+                    presets[activePresetName] = JSON.parse(JSON.stringify(state));
+                    savePresets(presets);
+                    refreshPresetOptions();
+                    if (presetSelect) { presetSelect.value = activePresetName; }
+                    return;
+                }
+            } catch (_) { }
+
+            // Otherwise prompt for a name (or allow rename)
+            var name = await showPrompt('预设名称（留空取消）', activePresetName || '');
+            name = (name || '').trim();
+            if (!name) { return; }
+            try {
+                if (name === activePresetName) {
+                    presets[name] = JSON.parse(JSON.stringify(state));
+                } else {
+                    if (presets[name]) {
+                        var ok = await showConfirm('目标预设已存在，是否覆盖？');
+                        if (!ok) { return; }
+                    }
+                    presets[name] = JSON.parse(JSON.stringify(state));
+                    if (activePresetName && presets[activePresetName] && activePresetName !== name) {
+                        try { delete presets[activePresetName]; } catch (_) { }
+                    }
+                    activePresetName = name;
+                    try { meta.lastPreset = activePresetName; saveStateMeta(meta); } catch (_) { }
+                }
+                savePresets(presets);
+            } catch (_) { presets = presets || {}; }
             refreshPresetOptions();
-            if(presetSelect) { presetSelect.value=name; }
+            if (presetSelect) { presetSelect.value = name; }
         });
     }
-    if(btnDelPreset) {
-        btnDelPreset.addEventListener('click', function(){
-            var name=presetSelect && presetSelect.value;
-            if(!name || !presets[name]) { return; }
-            if(!confirm('删除预设: '+name+'?')) { return; }
-            delete presets[name];
-            try{ localStorage.setItem(PRESET_KEY, JSON.stringify(presets)); }catch(_){ }
-            refreshPresetOptions();
-        });
-    }
-    if(presetSelect) {
-        presetSelect.addEventListener('change', function(){
-            var name=this.value;
-            if(!name || !presets[name]) { return; }
-            state=Object.assign({}, presets[name]);
-            reflect();
-        });
-    }
-    /* ---- 分页计算 ---- */
-    function updatePaging(){
-    if(!pageBar || !pageInfo) { return; } 
-        if(state.mode!=='paged') { pageBar.hidden = true; return; }
-        pageBar.hidden = false;
-        // 如果已经构建了页面边界，优先使用（段落级分页），否则退回按固定高度分页
-        if(typeof DomPager!=='undefined' && DomPager.isActive() && DomPager.totalPages()>0){
-            var cur = DomPager.currentPage()+1; var total = DomPager.totalPages();
-            pageInfo.textContent = cur + ' / ' + total;
-            if(pageProgress){ pageProgress.style.width = (total>0? (cur/total*100):0)+'%'; }
-        } else {
-            var h = (state.heightMode==='manual' && state.height>0)? state.height : (window.innerHeight - 40);
-            var total2 = Math.max(1, Math.ceil(document.documentElement.scrollHeight / h));
-            var current2 = Math.min(total2, Math.max(1, Math.floor(window.scrollY / h) + 1));
-            pageInfo.textContent = current2 + ' / ' + total2;
-            if(pageProgress){ pageProgress.style.width = (total2>0? (current2/total2*100):0)+'%'; }
+
+    /* ================== Reader 设置面板与状态 ================== */
+    (function initReaderSettings() {
+        var gear = document.getElementById('reader-gear');
+        var panel = document.getElementById('reader-settings');
+        if (!gear || !panel) { return; }
+        var inputs = {
+            font: document.getElementById('rs-font'),
+            line: document.getElementById('rs-line'),
+            para: document.getElementById('rs-para'),
+            pad: document.getElementById('rs-pad'),
+            width: document.getElementById('rs-width'),
+            height: document.getElementById('rs-height'),
+            // removed pageHeight; using height + heightMode
+        };
+        var vals = {
+            font: document.getElementById('rs-font-val'),
+            line: document.getElementById('rs-line-val'),
+            para: document.getElementById('rs-para-val'),
+            pad: document.getElementById('rs-pad-val')
+        };
+        var modeGroup = document.getElementById('rs-modes');
+        var alignGroup = document.getElementById('rs-aligns');
+        var colsGroup = document.getElementById('rs-cols');
+        var syncGroup = document.getElementById('rs-sync');
+        var themeGroup = document.getElementById('rs-themes');
+        var heightModeGroup = document.getElementById('rs-heightMode');
+        var btnReset = document.getElementById('rs-reset');
+        var presetSelect = document.getElementById('rs-preset');
+        var btnSavePreset = document.getElementById('rs-savePreset');
+        var btnDelPreset = document.getElementById('rs-delPreset');
+        var btnClose = document.getElementById('rs-close');
+        var pageBar = document.getElementById('reader-pagebar');
+        var pageInfo = document.getElementById('rp-info');
+        var pageProgress = document.getElementById('rp-progress');
+        var btnPrev = document.getElementById('rp-prev');
+        var btnNext = document.getElementById('rp-next');
+
+        var STORE_KEY = 'anhReaderSettings';
+        var PRESET_KEY = 'anhReaderPresets';
+        function loadState() {
+            try { var s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); return (s && typeof s === 'object') ? s : {}; } catch (_) { return {}; }
         }
-    }
-    window.addEventListener('scroll', throttle(updatePaging, 100));
-    window.addEventListener('resize', throttle(function(){ rebuildPagesBoundaries(); updatePaging(); }, 250));
-    btnPrev && btnPrev.addEventListener('click', function(){ jumpPage(-1); });
-    btnNext && btnNext.addEventListener('click', function(){ jumpPage(1); });
-    function jumpPage(delta){
-        if(state.mode!=='paged') { return; }
-        if(typeof DomPager!=='undefined' && DomPager.isActive()){
-            if(delta>0){ DomPager.next(); } else { DomPager.prev(); }
-            updatePaging();
-        } else {
-            if(pagesBoundaries.length>0){
-                var sy = window.scrollY;
-                var lo=0, hi=pagesBoundaries.length-1, ans=0;
-                while(lo<=hi){ var mid=(lo+hi)>>1; if(pagesBoundaries[mid].top<=sy+2){ ans=mid; lo=mid+1; } else { hi=mid-1; } }
-                var target = ans + delta;
-                if(target<0){ target=0; }
-                if(target>=pagesBoundaries.length){ target=pagesBoundaries.length-1; }
-                window.scrollTo({ top: pagesBoundaries[target].top, behavior:'auto' });
+        function saveStateMeta(m) { try { localStorage.setItem(STORE_KEY, JSON.stringify(m)); } catch (_) { } }
+
+        var DEFAULTS = { font: 16, line: 1.6, para: 8, pad: 12, width: 720, height: 0, heightMode: 'auto', mode: 'scroll', theme: 'auto', align: 'left', cols: 1, sync: 'on' };
+        var PRESET_TEMPLATES = {
+            '__default__': { name: '默认', data: JSON.parse(JSON.stringify(DEFAULTS)) },
+            // future templates can be added here
+        };
+        function loadPresets() {
+            try {
+                var p = JSON.parse(localStorage.getItem(PRESET_KEY) || '{}');
+                if (p && typeof p === 'object' && !Array.isArray(p)) { return p; }
+                return {};
+            } catch (_) { return {}; }
+        }
+        function savePresets(p) { try { localStorage.setItem(PRESET_KEY, JSON.stringify(p)); } catch (_) { } }
+
+        // metadata stores ui-level info like last selected preset
+        var meta = loadState();
+        var presets = loadPresets();
+        var activePresetName = (meta && meta.lastPreset) ? meta.lastPreset : '__default__';
+        if (!presets[activePresetName]) {
+            // try to seed from templates if available
+            if (PRESET_TEMPLATES['__default__']) { presets[activePresetName] = JSON.parse(JSON.stringify(PRESET_TEMPLATES['__default__'].data)); }
+            else { try { presets[activePresetName] = JSON.parse(JSON.stringify(DEFAULTS)); } catch (_) { presets[activePresetName] = Object.assign({}, DEFAULTS); } }
+            savePresets(presets);
+        }
+        // state is a live reference to the currently selected preset object
+        var state = presets[activePresetName];
+
+        function reflect() {
+            inputs.font.value = state.font; vals.font.textContent = state.font;
+            inputs.line.value = state.line; vals.line.textContent = state.line.toFixed(2);
+            inputs.para.value = state.para; vals.para.textContent = state.para;
+            inputs.pad.value = state.pad; vals.pad.textContent = state.pad;
+            // width: allow 0/empty to mean "auto" (use full available width)
+            inputs.width.value = state.width || '';
+            inputs.height.value = state.height || '';
+            document.documentElement.style.setProperty('--reader-font-size', state.font + 'px');
+            document.documentElement.style.setProperty('--reader-line-height', state.line);
+            document.documentElement.style.setProperty('--reader-para-spacing', state.para + 'px');
+            document.documentElement.style.setProperty('--reader-page-padding', state.pad + 'px');
+            if (state.width && Number(state.width) > 0) {
+                document.documentElement.style.setProperty('--reader-width', state.width + 'px');
             } else {
-                var h= (state.heightMode==='manual' && state.height>0)? state.height : (window.innerHeight - 40); 
-                window.scrollTo({ top: Math.max(0, window.scrollY + delta * h), behavior:'auto'});
+                // automatic: use full available width (max-width:100%)
+                document.documentElement.style.setProperty('--reader-width', '100%');
             }
-            updatePaging();
-        }
-    }
-    document.addEventListener('keydown', function(e){
-        if(state.mode==='paged'){
-            if(['PageDown','ArrowRight',' '].includes(e.key)){ e.preventDefault(); jumpPage(1); }
-            else if(['PageUp','ArrowLeft'].includes(e.key)){ e.preventDefault(); jumpPage(-1); }
-        }
-    });
-
-    /* ---- 段落级分页：构建页面边界（不修改 DOM，只记录滚动位置） ---- */
-    var pagesBoundaries = []; // [{top:number, firstEl:Element}]
-    function flattenDOM(root){
-    var out=[]; if(!root){ return out; }
-        root.childNodes.forEach(function(ch){
-            if(ch.nodeType===Node.ELEMENT_NODE){
-                out.push(ch); out = out.concat(flattenDOM(ch));
-            }
-        });
-        return out;
-    }
-    function rebuildPagesBoundaries(){
-        pagesBoundaries = [];
-    if(state.mode!=='paged'){ return; }
-        var content = document.getElementById('reader-content');
-    if(!content){ return; }
-    var maxH = (state.heightMode==='manual' && state.height>0)? state.height : (window.innerHeight - 40);
-        if(maxH <= 120){ return; }
-        var els = flattenDOM(content).filter(function(el){ return el.tagName==='PRE' || el.hasAttribute('data-line'); });
-        var curStartEl=null, curAccum=0;
-        els.forEach(function(el){
-            var h = el.offsetHeight; if(h<=0){ return; }
-            if(!curStartEl){ curStartEl = el; }
-            if(curAccum + h > maxH && curAccum>0){
-                // 结束上一页
-                var top = curStartEl.getBoundingClientRect().top + window.scrollY;
-                pagesBoundaries.push({ top: top, firstEl: curStartEl });
-                // 新页
-                curStartEl = el; curAccum = h;
-            } else {
-                curAccum += h;
-            }
-        });
-        if(curStartEl){
-            var top2 = curStartEl.getBoundingClientRect().top + window.scrollY;
-            pagesBoundaries.push({ top: top2, firstEl: curStartEl });
-        }
-        // 按 top 排序（防止顺序异常）
-        pagesBoundaries.sort(function(a,b){ return a.top - b.top; });
-    }
-    // 暴露给外部调试（可选）
-    window.__anhPages = function(){ return pagesBoundaries.slice(); };
-
-    // 在反映设置后构建
-    rebuildPagesBoundaries();
-    // 对外提供刷新（比如字体改变后 reflect 已调用 rebuildIndexNow -> 我们再调用）
-    reflect._rebuildPages = rebuildPagesBoundaries;
-})();
-
-/* ================== DOM 实际分页器 (page.js 风格) ================== */
-var DomPager = (function(){
-    var active = false;
-    var pages = []; // each page is the wrapper element
-    var current = 0;
-    var container = null;
-    var originalHTML = '';
-    var cfg = { pageHeight: 0 };
-
-    function measureAndGroup(){
-    // 只使用一级子元素（原始输入已是扁平结构）
-    var els = Array.from(container.children).filter(function(el){ return el.offsetHeight>0; });
-        var maxH = cfg.pageHeight>0? cfg.pageHeight : (window.innerHeight - 40);
-    if(maxH<120){ maxH = window.innerHeight - 40; }
-        var groups=[]; var cur=[]; var hSum=0;
-        els.forEach(function(el){
-            var h = el.offsetHeight;
-            if(hSum + h > maxH && cur.length>0){ groups.push(cur); cur=[el]; hSum=h; }
-            else { cur.push(el); hSum+=h; }
-        });
-    if(cur.length){ groups.push(cur); }
-        return groups;
-    }
-
-    function buildPages(){
-        // restore original html for clean measurement
-        container.innerHTML = originalHTML;
-        pages = [];
-        var groups = measureAndGroup();
-        // rebuild with cloned pages
-        container.innerHTML = '';
-        groups.forEach(function(group, idx){
-            var wrap = document.createElement('div');
-            wrap.className = 'anh-page';
-            wrap.setAttribute('data-page', String(idx));
-            wrap.style.display = 'none';
-            group.forEach(function(el){ wrap.appendChild(el.cloneNode(true)); });
-            container.appendChild(wrap);
-            pages.push(wrap);
-        });
-        current = Math.min(current, pages.length-1);
-    }
-
-    function applyPage(){
-    if(!active){ return; }
-        pages.forEach(function(p,i){ p.style.display = (i===current)? '' : 'none'; });
-        window.scrollTo({ top:0, behavior:'auto' });
-        if(typeof rebuildIndexNow==='function'){ rebuildIndexNow(); }
-    }
-
-    function enable(options){
-        cfg.pageHeight = (options && options.pageHeight) || 0;
-        if(active){ rebuild(); return; }
-        container = document.getElementById('reader-content');
-        if(!container){ return; }
-        originalHTML = container.innerHTML; // backup
-        active = true;
-        rebuild();
-    }
-    function disable(){
-    if(!active){ return; }
-        if(container && originalHTML){ container.innerHTML = originalHTML; }
-        active=false; pages=[]; current=0; originalHTML='';
-        if(typeof rebuildIndexNow==='function'){ rebuildIndexNow(); }
-    }
-    function rebuild(){ if(!active){ return; } buildPages(); applyPage(); }
-    function goto(i){ if(!active){ return; } if(i<0||i>=pages.length){ return; } current=i; applyPage(); }
-    function next(){ goto(current+1); }
-    function prev(){ goto(current-1); }
-    function isActive(){ return active; }
-    function totalPages(){ return pages.length; }
-    function currentPage(){ return current; }
-    function pageOfElement(el){
-        while(el && el!==container){ if(el.classList && el.classList.contains('anh-page')){ return parseInt(el.getAttribute('data-page')||'0',10); } el=el.parentElement; }
-        return -1;
-    }
-
-    window.addEventListener('resize', throttle(function(){ if(active){ rebuild(); } }, 250));
-    return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement };
-})();
-
-// 供 TTS 高亮自动翻页使用：替换 locateAndHighlight 的分页部分
-(function integrateDomPagerWithTTS(){
-    var origLocate = locateAndHighlight;
-    locateAndHighlight = function(startIdx, len, isSel){
-        origLocate(startIdx, len, isSel);
-        try {
-            if(!DomPager.isActive() || !currentHighlightEl){ return; }
-            var el = currentHighlightEl;
-            // 向上找属于分页单元的直接子元素
-            var pg = DomPager.pageOfElement(el);
-            if(pg>=0 && pg !== DomPager.currentPage()){
-                DomPager.goto(pg);
-                var info = document.getElementById('rp-info');
-                if(info){
-                    var curp = DomPager.currentPage()+1, totp = DomPager.totalPages();
-                    info.textContent = curp+' / '+totp;
-                    var bar = document.getElementById('rp-progress');
-                    if(bar){ bar.style.width = (totp>0? (curp/totp*100):0)+'%'; }
+            document.documentElement.style.setProperty('--reader-height', state.height > 0 ? state.height + 'px' : 'auto');
+            document.body.classList.toggle('reader-paged', state.mode === 'paged');
+            // Ensure .scroll-spacer visibility is explicitly toggled so that
+            // switching back to scroll mode always restores the spacer even if
+            // DomPager or other code previously changed inline styles.
+            try {
+                var spacer = document.querySelector('.scroll-spacer');
+                if (state.mode === 'paged') {
+                    if (spacer) {
+                        spacer.style.display = 'none';
+                        spacer.style.height = '0';
+                        spacer.style.minHeight = '0';
+                    }
+                } else {
+                    // Ensure spacer exists and clear inline styles so CSS shows it
+                    if (!spacer) {
+                        try {
+                            spacer = document.createElement('div');
+                            spacer.className = 'scroll-spacer';
+                            // Prefer inserting right after the reader root for stability
+                            var root = document.querySelector('.reader-root');
+                            if (root && root.parentNode) {
+                                if (root.nextSibling) { root.parentNode.insertBefore(spacer, root.nextSibling); }
+                                else { root.parentNode.appendChild(spacer); }
+                            } else {
+                                var ref = document.getElementById('ctx') || document.body.lastElementChild;
+                                if (ref && ref.parentNode) { ref.parentNode.insertBefore(spacer, ref); }
+                                else { document.body.appendChild(spacer); }
+                            }
+                        } catch (_) { spacer = null; }
+                    }
+                    if (spacer) {
+                        // fully remove inline style so CSS rules apply (including !important)
+                        try { spacer.removeAttribute('style'); } catch (_) { spacer.style.display = ''; spacer.style.height = ''; spacer.style.minHeight = ''; }
+                    }
+                }
+            } catch (_) { }
+            document.body.classList.toggle('reader-align-justify', state.align === 'justify');
+            document.documentElement.style.setProperty('--reader-columns', state.cols);
+            var content = document.getElementById('reader-content');
+            if (content) {
+                if (state.mode === 'scroll') {
+                    content.style.columnCount = state.cols > 1 ? state.cols : 1;
+                    content.style.columnGap = state.cols > 1 ? '48px' : '0';
+                } else {
+                    content.style.columnCount = 1; content.style.columnGap = '0';
                 }
             }
-        }catch(_){ }
-    };
-})();
-
-/* ================== TTS 自动翻页（分页模式） ================== */
-(function enableTTSAutoPage(){
-    var origLocate = locateAndHighlight;
-    locateAndHighlight = function(startIdx, len, isSel){
-        origLocate(startIdx, len, isSel);
-        try {
-            var bodyPaged = document.body.classList.contains('reader-paged');
-            if(!bodyPaged) { return; }
-            var h = (function(){
-                try{ var st = JSON.parse(localStorage.getItem('anhReaderSettings')||'{}');
-                    if(st && st.heightMode==='manual' && st.height>0){ return st.height; }
-                    return window.innerHeight - 40; }catch(_){ return window.innerHeight - 40; }
-            })();
-            if(!currentHighlightEl) { return; }
-            var r = currentHighlightEl.getBoundingClientRect();
-            var y = window.scrollY;
-            var topVisible = y;
-            var pageIndex = Math.floor(topVisible / h);
-            var highlightPage = Math.floor((r.top + y - 10) / h); // 给一点上方缓冲
-            if(highlightPage > pageIndex){
-                window.scrollTo({ top: highlightPage * h, behavior:'smooth' });
+            // 主题
+            document.body.classList.remove('reader-theme-light', 'reader-theme-dark');
+            if (state.theme === 'light') { document.body.classList.add('reader-theme-light'); }
+            else if (state.theme === 'dark') { document.body.classList.add('reader-theme-dark'); }
+            // 激活按钮样式
+            Array.from(modeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-mode') === state.mode); });
+            if (alignGroup) { Array.from(alignGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-align') === state.align); }); }
+            if (colsGroup) { Array.from(colsGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', Number(b.getAttribute('data-cols')) === state.cols); }); }
+            Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme') === state.theme); });
+            if (syncGroup) { Array.from(syncGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sync') === state.sync); }); }
+            if (heightModeGroup) { Array.from(heightModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-hmode') === state.heightMode); }); }
+            // Persist current preset and metadata
+            try { presets[activePresetName] = JSON.parse(JSON.stringify(state)); } catch (_) { presets[activePresetName] = Object.assign({}, state); }
+            savePresets(presets);
+            try { meta.lastPreset = activePresetName; saveStateMeta(meta); } catch (_) { }
+            rebuildIndexNow();
+            // 启用或禁用 DOM 分页
+            if (typeof DomPager !== 'undefined') {
+                if (state.mode === 'paged') { DomPager.enable({ pageHeight: (state.heightMode === 'manual' && state.height > 0) ? state.height : 0 }); }
+                else { DomPager.disable(); }
             }
-        } catch(_){}
-    };
-})();
-
-/* ================== 多列滚动定位优化 ================== */
-(function fixColumnScroll(){
-    var origScrollToLine = scrollToLine;
-    scrollToLine = function(line, smooth, scrollRatio, totalLines){
-        var content = document.getElementById('reader-content');
-        if(content && getComputedStyle(content).columnCount !== '1'){
-            // 在多列模式中，浏览器仍使用垂直滚动，因此直接调用原逻辑即可；若未来使用水平分页，可在此添加特殊逻辑。
+            updatePaging();
         }
-        return origScrollToLine(line, smooth, scrollRatio, totalLines);
-    };
-})();
+
+        ['font', 'line', 'para', 'pad'].forEach(function (k) {
+            inputs[k].addEventListener('input', function () { state[k] = k === 'line' ? parseFloat(this.value) : parseInt(this.value, 10); reflect(); });
+        });
+        inputs.width.addEventListener('change', function () { var v = parseInt(this.value, 10); if (!isNaN(v) && v > 0) { state.width = v; } else { state.width = 0; } reflect(); });
+        inputs.height.addEventListener('change', function () { var v = parseInt(this.value, 10); state.height = !isNaN(v) && v > 0 ? v : 0; reflect(); });
+        // removed pageHeight input listener
+        modeGroup.addEventListener('click', function (e) { var m = e.target && e.target.getAttribute('data-mode'); if (m) { state.mode = m; reflect(); } });
+        alignGroup && alignGroup.addEventListener('click', function (e) { var a = e.target && e.target.getAttribute('data-align'); if (a) { state.align = a; reflect(); } });
+        colsGroup && colsGroup.addEventListener('click', function (e) { var c = e.target && e.target.getAttribute('data-cols'); if (c) { state.cols = parseInt(c, 10) || 1; reflect(); } });
+        themeGroup.addEventListener('click', function (e) { var t = e.target && e.target.getAttribute('data-theme'); if (t) { state.theme = t; reflect(); } });
+        syncGroup && syncGroup.addEventListener('click', function (e) { var s = e.target && e.target.getAttribute('data-sync'); if (s) { state.sync = s; reflect(); } });
+        heightModeGroup && heightModeGroup.addEventListener('click', function (e) { var m = e.target && e.target.getAttribute('data-hmode'); if (m) { state.heightMode = m; reflect(); } });
+        btnReset.addEventListener('click', function () { state = JSON.parse(JSON.stringify(DEFAULTS)); try { presets[activePresetName] = JSON.parse(JSON.stringify(state)); savePresets(presets); } catch (_) { } reflect(); });
+        gear.addEventListener('click', function () { panel.classList.add('open'); });
+        btnClose.addEventListener('click', function () { panel.classList.remove('open'); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && panel.classList.contains('open')) { panel.classList.remove('open'); } });
+
+        reflect();
+        function refreshPresetOptions() {
+            if (!presetSelect) { return; }
+            presetSelect.innerHTML = '';
+            var keys = Object.keys(presets);
+            if (!keys.length) { var opt = document.createElement('option'); opt.value = ''; opt.textContent = '(无)'; presetSelect.appendChild(opt); return; }
+            keys.forEach(function (k) { var op = document.createElement('option'); op.value = k; op.textContent = k; presetSelect.appendChild(op); });
+            // select active preset if present
+            try { if (activePresetName && presets[activePresetName]) { presetSelect.value = activePresetName; } } catch (_) { }
+        }
+        refreshPresetOptions();
+        if (btnSavePreset) {
+            btnSavePreset.addEventListener('click', function () {
+                // If there's an active preset, save to it directly without prompting
+                try {
+                    if (activePresetName && presets[activePresetName]) {
+                        presets[activePresetName] = JSON.parse(JSON.stringify(state));
+                        savePresets(presets);
+                        refreshPresetOptions();
+                        if (presetSelect) { presetSelect.value = activePresetName; }
+                        return;
+                    }
+                } catch (_) { }
+
+                // Otherwise prompt for a name (or allow rename)
+                // showPrompt fallback handled in save path (synchronous UI replacement will be used elsewhere)
+                // If active preset exists, we already save directly above; this branch is rarely used.
+                showPrompt('预设名称（留空取消）', activePresetName || '').then(function (name) {
+                    (async function () {
+                        name = (name || '').trim();
+                        if (!name) { return; }
+                        try {
+                            // If name equals current active, just overwrite
+                            if (name === activePresetName) {
+                                presets[name] = JSON.parse(JSON.stringify(state));
+                            } else {
+                                // if target exists, confirm overwrite
+                                if (presets[name]) {
+                                    if (!(await showConfirm('目标预设已存在，是否覆盖？'))) { return; }
+                                }
+                                // create target from current state
+                                presets[name] = JSON.parse(JSON.stringify(state));
+                                // if we had an active preset with a different name, treat this as a rename: remove old key
+                                if (activePresetName && presets[activePresetName] && activePresetName !== name) {
+                                    try { delete presets[activePresetName]; } catch (_) { }
+                                }
+                                activePresetName = name;
+                                try { meta.lastPreset = activePresetName; saveStateMeta(meta); } catch (_) { }
+                            }
+                            savePresets(presets);
+                        } catch (_) { presets = presets || {}; }
+                        refreshPresetOptions();
+                        if (presetSelect) { presetSelect.value = name; }
+                    })();
+                });
+                var btnNewPreset = document.getElementById('rs-newPreset');
+                if (btnNewPreset) {
+                    btnNewPreset.addEventListener('click', function () {
+                        showPrompt('新建预设名称（唯一）').then(function (name) {
+                            name = (name || '').trim();
+                            if (!name) { return; }
+                            (function proceedNew() {
+                                try { presets[name] = JSON.parse(JSON.stringify(state)); savePresets(presets); } catch (_) { presets[name] = Object.assign({}, state); }
+                                activePresetName = name; meta.lastPreset = name; saveStateMeta(meta);
+                                refreshPresetOptions(); if (presetSelect) { presetSelect.value = name; }
+                                reflect();
+                            })();
+                        });
+                    });
+                }
+                if (btnDelPreset) {
+                    btnDelPreset.addEventListener('click', async function () {
+                        var name = presetSelect && presetSelect.value;
+                        if (!name || !presets[name]) { return; }
+                        if (!(await showConfirm('删除预设: ' + name + '?'))) { return; }
+                        delete presets[name];
+                        try { savePresets(presets); } catch (_) { }
+                        refreshPresetOptions();
+                        // if deleted active preset, fallback to default or first available
+                        if (name === activePresetName) {
+                            var keys = Object.keys(presets);
+                            if (keys.length > 0) { activePresetName = keys[0]; state = presets[activePresetName]; }
+                            else { activePresetName = '__default__'; presets[activePresetName] = JSON.parse(JSON.stringify(PRESET_TEMPLATES['__default__'].data)); state = presets[activePresetName]; savePresets(presets); }
+                            meta.lastPreset = activePresetName; saveStateMeta(meta);
+                            if (presetSelect) { presetSelect.value = activePresetName; }
+                            reflect();
+                        }
+                    });
+                }
+                if (presetSelect) {
+                    presetSelect.addEventListener('change', function () {
+                        var name = this.value;
+                        if (!name || !presets[name]) { return; }
+                        try { activePresetName = name; state = presets[activePresetName]; meta.lastPreset = activePresetName; saveStateMeta(meta); } catch (_) { activePresetName = '__default__'; state = presets[activePresetName]; }
+                        reflect();
+                    });
+                }
+                /* ---- 分页计算 ---- */
+                function updatePaging() {
+                    if (!pageBar || !pageInfo) { return; }
+                    if (state.mode !== 'paged') { pageBar.hidden = true; return; }
+                    pageBar.hidden = false;
+                    // 如果已经构建了页面边界，优先使用（段落级分页），否则退回按固定高度分页
+                    if (typeof DomPager !== 'undefined' && DomPager.isActive() && DomPager.totalPages() > 0) {
+                        var cur = DomPager.currentPage() + 1; var total = DomPager.totalPages();
+                        pageInfo.textContent = cur + ' / ' + total;
+                        if (pageProgress) { pageProgress.style.width = (total > 0 ? (cur / total * 100) : 0) + '%'; }
+                    } else {
+                        var h = (state.heightMode === 'manual' && state.height > 0) ? state.height : (window.innerHeight - 40);
+                        var total2 = Math.max(1, Math.ceil(document.documentElement.scrollHeight / h));
+                        var current2 = Math.min(total2, Math.max(1, Math.floor(window.scrollY / h) + 1));
+                        pageInfo.textContent = current2 + ' / ' + total2;
+                        if (pageProgress) { pageProgress.style.width = (total2 > 0 ? (current2 / total2 * 100) : 0) + '%'; }
+                    }
+                }
+                window.addEventListener('scroll', throttle(updatePaging, 100));
+                window.addEventListener('resize', throttle(function () { rebuildPagesBoundaries(); updatePaging(); }, 250));
+                btnPrev && btnPrev.addEventListener('click', function () { jumpPage(-1); });
+                btnNext && btnNext.addEventListener('click', function () { jumpPage(1); });
+                function jumpPage(delta) {
+                    if (state.mode !== 'paged') { return; }
+                    if (typeof DomPager !== 'undefined' && DomPager.isActive()) {
+                        if (delta > 0) { DomPager.next(); } else { DomPager.prev(); }
+                        updatePaging();
+                    } else {
+                        if (pagesBoundaries.length > 0) {
+                            var sy = window.scrollY;
+                            var lo = 0, hi = pagesBoundaries.length - 1, ans = 0;
+                            while (lo <= hi) { var mid = (lo + hi) >> 1; if (pagesBoundaries[mid].top <= sy + 2) { ans = mid; lo = mid + 1; } else { hi = mid - 1; } }
+                            var target = ans + delta;
+                            if (target < 0) { target = 0; }
+                            if (target >= pagesBoundaries.length) { target = pagesBoundaries.length - 1; }
+                            window.scrollTo({ top: pagesBoundaries[target].top, behavior: 'auto' });
+                        } else {
+                            var h = (state.heightMode === 'manual' && state.height > 0) ? state.height : (window.innerHeight - 40);
+                            window.scrollTo({ top: Math.max(0, window.scrollY + delta * h), behavior: 'auto' });
+                        }
+                        updatePaging();
+                    }
+                }
+                document.addEventListener('keydown', function (e) {
+                    if (state.mode === 'paged') {
+                        if (['PageDown', 'ArrowRight', ' '].includes(e.key)) { e.preventDefault(); jumpPage(1); }
+                        else if (['PageUp', 'ArrowLeft'].includes(e.key)) { e.preventDefault(); jumpPage(-1); }
+                    }
+                });
+
+                /* ---- 段落级分页：构建页面边界（不修改 DOM，只记录滚动位置） ---- */
+                var pagesBoundaries = []; // [{top:number, firstEl:Element}]
+                function flattenDOM(root) {
+                    var out = []; if (!root) { return out; }
+                    root.childNodes.forEach(function (ch) {
+                        if (ch.nodeType === Node.ELEMENT_NODE) {
+                            out.push(ch); out = out.concat(flattenDOM(ch));
+                        }
+                    });
+                    return out;
+                }
+                function rebuildPagesBoundaries() {
+                    pagesBoundaries = [];
+                    if (state.mode !== 'paged') { return; }
+                    var content = document.getElementById('reader-content');
+                    if (!content) { return; }
+                    var maxH = (state.heightMode === 'manual' && state.height > 0) ? state.height : (window.innerHeight - 40);
+                    if (maxH <= 120) { return; }
+                    var els = flattenDOM(content).filter(function (el) { return el.tagName === 'PRE' || el.hasAttribute('data-line'); });
+                    var curStartEl = null, curAccum = 0;
+                    els.forEach(function (el) {
+                        var h = el.offsetHeight; if (h <= 0) { return; }
+                        if (!curStartEl) { curStartEl = el; }
+                        if (curAccum + h > maxH && curAccum > 0) {
+                            // 结束上一页
+                            var top = curStartEl.getBoundingClientRect().top + window.scrollY;
+                            pagesBoundaries.push({ top: top, firstEl: curStartEl });
+                            // 新页
+                            curStartEl = el; curAccum = h;
+                        } else {
+                            curAccum += h;
+                        }
+                    });
+                    if (curStartEl) {
+                        var top2 = curStartEl.getBoundingClientRect().top + window.scrollY;
+                        pagesBoundaries.push({ top: top2, firstEl: curStartEl });
+                    }
+                    // 按 top 排序（防止顺序异常）
+                    pagesBoundaries.sort(function (a, b) { return a.top - b.top; });
+                }
+                // 暴露给外部调试（可选）
+                window.__anhPages = function () { return pagesBoundaries.slice(); };
+
+                // 在反映设置后构建
+                rebuildPagesBoundaries();
+                // 对外提供刷新（比如字体改变后 reflect 已调用 rebuildIndexNow -> 我们再调用）
+                reflect._rebuildPages = rebuildPagesBoundaries;
+            })();
+
+            /* ================== DOM 实际分页器 (page.js 风格) ================== */
+            var DomPager = (function () {
+                var active = false;
+                var pages = []; // each page is the wrapper element
+                var current = 0;
+                var container = null;
+                var originalHTML = '';
+                var cfg = { pageHeight: 0 };
+
+                function measureAndGroup() {
+                    // 只使用一级子元素（原始输入已是扁平结构）
+                    var els = Array.from(container.children).filter(function (el) { return el.offsetHeight > 0; });
+                    var maxH = cfg.pageHeight > 0 ? cfg.pageHeight : (window.innerHeight - 40);
+                    if (maxH < 120) { maxH = window.innerHeight - 40; }
+                    var groups = []; var cur = []; var hSum = 0;
+                    els.forEach(function (el) {
+                        var h = el.offsetHeight;
+                        if (hSum + h > maxH && cur.length > 0) { groups.push(cur); cur = [el]; hSum = h; }
+                        else { cur.push(el); hSum += h; }
+                    });
+                    if (cur.length) { groups.push(cur); }
+                    return groups;
+                }
+
+                function buildPages() {
+                    // restore original html for clean measurement
+                    container.innerHTML = originalHTML;
+                    pages = [];
+                    var groups = measureAndGroup();
+                    // rebuild with cloned pages
+                    container.innerHTML = '';
+                    groups.forEach(function (group, idx) {
+                        var wrap = document.createElement('div');
+                        wrap.className = 'anh-page';
+                        wrap.setAttribute('data-page', String(idx));
+                        wrap.style.display = 'none';
+                        group.forEach(function (el) { wrap.appendChild(el.cloneNode(true)); });
+                        container.appendChild(wrap);
+                        pages.push(wrap);
+                    });
+                    current = Math.min(current, pages.length - 1);
+                }
+
+                function applyPage() {
+                    if (!active) { return; }
+                    pages.forEach(function (p, i) { p.style.display = (i === current) ? '' : 'none'; });
+                    window.scrollTo({ top: 0, behavior: 'auto' });
+                    if (typeof rebuildIndexNow === 'function') { rebuildIndexNow(); }
+                }
+
+                function enable(options) {
+                    cfg.pageHeight = (options && options.pageHeight) || 0;
+                    if (active) { rebuild(); return; }
+                    container = document.getElementById('reader-content');
+                    if (!container) { return; }
+                    originalHTML = container.innerHTML; // backup
+                    active = true;
+                    rebuild();
+                }
+                function disable() {
+                    if (!active) { return; }
+                    if (container && originalHTML) { container.innerHTML = originalHTML; }
+                    active = false; pages = []; current = 0; originalHTML = '';
+                    if (typeof rebuildIndexNow === 'function') { rebuildIndexNow(); }
+                }
+                function rebuild() { if (!active) { return; } buildPages(); applyPage(); }
+                function goto(i) { if (!active) { return; } if (i < 0 || i >= pages.length) { return; } current = i; applyPage(); }
+                function next() { goto(current + 1); }
+                function prev() { goto(current - 1); }
+                function isActive() { return active; }
+                function totalPages() { return pages.length; }
+                function currentPage() { return current; }
+                function pageOfElement(el) {
+                    while (el && el !== container) { if (el.classList && el.classList.contains('anh-page')) { return parseInt(el.getAttribute('data-page') || '0', 10); } el = el.parentElement; }
+                    return -1;
+                }
+
+                window.addEventListener('resize', throttle(function () { if (active) { rebuild(); } }, 250));
+                return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement };
+            })();
+
+            // 供 TTS 高亮自动翻页使用：替换 locateAndHighlight 的分页部分
+            (function integrateDomPagerWithTTS() {
+                var origLocate = locateAndHighlight;
+                locateAndHighlight = function (startIdx, len, isSel) {
+                    origLocate(startIdx, len, isSel);
+                    try {
+                        if (!DomPager.isActive() || !currentHighlightEl) { return; }
+                        var el = currentHighlightEl;
+                        // 向上找属于分页单元的直接子元素
+                        var pg = DomPager.pageOfElement(el);
+                        if (pg >= 0 && pg !== DomPager.currentPage()) {
+                            DomPager.goto(pg);
+                            var info = document.getElementById('rp-info');
+                            if (info) {
+                                var curp = DomPager.currentPage() + 1, totp = DomPager.totalPages();
+                                info.textContent = curp + ' / ' + totp;
+                                var bar = document.getElementById('rp-progress');
+                                if (bar) { bar.style.width = (totp > 0 ? (curp / totp * 100) : 0) + '%'; }
+                            }
+                        }
+                    } catch (_) { }
+                };
+            })();
+
+            /* ================== TTS 自动翻页（分页模式） ================== */
+            (function enableTTSAutoPage() {
+                var origLocate = locateAndHighlight;
+                locateAndHighlight = function (startIdx, len, isSel) {
+                    origLocate(startIdx, len, isSel);
+                    try {
+                        var bodyPaged = document.body.classList.contains('reader-paged');
+                        if (!bodyPaged) { return; }
+                        var h = (function () {
+                            try {
+                                var st = JSON.parse(localStorage.getItem('anhReaderSettings') || '{}');
+                                if (st && st.heightMode === 'manual' && st.height > 0) { return st.height; }
+                                return window.innerHeight - 40;
+                            } catch (_) { return window.innerHeight - 40; }
+                        })();
+                        if (!currentHighlightEl) { return; }
+                        var r = currentHighlightEl.getBoundingClientRect();
+                        var y = window.scrollY;
+                        var topVisible = y;
+                        var pageIndex = Math.floor(topVisible / h);
+                        var highlightPage = Math.floor((r.top + y - 10) / h); // 给一点上方缓冲
+                        if (highlightPage > pageIndex) {
+                            window.scrollTo({ top: highlightPage * h, behavior: 'smooth' });
+                        }
+                    } catch (_) { }
+                };
+            })();
+
+            /* ================== 多列滚动定位优化 ================== */
+            (function fixColumnScroll() {
+                var origScrollToLine = scrollToLine;
+                scrollToLine = function (line, smooth, scrollRatio, totalLines) {
+                    var content = document.getElementById('reader-content');
+                    if (content && getComputedStyle(content).columnCount !== '1') {
+                        // 在多列模式中，浏览器仍使用垂直滚动，因此直接调用原逻辑即可；若未来使用水平分页，可在此添加特殊逻辑。
+                    }
+                    return origScrollToLine(line, smooth, scrollRatio, totalLines);
+                };
+            })();

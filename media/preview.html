@@ -190,6 +190,7 @@
         <div class="rs-row"><label>预设</label><div style="flex:1;display:flex;gap:6px;align-items:center;">
             <select id="rs-preset" class="rs-select" style="flex:1;min-width:120px;"></select>
             <button class="rs-toggle" id="rs-savePreset" style="white-space:nowrap;">保存</button>
+            <button class="rs-toggle" id="rs-newPreset" style="white-space:nowrap;">新建</button>
             <button class="rs-toggle" id="rs-delPreset" style="white-space:nowrap;">删除</button>
         </div></div>
         <div class="rs-row"><label>主题模式</label><div class="rs-theme-group" id="rs-themes"><button data-theme="light" class="rs-toggle">浅色</button><button data-theme="dark" class="rs-toggle">深色</button><button data-theme="auto" class="rs-toggle">跟随</button></div></div>
@@ -222,6 +223,17 @@
             <li id="ctx-copy">复制纯文本</li>
             <li id="ctx-tts">朗读选中文本</li>
         </ul>
+    </div>
+
+    <!-- 简易模态对话，用于替代 window.prompt/confirm（webview sandbox 无 allow-modals） -->
+    <div id="anh-modal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;z-index:3000;align-items:center;justify-content:center;">
+        <div id="anh-modal-backdrop" style="position:absolute;left:0;top:0;right:0;bottom:0;background:#000a;"></div>
+        <div id="anh-modal-box" style="position:relative;z-index:3001;background:var(--vscode-editor-background,#222);color:var(--vscode-editor-foreground,#ddd);padding:16px;border-radius:8px;min-width:320px;max-width:90vw;">
+            <div id="anh-modal-title" style="font-weight:600;margin-bottom:8px;"></div>
+            <div id="anh-modal-body" style="margin-bottom:12px;"></div>
+            <div id="anh-modal-input-wrap" style="margin-bottom:12px;"><input id="anh-modal-input" style="width:100%;padding:6px;border-radius:4px;border:1px solid #555;"/></div>
+            <div style="text-align:right;"><button id="anh-modal-ok" class="rs-toggle">确定</button><button id="anh-modal-cancel" class="rs-toggle" style="margin-left:8px;">取消</button></div>
+        </div>
     </div>
 
     <!-- 外链脚本（带 nonce） -->
