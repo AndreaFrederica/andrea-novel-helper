@@ -5,6 +5,9 @@
 var DEBUG_TTS = true;           // 控制是否在 Webview 控制台输出日志
 var DEBUG_POST_TO_EXT = false;  // 如需把日志发回扩展侧，设为 true
 var PAGE_HEIGHT_RATIO = 0.7;    // 分页模式下页面高度相对于窗口高度的比例
+// 本地字体缓存与扩展下发字体
+var vscodeFontFamily = '';
+var localFontFamilies = [];
 
 function dlog(tag, payload) {
     if (!DEBUG_TTS) { return; }
@@ -565,6 +568,9 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var themeGroup = document.getElementById('rs-themes');
     var heightModeGroup = document.getElementById('rs-heightMode');
     var widthModeGroup = document.getElementById('rs-widthMode');
+    var fontModeGroup = document.getElementById('rs-fontMode');
+    var fontFamilySelect = document.getElementById('rs-fontFamily');
+    var btnReloadFonts = document.getElementById('rs-reloadFonts');
     var btnReset = document.getElementById('rs-reset');
     var presetSelect = document.getElementById('rs-preset');
     var btnSavePreset = document.getElementById('rs-savePreset');
@@ -590,6 +596,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         line: 1.6,
         para: 8,
         pad: 12,
+        fontFamilyMode: 'auto',
+        fontFamily: '',
         width: 720,
         widthMode: 'manual',
         height: 0,
@@ -658,6 +666,35 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         document.documentElement.style.setProperty('--reader-line-height', state.line);
         document.documentElement.style.setProperty('--reader-para-spacing', state.para + 'px');
         document.documentElement.style.setProperty('--reader-page-padding', state.pad + 'px');
+        // 计算并设置字体族：按“跟随 VS Code / 自定义”逻辑直接写入最终栈
+        try {
+            var autoFollow = (state.fontFamilyMode === 'auto');
+
+            // VS Code 设置里拿到的值（可能为空或逗号分隔列表）
+            var raw = String(vscodeFontFamily || '').trim();
+
+            function platformEditorDefault() {
+                var ua = navigator.userAgent || '';
+                var isWin = /Windows/i.test(ua);
+                var isMac = /Mac/i.test(ua);
+                if (isWin) { return "'Consolas','Courier New',monospace"; }
+                if (isMac) { return "Menlo,Monaco,'Courier New',monospace"; }
+                // Linux：保留 Droid 回退更接近 VS Code
+                return "'Droid Sans Mono','monospace','Droid Sans Fallback'";
+            }
+
+            var stack;
+            if (autoFollow) {
+                // 关键：raw 可能本身就是“逗号分隔列表”，不要整体加引号，直接用
+                stack = raw ? raw : platformEditorDefault();
+            } else {
+                // 自定义模式
+                stack = String(state.fontFamily || '').trim();
+            }
+
+            // 直接把最终栈写入 CSS 变量（不要再拼接 UI 栈）
+            document.documentElement.style.setProperty('--reader-font-family', stack || '');
+        } catch (_) { }
         if (state.width && Number(state.width) > 0) {
             document.documentElement.style.setProperty('--reader-width', state.width + 'px');
         } else {
@@ -730,6 +767,16 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme') === state.theme); });
         if (syncGroup) { Array.from(syncGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sync') === state.sync); }); }
         if (heightModeGroup) { Array.from(heightModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-hmode') === state.heightMode); }); }
+        // 字体模式/下拉同步
+        try {
+            if (typeof fontModeGroup !== 'undefined' && fontModeGroup) {
+                Array.from(fontModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-fmode') === state.fontFamilyMode); });
+            }
+            if (typeof fontFamilySelect !== 'undefined' && fontFamilySelect) {
+                fontFamilySelect.disabled = (state.fontFamilyMode !== 'custom');
+                if (state.fontFamilyMode === 'custom' && state.fontFamily) { fontFamilySelect.value = state.fontFamily; }
+            }
+        } catch (_) { }
         Array.from(widthModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
             b.classList.toggle('active', b.getAttribute('data-wmode') === state.widthMode);
         });
@@ -768,6 +815,76 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             reflect();
         });
     }
+
+    // 字体枚举与下拉填充（使用 Local Font Access API，如果不可用则静默失败）
+    var localFontFamilies = [];
+    function populateFontSelect() {
+        try {
+            if (!fontFamilySelect) { return; }
+            fontFamilySelect.innerHTML = '';
+            if (!localFontFamilies || !localFontFamilies.length) {
+                var opt = document.createElement('option'); opt.value = ''; opt.textContent = '(无可用系统字体)'; fontFamilySelect.appendChild(opt); return;
+            }
+            var blank = document.createElement('option'); blank.value = ''; blank.textContent = '(默认)'; fontFamilySelect.appendChild(blank);
+            localFontFamilies.forEach(function (f) { var op = document.createElement('option'); op.value = f; op.textContent = f; fontFamilySelect.appendChild(op); });
+            // 尝试恢复状态中保存的值
+            try { if (state.fontFamilyMode === 'custom' && state.fontFamily) { fontFamilySelect.value = state.fontFamily; } } catch (_) { }
+        } catch (_) { }
+    }
+
+    async function loadLocalFonts(force) {
+        // 先走扩展
+        if (vscode) {
+            vscode.postMessage({ type: 'requestFonts', force: !!force });
+            return; // 等 message 回来填充
+        }
+
+        // 没有扩展 API 才尝试 queryLocalFonts（非 webview 才可能放行）
+        if (!('queryLocalFonts' in window)) { localFontFamilies = []; populateFontSelect(); return; }
+        try {
+            const faces = await window.queryLocalFonts();
+            const fams = Array.from(new Set(faces.map(f => (f.family || '').trim()).filter(Boolean))).sort();
+            localFontFamilies = fams; populateFontSelect();
+        } catch (e) {
+            // 在 webview 下这里大概率是 SecurityError：权限策略禁止
+            localFontFamilies = []; populateFontSelect();
+        }
+    }
+
+    // 接收扩展的字体列表
+    window.addEventListener('message', (ev) => {
+        const msg = ev.data;
+        if (msg?.type === 'fontFamilies') {
+            localFontFamilies = Array.isArray(msg.list) ? msg.list : [];
+            populateFontSelect();
+        } else if (msg?.type === 'vscodeFontFamily') {
+            vscodeFontFamily = String(msg.value || '').trim();
+            if (typeof reflect === 'function') { reflect(); }
+        }
+    });
+
+
+    // 绑定字体控件事件
+    if (fontModeGroup) {
+        fontModeGroup.addEventListener('click', function (e) {
+            var fm = e.target && e.target.getAttribute('data-fmode');
+            if (!fm) { return; }
+            state.fontFamilyMode = fm; reflect();
+        });
+    }
+    if (fontFamilySelect) {
+        fontFamilySelect.addEventListener('change', function () { state.fontFamily = this.value || ''; reflect(); });
+    }
+    if (btnReloadFonts) { btnReloadFonts.addEventListener('click', function () { loadLocalFonts(true); }); }
+
+    // 首次尝试填充字体（异步）
+    loadLocalFonts(false).catch(function () { });
+    // 启动时主动请求扩展下发 editor.fontFamily，便于“跟随 VS Code”立即生效
+    try {
+        if (vscode && typeof vscode.postMessage === 'function') {
+            try { vscode.postMessage({ type: 'requestVscodeFontFamily' }); } catch (_) { }
+        }
+    } catch (_) { }
     if (btnReset) { btnReset.addEventListener('click', function () { state = JSON.parse(JSON.stringify(DEFAULTS)); try { presets[activePresetName] = JSON.parse(JSON.stringify(state)); savePresets(presets); } catch (_) { } reflect(); }); }
     if (gear) { gear.addEventListener('click', function () { panel.classList.add('open'); }); }
     if (btnClose) { btnClose.addEventListener('click', function () { panel.classList.remove('open'); }); }
@@ -1449,6 +1566,14 @@ function showConfirm(msg) {
     window.addEventListener('message', function (ev) {
         var msg = ev && ev.data;
         if (!msg || !isSyncOn()) { return; }
+
+        // 接收来自扩展的编辑器字体设置，供「跟随 VS Code」模式使用
+        try {
+            if (typeof msg.vscodeFontFamily === 'string') {
+                vscodeFontFamily = String(msg.vscodeFontFamily || '');
+                try { reflect(); } catch (_) { }
+            }
+        } catch (_) { }
 
         if (msg.type === 'editorScroll') {
             var ratio = (typeof msg.ratio === 'number') ? Math.min(1, Math.max(0, msg.ratio)) : 0;

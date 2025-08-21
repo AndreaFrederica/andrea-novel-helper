@@ -23,6 +23,7 @@
 		"dlog",
 		"errout",
 		"expl",
+		"fmode",
 		"fsdb",
 		"hmode",
 		"hugewarn",

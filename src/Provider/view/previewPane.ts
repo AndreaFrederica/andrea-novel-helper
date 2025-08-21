@@ -2,6 +2,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as fontList from 'font-list';
 import { mdToPlainText } from '../../utils/md_plain';
 import { setActivePreview } from '../../context/previewRedirect';
 
@@ -56,6 +57,34 @@ export class PreviewManager {
             })
         );
     }
+
+    // —— 字体清单缓存（避免频繁枚举系统目录）
+    private fontsCache?: { list: string[]; ts: number };
+
+    /** 扩展侧枚举本机字体并回发给 webview */
+    private async sendFontFamilies(doc: vscode.TextDocument) {
+        const key = doc.uri.toString();
+        const panel = this.panels.get(key);
+        if (!panel) { return; }
+
+        try {
+            let list: string[];
+            const reuse = this.fontsCache && (Date.now() - this.fontsCache.ts < 5 * 60 * 1000); // 5 分钟缓存
+            if (reuse) {
+                list = this.fontsCache!.list;
+            } else {
+                const arr = await fontList.getFonts(); // ["Arial","Microsoft YaHei",...]
+                const uniq = Array.from(new Set(arr.map(n => n.trim()).filter(Boolean)))
+                    .sort((a, b) => a.localeCompare(b));
+                this.fontsCache = { list: uniq, ts: Date.now() };
+                list = uniq;
+            }
+            panel.webview.postMessage({ type: 'fontFamilies', list });
+        } catch (e: any) {
+            panel.webview.postMessage({ type: 'fontFamilies', list: [], error: String(e?.message || e) });
+        }
+    }
+
 
     openPreviewForActiveEditor() {
         const doc = vscode.window.activeTextEditor?.document;
@@ -245,6 +274,23 @@ export class PreviewManager {
     private onWebviewMessage(doc: vscode.TextDocument, msg: any) {
         const key = doc.uri.toString();
 
+        if (msg?.type === 'requestFonts') {
+            this.sendFontFamilies(doc); // 异步列举并回发 { type:'fontFamilies', list:[...] }
+            return;
+        }
+
+        // Webview 在启动时可能会请求当前编辑器的 fontFamily，以便立即应用“跟随 VS Code”模式
+        if (msg?.type === 'requestVscodeFontFamily') {
+            const panel = this.panels.get(key);
+            let editorFontFamily = '';
+            try {
+                const cfg = vscode.workspace.getConfiguration('editor', doc.uri);
+                editorFontFamily = String(cfg.get<string>('fontFamily') || '');
+            } catch (_) { editorFontFamily = ''; }
+            try { panel?.webview.postMessage({ type: 'vscodeFontFamily', value: editorFontFamily }); } catch { }
+            return;
+        }
+
         if (msg?.type === 'previewScroll' && typeof msg.ratio === 'number') {
             const t = Date.now();
             const last = this.loopGuard.get(key) ?? 0;
@@ -392,53 +438,61 @@ export class PreviewManager {
         return { text, blocks };
     }
 
-private sendEditorTop(doc: vscode.TextDocument) {
-    const key = doc.uri.toString();
-    const panel = this.panels.get(key);
-    if (!panel) { return; }
-    const editor = this.findEditor(doc);
-    if (!editor) { return; }
+    private sendEditorTop(doc: vscode.TextDocument) {
+        const key = doc.uri.toString();
+        const panel = this.panels.get(key);
+        if (!panel) { return; }
+        const editor = this.findEditor(doc);
+        if (!editor) { return; }
 
-    const state = this.scrollState.get(key);
-    if (state?.isScrolling && state.lastDirection === 'preview') { return; }
+        const state = this.scrollState.get(key);
+        if (state?.isScrolling && state.lastDirection === 'preview') { return; }
 
-    const vr = editor.visibleRanges[0];
-    const topVisible = vr ? vr.start.line : editor.selection.active.line;
-    const bottomVisible = vr ? vr.end.line : topVisible;
+        const vr = editor.visibleRanges[0];
+        const topVisible = vr ? vr.start.line : editor.selection.active.line;
+        const bottomVisible = vr ? vr.end.line : topVisible;
 
-    const totalLines = doc.lineCount;
-    const scrollRatio = Math.min(1, topVisible / Math.max(1, totalLines - 1));
-    const ratio4 = +scrollRatio.toFixed(4);
+        const totalLines = doc.lineCount;
+        const scrollRatio = Math.min(1, topVisible / Math.max(1, totalLines - 1));
+        const ratio4 = +scrollRatio.toFixed(4);
 
-    // 消回声：如果刚刚是预览驱动的，且在静音窗内 & 比例差在死区内，就不要回传
-    const lastFromPreview = this.lastAppliedFromPreview.get(key);
-    if (lastFromPreview && (Date.now() - lastFromPreview.ts <= MUTE_MS) &&
-        Math.abs(lastFromPreview.ratio - ratio4) <= EPS) {
-        return;
-    }
-
-    this.scrollState.set(key, { isScrolling: true, lastDirection: 'editor' });
-    this.loopGuard.set(key, Date.now());
-
-    const metrics = this.estimateEditorPixels(doc, editor);
-
-    panel.webview.postMessage({
-        type: 'editorScroll',
-        ratio: ratio4,
-        editorScrollHeight: metrics.scrollHeight,
-        editorViewportPx: metrics.viewportPx,
-        topLine: topVisible,
-        bottomLine: bottomVisible,
-        totalLines: totalLines
-    });
-
-    setTimeout(() => {
-        const st = this.scrollState.get(key);
-        if (st?.lastDirection === 'editor') {
-            this.scrollState.set(key, { isScrolling: false, lastDirection: 'editor' });
+        // 消回声：如果刚刚是预览驱动的，且在静音窗内 & 比例差在死区内，就不要回传
+        const lastFromPreview = this.lastAppliedFromPreview.get(key);
+        if (lastFromPreview && (Date.now() - lastFromPreview.ts <= MUTE_MS) &&
+            Math.abs(lastFromPreview.ratio - ratio4) <= EPS) {
+            return;
         }
-    }, 300);
-}
+
+        this.scrollState.set(key, { isScrolling: true, lastDirection: 'editor' });
+        this.loopGuard.set(key, Date.now());
+
+        const metrics = this.estimateEditorPixels(doc, editor);
+
+        // 尝试读取编辑器字体设置，传递给 webview 以便“跟随 VS Code”模式使用
+        let editorFontFamily = '';
+        try {
+            const cfg = vscode.workspace.getConfiguration('editor', doc.uri);
+            editorFontFamily = String(cfg.get<string>('fontFamily') || '');
+        } catch (_) { editorFontFamily = ''; }
+
+        panel.webview.postMessage({
+            type: 'editorScroll',
+            ratio: ratio4,
+            editorScrollHeight: metrics.scrollHeight,
+            editorViewportPx: metrics.viewportPx,
+            topLine: topVisible,
+            bottomLine: bottomVisible,
+            totalLines: totalLines,
+            vscodeFontFamily: editorFontFamily
+        });
+
+        setTimeout(() => {
+            const st = this.scrollState.get(key);
+            if (st?.lastDirection === 'editor') {
+                this.scrollState.set(key, { isScrolling: false, lastDirection: 'editor' });
+            }
+        }, 300);
+    }
 
 
     /** 从模板文件生成 HTML，并把脚本改成外链+nonce */

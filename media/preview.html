@@ -29,6 +29,9 @@
         body {
             margin: 0;
             padding: 12px;
+            /* 默认跟随 VS Code 主题变量；在没有 reader-theme-* 类时也能匹配宿主主题 */
+            background: var(--vscode-editor-background, #fafafa);
+            color: var(--vscode-editor-foreground, #222);
             font: 13px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
         }
 
@@ -76,6 +79,7 @@
             font-size: var(--reader-font-size);
             line-height: var(--reader-line-height);
             margin: 0 0 var(--reader-para-spacing) 0;
+            font-family: var(--reader-font-family, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial);
         }
 
         .reader-content [data-line]:last-child pre {
@@ -181,7 +185,7 @@
             color: var(--vscode-editor-foreground, #ddd);
             border: 1px solid #5556;
             border-radius: 16px;
-            width: 380px;
+            width: 80%;
             max-width: 90vw;
             max-height: 85vh;
             overflow: auto;
@@ -406,6 +410,18 @@
         <div class="rs-row"><label>字体大小</label><input id="rs-font" type="range" min="12" max="30" step="1">
             <div class="rs-value" id="rs-font-val"></div>
         </div>
+                <div class="rs-row"><label>字体</label>
+                    <div style="flex:1;display:flex;gap:8px;align-items:center;">
+                        <div class="rs-mode-group" id="rs-fontMode">
+                            <button data-fmode="auto" class="rs-toggle">跟随</button>
+                            <button data-fmode="custom" class="rs-toggle">自定义</button>
+                        </div>
+                        <select id="rs-fontFamily" class="rs-select" style="flex:1;min-width:140px;" disabled>
+                            <option value="">（加载系统字体…）</option>
+                        </select>
+                        <button id="rs-reloadFonts" class="rs-toggle" title="重新枚举系统字体">刷新</button>
+                    </div>
+                </div>
         <div class="rs-row"><label>行间距</label><input id="rs-line" type="range" min="1.2" max="2.2" step="0.05">
             <div class="rs-value" id="rs-line-val"></div>
         </div>
