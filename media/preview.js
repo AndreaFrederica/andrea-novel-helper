@@ -634,18 +634,28 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
                         spacer = document.createElement('div');
                         spacer.className = 'scroll-spacer';
                         var root = document.querySelector('.reader-root');
-                        if (root && root.parentNode) {
-                            if (root.nextSibling) { root.parentNode.insertBefore(spacer, root.nextSibling); }
-                            else { root.parentNode.appendChild(spacer); }
+                        var content = document.getElementById('reader-content');
+                        if (root) {
+                            // 优先把 spacer 放在 .reader-root 内、紧跟 #reader-content 之后（更稳定地影响内容高度）
+                            if (content && content.parentNode === root) {
+                                if (content.nextSibling) { root.insertBefore(spacer, content.nextSibling); }
+                                else { root.appendChild(spacer); }
+                            } else {
+                                console.error('spacer插入错误：', root);
+                            }
                         } else {
-                            var ref = document.getElementById('ctx') || document.body.lastElementChild;
-                            if (ref && ref.parentNode) { ref.parentNode.insertBefore(spacer, ref); }
-                            else { document.body.appendChild(spacer); }
+                            console.error('spacer插入错误：', root);
                         }
                     } catch (_) { spacer = null; }
                 }
                 if (spacer) {
-                    try { spacer.removeAttribute('style'); } catch (_) { spacer.style.display = ''; spacer.style.height = ''; spacer.style.minHeight = ''; }
+                    try {
+                        spacer.removeAttribute('style');
+                    } catch (_) {
+                        spacer.style.display = '';
+                        spacer.style.height = '';
+                        spacer.style.minHeight = '';
+                    }
                 }
             }
         } catch (_) { }
@@ -973,6 +983,9 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement };
     })();
 
+    // 将 DomPager 暴露到全局，供其他独立作用域（如 initScrollSync）访问
+    try { window.DomPager = DomPager; } catch (_) { }
+
     // 在 DomPager 定义完成后、TTS联动代码附近追加（但不在 updatePaging 里）
     (function wireDomPagerOutboundSync() {
         try {
@@ -1191,7 +1204,6 @@ function showConfirm(msg) {
 /* ================== Preview ↔ VSCode 同步滚动 ================== */
 (function initScrollSync() {
     if (!window.acquireVsCodeApi) { return; }
-    var vscode = acquireVsCodeApi();
 
     // —— 读当前预设的同步开关、模式（不依赖内部 state 变量）——
     function getCurrentState() {
