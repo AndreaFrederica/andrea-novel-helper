@@ -543,6 +543,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var presetSelect = document.getElementById('rs-preset');
     var btnSavePreset = document.getElementById('rs-savePreset');
     var btnDelPreset = document.getElementById('rs-delPreset');
+    var btnNewPreset = document.getElementById('rs-newPreset');
     var btnClose = document.getElementById('rs-close');
     var pageBar = document.getElementById('reader-pagebar');
     var pageInfo = document.getElementById('rp-info');
@@ -761,6 +762,33 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
                 } catch (_) { presets = presets || {}; }
                 refreshPresetOptions();
                 if (presetSelect) { presetSelect.value = name; }
+            });
+        });
+    }
+    if (btnNewPreset) {
+        btnNewPreset.addEventListener('click', function () {
+            showPrompt('新建预设名称（唯一）', '').then(function (name) {
+                name = (name || '').trim();
+                if (!name) { return; }
+
+                function finalizeCreate() {
+                    try { presets[name] = JSON.parse(JSON.stringify(state)); }
+                    catch (_) { presets[name] = Object.assign({}, state); }
+                    activePresetName = name;
+                    try { meta.lastPreset = activePresetName; saveStateMeta(meta); } catch (_) { }
+                    savePresets(presets);
+                    refreshPresetOptions();
+                    if (presetSelect) { presetSelect.value = name; }
+                    reflect();
+                }
+
+                if (presets[name]) {
+                    showConfirm('预设已存在：' + name + '，是否覆盖？').then(function (ok) {
+                        if (ok) { finalizeCreate(); }
+                    });
+                } else {
+                    finalizeCreate();
+                }
             });
         });
     }
@@ -1008,15 +1036,91 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     reflect();
 })();
 
-/* ================== 轻量弹窗：showPrompt / showConfirm（如页面已有请忽略） ================== */
 function showPrompt(msg, defVal) {
+    var modal = document.getElementById('anh-modal');
+    if (!modal) {
+        return Promise.resolve(window.prompt(msg || '输入', defVal || ''));
+    }
     return new Promise(function (resolve) {
-        var v = window.prompt(msg || '输入', defVal || '');
-        resolve(v);
+        var title = document.getElementById('anh-modal-title');
+        var body = document.getElementById('anh-modal-body');
+        var input = document.getElementById('anh-modal-input');
+        var ok = document.getElementById('anh-modal-ok');
+        var cancel = document.getElementById('anh-modal-cancel');
+        var backdrop = document.getElementById('anh-modal-backdrop');
+
+        title.textContent = '提示';
+        body.textContent = msg || '';
+        input.value = defVal || '';
+        modal.style.display = 'flex';
+
+        function close(v) {
+            modal.style.display = 'none';
+            cleanup();
+            resolve(v);
+        }
+        function onKey(e) {
+            if (e.key === 'Enter') { e.preventDefault(); ok.click(); }
+            else if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+        }
+        function cleanup() {
+            ok.removeEventListener('click', onOk);
+            cancel.removeEventListener('click', onCancel);
+            backdrop.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+        }
+        function onOk() { close(input.value); }
+        function onCancel() { close(null); }
+
+        ok.addEventListener('click', onOk);
+        cancel.addEventListener('click', onCancel);
+        backdrop.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey);
+        try { input.focus(); input.select(); } catch (_) { }
     });
 }
+
 function showConfirm(msg) {
+    var modal = document.getElementById('anh-modal');
+    if (!modal) {
+        return Promise.resolve(window.confirm(msg || '确认？'));
+    }
     return new Promise(function (resolve) {
-        resolve(window.confirm(msg || '确认？'));
+        var title = document.getElementById('anh-modal-title');
+        var body = document.getElementById('anh-modal-body');
+        var inputWrap = document.getElementById('anh-modal-input-wrap');
+        var ok = document.getElementById('anh-modal-ok');
+        var cancel = document.getElementById('anh-modal-cancel');
+        var backdrop = document.getElementById('anh-modal-backdrop');
+
+        title.textContent = '确认';
+        body.textContent = msg || '';
+        inputWrap.style.display = 'none';
+        modal.style.display = 'flex';
+
+        function close(v) {
+            modal.style.display = 'none';
+            inputWrap.style.display = '';
+            cleanup();
+            resolve(v);
+        }
+        function onKey(e) {
+            if (e.key === 'Enter') { e.preventDefault(); ok.click(); }
+            else if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+        }
+        function cleanup() {
+            ok.removeEventListener('click', onOk);
+            cancel.removeEventListener('click', onCancel);
+            backdrop.removeEventListener('click', onCancel);
+            document.removeEventListener('keydown', onKey);
+        }
+        function onOk() { close(true); }
+        function onCancel() { close(false); }
+
+        ok.addEventListener('click', onOk);
+        cancel.addEventListener('click', onCancel);
+        backdrop.addEventListener('click', onCancel);
+        document.addEventListener('keydown', onKey);
+        try { ok.focus(); } catch (_) { }
     });
 }
