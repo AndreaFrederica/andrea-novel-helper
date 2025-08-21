@@ -973,6 +973,63 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement };
     })();
 
+    // 在 DomPager 定义完成后、TTS联动代码附近追加（但不在 updatePaging 里）
+    (function wireDomPagerOutboundSync() {
+        try {
+            // 防止重复包装
+            if (window.__anhDomPagerWired) { return; }
+            window.__anhDomPagerWired = true;
+
+            if (typeof DomPager === 'undefined') { return; }
+
+            // 取 vscode 句柄（优先用全局已创建的 vscode）
+            var vs = (typeof vscode !== 'undefined' && vscode)
+                || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
+            if (!vs) { return; }
+
+            // 保存原方法
+            var _goto = DomPager.goto;
+            var _next = DomPager.next;
+            var _prev = DomPager.prev;
+
+            function notifyPaged() {
+                if (!document.body.classList.contains('reader-paged')) { return; }
+                if (!DomPager.isActive || !DomPager.isActive()) { return; }
+
+                var total = Math.max(1, DomPager.totalPages());
+                var page = DomPager.currentPage();
+                var ratio = total > 1 ? (page / (total - 1)) : 0;
+
+                try {
+                    vs.postMessage({
+                        type: 'previewScroll',
+                        mode: 'paged',
+                        ratio: ratio,
+                        page: page,
+                        totalPages: total
+                    });
+                } catch (_) { }
+            }
+
+            // 包装翻页方法（一次性）
+            DomPager.goto = function (i) { _goto(i); notifyPaged(); };
+            DomPager.next = function () { _next(); notifyPaged(); };
+            DomPager.prev = function () { _prev(); notifyPaged(); };
+
+            // 页码条按钮：避免重复绑定
+            var btnPrev = document.getElementById('rp-prev');
+            var btnNext = document.getElementById('rp-next');
+            if (btnPrev && !btnPrev.__wiredNotify) {
+                btnPrev.__wiredNotify = true;
+                btnPrev.addEventListener('click', function () { setTimeout(notifyPaged, 0); });
+            }
+            if (btnNext && !btnNext.__wiredNotify) {
+                btnNext.__wiredNotify = true;
+                btnNext.addEventListener('click', function () { setTimeout(notifyPaged, 0); });
+            }
+        } catch (_) { }
+    })();
+
     /* 将 DomPager 与 TTS 高亮联动 */
     (function integrateDomPagerWithTTS() {
         var origLocate = locateAndHighlight;
@@ -998,6 +1055,11 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     (function enableTTSAutoPage() {
         var origLocate = locateAndHighlight;
         locateAndHighlight = function (startIdx, len, isSel) {
+            // ✨ 若 DomPager 已启用，直接交给 integrateDomPagerWithTTS 处理，避免双重干预
+            if (typeof DomPager !== 'undefined' && DomPager.isActive && DomPager.isActive()) {
+                return origLocate(startIdx, len, isSel);
+            }
+
             origLocate(startIdx, len, isSel);
             try {
                 var bodyPaged = document.body.classList.contains('reader-paged');
@@ -1020,6 +1082,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             } catch (_) { }
         };
     })();
+
 
     /* 多列滚动定位优化（目前保持与垂直滚动一致） */
     (function fixColumnScroll() {
@@ -1124,3 +1187,134 @@ function showConfirm(msg) {
         try { ok.focus(); } catch (_) { }
     });
 }
+
+/* ================== Preview ↔ VSCode 同步滚动 ================== */
+(function initScrollSync() {
+    if (!window.acquireVsCodeApi) { return; }
+    var vscode = acquireVsCodeApi();
+
+    // —— 读当前预设的同步开关、模式（不依赖内部 state 变量）——
+    function getCurrentState() {
+        try {
+            var meta = JSON.parse(localStorage.getItem('anhReaderSettings') || '{}');
+            var presets = JSON.parse(localStorage.getItem('anhReaderPresets') || '{}');
+            var name = (meta && meta.lastPreset) ? meta.lastPreset : '__default__';
+            return (presets && presets[name]) ? presets[name] : {};
+        } catch (_) { return {}; }
+    }
+    function isSyncOn() {
+        var s = getCurrentState();
+        return !s.sync || s.sync === 'on';
+    }
+    function isPaged() { return document.body.classList.contains('reader-paged'); }
+
+    // —— spacer 工具：让滚动模式下总高度与 Editor 一致 —— 
+    function ensureSpacer() {
+        var s = document.querySelector('.scroll-spacer');
+        if (!s) {
+            s = document.createElement('div');
+            s.className = 'scroll-spacer';
+            var root = document.querySelector('.reader-root');
+            if (root && root.parentNode) {
+                if (root.nextSibling) { root.parentNode.insertBefore(s, root.nextSibling); }
+                else { root.parentNode.appendChild(s); }
+            } else {
+                document.body.appendChild(s);
+            }
+        }
+        return s;
+    }
+    function adjustSpacerToTotalHeight(targetTotal) {
+        if (!targetTotal || targetTotal <= 0 || isPaged()) { return; }
+        var s = ensureSpacer();
+        var doc = document.documentElement;
+        var spacerPx = parseFloat(getComputedStyle(s).height) || 0;
+        var currentTotal = doc.scrollHeight;
+        var base = currentTotal - spacerPx; // 去掉 spacer 后的真实内容高度
+        var need = Math.max(0, targetTotal - base);
+        if (Math.abs(need - spacerPx) > 1) { s.style.height = need + 'px'; }
+    }
+
+    // —— 公共度量 & 发消息 —— 
+    function getScrollMetrics() {
+        var doc = document.documentElement;
+        var max = Math.max(1, doc.scrollHeight - window.innerHeight);
+        var ratio = max > 0 ? (window.scrollY / max) : 0;
+        return {
+            ratio: Math.min(1, Math.max(0, ratio)),
+            scrollHeight: doc.scrollHeight,
+            viewport: window.innerHeight
+        };
+    }
+    function postPreviewRatio() {
+        if (!isSyncOn()) { return; }
+        var mode = isPaged() ? 'paged' : 'scroll';
+        var payload = { type: 'previewScroll', mode: mode };
+        if (mode === 'paged' && window.DomPager && window.DomPager.isActive && window.DomPager.isActive()) {
+            var page = window.DomPager.currentPage();
+            var total = Math.max(1, window.DomPager.totalPages());
+            payload.ratio = total > 1 ? (page / (total - 1)) : 0;
+            payload.page = page; payload.totalPages = total;
+        } else {
+            var m = getScrollMetrics();
+            payload.ratio = m.ratio;
+            payload.scrollHeight = m.scrollHeight;
+            payload.viewport = m.viewport;
+        }
+        try { vscode.postMessage(payload); } catch (_) { }
+    }
+
+    // —— 双向防回环（小锁）——
+    var lockUntil = 0;
+    function inLock() { return Date.now() < lockUntil; }
+    function withLock(fn) { lockUntil = Date.now() + 220; try { fn(); } finally { } }
+
+    // —— 预览 → 扩展：本地滚动上报 —— 
+    window.addEventListener('scroll', throttle(function () {
+        if (!isSyncOn() || inLock()) { return; }
+        postPreviewRatio();
+    }, 60));
+
+    // —— 扩展 → 预览：接收滚动/翻页指令 —— 
+    window.addEventListener('message', function (ev) {
+        var msg = ev && ev.data;
+        if (!msg || !isSyncOn()) { return; }
+
+        if (msg.type === 'editorScroll') {
+            var ratio = (typeof msg.ratio === 'number') ? Math.min(1, Math.max(0, msg.ratio)) : 0;
+
+            if (isPaged()) {
+                if (window.DomPager && window.DomPager.isActive && window.DomPager.isActive()) {
+                    var total = Math.max(1, window.DomPager.totalPages());
+                    var target = Math.min(total - 1, Math.max(0, Math.round(ratio * (total - 1))));
+                    withLock(function () {
+                        window.DomPager.goto(target);
+                        try {
+                            var info = document.getElementById('rp-info');
+                            var bar = document.getElementById('rp-progress');
+                            if (info) { info.textContent = (window.DomPager.currentPage() + 1) + ' / ' + total; }
+                            if (bar) { bar.style.width = (total > 0 ? ((window.DomPager.currentPage() + 1) / total * 100) : 0) + '%'; }
+                        } catch (_) { }
+                    });
+                }
+            } else {
+                // 滚动模式：按比例滚动；若提供了编辑器总高度，则调 spacer 匹配
+                if (typeof msg.editorScrollHeight === 'number' && msg.editorScrollHeight > 0) {
+                    adjustSpacerToTotalHeight(msg.editorScrollHeight);
+                }
+                var doc = document.documentElement;
+                var max = Math.max(1, doc.scrollHeight - window.innerHeight);
+                var top = ratio * max;
+                withLock(function () { window.scrollTo({ top: top, behavior: 'auto' }); });
+            }
+        } else if (msg.type === 'revealLine') {
+            // 备用协议：按行数/比例定位（与你已有 scrollToLine 保持一致）
+            withLock(function () {
+                scrollToLine(msg.line || 0, true, msg.ratio, msg.totalLines);
+            });
+        }
+    });
+
+    // —— 暴露给外部（可选） —— 
+    window.__anhSync = { adjustSpacerToTotalHeight: adjustSpacerToTotalHeight };
+})();
