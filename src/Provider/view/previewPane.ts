@@ -8,6 +8,8 @@ import { setActivePreview } from '../../context/previewRedirect';
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
 
 type Block = { srcLine: number; text: string };
+const EPS = 0.02;     // 2% 死区
+const MUTE_MS = 350;  // 与 webview 一致的“静音窗口”
 
 export function registerPreviewPane(context: vscode.ExtensionContext) {
     const manager = new PreviewManager(context);
@@ -30,6 +32,8 @@ export class PreviewManager {
     /** 当前被“跟随活动编辑器”复用的主预览面板（用户首次点击按钮后进入跟随模式） */
     private primaryPanel: vscode.WebviewPanel | undefined;
     private primaryDocUri: string | undefined;
+    // 记录“刚刚是预览端拉我”的状态，用于 sendEditorTop 抑制回传
+    private lastAppliedFromPreview = new Map<string, { ratio: number, ts: number }>();
 
     constructor(private readonly context: vscode.ExtensionContext) {
         this.context.subscriptions.push(
@@ -250,14 +254,29 @@ export class PreviewManager {
             const editor = this.findEditor(doc);
             if (!editor) { return; }
 
+            // 当前编辑器的可见顶行
+            const vr = editor.visibleRanges[0];
+            const curTop = vr ? vr.start.line : editor.selection.active.line;
+            const total = Math.max(1, doc.lineCount - 1);
+            const curRatio = total > 0 ? (curTop / total) : 0;
+
+            // 死区判断：预览上报与当前编辑器视角差距很小，就不动编辑器
+            if (Math.abs(curRatio - msg.ratio) <= EPS) {
+                return;
+            }
+
             this.scrollState.set(key, { isScrolling: true, lastDirection: 'preview' });
 
-            const total = Math.max(0, doc.lineCount - 1);
-            const targetLine = this.clampInt(Math.round(msg.ratio * total), 0, doc.lineCount - 1);
+            // 目标：优先使用预览给的 topLine/bottomLine，否则按比例
+            let targetLine = Number.isInteger(msg.topLine)
+                ? this.clampInt(msg.topLine, 0, doc.lineCount - 1)
+                : this.clampInt(Math.round(msg.ratio * Math.max(0, doc.lineCount - 1)), 0, doc.lineCount - 1);
 
             const pos = new vscode.Position(targetLine, 0);
-            // 分页/滚动两种模式都用“尽量靠上显示”，体验更贴合比例
             editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
+
+            // 记录“刚刚是预览驱动的”
+            this.lastAppliedFromPreview.set(key, { ratio: +msg.ratio.toFixed(4), ts: Date.now() });
 
             setTimeout(() => {
                 const st = this.scrollState.get(key);
@@ -267,6 +286,7 @@ export class PreviewManager {
             }, 300);
             return;
         }
+
 
         if (msg?.type === 'previewTopLine' && Number.isInteger(msg.line)) {
             const t = Date.now();
@@ -306,6 +326,42 @@ export class PreviewManager {
             console.warn(`[Preview JS Error] ${msg.message || ''} @${msg.line || ''}:${msg.col || ''}`);
             vscode.window.setStatusBarMessage('预览脚本错误: ' + (msg.message || ''), 4000);
         }
+
+        if (msg?.type === 'previewViewport'
+            && Number.isInteger(msg.top) && Number.isInteger(msg.bottom)) {
+            const t = Date.now();
+            const last = this.loopGuard.get(key) ?? 0;
+            const state = this.scrollState.get(key);
+            if (t - last < 500 || (state?.isScrolling && state.lastDirection === 'editor')) { return; }
+
+            const editor = this.findEditor(doc);
+            if (!editor) { return; }
+
+            this.scrollState.set(key, { isScrolling: true, lastDirection: 'preview' });
+
+            // 估算可视行数，用来“向上滚”时贴底
+            const metrics = this.estimateEditorPixels(doc, editor);
+            const vr = editor.visibleRanges[0];
+            const visibleCount =
+                vr ? (vr.end.line - vr.start.line + 1)
+                    : (metrics.viewportPx ? Math.max(1, Math.round(metrics.viewportPx / Math.max(1, metrics.lineHeight))) : 30);
+
+            const dir: 'down' | 'up' = (msg.dir === 'up') ? 'up' : 'down';
+            let targetTop = msg.top;
+            if (dir === 'up') { targetTop = msg.bottom - (visibleCount - 1); }
+            targetTop = this.clampInt(targetTop, 0, doc.lineCount - 1);
+
+            const pos = new vscode.Position(targetTop, 0);
+            editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.AtTop);
+
+            setTimeout(() => {
+                const st = this.scrollState.get(key);
+                if (st?.lastDirection === 'preview') {
+                    this.scrollState.set(key, { isScrolling: false, lastDirection: 'preview' });
+                }
+            }, 300);
+            return;
+        }
     }
 
     private updatePanel(panel: vscode.WebviewPanel, doc: vscode.TextDocument) {
@@ -336,40 +392,54 @@ export class PreviewManager {
         return { text, blocks };
     }
 
-    private sendEditorTop(doc: vscode.TextDocument) {
-        const key = doc.uri.toString();
-        const panel = this.panels.get(key);
-        if (!panel) { return; }
-        const editor = this.findEditor(doc);
-        if (!editor) { return; }
+private sendEditorTop(doc: vscode.TextDocument) {
+    const key = doc.uri.toString();
+    const panel = this.panels.get(key);
+    if (!panel) { return; }
+    const editor = this.findEditor(doc);
+    if (!editor) { return; }
 
-        const state = this.scrollState.get(key);
-        if (state?.isScrolling && state.lastDirection === 'preview') { return; }
+    const state = this.scrollState.get(key);
+    if (state?.isScrolling && state.lastDirection === 'preview') { return; }
 
-        const topVisible = editor.visibleRanges[0]?.start.line ?? editor.selection.active.line;
-        const totalLines = doc.lineCount;
-        const scrollRatio = Math.min(1, topVisible / Math.max(1, totalLines - 1));
+    const vr = editor.visibleRanges[0];
+    const topVisible = vr ? vr.start.line : editor.selection.active.line;
+    const bottomVisible = vr ? vr.end.line : topVisible;
 
-        this.scrollState.set(key, { isScrolling: true, lastDirection: 'editor' });
-        this.loopGuard.set(key, Date.now());
+    const totalLines = doc.lineCount;
+    const scrollRatio = Math.min(1, topVisible / Math.max(1, totalLines - 1));
+    const ratio4 = +scrollRatio.toFixed(4);
 
-        const metrics = this.estimateEditorPixels(doc, editor);
-
-        // ✅ 新协议：editorScroll（preview.js 会按比例滚动；若提供了 editorScrollHeight，会用 spacer 精准对齐）
-        panel.webview.postMessage({
-            type: 'editorScroll',
-            ratio: scrollRatio,
-            editorScrollHeight: metrics.scrollHeight,
-            editorViewportPx: metrics.viewportPx
-        });
-
-        setTimeout(() => {
-            const st = this.scrollState.get(key);
-            if (st?.lastDirection === 'editor') {
-                this.scrollState.set(key, { isScrolling: false, lastDirection: 'editor' });
-            }
-        }, 300);
+    // 消回声：如果刚刚是预览驱动的，且在静音窗内 & 比例差在死区内，就不要回传
+    const lastFromPreview = this.lastAppliedFromPreview.get(key);
+    if (lastFromPreview && (Date.now() - lastFromPreview.ts <= MUTE_MS) &&
+        Math.abs(lastFromPreview.ratio - ratio4) <= EPS) {
+        return;
     }
+
+    this.scrollState.set(key, { isScrolling: true, lastDirection: 'editor' });
+    this.loopGuard.set(key, Date.now());
+
+    const metrics = this.estimateEditorPixels(doc, editor);
+
+    panel.webview.postMessage({
+        type: 'editorScroll',
+        ratio: ratio4,
+        editorScrollHeight: metrics.scrollHeight,
+        editorViewportPx: metrics.viewportPx,
+        topLine: topVisible,
+        bottomLine: bottomVisible,
+        totalLines: totalLines
+    });
+
+    setTimeout(() => {
+        const st = this.scrollState.get(key);
+        if (st?.lastDirection === 'editor') {
+            this.scrollState.set(key, { isScrolling: false, lastDirection: 'editor' });
+        }
+    }, 300);
+}
+
 
     /** 从模板文件生成 HTML，并把脚本改成外链+nonce */
     private wrapHtml(panel: vscode.WebviewPanel, body: string) {

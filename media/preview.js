@@ -62,6 +62,30 @@ function rebuildIndexNow() {
 }
 var rebuildIndex = throttle(rebuildIndexNow, 100);
 
+function getVisibleLineRange() {
+    if (!index.length) { return { topLine: 0, bottomLine: 0 }; }
+    var yTop = window.scrollY;
+    var yBot = yTop + window.innerHeight;
+
+    function findByY(y) {
+        var lo = 0, hi = index.length - 1, ans = 0;
+        while (lo <= hi) {
+            var mid = (lo + hi) >> 1;
+            if (index[mid].top <= y) { ans = mid; lo = mid + 1; }
+            else { hi = mid - 1; }
+        }
+        return ans;
+    }
+
+    var iTop = findByY(yTop);
+    var iBot = findByY(yBot);
+    var topLine = index[Math.max(0, Math.min(iTop, index.length - 1))].line;
+    var bottomLine = index[Math.max(0, Math.min(iBot, index.length - 1))].line;
+    if (bottomLine < topLine) { bottomLine = topLine; }
+    return { topLine: topLine, bottomLine: bottomLine };
+}
+
+
 function scrollToLine(line, smooth, scrollRatio, totalLines) {
     if (!index.length) { return; }
 
@@ -912,6 +936,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         var current = 0;
         var container = null;
         var originalHTML = '';
+        var pageStarts = [];   // 每页第一个 data-line 的行号（单调）
         var cfg = { pageHeight: 0 };
 
         function measureAndGroup() {
@@ -943,6 +968,28 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
                 pages.push(wrap);
             });
             current = Math.min(current, pages.length - 1);
+            // 重新计算每页起始 data-line（用 clone 后的节点也OK）
+            pageStarts = pages.map(function (p) {
+                var first = p.querySelector('[data-line]');
+                return first ? Number(first.getAttribute('data-line')) : Number.MAX_SAFE_INTEGER;
+            });
+            // 防御：保证严格递增
+            for (var i = 1; i < pageStarts.length; i++) {
+                if (!(pageStarts[i] > pageStarts[i - 1])) {
+                    pageStarts[i] = pageStarts[i - 1] + 1;
+                }
+            }
+        }
+
+        function pageOfLine(line) {
+            if (!active || !pageStarts.length) { return -1; }
+            var lo = 0, hi = pageStarts.length - 1, ans = 0;
+            while (lo <= hi) {
+                var mid = (lo + hi) >> 1;
+                if (pageStarts[mid] <= line) { ans = mid; lo = mid + 1; }
+                else { hi = mid - 1; }
+            }
+            return ans;
         }
 
         function applyPage() {
@@ -980,7 +1027,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         }
 
         window.addEventListener('resize', throttle(function () { if (active) { rebuild(); } }, 250));
-        return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement };
+        return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement, pageOfLine };
     })();
 
     // 将 DomPager 暴露到全局，供其他独立作用域（如 initScrollSync）访问
@@ -995,11 +1042,6 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
             if (typeof DomPager === 'undefined') { return; }
 
-            // 取 vscode 句柄（优先用全局已创建的 vscode）
-            var vs = (typeof vscode !== 'undefined' && vscode)
-                || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
-            if (!vs) { return; }
-
             // 保存原方法
             var _goto = DomPager.goto;
             var _next = DomPager.next;
@@ -1008,20 +1050,28 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             function notifyPaged() {
                 if (!document.body.classList.contains('reader-paged')) { return; }
                 if (!DomPager.isActive || !DomPager.isActive()) { return; }
+                if (!vscode) { return; }
+                if (!isSyncOnLocal()) { return; }   
 
-                var total = Math.max(1, DomPager.totalPages());
-                var page = DomPager.currentPage();
-                var ratio = total > 1 ? (page / (total - 1)) : 0;
-
-                try {
-                    vs.postMessage({
-                        type: 'previewScroll',
-                        mode: 'paged',
-                        ratio: ratio,
-                        page: page,
-                        totalPages: total
-                    });
-                } catch (_) { }
+                // 优先用全局可见区间函数（若稍后 initScrollSync 才绑定，也有本地回退）
+                var vr = (window.__anhVisibleRange && window.__anhVisibleRange());
+                if (!vr) {
+                    // 回退：用 index 二分 y->line
+                    function lineAtY(y) {
+                        if (!index || !index.length) { return 0; }
+                        var lo = 0, hi = index.length - 1, ans = 0;
+                        while (lo <= hi) {
+                            var mid = (lo + hi) >> 1;
+                            if (index[mid].top <= y) { ans = mid; lo = mid + 1; }
+                            else { hi = mid - 1; }
+                        }
+                        return index[ans] ? (index[ans].line | 0) : 0;
+                    }
+                    var yTop = window.scrollY + 2;
+                    var yBot = yTop + window.innerHeight - 2;
+                    vr = { top: lineAtY(yTop), bottom: lineAtY(yBot) };
+                }
+                try { vscode.postMessage({ type: 'previewViewport', top: vr.top, bottom: vr.bottom, dir: 'down' }); } catch (_) { }
             }
 
             // 包装翻页方法（一次性）
@@ -1203,7 +1253,31 @@ function showConfirm(msg) {
 
 /* ================== Preview ↔ VSCode 同步滚动 ================== */
 (function initScrollSync() {
+
     if (!window.acquireVsCodeApi) { return; }
+    function lineAtY(y) {
+        if (!index.length) { return 0; }
+        var lo = 0, hi = index.length - 1, ans = 0;
+        while (lo <= hi) {
+            var mid = (lo + hi) >> 1;
+            if (index[mid].top <= y) { ans = mid; lo = mid + 1; }
+            else { hi = mid - 1; }
+        }
+        return index[ans] ? (index[ans].line | 0) : 0;
+    }
+    function visibleSrcLineRange() {
+        var yTop = window.scrollY + 2;
+        var yBot = yTop + window.innerHeight - 2;
+        return { top: lineAtY(yTop), bottom: lineAtY(yBot) };
+    }
+    // 暴露给其他 IIFE（如 DomPager 的 wire 通知）
+    try { window.__anhVisibleRange = visibleSrcLineRange; } catch (_) { }
+
+    function postPreviewViewport() {
+        if (!isSyncOn()) { return; }
+        var r = visibleSrcLineRange();
+        try { vscode.postMessage({ type: 'previewViewport', top: r.top, bottom: r.bottom, dir: 'down' }); } catch (_) { }
+    }
 
     // —— 读当前预设的同步开关、模式（不依赖内部 state 变量）——
     function getCurrentState() {
@@ -1262,30 +1336,52 @@ function showConfirm(msg) {
         if (!isSyncOn()) { return; }
         var mode = isPaged() ? 'paged' : 'scroll';
         var payload = { type: 'previewScroll', mode: mode };
+
         if (mode === 'paged' && window.DomPager && window.DomPager.isActive && window.DomPager.isActive()) {
             var page = window.DomPager.currentPage();
             var total = Math.max(1, window.DomPager.totalPages());
             payload.ratio = total > 1 ? (page / (total - 1)) : 0;
-            payload.page = page; payload.totalPages = total;
+            payload.ratio = +payload.ratio.toFixed(4);
         } else {
             var m = getScrollMetrics();
-            payload.ratio = m.ratio;
-            payload.scrollHeight = m.scrollHeight;
-            payload.viewport = m.viewport;
+            payload.ratio = +m.ratio.toFixed(4);
+            var vr = getVisibleLineRange();
+            payload.topLine = vr.topLine;
+            payload.bottomLine = vr.bottomLine;
         }
+
+        if (!shouldSend(payload.ratio)) { return; }
         try { vscode.postMessage(payload); } catch (_) { }
     }
 
-    // —— 双向防回环（小锁）——
-    var lockUntil = 0;
+
+    // —— 防回声控制 —— 
+    var lockUntil = 0;          // 禁止“接收后又发”的时间窗（滚动期间不发出去）
+    var muteSendUntil = 0;      // 静音窗口：本端滚动时不向扩展上报
+    var lastEditorRatio = null; // 最近一次“扩展→预览”要求的比例
+    var EPS = 0.02;             // 死区：比例差低于 2% 不触发回传
+
     function inLock() { return Date.now() < lockUntil; }
-    function withLock(fn) { lockUntil = Date.now() + 220; try { fn(); } finally { } }
+    function withLock(ms, fn) {
+        lockUntil = Date.now() + (typeof ms === 'number' ? ms : 350);
+        muteSendUntil = lockUntil;
+        try { fn(); } finally { }
+    }
+    function shouldSend(currentRatio) {
+        if (Date.now() < muteSendUntil) { return false; }
+        if (lastEditorRatio !== null && Math.abs(currentRatio - lastEditorRatio) <= EPS) { return false; }
+        return true;
+    }
+
 
     // —— 预览 → 扩展：本地滚动上报 —— 
     window.addEventListener('scroll', throttle(function () {
         if (!isSyncOn() || inLock()) { return; }
+        // 这里让 postPreviewRatio 自己做死区判断
         postPreviewRatio();
     }, 60));
+
+
 
     // —— 扩展 → 预览：接收滚动/翻页指令 —— 
     window.addEventListener('message', function (ev) {
@@ -1294,12 +1390,13 @@ function showConfirm(msg) {
 
         if (msg.type === 'editorScroll') {
             var ratio = (typeof msg.ratio === 'number') ? Math.min(1, Math.max(0, msg.ratio)) : 0;
+            lastEditorRatio = ratio;
 
             if (isPaged()) {
                 if (window.DomPager && window.DomPager.isActive && window.DomPager.isActive()) {
                     var total = Math.max(1, window.DomPager.totalPages());
                     var target = Math.min(total - 1, Math.max(0, Math.round(ratio * (total - 1))));
-                    withLock(function () {
+                    withLock(350, function () {
                         window.DomPager.goto(target);
                         try {
                             var info = document.getElementById('rp-info');
@@ -1310,20 +1407,39 @@ function showConfirm(msg) {
                     });
                 }
             } else {
-                // 滚动模式：按比例滚动；若提供了编辑器总高度，则调 spacer 匹配
+                // 滚动模式：优先使用来自编辑器的 topLine 来定位；否则退回比例
                 if (typeof msg.editorScrollHeight === 'number' && msg.editorScrollHeight > 0) {
                     adjustSpacerToTotalHeight(msg.editorScrollHeight);
                 }
                 var doc = document.documentElement;
-                var max = Math.max(1, doc.scrollHeight - window.innerHeight);
-                var top = ratio * max;
-                withLock(function () { window.scrollTo({ top: top, behavior: 'auto' }); });
+                if (Number.isInteger(msg.topLine) && Number.isInteger(msg.totalLines) && msg.totalLines > 1) {
+                    var r = Math.min(1, Math.max(0, msg.topLine / (msg.totalLines - 1)));
+                    var max = Math.max(1, doc.scrollHeight - window.innerHeight);
+                    var top = r * max;
+                    withLock(350, function () { window.scrollTo({ top: top, behavior: 'auto' }); });
+                } else {
+                    var max2 = Math.max(1, doc.scrollHeight - window.innerHeight);
+                    var top2 = ratio * max2;
+                    withLock(350, function () { window.scrollTo({ top: top2, behavior: 'auto' }); });
+                }
             }
         } else if (msg.type === 'revealLine') {
             // 备用协议：按行数/比例定位（与你已有 scrollToLine 保持一致）
             withLock(function () {
                 scrollToLine(msg.line || 0, true, msg.ratio, msg.totalLines);
             });
+        } else if (msg.type === 'editorViewport') {
+            var mid = Math.round(((msg.top | 0) + (msg.bottom | 0)) / 2);
+            if (isPaged()) {
+                if (window.DomPager && window.DomPager.isActive && window.DomPager.isActive() && window.DomPager.pageOfLine) {
+                    var pg = window.DomPager.pageOfLine(mid);
+                    withLock(function () { window.DomPager.goto(pg); });
+                }
+                // 分页页内无需再滚动，applyPage() 里已 rebuildIndexNow()
+            } else {
+                withLock(function () { scrollToLine(mid, true); });
+            }
+            return;
         }
     });
 
