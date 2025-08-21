@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ahoCorasickManager } from '../../utils/AhoCorasick/ahoCorasickManager';
 import { isHugeFile, getSupportedLanguages } from '../../utils/utils';
 import { getRoleMatches } from '../../context/roleAsyncShared';
+import { getEffectiveDocumentSync } from '../../context/previewRedirect';
 import { getDocumentRoleOccurrences } from '../../context/documentRolesCache';
 import { onDidUpdateDecorations } from '../../events/updateDecorations';
 import { Role } from '../../extension';
@@ -54,7 +55,7 @@ class DocumentRolesModel {
     }
 
     getHierarchy(): RoleHierarchyAffiliationGroup[] {
-        const active = vscode.window.activeTextEditor?.document;
+    const active = getEffectiveDocumentSync() ?? vscode.window.activeTextEditor?.document;
         if (!active) { return []; }
         if (active.uri.toString() !== this.lastDocUri || active.version !== this.lastVersion) {
             this.rebuild();
@@ -63,7 +64,7 @@ class DocumentRolesModel {
     }
 
     private rebuild(force = false): boolean {
-        const active = vscode.window.activeTextEditor?.document;
+    const active = getEffectiveDocumentSync() ?? vscode.window.activeTextEditor?.document;
         if (!active) {
             if (this.cachedHierarchy.length) {
                 this.cachedHierarchy = [];

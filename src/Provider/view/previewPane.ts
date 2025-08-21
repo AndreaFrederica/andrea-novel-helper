@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { mdToPlainText } from '../../utils/md_plain';
+import { setActivePreview } from '../../context/previewRedirect';
 
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
 
@@ -55,13 +56,26 @@ export class PreviewManager {
   openPreviewForActiveEditor() {
     const doc = vscode.window.activeTextEditor?.document;
     if (!doc) {return;}
-    this.ensurePanelFor(doc).then(panel => {
-      panel.reveal(vscode.ViewColumn.Beside);
-      this.updatePanel(panel, doc);
-  // 设置为主面板以启用后续自动跟随
-  this.primaryPanel = panel;
-  this.primaryDocUri = doc.uri.toString();
-  this.persistPrimaryDoc(this.primaryDocUri);
+    this.ensurePanelFor(doc).then(async panel => {
+      try {
+        panel.reveal(vscode.ViewColumn.Beside);
+      } catch (e) {
+        // panel might have been disposed concurrently; try to recreate
+        try { this.panels.delete(doc.uri.toString()); } catch {}
+        try { panel = await this.ensurePanelFor(doc); panel.reveal(vscode.ViewColumn.Beside); } catch { return; }
+      }
+
+      try {
+        this.updatePanel(panel, doc);
+      } catch (e) {
+        try { this.panels.delete(doc.uri.toString()); } catch {}
+        try { panel = await this.ensurePanelFor(doc); this.updatePanel(panel, doc); } catch { return; }
+      }
+
+      // 设置为主面板以启用后续自动跟随
+      this.primaryPanel = panel;
+      this.primaryDocUri = doc.uri.toString();
+      this.persistPrimaryDoc(this.primaryDocUri);
     });
   }
 
@@ -106,11 +120,21 @@ export class PreviewManager {
     panel.onDidDispose(() => this.panels.delete(key), null, this.context.subscriptions);
     panel.webview.onDidReceiveMessage(msg => this.onWebviewMessage(doc, msg), null, this.context.subscriptions);
 
+    // track preview focus -> redirect effective document
+    panel.onDidChangeViewState(e => {
+      try {
+        if (e.webviewPanel.active) { setActivePreview(doc.uri.toString()); }
+        else { setActivePreview(undefined); }
+      } catch { /* ignore */ }
+    }, null, this.context.subscriptions);
+
     // 若这是 primaryPanel，被关闭后重置引用
     panel.onDidDispose(() => {
       if (this.primaryPanel === panel) { this.primaryPanel = undefined; this.primaryDocUri = undefined; }
-  // 清除持久化状态
-  this.persistPrimaryDoc(undefined);
+      // 清除持久化状态
+      this.persistPrimaryDoc(undefined);
+      // 清理 active preview override 若它指向该文档
+      try { setActivePreview(undefined); } catch {}
     });
 
     return panel;
@@ -124,19 +148,49 @@ export class PreviewManager {
     const newKey = newDoc.uri.toString();
     if (this.primaryDocUri === newKey) {return;} // 同一个文档，无需切换
 
-    // 1. 停止旧文档 TTS（发送停止命令即可，webview 内自行判断）
-    try { this.primaryPanel.webview.postMessage({ type: 'ttsControl', command: 'stop' }); } catch {}
+  // 1. 停止旧文档 TTS（发送停止命令即可，webview 内自行判断）
+  try { this.primaryPanel.webview.postMessage({ type: 'ttsControl', command: 'stop' }); } catch (e) { /* ignore */ }
 
     // 2. 更新映射：移除旧 key，添加新 key 复用同一个 panel
-    if (this.primaryDocUri) { this.panels.delete(this.primaryDocUri); }
-    this.panels.set(newKey, this.primaryPanel);
-  this.primaryDocUri = newKey;
-  this.persistPrimaryDoc(this.primaryDocUri);
+    if (this.primaryDocUri) { try { this.panels.delete(this.primaryDocUri); } catch {} }
+    try {
+      this.panels.set(newKey, this.primaryPanel!);
+      this.primaryDocUri = newKey;
+      this.persistPrimaryDoc(this.primaryDocUri);
 
-    // 3. 用新文档内容刷新 panel
-    this.updatePanel(this.primaryPanel, newDoc);
-    // 4. 同步滚动定位（稍延迟等待渲染）
-    setTimeout(() => this.sendEditorTop(newDoc), 50);
+      // 3. 用新文档内容刷新 panel
+      try {
+        this.updatePanel(this.primaryPanel!, newDoc);
+      } catch (e) {
+        // primaryPanel 可能已失效，清理并创建新的 panel
+        this.primaryPanel = undefined;
+        this.primaryDocUri = undefined;
+        try { this.panels.delete(newKey); } catch {}
+        this.ensurePanelFor(newDoc).then(p => {
+          try { p.reveal(vscode.ViewColumn.Beside); } catch {}
+          this.primaryPanel = p;
+          this.primaryDocUri = newKey;
+          this.persistPrimaryDoc(this.primaryDocUri);
+          try { this.updatePanel(p, newDoc); } catch {}
+          setTimeout(() => this.sendEditorTop(newDoc), 50);
+        }).catch(() => {});
+        return;
+      }
+
+      // 4. 同步滚动定位（稍延迟等待渲染）
+      setTimeout(() => this.sendEditorTop(newDoc), 50);
+    } catch (e) {
+      // 容错：尝试新建 panel
+      this.primaryPanel = undefined; this.primaryDocUri = undefined;
+      try { this.panels.delete(newKey); } catch {}
+      this.ensurePanelFor(newDoc).then(p => {
+        try { p.reveal(vscode.ViewColumn.Beside); } catch {}
+        this.primaryPanel = p; this.primaryDocUri = newKey; this.persistPrimaryDoc(this.primaryDocUri);
+        try { this.updatePanel(p, newDoc); } catch {}
+        setTimeout(() => this.sendEditorTop(newDoc), 50);
+      }).catch(() => {});
+      return;
+    }
   }
 
   /** 持久化当前主文档 URI */
@@ -156,8 +210,11 @@ export class PreviewManager {
       if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) {return;}
       const panel = await this.ensurePanelFor(doc);
       this.primaryPanel = panel; this.primaryDocUri = doc.uri.toString();
-      this.updatePanel(panel, doc);
-      panel.reveal(vscode.ViewColumn.Beside, true);
+      try { this.updatePanel(panel, doc); } catch {}
+      try { panel.reveal(vscode.ViewColumn.Beside, true); } catch (e) {
+        try { this.panels.delete(doc.uri.toString()); } catch {}
+        return;
+      }
       setTimeout(() => this.sendEditorTop(doc), 120);
     } catch {}
   }

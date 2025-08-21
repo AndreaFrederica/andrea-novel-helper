@@ -16,7 +16,8 @@
 			"outFiles": [
 				"${workspaceFolder}/out/**/*.js"
 			],
-			"preLaunchTask": "${defaultBuildTask}"
+			"port": 9229,
+			"preLaunchTask": "${defaultBuildTask}",
 		}
 	]
 }

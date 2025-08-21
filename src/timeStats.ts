@@ -12,6 +12,7 @@ import { isHugeFile } from './utils/utils';
 import { getFileTracker } from './utils/tracker/fileTracker';
 import { getIgnoredWritingStatsManager } from './utils/WritingCount/ignoredWritingStats';
 import { CombinedIgnoreParser } from './utils/Parser/gitignoreParser';
+import { getEffectiveDocumentSync, onDidChangeEffectiveDocument, setActivePreview } from './context/previewRedirect';
 
 // -------------------- 数据结构 --------------------
 interface Bucket {
@@ -533,7 +534,8 @@ function scheduleFlush(doc: vscode.TextDocument) {
     }
     st.debounce = setTimeout(() => {
         // 只有当前编辑器且窗口聚焦时再冲刷，避免后台自动变动造成误差
-        if (vscode.window.activeTextEditor?.document === doc && windowFocused) {
+        const effectiveDoc2 = getEffectiveDocumentSync() ?? vscode.window.activeTextEditor?.document;
+        if (effectiveDoc2 === doc && windowFocused) {
             flushDocStats(doc);
         }
     }, imeDebounceMs);
@@ -602,7 +604,8 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
         tsDebug('textChange:skip-lang', { file: doc.uri.fsPath, lang: doc.languageId, enabledLanguages });
         return;
     }
-    if (!vscode.window.activeTextEditor || vscode.window.activeTextEditor.document !== doc) {
+    const effectiveDoc = getEffectiveDocumentSync() ?? vscode.window.activeTextEditor?.document;
+    if (!effectiveDoc || effectiveDoc !== doc) {
         return;
     }
     if (!windowFocused) {
@@ -1087,7 +1090,20 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
     // 关闭时清空引用
     panel.onDidDispose(() => {
         dashboardPanel = undefined;
+        try { setActivePreview(undefined); } catch {}
     });
+
+    // 当 dashboard 获得焦点时，把 effective document 指向当前 timeStats 的 currentDocPath（若有）
+    panel.onDidChangeViewState(e => {
+        try {
+            if (e.webviewPanel.active) {
+                if (currentDocPath) { setActivePreview(currentDocPath); }
+                else { setActivePreview(undefined); }
+            } else {
+                setActivePreview(undefined);
+            }
+        } catch { /* ignore */ }
+    }, undefined, context.subscriptions);
 }
 
 // 修改 openDashboard 以复用 setupDashboardPanel，并缓存 panel 引用
@@ -1161,6 +1177,23 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
             }
         })
     );
+
+    // 监听 preview -> effective document 改变
+    try {
+        const disp = onDidChangeEffectiveDocument(uri => {
+            try {
+                if (!uri) {
+                    // preview 失去焦点，回退到 active editor
+                    handleActiveEditorChange(vscode.window.activeTextEditor);
+                } else {
+                    // preview 获得焦点：尝试找到已打开的文档并视为活动
+                    const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri);
+                    handleActiveEditorChange(doc ? ({ document: doc } as vscode.TextEditor) : undefined);
+                }
+            } catch (e) { /* ignore */ }
+        });
+        context.subscriptions.push(disp);
+    } catch { /* ignore */ }
 
     // 注册反序列化器：支持 VS Code 重启后恢复面板
     if (vscode.window.registerWebviewPanelSerializer) {
