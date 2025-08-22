@@ -20,6 +20,27 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('myPreview.ttsPlay', () => manager.sendTTSCommand('play')),
         vscode.commands.registerCommand('myPreview.ttsPause', () => manager.sendTTSCommand('pause')),
         vscode.commands.registerCommand('myPreview.ttsStop', () => manager.sendTTSCommand('stop')),
+        vscode.commands.registerCommand('myPreview.copyPlainText', () => {
+            try {
+                const ed = vscode.window.activeTextEditor;
+                if (!ed || !ed.document) { return; }
+                const doc = ed.document;
+                // Prefer selection
+                const sel = ed.selection && !ed.selection.isEmpty ? doc.getText(ed.selection) : null;
+                if (sel) {
+                    // If selection exists, copy its plain text (for markdown selection we can use mdToPlainText on the slice)
+                    const text = (doc.languageId === 'markdown') ? mdToPlainText(sel).text : sel;
+                    vscode.env.clipboard.writeText(text);
+                    vscode.window.setStatusBarMessage('已复制纯文本（选区）', 1200);
+                    return;
+                }
+                // No selection: render full document to plain text
+                const mgr = manager;
+                const { text } = mgr['renderToPlainText'](doc);
+                vscode.env.clipboard.writeText(text);
+                vscode.window.setStatusBarMessage('已复制纯文本（全文）', 1200);
+            } catch (e) { /* ignore */ }
+        }),
     );
     // 启动后尝试恢复上次的预览
     setTimeout(() => manager.restorePrimaryPanel().catch(() => { }), 150);

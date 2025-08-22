@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -18,6 +18,7 @@
   "activationEvents": [
     "onLanguage:markdown",
     "onLanguage:plaintext",
+    "onLanguage:json5",
     "onFileSystem:andrea-outline",
     "onStartupFinished"
   ],
@@ -81,6 +82,55 @@
       }
     ],
     "commands": [
+            {
+        "command": "andrea.ensureEnterOverrides",
+        "title": "Andrea: [警告] 覆盖 Enter（接管 Markdown 回车）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.toggleSmartExit",
+        "title": "切换：智慧跳出括号/引号"
+      },
+      {
+        "command": "andrea.smartEnter",
+        "title": "智能回车：智能切段"
+      },
+      {
+        "command": "andrea.formatDocument",
+        "title": "快速排版全文（Markdown/纯文本）"
+      },
+      {
+        "command": "andrea.quickSettings",
+        "title": "小说版式：快速设置"
+      },
+      {
+        "command": "andrea.toggleIndentFirst",
+        "title": "切换：段首缩进"
+      },
+      {
+        "command": "andrea.toggleTrimTrailing",
+        "title": "切换：去尾空格"
+      },
+      {
+        "command": "andrea.changeBlankLines",
+        "title": "设置：段间空行数"
+      },
+      {
+        "command": "andrea.changeIndentSize",
+        "title": "设置：缩进宽度（同步 VS Code）"
+      },
+      {
+        "command": "andrea.manageEditorFontFamily",
+        "title": "管理：编辑器字体家族（图形化）"
+      },
+      {
+        "command": "andrea.toggleAutoPairs",
+        "title": "切换：智慧补齐括号"
+      },
+      {
+        "command": "andrea.toggleSmartEnter",
+        "title": "切换：智慧切段"
+      },
       {
         "command": "myPreview.open",
         "title": "Open Preview",
@@ -90,8 +140,16 @@
         }
       },
       {
-        "command": "myPreview.exportTxt",
-        "title": "Export Rendered Text to .txt"
+        "command": "myPreview.copyPlainText",
+        "title": "Copy Rendered Plain Text"
+      },
+      {
+        "command": "WordCount.exportTxt",
+        "title": "Export Item Text to .txt"
+      },
+      {
+        "command": "WordCount.copyPlainText",
+        "title": "Copy Item Plain Text"
       },
       {
         "command": "AndreaNovelHelper.addRoleFromSelection",
@@ -566,6 +624,16 @@
           "group": "5_clip@2"
         },
         {
+          "when": "view == wordCountExplorer && viewItem == wordCountFile",
+          "command": "WordCount.copyPlainText",
+          "group": "5_clip@4"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFile",
+          "command": "WordCount.exportTxt",
+          "group": "5_clip@5"
+        },
+        {
           "when": "view == wordCountExplorer && viewItem == wordCountFolder",
           "command": "AndreaNovelHelper.wordCount.paste",
           "group": "5_clip@3"
@@ -600,6 +668,11 @@
       ],
       "editor/context": [
         {
+          "command": "andrea.formatDocument",
+          "when": "editorLangId == markdown || editorLangId == plaintext || editorLangId == json5",
+          "group": "navigation@9"
+        },
+        {
           "when": "editorHasSelection",
           "command": "AndreaNovelHelper.addRoleFromSelection",
           "group": "navigation"
@@ -618,6 +691,12 @@
           "when": "editorTextFocus && resourceExtname == .md && editorHasSelection",
           "command": "AndreaNovelHelper.showMarkdownFormatMenu",
           "group": "1_modification@1"
+        }
+        ,
+        {
+          "when": "editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "myPreview.copyPlainText",
+          "group": "navigation@8"
         }
       ],
       "commandPalette": [
@@ -639,6 +718,58 @@
       "type": "object",
       "title": "%config.title%",
       "properties": {
+        "andrea.typeset.pairs": {
+          "type": [
+            "array",
+            "string"
+          ],
+          "default": [
+            "()",
+            "[]",
+            "{}",
+            "“”",
+            "‘’",
+            "「」",
+            "『』",
+            "《》"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "统一成对符号。推荐数组：每项2字符（开→合）。也支持把全部符号串为一个偶数长度字符串（数组优先）。"
+        },
+        "andrea.typeset.enableAutoPairs": {
+          "type": "boolean",
+          "default": true,
+          "description": "开启智慧补齐括号/引号（自动补全与包裹选区）。"
+        },
+        "andrea.typeset.enableSmartEnter": {
+          "type": "boolean",
+          "default": true,
+          "description": "开启智慧切段（回车：下一段，插入空行+缩进）。"
+        },
+        "andrea.typeset.enableSmartExit": {
+          "type": "boolean",
+          "default": true,
+          "description": "开启智慧跳出括号/引号：当光标紧贴闭合符号左侧时，按 Enter 会先把光标移到闭合符号之后。"
+        },
+        "andrea.typeset.indentFirstTwoSpaces": {
+          "type": "boolean",
+          "default": true,
+          "description": "段首插入一个“缩进单元”（跟随 editor.insertSpaces / editor.tabSize）。"
+        },
+        "andrea.typeset.blankLinesBetweenParas": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 6,
+          "description": "段落之间的空行数（智慧切段与全文排版都会按此值处理）。"
+        },
+        "andrea.typeset.trimTrailingSpaces": {
+          "type": "boolean",
+          "default": true,
+          "description": "回车/排版时清理行尾空格。"
+        },
         "AndreaNovelHelper.enableWordSegmentFilter": {
           "type": "boolean",
           "default": true,
@@ -951,7 +1082,19 @@
           "icon": "images/checklist_dark.svg"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "key": "enter",
+        "command": "andrea.smartEnter",
+        "when": "editorTextFocus && andrea.typeset.smartEnterOn && !editorReadonly && (!suggestWidgetVisible || config.editor.acceptSuggestionOnEnter == 'off') && !inlineSuggestionVisible && !editorHasMultipleSelections && vim.mode != 'Normal' && vim.mode != 'Visual' && vim.mode != 'VisualBlock' && vim.mode != 'VisualLine' && vim.mode != 'SearchInProgressMode' && vim.mode != 'CommandlineInProgress' && vim.mode != 'Replace' && vim.mode != 'EasyMotionMode' && vim.mode != 'EasyMotionInputMode'"
+      },
+      {
+        "key": "ctrl+alt+i",
+        "command": "andrea.quickSettings",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
@@ -984,6 +1127,7 @@
     "iconv-lite": "^0.6.3",
     "jschardet": "^3.1.4",
     "json5": "^2.2.3",
+    "jsonc-parser": "^3.3.1",
     "memfs": "^4.17.2",
     "uuid": "^11.1.0"
   }

@@ -10,6 +10,7 @@ import { sortItems } from '../../utils/Order/sorter';
 import { GitGuard } from '../../utils/Git/gitGuard';
 import { getFileTracker } from '../../utils/tracker/fileTracker';
 import * as timeStatsModule from '../../timeStats';
+import { mdToPlainText } from '../../utils/md_plain';
 import { getFileByPath, updateFileWritingStats, getFileUuid } from '../../utils/tracker/globalFileTracking';
 import { getCutClipboard } from '../../utils/WordCount/wordCountCutHelper';
 import { WordCountOrderManager } from '../../utils/Order/wordCountOrder';
@@ -1245,59 +1246,157 @@ export interface WordCountProvider extends HasOrderManager {}
 (WordCountProvider.prototype as any).setOrderManager = function(mgr: WordCountOrderManager){ this.orderManager = mgr; };
 (WordCountProvider.prototype as any).getOrderManager = function(){ return this.orderManager; };
 
-// —— 打开方式工具函数（与包管理器一致）——
-async function executeOpenAction(action: string, uri: vscode.Uri): Promise<void> {
-    try {
-        switch (action) {
-            case 'vscode':
-                await vscode.window.showTextDocument(uri);
-                break;
-            case 'vscode-new':
-                try {
-                    await vscode.commands.executeCommand('vscode.openWith', uri, 'default', vscode.ViewColumn.Beside);
-                } catch {
-                    await vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside });
-                }
-                break;
-            case 'system-default':
-                await vscode.env.openExternal(uri);
-                break;
-            case 'explorer':
-                await vscode.commands.executeCommand('revealFileInOS', uri);
-                break;
-            default:
-                await vscode.window.showTextDocument(uri);
-                break;
-        }
-    } catch (error) {
-        vscode.window.showErrorMessage(`打开文件失败: ${error}`);
-    }
-}
+// // —— 打开方式工具函数（与包管理器一致）——
+// async function executeOpenAction(action: string, uri: vscode.Uri): Promise<void> {
+//     try {
+//         switch (action) {
+//             case 'vscode':
+//                 await vscode.window.showTextDocument(uri);
+//                 break;
+//             case 'vscode-new':
+//                 try {
+//                     await vscode.commands.executeCommand('vscode.openWith', uri, 'default', vscode.ViewColumn.Beside);
+//                 } catch {
+//                     await vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside });
+//                 }
+//                 break;
+//             case 'system-default':
+//                 await vscode.env.openExternal(uri);
+//                 break;
+//             case 'explorer':
+//                 await vscode.commands.executeCommand('revealFileInOS', uri);
+//                 break;
+//             default:
+//                 await vscode.window.showTextDocument(uri);
+//                 break;
+//         }
+//     } catch (error) {
+//         vscode.window.showErrorMessage(`打开文件失败: ${error}`);
+//     }
+// }
 
-// —— 注册 openWith 命令 —__
-export function registerWordCountOpenWith(context: vscode.ExtensionContext) {
+// // —— 注册 openWith 命令 —__
+// export function registerWordCountOpenWith(context: vscode.ExtensionContext) {
+//     context.subscriptions.push(
+//         vscode.commands.registerCommand('AndreaNovelHelper.openWith', async (node: any) => {
+//             const uri = node.resourceUri || node.uri || node;
+//             const filePath = uri.fsPath;
+//             const fileName = path.basename(filePath);
+//             try {
+//                 await vscode.commands.executeCommand('explorer.openWith', uri);
+//             } catch (error) {
+//                 const options = [
+//                     { label: 'VS Code 编辑器', description: '在当前编辑器中打开', action: 'vscode' },
+//                     { label: 'VS Code 新窗口', description: '在新的 VS Code 窗口中打开', action: 'vscode-new' },
+//                     { label: '系统默认程序', description: '使用系统默认关联程序打开', action: 'system-default' },
+//                     { label: '文件资源管理器', description: '在文件资源管理器中显示', action: 'explorer' }
+//                 ];
+//                 const selected = await vscode.window.showQuickPick(options, {
+//                     placeHolder: `选择打开 ${fileName} 的方式`,
+//                     title: '打开方式'
+//                 });
+//                 if (selected) {
+//                     await executeOpenAction(selected.action, uri);
+//                 }
+//             }
+//         })
+//     );
+// }
+
+// 在 WordCount 视图上注册复制/导出纯文本命令，复用 preview 的渲染逻辑
+export function registerWordCountPlainTextCommands(context: vscode.ExtensionContext, provider: WordCountProvider) {
+    // mdToPlainText helper imported statically above
+
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.openWith', async (node: any) => {
-            const uri = node.resourceUri || node.uri || node;
-            const filePath = uri.fsPath;
-            const fileName = path.basename(filePath);
+        vscode.commands.registerCommand('WordCount.copyPlainText', async (node?: any) => {
             try {
-                await vscode.commands.executeCommand('explorer.openWith', uri);
-            } catch (error) {
-                const options = [
-                    { label: 'VS Code 编辑器', description: '在当前编辑器中打开', action: 'vscode' },
-                    { label: 'VS Code 新窗口', description: '在新的 VS Code 窗口中打开', action: 'vscode-new' },
-                    { label: '系统默认程序', description: '使用系统默认关联程序打开', action: 'system-default' },
-                    { label: '文件资源管理器', description: '在文件资源管理器中显示', action: 'explorer' }
-                ];
-                const selected = await vscode.window.showQuickPick(options, {
-                    placeHolder: `选择打开 ${fileName} 的方式`,
-                    title: '打开方式'
-                });
-                if (selected) {
-                    await executeOpenAction(selected.action, uri);
+                // Resolve URI from node if provided (TreeView invocation). Support several shapes.
+                const resolveUri = (n: any): vscode.Uri | undefined => {
+                    if (!n) return undefined;
+                    if (n instanceof vscode.Uri) return n as vscode.Uri;
+                    if (n.resourceUri && n.resourceUri instanceof vscode.Uri) return n.resourceUri as vscode.Uri;
+                    if (typeof n === 'string') return vscode.Uri.file(n);
+                    if (n.fsPath) return vscode.Uri.file(n.fsPath);
+                    return undefined;
+                };
+
+                let uri = resolveUri(node);
+                const invokedFromTree = !!uri;
+
+                if (!uri) {
+                    // fallback to active editor
+                    const ed = vscode.window.activeTextEditor;
+                    if (ed && ed.document) uri = ed.document.uri;
                 }
-            }
+                if (!uri) return;
+
+                const doc = await vscode.workspace.openTextDocument(uri);
+
+                // If invoked from tree, always render full document; if invoked without node, prefer selection.
+                if (!invokedFromTree) {
+                    const active = vscode.window.activeTextEditor;
+                    if (active && active.document.uri.toString() === doc.uri.toString() && !active.selection.isEmpty) {
+                        const sel = active.document.getText(active.selection);
+                        const text = (doc.languageId === 'markdown') ? mdToPlainText(sel).text : sel;
+                        await vscode.env.clipboard.writeText(text);
+                        vscode.window.setStatusBarMessage('已复制纯文本（选区）', 1200);
+                        return;
+                    }
+                }
+
+                // Render whole document
+                let text: string;
+                try {
+                    const maybe = (provider as any).renderToPlainText ? (provider as any).renderToPlainText(doc) : null;
+                    if (maybe && typeof maybe.text === 'string') text = maybe.text;
+                    else text = mdToPlainText(doc.getText()).text;
+                } catch {
+                    text = mdToPlainText(doc.getText()).text;
+                }
+
+                await vscode.env.clipboard.writeText(text);
+                vscode.window.setStatusBarMessage('已复制纯文本（全文）', 1200);
+            } catch (e) { /* ignore */ }
+        }),
+        vscode.commands.registerCommand('WordCount.exportTxt', async (node?: any) => {
+            try {
+                console.log('[exportTxt] argIsItem=', !!node, 'type=', node?.constructor?.name, 'uri=', node?.resourceUri?.fsPath);
+                const resolveUri = (n: any): vscode.Uri | undefined => {
+                    if (!n) return undefined;
+                    if (n instanceof vscode.Uri) return n as vscode.Uri;
+                    if (n.resourceUri && n.resourceUri instanceof vscode.Uri) return n.resourceUri as vscode.Uri;
+                    if (typeof n === 'string') return vscode.Uri.file(n);
+                    if (n.fsPath) return vscode.Uri.file(n.fsPath);
+                    return undefined;
+                };
+
+                let uri = resolveUri(node);
+                if (!uri) {
+                    const ed = vscode.window.activeTextEditor;
+                    if (ed && ed.document) uri = ed.document.uri;
+                }
+                if (!uri) return;
+
+                const doc = await vscode.workspace.openTextDocument(uri);
+
+                // Always render the file from disk (not relying on active editor content)
+                let text: string;
+                try {
+                    const maybe = (provider as any).renderToPlainText ? (provider as any).renderToPlainText(doc) : null;
+                    if (maybe && typeof maybe.text === 'string') text = maybe.text;
+                    else text = mdToPlainText(doc.getText()).text;
+                } catch {
+                    text = mdToPlainText(doc.getText()).text;
+                }
+
+                const saveUri = await vscode.window.showSaveDialog({
+                    defaultUri: uri.with({ path: uri.path.replace(/\.[^/\\.]+$/, '') + '.txt' }),
+                    filters: { Text: ['txt'] }
+                });
+                if (!saveUri) return;
+                await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(text));
+                vscode.window.showInformationMessage(`导出完成：${saveUri.fsPath}`);
+            } catch (e) { /* ignore */ }
         })
     );
 }

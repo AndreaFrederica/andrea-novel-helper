@@ -1,14 +1,13 @@
 /* eslint-disable curly */
 import * as fs from 'fs';
-import JSON5 from 'json5';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { Role } from './extension';
-import { getSupportedLanguages, loadRoles, getPrefix } from './utils/utils';
+import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createRoleCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, updateDecorations } from './events/updateDecorations';
-import { WordCountProvider } from './Provider/view/wordCountProvider';
+import { registerWordCountPlainTextCommands, WordCountProvider } from './Provider/view/wordCountProvider';
 import { WordCountOrderManager } from './utils/Order/wordCountOrder';
 import { ensureRegisterOpenWith } from './commands/openWith';
 import { initAhoCorasickManager } from './utils/AhoCorasick/ahoCorasickManager';
@@ -43,6 +42,14 @@ import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
 import { registerPreviewPane } from './Provider/view/previewPane';
 import { stopAllPreviewTTS, PreviewManager } from './Provider/view/previewPane';
+import { registerAutoPairs } from './typeset/autoPairs';
+import { registerSmartEnter } from './typeset/smartEnter';
+import { registerFormat } from './typeset/format';
+import { registerLayoutStatusBar } from './typeset/layoutStatusBar';
+import { registerQuickSettings } from './typeset/quickSettings';
+import { registerFontManager } from './typeset/fontManager';
+import { registerContextKeys } from './typeset/contextKeys';
+import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOverride';
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
 
@@ -86,6 +93,8 @@ export const onDidFinishRoles = _onDidFinishRoles.event;
 export async function activate(context: vscode.ExtensionContext) {
     // 输出通道用于调试激活阶段错误/栈
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
+    registerContextKeys(context);
+    // registerTypeInterceptor(context);
     context.subscriptions.push(logChannel);
     const log = (msg: string, err?: any) => {
         const time = new Date().toISOString();
@@ -106,7 +115,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // 仅在工作区未设置时弹窗
         const pick = await vscode.window.showInformationMessage(
             '是否在当前工作区启用 Andrea Novel Helper？（可随时在设置或命令面板切换）',
-            { modal: true, },
+            { modal: false, },
             '启用本工作区', '禁用本工作区'
         );
         if (pick === '禁用本工作区') {
@@ -198,6 +207,8 @@ export async function activate(context: vscode.ExtensionContext) {
             })
         );
 
+        // 注册注入按键配置命令
+        registerEnsureEnterOverridesCommand(context);
 
         // 注册“打开双大纲”命令
         context.subscriptions.push(
@@ -206,9 +217,17 @@ export async function activate(context: vscode.ExtensionContext) {
                 openDoubleOutline
             )
         );
-    const previewManager: PreviewManager = registerPreviewPane(context);
-    (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
-    _previewManager = previewManager; // 模块级保存
+
+        registerAutoPairs(context);
+        registerSmartEnter(context);
+        registerFormat(context);
+
+        const { refresh } = registerLayoutStatusBar(context);
+        registerQuickSettings(context, refresh);
+        registerFontManager(context, refresh);
+        const previewManager: PreviewManager = registerPreviewPane(context);
+        (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
+        _previewManager = previewManager; // 模块级保存
 
         // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
         setTimeout(() => {
@@ -336,12 +355,12 @@ export async function activate(context: vscode.ExtensionContext) {
         // 注册缺省角色库缺失提示（避免与项目初始化向导重复）
         registerMissingRolesBootstrap(context);
 
-    // 角色文件监听：已在 packageManagerView 中实现更全面的 watcher（含目录/文件/保存逻辑与 UI 刷新），
-    // 这里移除原简化 watcher，避免重复触发 loadRoles / _onDidChangeRoles 造成双重扫描与事件抖动。
-    // 若未来需要独立于包管理器的精简模式，可在设置中加开关再恢复。
+        // 角色文件监听：已在 packageManagerView 中实现更全面的 watcher（含目录/文件/保存逻辑与 UI 刷新），
+        // 这里移除原简化 watcher，避免重复触发 loadRoles / _onDidChangeRoles 造成双重扫描与事件抖动。
+        // 若未来需要独立于包管理器的精简模式，可在设置中加开关再恢复。
 
-    // 首次激活：强制全量刷新（清空缓存）再做异步批次扫描，避免潜在遗留缓存/过滤导致的初次缺失
-    loadRoles(true); // 不阻塞激活；内部仍按批次异步触发 _onDidChangeRoles / 完成事件
+        // 首次激活：强制全量刷新（清空缓存）再做异步批次扫描，避免潜在遗留缓存/过滤导致的初次缺失
+        loadRoles(true); // 不阻塞激活；内部仍按批次异步触发 _onDidChangeRoles / 完成事件
         initAutomaton();
 
         // 防抖更新
@@ -353,13 +372,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // 角色库变化后：去抖重建自动机 + 刷新装饰（Hover 已在自身模块监听 onDidChangeRoles，无需额外处理；Def 依赖 hoverRangesMap 也会间接更新）
         let acRebuildTimer: ReturnType<typeof setTimeout> | undefined;
-    const onRolesChanged = onDidChangeRoles(() => {
+        const onRolesChanged = onDidChangeRoles(() => {
             if (acRebuildTimer) clearTimeout(acRebuildTimer);
             acRebuildTimer = setTimeout(() => {
                 try {
                     initAutomaton(); // 重建 AC 自动机（包含别名）
                 } catch (e) { console.warn('[ANH] initAutomaton after roles change failed', e); }
-        try { clearAllRoleMatchCache(); } catch {/* ignore */}
+                try { clearAllRoleMatchCache(); } catch {/* ignore */ }
                 scheduleUpdate(); // 触发装饰刷新
             }, 150);
         });
@@ -368,7 +387,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // 最终一次全量加载完成后：立即重建 & 立即刷新（不再二次防抖），确保拿到完整 roles 状态至少跑一次
         const onRolesFinishedDisp = onDidFinishRoles(() => {
             try { initAutomaton(); } catch (e) { console.warn('[ANH] initAutomaton after roles FINISH failed', e); }
-            try { clearAllRoleMatchCache(); } catch {/* ignore */}
+            try { clearAllRoleMatchCache(); } catch {/* ignore */ }
             // 直接调用而非 schedule，避免再等待 200ms
             updateDecorations();
         });
@@ -588,6 +607,8 @@ export async function activate(context: vscode.ExtensionContext) {
             dragAndDropController: dndController
         });
         context.subscriptions.push(treeView);
+
+        registerWordCountPlainTextCommands(context, wordCountProvider);
 
         // —— 文件/目录 复制 剪切 粘贴 ——
         type ClipEntry = { source: string; isDir: boolean };
@@ -874,7 +895,7 @@ export function deactivate() {
     decorationTypes.forEach((d) => d.dispose());
     deactivateMarkdownToolbar();
     deactivateTimeStats();
-    try { stopAllPreviewTTS(_previewManager); } catch {}
+    try { stopAllPreviewTTS(_previewManager); } catch { }
 }
 
 let _previewManager: PreviewManager | undefined;

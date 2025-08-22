@@ -10,6 +10,17 @@ import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
 import { getRoleMatches } from '../context/roleAsyncShared';
 import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../context/documentRolesCache';
 
+// —— 每文档每角色的 ranges 哈希：docUri -> (roleName -> hash) —— 
+const appliedHashes = new Map<string, Map<string, string>>();
+
+function getPerDocHashes(docUri: string): Map<string, string> {
+    let m = appliedHashes.get(docUri);
+    if (!m) { m = new Map(); appliedHashes.set(docUri, m); }
+    return m;
+}
+
+
+
 // —— Diagnostics 集合 —— 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
 // uri.fsPath -> 上次的 Diagnostic 数组
@@ -86,9 +97,9 @@ export async function updateDecorations() {
     // 每个可见编辑器单独处理
     for (const editor of vscode.window.visibleTextEditors) {
         const doc = editor.document;
-    const bigCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const hugeTh = bigCfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
-    const suppress = bigCfg.get<boolean>('hugeFile.suppressWarning', false)!;
+        const bigCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const hugeTh = bigCfg.get<number>('hugeFile.thresholdBytes', 50 * 1024)!;
+        const suppress = bigCfg.get<boolean>('hugeFile.suppressWarning', false)!;
         if (isHugeFile(doc, hugeTh)) {
             // 跳过高成本标注
             if (!suppress && !hugeWarnedFiles.has(doc.uri.fsPath)) {
@@ -99,7 +110,7 @@ export async function updateDecorations() {
         }
         // 过滤语言 & 词库文件（支持通过配置的语言 ID 或文件扩展名）
         const supportedLangs = getSupportedLanguages();
-        const supportedExts = new Set(getSupportedExtensions().map(e=>e.toLowerCase()));
+        const supportedExts = new Set(getSupportedExtensions().map(e => e.toLowerCase()));
         const fileNameLower = doc.fileName.toLowerCase();
         const extMatch = fileNameLower.match(/\.([a-z0-9_\-]+)$/);
         const ext = extMatch ? extMatch[1] : '';
@@ -136,17 +147,17 @@ export async function updateDecorations() {
                 console.log('[Decorations] 异步空结果 fallback 同步');
                 fullText = doc.getText();
                 const rawHits = ahoCorasickManager.search(fullText);
-                hits = rawHits.map(([endIdx, pat]) => [ endIdx, Array.isArray(pat) ? pat : [pat] ]);
+                hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]]);
             }
         } catch (e) {
             console.warn('[Decorations] 异步匹配失败 fallback 同步', e);
             fullText = doc.getText();
             const rawHits = ahoCorasickManager.search(fullText);
-            hits = rawHits.map(([endIdx, pat]) => [ endIdx, Array.isArray(pat) ? pat : [pat] ]);
+            hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]]);
         }
-    const acCost = Date.now() - startMs;
-    console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
-    console.log('[Decorations] 找到的匹配:', hits.slice(0, 5)); // 只显示前5个匹配，避免日志过长
+        const acCost = Date.now() - startMs;
+        console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
+        console.log('[Decorations] 找到的匹配:', hits.slice(0, 5)); // 只显示前5个匹配，避免日志过长
 
         // 预构建 pattern -> role 映射（包含别名和fixes），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
         const patternRoleMap = new Map<string, Role>();
@@ -175,6 +186,7 @@ export async function updateDecorations() {
                 const pat = raw.trim().normalize('NFC');
                 // 先用预构建映射（含别名）获取角色；若失败再尝试 AC（理论上不应再缺失）
                 let role = patternRoleMap.get(pat) || ahoCorasickManager.getRole(pat);
+                // let role = ahoCorasickManager.getRole(pat);
                 if (!role) {
                     // 别名丢失兜底：线性扫描（极少发生，日志观测）
                     role = roles.find(r => r.name === pat || r.aliases?.includes(pat));
@@ -186,7 +198,7 @@ export async function updateDecorations() {
                 }
                 // 添加调试信息：显示找到的匹配
                 const startPos = endIdx - pat.length + 1;
-                console.log(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx+1}) -> 角色 "${role.name}"`);
+                console.log(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx + 1}) -> 角色 "${role.name}"`);
                 candidates.push({
                     role,
                     text: pat,
@@ -234,7 +246,7 @@ export async function updateDecorations() {
                 }
             };
             await sliceBatch();
-            console.log('[Decorations] Regex阶段耗时', Date.now()-regexStart, 'ms');
+            console.log('[Decorations] Regex阶段耗时', Date.now() - regexStart, 'ms');
         }
 
         // 按优先级和长度排序：优先级高的先处理，同优先级按长度倒序
@@ -245,7 +257,7 @@ export async function updateDecorations() {
 
         // 智能去重：高优先级的覆盖低优先级的，但允许正则表达式被分割
         const selected: Candidate[] = [];
-        const occupiedRanges: Array<{start: number, end: number}> = [];
+        const occupiedRanges: Array<{ start: number, end: number }> = [];
         for (const c of candidates) {
             if (c.role.type === '正则表达式') {
                 // 对于正则表达式，计算未被占用的片段
@@ -267,25 +279,25 @@ export async function updateDecorations() {
                 const hasOverlap = occupiedRanges.some(range => rangesOverlap(range.start, range.end, c.start, c.end));
                 if (!hasOverlap) {
                     selected.push(c);
-                    occupiedRanges.push({start: c.start, end: c.end});
+                    occupiedRanges.push({ start: c.start, end: c.end });
                 }
             }
         }
 
         // 计算未被占用的片段
-        function calculateFreeSegments(start: number, end: number, occupied: Array<{start: number, end: number}>): Array<{start: number, end: number}> {
+        function calculateFreeSegments(start: number, end: number, occupied: Array<{ start: number, end: number }>): Array<{ start: number, end: number }> {
             // 找到与当前范围重叠的已占用范围
             const overlapping = occupied.filter(range => rangesOverlap(range.start, range.end, start, end))
                 .sort((a, b) => a.start - b.start);
             if (overlapping.length === 0) {
-                return [{start, end}];
+                return [{ start, end }];
             }
-            const segments: Array<{start: number, end: number}> = [];
+            const segments: Array<{ start: number, end: number }> = [];
             let currentPos = start;
             for (const range of overlapping) {
                 // 添加当前位置到重叠范围开始之间的片段
                 if (currentPos < range.start) {
-                    segments.push({start: currentPos, end: Math.min(range.start, end)});
+                    segments.push({ start: currentPos, end: Math.min(range.start, end) });
                 }
                 // 移动到重叠范围结束后
                 currentPos = Math.max(currentPos, range.end);
@@ -293,11 +305,40 @@ export async function updateDecorations() {
             }
             // 添加最后一个片段
             if (currentPos < end) {
-                segments.push({start: currentPos, end});
+                segments.push({ start: currentPos, end });
             }
             return segments;
         }
 
+        // // 生成 role → ranges （并做最小化 setDecorations：如果范围未变则跳过）
+        // const roleToRanges = new Map<Role, vscode.Range[]>();
+        // for (const c of selected) {
+        //     const range = new vscode.Range(doc.positionAt(c.start), doc.positionAt(c.end));
+        //     hoverRanges.push({ range, role: c.role });
+        //     if (!roleToRanges.has(c.role)) roleToRanges.set(c.role, []);
+        //     roleToRanges.get(c.role)!.push(range);
+        // }
+
+        // // 1) 给出现的角色 setRanges（若与上次相同则跳过）
+        // for (const [role, ranges] of roleToRanges) {
+        //     const meta = decorationMeta.get(role.name)!;
+        //     // VSCode 没有直接获取已设置 ranges，简单策略：存一份哈希
+        //     const key = `${role.name}::hash`;
+        //     const prev = (meta as any)[key] as string | undefined;
+        //     const hash = ranges.map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`).join('|');
+        //     if (prev !== hash) {
+        //         editor.setDecorations(meta.deco, ranges);
+        //         (meta as any)[key] = hash;
+        //     }
+        // }
+        // // 2) 给没出现的角色 clear（按名称判定）
+        // const presentNames = new Set(Array.from(roleToRanges.keys()).map(r => r.name));
+        // for (const [roleName, { deco }] of decorationMeta) {
+        //     if (!presentNames.has(roleName)) {
+        //         editor.setDecorations(deco, []);
+        //         (decorationMeta.get(roleName)! as any)[`${roleName}::hash`] = '';
+        //     }
+        // }
         // 生成 role → ranges （并做最小化 setDecorations：如果范围未变则跳过）
         const roleToRanges = new Map<Role, vscode.Range[]>();
         for (const c of selected) {
@@ -307,31 +348,39 @@ export async function updateDecorations() {
             roleToRanges.get(c.role)!.push(range);
         }
 
+        // —— 按“文档×角色”做哈希比对，避免跨编辑器串扰 —— //
+        const docKey = doc.uri.toString();               // 也可用 toString(true)
+        const perDoc = getPerDocHashes(docKey);
+
         // 1) 给出现的角色 setRanges（若与上次相同则跳过）
         for (const [role, ranges] of roleToRanges) {
             const meta = decorationMeta.get(role.name)!;
-            // VSCode 没有直接获取已设置 ranges，简单策略：存一份哈希
-            const key = `${role.name}::hash`;
-            const prev = (meta as any)[key] as string | undefined;
-            const hash = ranges.map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`).join('|');
+
+            const prev = perDoc.get(role.name) || '';
+            const hash = ranges
+                .map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`)
+                .join('|');
+
             if (prev !== hash) {
                 editor.setDecorations(meta.deco, ranges);
-                (meta as any)[key] = hash;
+                perDoc.set(role.name, hash);
             }
         }
-        // 2) 给没出现的角色 clear（按名称判定）
+
+        // 2) 给没出现的角色 clear（仅影响当前文档）
         const presentNames = new Set(Array.from(roleToRanges.keys()).map(r => r.name));
         for (const [roleName, { deco }] of decorationMeta) {
             if (!presentNames.has(roleName)) {
                 editor.setDecorations(deco, []);
-                (decorationMeta.get(roleName)! as any)[`${roleName}::hash`] = '';
+                perDoc.set(roleName, ''); // 标记该文档此角色为空
             }
         }
 
-    // 写入缓存供“当前文章角色”视图复用
-    updateDocumentRoleOccurrences(doc, roleToRanges);
 
-    // —— 敏感词诊断 —— 
+        // 写入缓存供“当前文章角色”视图复用
+        updateDocumentRoleOccurrences(doc, roleToRanges);
+
+        // —— 敏感词诊断 —— 
         const diagnostics: vscode.Diagnostic[] = [];
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
         // 判断当前文件是否为任意敏感词库定义文件（支持多包多文件）
@@ -397,6 +446,12 @@ export async function updateDecorations() {
             prevDiagnostics.set(key, diagnostics.map(d => d));
         }
 
+        // —— 清理不再可见的文档缓存，防内存增长/串扰 —— 
+        const visibleKeys = new Set(vscode.window.visibleTextEditors.map(e => e.document.uri.toString()));
+        for (const key of Array.from(appliedHashes.keys())) {
+            if (!visibleKeys.has(key)) appliedHashes.delete(key);
+        }
+
         // 触发“该文档装饰完成”事件
         try {
             _onDidUpdateDecorations.fire({
@@ -405,6 +460,6 @@ export async function updateDecorations() {
                 ranges: Array.from(roleToRanges.values()).reduce((s, arr) => s + arr.length, 0),
                 tookMs: Date.now() - startMs
             });
-        } catch {}
+        } catch { }
     }
 }
