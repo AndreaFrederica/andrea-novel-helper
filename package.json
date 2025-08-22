@@ -1,8 +1,8 @@
 {
   "name": "andrea-novel-helper",
-  "displayName": "Andrea 小说助手",
-  "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等",
-  "version": "0.3.9",
+  "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
+  "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
+  "version": "0.3.10",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -83,57 +83,57 @@
     ],
     "commands": [
             {
-        "command": "andrea.ensureEnterOverrides",
-        "title": "Andrea: [警告] 覆盖 Enter（接管 Markdown 回车）",
-        "category": "Andrea Novel Helper"
-      },
+              "command": "andrea.ensureEnterOverrides",
+              "title": "%command.andrea.ensureEnterOverrides.title%",
+              "category": "Andrea Novel Helper"
+            },
       {
         "command": "andrea.toggleSmartExit",
-        "title": "切换：智慧跳出括号/引号"
+        "title": "%command.andrea.toggleSmartExit.title%"
       },
       {
         "command": "andrea.smartEnter",
-        "title": "智能回车：智能切段"
+        "title": "%command.andrea.smartEnter.title%"
       },
       {
         "command": "andrea.formatDocument",
-        "title": "快速排版全文（Markdown/纯文本）"
+        "title": "%command.andrea.formatDocument.title%"
       },
       {
         "command": "andrea.quickSettings",
-        "title": "小说版式：快速设置"
+        "title": "%command.andrea.quickSettings.title%"
       },
       {
         "command": "andrea.toggleIndentFirst",
-        "title": "切换：段首缩进"
+        "title": "%command.andrea.toggleIndentFirst.title%"
       },
       {
         "command": "andrea.toggleTrimTrailing",
-        "title": "切换：去尾空格"
+        "title": "%command.andrea.toggleTrimTrailing.title%"
       },
       {
         "command": "andrea.changeBlankLines",
-        "title": "设置：段间空行数"
+        "title": "%command.andrea.changeBlankLines.title%"
       },
       {
         "command": "andrea.changeIndentSize",
-        "title": "设置：缩进宽度（同步 VS Code）"
+        "title": "%command.andrea.changeIndentSize.title%"
       },
       {
         "command": "andrea.manageEditorFontFamily",
-        "title": "管理：编辑器字体家族（图形化）"
+        "title": "%command.andrea.manageEditorFontFamily.title%"
       },
       {
         "command": "andrea.toggleAutoPairs",
-        "title": "切换：智慧补齐括号"
+        "title": "%command.andrea.toggleAutoPairs.title%"
       },
       {
         "command": "andrea.toggleSmartEnter",
-        "title": "切换：智慧切段"
+        "title": "%command.andrea.toggleSmartEnter.title%"
       },
       {
         "command": "myPreview.open",
-        "title": "Open Preview",
+        "title": "%command.myPreview.open.title%",
         "icon": {
           "light": "images/preview_light.svg",
           "dark": "images/preview_dark.svg"
@@ -141,15 +141,15 @@
       },
       {
         "command": "myPreview.copyPlainText",
-        "title": "Copy Rendered Plain Text"
+        "title": "%command.myPreview.copyPlainText.title%"
       },
       {
         "command": "WordCount.exportTxt",
-        "title": "Export Item Text to .txt"
+        "title": "%command.wordCount.exportTxt.title%"
       },
       {
         "command": "WordCount.copyPlainText",
-        "title": "Copy Item Plain Text"
+        "title": "%command.wordCount.copyPlainText.title%"
       },
       {
         "command": "AndreaNovelHelper.addRoleFromSelection",
@@ -399,13 +399,13 @@
     "walkthroughs": [
       {
         "id": "andreaNovelHelper.setup",
-        "title": "小说助手配置向导",
-        "description": "通过这些步骤完成 Git 安装与用户信息配置。",
+        "title": "%walkthrough.andrea.setup.title%",
+        "description": "%walkthrough.andrea.setup.description%",
         "steps": [
           {
             "id": "anh.step.open",
-            "title": "开始",
-            "description": "欢迎使用小说助手配置向导。依次完成以下步骤，或直接点击右上角重试。",
+            "title": "%walkthrough.anh.step.open.title%",
+            "description": "%walkthrough.anh.step.open.description%",
             "media": {
               "markdown": "media/walkthrough/step0_intro.md"
             },
@@ -415,8 +415,8 @@
           },
           {
             "id": "anh.step.checkGit",
-            "title": "检查是否已安装 Git",
-            "description": "点击 [立即检查](command:AndreaNovelHelper.wizard.checkGit) 来检测本机是否已安装 Git。",
+            "title": "%walkthrough.anh.step.checkGit.title%",
+            "description": "%walkthrough.anh.step.checkGit.description%",
             "media": {
               "markdown": "media/walkthrough/step1_checkGit.md"
             },
@@ -426,8 +426,8 @@
           },
           {
             "id": "anh.step.installGit",
-            "title": "安装 Git (若尚未安装)",
-            "description": "若上一步检测未安装，可点击 [打开下载页面](command:AndreaNovelHelper.wizard.openGitDownload) 下载安装后重启 VS Code。",
+            "title": "%walkthrough.anh.step.installGit.title%",
+            "description": "%walkthrough.anh.step.installGit.description%",
             "media": {
               "markdown": "media/walkthrough/step2_installGit.md"
             },
@@ -437,8 +437,8 @@
           },
           {
             "id": "anh.step.checkUser",
-            "title": "检查 Git 用户信息",
-            "description": "点击 [检查用户信息](command:AndreaNovelHelper.wizard.checkGitUser) 查看当前生效的 user.name 与 user.email。",
+            "title": "%walkthrough.anh.step.checkUser.title%",
+            "description": "%walkthrough.anh.step.checkUser.description%",
             "media": {
               "markdown": "media/walkthrough/step3_checkUser.md"
             },
@@ -448,8 +448,8 @@
           },
           {
             "id": "anh.step.configureUser",
-            "title": "配置或修改 Git 用户信息",
-            "description": "如未配置或需修改，点击 [配置用户信息](command:AndreaNovelHelper.wizard.configureGitUser) 进行交互式设置。",
+            "title": "%walkthrough.anh.step.configureUser.title%",
+            "description": "%walkthrough.anh.step.configureUser.description%",
             "media": {
               "markdown": "media/walkthrough/step4_configUser.md"
             },
@@ -459,8 +459,8 @@
           },
           {
             "id": "anh.step.recheck",
-            "title": "完成并再次验证",
-            "description": "可再次点击 [重新检查](command:AndreaNovelHelper.wizard.checkGitUser) 验证结果，全部步骤完成后即可开始写作。",
+            "title": "%walkthrough.anh.step.recheck.title%",
+            "description": "%walkthrough.anh.step.recheck.description%",
             "media": {
               "markdown": "media/walkthrough/step5_recheck.md"
             },
@@ -736,51 +736,51 @@
           "items": {
             "type": "string"
           },
-          "markdownDescription": "统一成对符号。推荐数组：每项2字符（开→合）。也支持把全部符号串为一个偶数长度字符串（数组优先）。"
+          "markdownDescription": "%config.typeset.pairs.markdownDescription%"
         },
         "andrea.typeset.enableAutoPairs": {
           "type": "boolean",
           "default": true,
-          "description": "开启智慧补齐括号/引号（自动补全与包裹选区）。"
+          "description": "%config.typeset.enableAutoPairs.description%"
         },
         "andrea.typeset.enableSmartEnter": {
           "type": "boolean",
           "default": true,
-          "description": "开启智慧切段（回车：下一段，插入空行+缩进）。"
+          "description": "%config.typeset.enableSmartEnter.description%"
         },
         "andrea.typeset.enableSmartExit": {
           "type": "boolean",
           "default": true,
-          "description": "开启智慧跳出括号/引号：当光标紧贴闭合符号左侧时，按 Enter 会先把光标移到闭合符号之后。"
+          "description": "%config.typeset.enableSmartExit.description%"
         },
         "andrea.typeset.indentFirstTwoSpaces": {
           "type": "boolean",
           "default": true,
-          "description": "段首插入一个“缩进单元”（跟随 editor.insertSpaces / editor.tabSize）。"
+          "description": "%config.typeset.indentFirstTwoSpaces.description%"
         },
         "andrea.typeset.blankLinesBetweenParas": {
           "type": "integer",
           "default": 1,
           "minimum": 0,
           "maximum": 6,
-          "description": "段落之间的空行数（智慧切段与全文排版都会按此值处理）。"
+          "description": "%config.typeset.blankLinesBetweenParas.description%"
         },
         "andrea.typeset.trimTrailingSpaces": {
           "type": "boolean",
           "default": true,
-          "description": "回车/排版时清理行尾空格。"
+          "description": "%config.typeset.trimTrailingSpaces.description%"
         },
         "AndreaNovelHelper.enableWordSegmentFilter": {
           "type": "boolean",
           "default": true,
-          "description": "启用角色匹配分词过滤（避免单字或短词误匹配）。关闭后不再做基于分词的精确位置过滤。"
+          "description": "%config.roles.enableWordSegmentFilter.description%"
         },
         "AndreaNovelHelper.wordSegment.autoFilterMaxLength": {
           "type": "integer",
           "default": 1,
           "minimum": 1,
           "maximum": 6,
-          "description": "自动应用分词过滤的角色名最大长度（含）。默认 1=仅单字；2=单/双字；等。可被角色字段 wordSegmentFilter 覆盖。"
+          "description": "%config.roles.wordSegment.autoFilterMaxLength.description%"
         },
         "AndreaNovelHelper.rolesFile": {
           "type": "string",
@@ -857,12 +857,12 @@
           "default": 51200,
           "minimum": 1024,
           "maximum": 10485760,
-          "description": "超过该大小(字节)的文件视为超大文件，将关闭正则/自动机着色等高成本功能，仅保留 TimeStats 近似统计并弹出提示。"
+          "description": "%config.hugeFile.thresholdBytes.description%"
         },
         "AndreaNovelHelper.hugeFile.suppressWarning": {
           "type": "boolean",
           "default": false,
-          "description": "不再弹出超大文件提示。"
+          "description": "%config.hugeFile.suppressWarning.description%"
         },
         "AndreaNovelHelper.timeStats.idleThresholdMs": {
           "type": "number",
@@ -909,42 +909,42 @@
           "type": "number",
           "default": 65536,
           "minimum": 4096,
-          "description": "TimeStats: 触发大文件近似实时统计的字节阈值。超过后用增量估算并后台校准。"
+          "description": "%config.timeStats.largeFile.thresholdBytes.description%"
         },
         "AndreaNovelHelper.timeStats.largeFile.approximate": {
           "type": "boolean",
           "default": true,
-          "description": "TimeStats: 是否启用大文件增量近似统计以提升输入流畅度。"
+          "description": "%config.timeStats.largeFile.approximate.description%"
         },
         "AndreaNovelHelper.timeStats.largeFile.accurateEveryChanges": {
           "type": "number",
           "default": 80,
           "minimum": 5,
-          "description": "TimeStats: 大文件近似模式下累计多少次文本变更后触发一次精确校准。"
+          "description": "%config.timeStats.largeFile.accurateEveryChanges.description%"
         },
         "AndreaNovelHelper.timeStats.largeFile.accurateEveryMs": {
           "type": "number",
           "default": 60000,
           "minimum": 5000,
-          "description": "TimeStats: 大文件近似模式下与上次精确校准的最小时间间隔 (毫秒)。"
+          "description": "%config.timeStats.largeFile.accurateEveryMs.description%"
         },
         "AndreaNovelHelper.timeStats.debug": {
           "type": "boolean",
           "default": false,
-          "description": "TimeStats: 输出详细调试日志 (可能影响性能)。"
+          "description": "%config.timeStats.debug.description%"
         },
         "AndreaNovelHelper.wordCount.largeFileThreshold": {
           "type": "number",
           "default": 51200,
           "minimum": 1024,
-          "description": "大文件快速估算字数阈值 (字节)。超过该大小先显示估算字数，后台再进行精确统计。"
+          "description": "%config.wordCount.largeFileThreshold.description%"
         },
         "AndreaNovelHelper.wordCount.largeFileAvgBytesPerChar": {
           "type": "number",
           "default": 3,
           "minimum": 0.5,
           "maximum": 10,
-          "description": "大文件估算阶段使用的平均字节/字符比值 (字节 ÷ 字符)。例如 1.6 代表 1.6 字节≈1 个字符。"
+          "description": "%config.wordCount.largeFileAvgBytesPerChar.description%"
         },
         "AndreaNovelHelper.timeStats.persistReadOnlySessions": {
           "type": "boolean",
@@ -979,7 +979,7 @@
         "AndreaNovelHelper.fileTracker.trustCallerFilters": {
           "type": "boolean",
           "default": false,
-          "description": "If true, FileTrackingDataManager will trust that callers already applied ignore/filter rules and skip redundant checks (e.g. .git filtering). Core protections (like avoiding tracking the DB file) are still enforced. Enabling may yield a small performance improvement when callers filter aggressively."
+          "description": "%config.fileTracker.trustCallerFilters.description%"
         },
         "AndreaNovelHelper.fileTracker.writeLegacySnapshot": {
           "type": "boolean",
@@ -1035,19 +1035,19 @@
           "default": 0,
           "minimum": 0,
           "maximum": 128,
-          "description": "并行统计 worker 数量。0=自动 (cpu/2 上限受 maxWorkersUpperLimit 限制)。"
+          "description": "%config.wordCount.maxWorkers.description%"
         },
         "AndreaNovelHelper.wordCount.maxWorkersUpperLimit": {
           "type": "number",
           "default": 8,
           "minimum": 1,
           "maximum": 128,
-          "description": "worker 自动模式与手动设置的最大允许上限。防止意外拉满 CPU。"
+          "description": "%config.wordCount.maxWorkersUpperLimit.description%"
         },
         "AndreaNovelHelper.debug.completionLog": {
           "type": "boolean",
           "default": false,
-          "description": "补全: 输出前缀/匹配数调试日志 (可能影响性能)。"
+          "description": "%config.debug.completionLog.description%"
         }
       }
     },

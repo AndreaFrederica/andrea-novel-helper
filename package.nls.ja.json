@@ -21,6 +21,11 @@
     ,
     "command.openTimeStats.title": "タイム統計を開く",
     "command.exportTimeStatsCSV.title": "タイム統計CSVをエクスポート",
+    "command.myPreview.open.title": "プレビューを開く",
+    "command.myPreview.copyPlainText.title": "レンダリングされたプレーンテキストをコピー",
+    "command.wordCount.exportTxt.title": "項目テキストを .txt にエクスポート",
+    "command.wordCount.copyPlainText.title": "項目のプレーンテキストをコピー",
+    "config.typeset.pairs.markdownDescription": "ペア記号を統一します。配列を推奨：各要素は2文字（開→閉）。偶数長の文字列も指定できます（配列が優先されます）。",
     "config.timeStats.enabledLanguages.description": "執筆統計を追跡する言語 ID のリスト（デフォルト: markdown, plaintext）。",
     "config.timeStats.idleThresholdMs.description": "アイドル閾値（ミリ秒）。この時間以上入力がなければ統計が一時停止します（デフォルト: 30000）。",
     "config.timeStats.bucketSizeMs.description": "CPM 計算のための時間バケットサイズ（ミリ秒）（デフォルト: 60000）。"

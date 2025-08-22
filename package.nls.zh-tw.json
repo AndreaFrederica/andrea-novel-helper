@@ -21,6 +21,11 @@
     ,
     "command.openTimeStats.title": "打開寫作統計",
     "command.exportTimeStatsCSV.title": "匯出寫作統計CSV",
+    "command.myPreview.open.title": "打開預覽",
+    "command.myPreview.copyPlainText.title": "複製渲染後的純文字",
+    "command.wordCount.exportTxt.title": "匯出項目文字為 .txt",
+    "command.wordCount.copyPlainText.title": "複製項目純文字",
+    "config.typeset.pairs.markdownDescription": "統一成對符號。建議使用陣列：每項為2字元（開→合）。也支援提供偶數長度的字串（陣列優先）。",
     "config.timeStats.enabledLanguages.description": "參與寫作統計的語言 ID 列表（預設：markdown, plaintext）。",
     "config.timeStats.idleThresholdMs.description": "閒置閾值（毫秒）；超過此時間無輸入視為暫停統計（預設：30000）。",
     "config.timeStats.bucketSizeMs.description": "用於 CPM 計算的時間桶大小（毫秒）（預設：60000）。"
