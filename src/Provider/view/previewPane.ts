@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as fontList from 'font-list';
 import { mdToPlainText } from '../../utils/md_plain';
+import { txtToPlainText } from '../../utils/txt_plain';
 import { setActivePreview } from '../../context/previewRedirect';
 
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
@@ -28,8 +29,11 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
                 // Prefer selection
                 const sel = ed.selection && !ed.selection.isEmpty ? doc.getText(ed.selection) : null;
                 if (sel) {
-                    // If selection exists, copy its plain text (for markdown selection we can use mdToPlainText on the slice)
-                    const text = (doc.languageId === 'markdown') ? mdToPlainText(sel).text : sel;
+                    // If selection exists, copy its plain text (use appropriate processor for markdown/plaintext)
+                    let text: string;
+                    if (doc.languageId === 'markdown') { text = mdToPlainText(sel).text; }
+                    else if (doc.languageId === 'plaintext') { text = txtToPlainText(sel).text; }
+                    else { text = sel; }
                     vscode.env.clipboard.writeText(text);
                     vscode.window.setStatusBarMessage('已复制纯文本（选区）', 1200);
                     return;
@@ -444,7 +448,9 @@ export class PreviewManager {
             return { htmlBody };
         } else {
             const text = doc.getText();
-            const htmlBody = `<div data-line="0"><pre>${this.escapeHtml(text)}</pre></div>`;
+            // For plaintext, preserve paragraph/blank-line blocks via txtToPlainText
+            const { blocks } = txtToPlainText(text);
+            const htmlBody = blocks.map(b => `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`).join('\n');
             return { htmlBody };
         }
     }
@@ -454,9 +460,10 @@ export class PreviewManager {
             const src = doc.getText();
             return mdToPlainText(src);
         }
-        const text = doc.getText();
-        const blocks = [{ srcLine: 0, text }];
-        return { text, blocks };
+    const text = doc.getText();
+    const blocks = (doc.languageId === 'plaintext') ? txtToPlainText(text).blocks : [{ srcLine: 0, text }];
+    const outText = (doc.languageId === 'plaintext') ? txtToPlainText(text).text : text;
+    return { text: outText, blocks };
     }
 
     private sendEditorTop(doc: vscode.TextDocument) {

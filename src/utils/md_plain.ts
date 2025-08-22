@@ -90,7 +90,7 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
             continue;
         }
 
-        // 8) Paragraph / 连续非空行
+        // 8) Paragraph / 连续非空行 或 空行：保留空行为独立空块
         const start = i;
         const buf: string[] = [];
         while (i < lines.length && lines[i].trim() !== '') {
@@ -98,11 +98,26 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
             buf.push(lines[i]);
             i++;
         }
-        if (buf.length) { pushBlock(start, stripInline(buf.join('\n'))); }
-        while (i < lines.length && lines[i].trim() === '') { i++; } // 跳过空行
+        if (buf.length) {
+            // 推入段落块
+            pushBlock(start, stripInline(buf.join('\n')));
+            // 保留段落后面的空行，每个空行都作为单独空块
+            while (i < lines.length && lines[i].trim() === '') {
+                pushBlock(i, '');
+                i++;
+            }
+            continue;
+        } else {
+            // 当前就是空行：把连续的每一行都作为单独空块保存
+            while (i < lines.length && lines[i].trim() === '') {
+                pushBlock(i, '');
+                i++;
+            }
+            continue;
+        }
     }
-
-    const text = blocks.map(b => b.text).join('\n\n').replace(/\n{3,}/g, '\n\n');
+    // 用单个换行符连接 blocks；因为空行由空块表示，能精确保留原始空行数量
+    const text = blocks.map(b => b.text).join('\n');
     return { text, blocks };
 }
 
