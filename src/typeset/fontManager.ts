@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as fontList from 'font-list';
 
-/** CSS font-family 解析：支持引号、反斜杠转义，返回有序去重列表 */
+/** CSS font-family 解析：支持引号、引号内外的反斜杠转义，返回有序去重列表 */
 export function parseFontFamily(input: string): string[] {
     const out: string[] = [];
     let cur = '';
@@ -15,10 +15,22 @@ export function parseFontFamily(input: string): string[] {
 
     while (i < input.length) {
         const ch = input[i];
-        if (quote) {
-            if (ch === '\\') {
-                if (i + 1 < input.length) { cur += input[i + 1]; i += 2; continue; }
+
+        // 统一处理：引号内外都识别反斜杠做“转义下一个字符”
+        if (ch === '\\') {
+            if (i + 1 < input.length) {
+                cur += input[i + 1];
+                i += 2;
+                continue;
+            } else {
+                // 末尾孤立的反斜杠：按字面追加一次
+                cur += '\\';
+                i++;
+                continue;
             }
+        }
+
+        if (quote) {
             if (ch === quote) { quote = null; i++; continue; }
             cur += ch; i++; continue;
         } else {
@@ -29,7 +41,9 @@ export function parseFontFamily(input: string): string[] {
     }
     pushToken(cur);
 
-    const seen = new Set<string>(); const dedup: string[] = [];
+    // 去重（忽略大小写）
+    const seen = new Set<string>();
+    const dedup: string[] = [];
     for (const t of out) {
         const key = t.toLowerCase();
         if (!seen.has(key)) { seen.add(key); dedup.push(t); }
@@ -42,18 +56,47 @@ const GENERIC_KEYWORDS = new Set([
     'ui-monospace', 'ui-rounded', 'ui-serif', 'ui-sans-serif', 'emoji', 'math', 'fangsong'
 ]);
 
+// ---- 统一规范化工具 ----
+
+/** 去掉外层成对引号并反转义（\x -> x；末尾孤立反斜杠保留） */
+function unquote_and_unescape(raw: string): string {
+    let s = (raw ?? '').trim();
+    if (!s) {return s;}
+
+    // 去外层成对引号
+    if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
+        s = s.slice(1, -1);
+    }
+    // \x -> x；注意：末尾孤立 \ 不会被这个正则吃掉
+    s = s.replace(/\\(.)/g, '$1');
+    return s.trim();
+}
+
+/** 规范化整个列表：去引号、反转义、去空、大小写去重 */
+function normalize_font_list(list: string[]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const item of list) {
+        const v = unquote_and_unescape(item);
+        if (!v) {continue;}
+        const k = v.toLowerCase();
+        if (!seen.has(k)) { seen.add(k); out.push(v); }
+    }
+    return out;
+}
+
 // 用单引号包裹带空格/特殊字符的字体名，避免 JSON 里的 \" 转义
 function needsQuotes(name: string): boolean {
-    if (GENERIC_KEYWORDS.has(name.trim().toLowerCase())) {return false;}
+    if (GENERIC_KEYWORDS.has(name.trim().toLowerCase())) { return false; }
     // 仅允许无空格的简洁 token，无空格/纯字母数字/下划线/连字符
     return !/^[A-Za-z0-9_-]+$/.test(name.trim());
 }
 
 function quote(name: string): string {
     const n = name.trim();
-    if (!needsQuotes(n)) {return n;}
-    // 单引号外层，内部单引号转义为 \'
-    return `'${n.replace(/'/g, "\\'")}'`;
+    if (!needsQuotes(n)) { return n; }
+    // CSS 单引号字符串：需要把 \ 先转义为 \\，再把 ' 转义为 \'
+    return `'${n.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
 }
 
 export function serializeFontFamily(list: string[]): string {
@@ -75,7 +118,9 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
     context.subscriptions.push(
         vscode.commands.registerCommand('andrea.manageEditorFontFamily', async () => {
             const cfg = vscode.workspace.getConfiguration('editor');
-            let working = parseFontFamily(cfg.get<string>('fontFamily', '') || '');
+
+            // 初始化时就做一次规范化，避免历史遗留的引号/转义进入工作集
+            let working = normalize_font_list(parseFontFamily(cfg.get<string>('fontFamily', '') || ''));
 
             // —— 会话级缓存：只在本次管理器会话中缓存一次 —— //
             let sessionFonts: string[] | null = null;
@@ -85,7 +130,8 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                     { location: vscode.ProgressLocation.Notification, title: '正在枚举本机字体…' },
                     async () => fontList.getFonts()
                 );
-                sessionFonts = Array.from(new Set(arr.map(n => n.trim()).filter(Boolean)))
+                // 对枚举回来的系统字体做清洗（font-list 某些平台可能带引号）
+                sessionFonts = normalize_font_list(arr.map(n => n.trim()).filter(Boolean))
                     .sort((a, b) => a.localeCompare(b));
                 return sessionFonts!;
             };
@@ -98,7 +144,8 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                     { canPickMany: true, placeHolder: '选择要添加的系统字体（可多选）' }
                 );
                 if (!picked || picked.length === 0) { return; }
-                working = [...working, ...picked.map(p => p.label)];
+                // 追加后再整体规范化，确保列表干净
+                working = normalize_font_list([...working, ...picked.map(p => p.label)]);
             };
 
             const addManual = async (): Promise<void> => {
@@ -108,9 +155,17 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                     ignoreFocusOut: true
                 });
                 if (!input) { return; }
+
                 const arr = parseFontFamily(input);
                 const exist = new Set(working.map(s => s.toLowerCase()));
-                for (const a of arr) { if (!exist.has(a.toLowerCase())) { working.push(a); } }
+                for (const a of arr) {
+                    const k = a.toLowerCase();
+                    if (!exist.has(k)) {
+                        working.push(a);
+                        exist.add(k); // 同批次去重
+                    }
+                }
+                working = normalize_font_list(working); // 兜底一次
             };
 
             const removeFonts = async (): Promise<void> => {
@@ -120,6 +175,7 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                 if (!picked) { return; }
                 const toDel = new Set(picked.map(p => p.label.replace(/^\d+\.\s*/, '').toLowerCase()));
                 working = working.filter(f => !toDel.has(f.toLowerCase()));
+                working = normalize_font_list(working);
             };
 
             const editFont = async (): Promise<void> => {
@@ -137,9 +193,7 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                 const idx = working.findIndex(s => s === old);
                 if (idx >= 0) {
                     working[idx] = input.trim();
-                    const seen = new Set<string>(); const next: string[] = [];
-                    for (const s of working) { const k = s.toLowerCase(); if (!seen.has(k)) { seen.add(k); next.push(s); } }
-                    working = next;
+                    working = normalize_font_list(working);
                 }
             };
 
@@ -169,13 +223,14 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                     case '置顶': arr.unshift(item); break;
                     case '置底': arr.push(item); break;
                 }
-                const seen = new Set<string>(); const out: string[] = [];
-                for (const s of arr) { const k = s.toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(s); } }
-                working = out;
+                working = normalize_font_list(arr);
             };
 
             const save = async (): Promise<void> => {
-                await cfg.update('fontFamily', serializeFontFamily(working), vscode.ConfigurationTarget.Workspace);
+                // 保存前最终兜底一次，避免任何异常格式写回设置
+                const finalList = normalize_font_list(working);
+                await cfg.update('fontFamily', serializeFontFamily(finalList), vscode.ConfigurationTarget.Workspace);
+                working = finalList;
                 onRefreshStatus();
                 vscode.window.showInformationMessage('已保存 editor.fontFamily');
             };
