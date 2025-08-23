@@ -27,6 +27,17 @@
           />
         </div>
 
+        <div class="col-12 col-md-6">
+          <q-input
+            v-model="draft.base.affiliation"
+            label="从属 (affiliation)"
+            dense
+            filled
+            :debounce="150"
+            @update:model-value="commit(['base.affiliation'])"
+          />
+        </div>
+
         <div v-if="typeSelect === '__custom__'" class="col-12 col-md-6">
           <q-input
             v-model="customType"
@@ -714,7 +725,7 @@ function toEntry(k: string, v: any, bucket: 'extended' | 'custom'): ExtraEntry {
 }
 
 /** 基础键黑名单：不应进入 扩展/自定义 列表 */
-const BASE_KEYS_BLOCKLIST = new Set(['aliases', 'fixes', 'regex', 'regexFlags']);
+const BASE_KEYS_BLOCKLIST = new Set(['aliases', 'fixes', 'regex', 'regexFlags', 'affiliation']);
 
 const mergedEntries = reactive<ExtraEntry[]>([]);
 function reloadExtras() {
