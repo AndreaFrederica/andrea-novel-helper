@@ -15,5 +15,15 @@ server = { cmd = [
     "5173",
 ] }
 
+build = { cmd = ["npm", "run", "compile"] }
+
+build_web = { cmd = ["npm", "run", "build:webview"] }
+
+build_all = { depends-on = ["build_web", "build"] }
+
+web_dev = { cmd = ["npm", "run", "dev:webview"] }
+
+publish = { cmd = ["npx", "vsce", "publish"], depends-on = ["build_all"] }
+
 [dependencies]
 python = ">=3.13.5,<3.14"

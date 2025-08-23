@@ -50,6 +50,9 @@ import { registerQuickSettings } from './typeset/quickSettings';
 import { registerFontManager } from './typeset/fontManager';
 import { registerContextKeys } from './typeset/contextKeys';
 import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOverride';
+
+import {activate as roleCardManagerActivate} from './Provider/view/roleCardManager';
+
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
 
@@ -217,6 +220,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 openDoubleOutline
             )
         );
+
+        roleCardManagerActivate(context);
 
         registerAutoPairs(context);
         registerSmartEnter(context);

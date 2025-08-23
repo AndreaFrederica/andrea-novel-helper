@@ -82,11 +82,15 @@
       }
     ],
     "commands": [
-            {
-              "command": "andrea.ensureEnterOverrides",
-              "title": "%command.andrea.ensureEnterOverrides.title%",
-              "category": "Andrea Novel Helper"
-            },
+      {
+        "command": "andrea.roleCardManager.open",
+        "title": "打开角色卡管理器"
+      },
+      {
+        "command": "andrea.ensureEnterOverrides",
+        "title": "%command.andrea.ensureEnterOverrides.title%",
+        "category": "Andrea Novel Helper"
+      },
       {
         "command": "andrea.toggleSmartExit",
         "title": "%command.andrea.toggleSmartExit.title%"
@@ -691,8 +695,7 @@
           "when": "editorTextFocus && resourceExtname == .md && editorHasSelection",
           "command": "AndreaNovelHelper.showMarkdownFormatMenu",
           "group": "1_modification@1"
-        }
-        ,
+        },
         {
           "when": "editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
           "command": "myPreview.copyPlainText",
@@ -1096,7 +1099,7 @@
       }
     ]
   },
-    "workspaces": [
+  "workspaces": [
     "packages/webview"
   ],
   "scripts": {

@@ -3,7 +3,7 @@ import {
   createMemoryHistory,
   createRouter,
   createWebHashHistory,
-  createWebHistory,
+createWebHistory  ,
 } from 'vue-router';
 import routes from './routes';
 

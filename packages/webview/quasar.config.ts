@@ -52,6 +52,7 @@ export default defineConfig((ctx) => {
       // rebuildCache: true, // rebuilds Vite/linter/etc cache on startup
 
       // publicPath: '/',
+      publicPath: './',      // ✅ 改成相对路径，避免产物里出现 /assets/... 的绝对引用
       // analyze: true,
       // env: {},
       // rawDefine: {}
