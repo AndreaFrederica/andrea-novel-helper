@@ -1096,11 +1096,16 @@
       }
     ]
   },
+    "workspaces": [
+    "packages/webview"
+  ],
   "scripts": {
-    "vscode:prepublish": "pnpm run compile",
+    "build:webview": "npm --workspace=webview run build",
+    "dev:webview": "npm --workspace=webview run dev",
+    "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "pnpm run compile && pnpm run lint",
+    "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test"
   },
