@@ -425,7 +425,7 @@
 </template>
 
 <script lang="ts" setup>
-import { BuiltinType, JsonValue, RoleCardModel, RoleType } from 'app/types/role';
+import type { BuiltinType, JsonValue, RoleCardModel, RoleType } from 'app/types/role';
 import { computed, reactive, watch, ref } from 'vue';
 
 const props = defineProps<{ modelValue: RoleCardModel }>();

@@ -1,0 +1,19 @@
+[workspace]
+authors = ["AndreaFrederica <andreafrederica@outlook.com>"]
+channels = ["conda-forge"]
+name = "andrea-novel-helper"
+platforms = ["win-64"]
+version = "0.1.0"
+
+[tasks]
+server = { cmd = [
+    "python",
+    "static_server.py",
+    "--dir",
+    "./packages/webview/dist/spa",
+    "--port",
+    "5173",
+] }
+
+[dependencies]
+python = ">=3.13.5,<3.14"

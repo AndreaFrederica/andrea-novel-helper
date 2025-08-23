@@ -18,66 +18,65 @@ export default defineConfigWithVueTs(
     // ignores: []
   },
 
+  // 基础推荐集
   pluginQuasar.configs.recommended(),
   js.configs.recommended,
 
-  /**
-   * https://eslint.vuejs.org
-   *
-   * pluginVue.configs.base
-   *   -> Settings and rules to enable correct ESLint parsing.
-   * pluginVue.configs[ 'flat/essential']
-   *   -> base, plus rules to prevent errors or unintended behavior.
-   * pluginVue.configs["flat/strongly-recommended"]
-   *   -> Above, plus rules to considerably improve code readability and/or dev experience.
-   * pluginVue.configs["flat/recommended"]
-   *   -> Above, plus rules to enforce subjective community defaults to ensure consistency.
-   */
+  // Vue 基础（不要用 strongly/recommended 以免加更多限制）
   pluginVue.configs['flat/essential'],
 
+  // 类型检查相关（放在前面，后面会用“最终覆盖块”覆盖个别规则）
+  vueTsConfigs.recommendedTypeChecked,
+
+  // 通用语言环境与少量项目级自定义
+  {
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        process: 'readonly',
+        ga: 'readonly',
+        cordova: 'readonly',
+        Capacitor: 'readonly',
+        chrome: 'readonly',
+        browser: 'readonly',
+      },
+    },
+    rules: {
+      'prefer-promise-reject-errors': 'off',
+      'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off',
+    },
+  },
+
+  // 仅对 TS/Vue 文件的规则（非最终覆盖）
   {
     files: ['**/*.ts', '**/*.vue'],
     rules: {
       '@typescript-eslint/consistent-type-imports': ['error', { prefer: 'type-imports' }],
     },
   },
-  // https://github.com/vuejs/eslint-config-typescript
-  vueTsConfigs.recommendedTypeChecked,
 
-  {
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-
-      globals: {
-        ...globals.browser,
-        ...globals.node, // SSR, Electron, config files
-        process: 'readonly', // process.env.*
-        ga: 'readonly', // Google Analytics
-        cordova: 'readonly',
-        Capacitor: 'readonly',
-        chrome: 'readonly', // BEX related
-        browser: 'readonly', // BEX related
-      },
-    },
-
-    // add your custom rules here
-    rules: {
-      'prefer-promise-reject-errors': 'off',
-
-      // allow debugger during development only
-      'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off',
-    },
-  },
-
-  {
-    files: ['src-pwa/custom-service-worker.ts'],
-    languageOptions: {
-      globals: {
-        ...globals.serviceworker,
-      },
-    },
-  },
-
+  // 跳过 Prettier 的格式化冲突规则
   prettierSkipFormatting,
+
+  // === 最终覆盖块（必须放最后，确保放宽规则生效） ===
+  {
+    files: ['**/*.{ts,tsx,vue}'],
+    rules: {
+      // 允许 any（只警告）
+      '@typescript-eslint/no-explicit-any': 'warn',
+
+      // 不必要断言：关闭
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+
+      // 未使用变量：只警告，并允许下划线忽略
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      }],
+    },
+  },
 );

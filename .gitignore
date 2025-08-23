@@ -7,4 +7,7 @@ node_modules
 package-lock.json
 .npm
 .history
+novel-helper# pixi environments
+.pixi/*
+!.pixi/config.toml
 novel-helper

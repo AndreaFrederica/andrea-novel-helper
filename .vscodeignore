@@ -25,7 +25,7 @@ novel-helper
 .history
 builder
 
-
+*.py
 
 
 # ============= 忽略扩展源码、配置文件 =============
@@ -56,3 +56,7 @@ node_modules/
 # ============= 保留前端 SPA 产物 =============
 !packages/webview/dist/
 !packages/webview/dist/**
+
+
+.pixi/*
+!.pixi/config.toml

@@ -16,8 +16,8 @@
       side="left"
       bordered
       :breakpoint="0"
-      :width="drawerWidth"
-      class="bg-grey-1"
+      class="bg-grey-1 drawer-fullheight"
+      style="height: 100vh;"
     >
       <q-scroll-area class="fit">
         <div class="q-pa-md">
@@ -91,7 +91,8 @@
 
     <!-- 右侧主体 -->
     <q-page-container>
-      <div class="column col q-gutter-md">
+      <div class="main-content">
+        <div class="column col q-gutter-md">
       <!-- 用外层 div 承载 ref，避免去摸子组件实例的 $el -->
       <div
         v-for="(r, idx) in roles"
@@ -99,7 +100,7 @@
         :ref="el => setRoleRef(r.id, el as HTMLElement)"
       >
         <role-card
-          v-model="roles[idx]"
+          v-model="roles[idx]!"
           @changed="e => onChanged(idx, e)"
           @type-changed="e => onTypeChanged(idx, e)"
         />
@@ -118,6 +119,7 @@
           <pre style="white-space:pre-wrap">{{ roles }}</pre>
         </q-card-section>
       </q-card>
+        </div>
       </div>
     </q-page-container>
   </q-layout>
@@ -126,14 +128,9 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import RoleCard from 'components/RoleCard.vue'
+import type { RoleCardModel } from '../../types/role'
 
-type KV = Record<string, any>
-type Role = {
-  id: string
-  base?: KV
-  extended?: KV
-  custom?: KV
-}
+type RoleWithId = RoleCardModel & { id: string }
 
 const drawerOpen = ref(true)
 const drawerWidth = 300
@@ -142,7 +139,7 @@ const drawerWidth = 300
 const opened = ref<Set<string>>(new Set())
 
 // 初始示例
-const roles = ref<Role[]>([
+const roles = ref<RoleWithId[]>([
   // ===== 正则表达式示例 =====
   {
     id: genId(),
@@ -382,7 +379,7 @@ function close (id: string) {
 
 // 展开/收起全部
 function expandAll () {
-  opened.value = new Set(roles.value.map(r => r.id))
+  opened.value = new Set(roles.value.map((r: RoleWithId) => r.id))
 }
 function collapseAll () {
   opened.value = new Set()
@@ -393,7 +390,7 @@ function onTypeChanged (index: number, e: any) {}
 
 // 添加角色
 function addRole () {
-  const newRole: Role = {
+  const newRole: RoleWithId = {
     id: genId(),
     base: {
       name: `新角色 ${roles.value.length + 1}`,
@@ -408,35 +405,39 @@ function addRole () {
     custom: {}
   }
   roles.value.push(newRole)
-  nextTick(() => {
+  void nextTick(() => {
     open(newRole.id)            // 新增的在边栏默认展开
     scrollToRole(newRole.id)    // 并滚动过去
   })
 }
-
-function hasBucket (r: Role, bucket: 'base'|'extended'|'custom') {
-  const obj = r[bucket]
+function hasBucket (r: RoleWithId, bucket: 'base'|'extended'|'custom') {
+  const obj = ((r as unknown) as Record<string, unknown>)[bucket]
   return obj && typeof obj === 'object'
 }
-function countKeys (r: Role, bucket: 'base'|'extended'|'custom') {
-  const obj = r[bucket] as KV|undefined
+function countKeys (r: RoleWithId, bucket: 'base'|'extended'|'custom') {
+  const obj = ((r as unknown) as Record<string, unknown>)[bucket]
   return obj ? Object.keys(obj).length : 0
 }
-function bucketEntries (r: Role, bucket: 'base'|'extended'|'custom') {
-  const obj = r[bucket] as KV|undefined
+function bucketEntries (r: RoleWithId, bucket: 'base'|'extended'|'custom') {
+  const obj = ((r as unknown) as Record<string, unknown>)[bucket]
   if (!obj) return []
-  return Object.keys(obj).map(k => {
-    const v = obj[k]
+  const rec = obj as Record<string, unknown>
+  return Object.keys(rec).map(k => {
+    const v = rec[k]
     return { key: k, preview: toPreview(v) }
   })
 }
-function toPreview (v: any): string {
+function toPreview (v: unknown): string {
   if (Array.isArray(v)) return `[${v.map(x => stringifyShort(x)).join(', ')}]`
   if (typeof v === 'object' && v !== null) return '{…}'
   return stringifyShort(v)
 }
-function stringifyShort (v: any): string {
-  const s = String(v ?? '')
+function stringifyShort (v: unknown): string {
+  let s: string
+  if (typeof v === 'string') s = v
+  else if (v == null) s = ''
+  else if (typeof v === 'object') s = '[object]'
+  else s = String(v as number | boolean | symbol | bigint)
   return s.length > 36 ? s.slice(0, 33) + '…' : s
 }
 
@@ -468,4 +469,13 @@ function genId () {
 
 /* 列表圆角 */
 .rounded-borders { border-radius: 8px; }
+
+/* 主内容区独立滚动，避免与侧边栏共享滚动 */
+.main-content { height: 95vh; overflow: auto; }
+
+/* 让抽屉内部滚动区独立占满视口，从而有自己的滚动条 */
+.drawer-fullheight .q-scrollarea__container,
+.drawer-fullheight .q-scrollarea__scrollbar {
+  height: 95vh;
+}
 </style>
