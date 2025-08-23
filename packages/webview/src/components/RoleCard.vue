@@ -414,32 +414,8 @@
 </template>
 
 <script lang="ts" setup>
+import { BuiltinType, JsonValue, RoleCardModel, RoleType } from 'app/types/role';
 import { computed, reactive, watch, ref } from 'vue';
-
-/** ====== 类型声明（与约束一致） ====== */
-type BuiltinType = '主角' | '配角' | '联动角色' | '敏感词' | '词汇' | '正则表达式';
-type RoleType = BuiltinType | string;
-type JsonValue = string | number | boolean | null | string[];
-
-interface BaseFieldsCommon {
-  name: string;
-  type: RoleType;
-  color?: string;
-  priority?: number;
-  description?: string;
-  aliases?: string[] | undefined; // 独立：基础字段
-  fixes?: string[] | undefined; // 独立：基础字段（仅敏感词可编辑）
-  regex?: string | undefined; // 正则专用：基础字段
-  regexFlags?: string | undefined; // 正则专用：基础字段
-}
-
-type ExtendedFields = Record<string, JsonValue>;
-type CustomFields = Record<string, JsonValue>;
-interface RoleCardModel {
-  base: BaseFieldsCommon;
-  extended?: ExtendedFields | undefined;
-  custom?: CustomFields | undefined;
-}
 
 const props = defineProps<{ modelValue: RoleCardModel }>();
 const emit = defineEmits<{
@@ -644,8 +620,6 @@ const fixesUI = computed(() => {
   return Array.from({ length: Math.max(1, fixesModel.value.length + 1) }, (_, i) => i);
 });
 
-
-
 function removeAlias(i: number) {
   const arr = aliasesModel.value.slice();
   if (i < arr.length) {
@@ -653,7 +627,6 @@ function removeAlias(i: number) {
     onAliasesUpdate(arr);
   }
 }
-
 
 function removeFix(i: number) {
   const arr = fixesModel.value.slice();
