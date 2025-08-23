@@ -1,0 +1,31 @@
+{
+  "[markdown]": {
+    "editor.quickSuggestions": {
+      "other": true,
+      "comments": true,
+      "strings": true
+    },
+    "editor.suggestOnTriggerCharacters": true,
+    "editor.wordBasedSuggestions": "allDocuments",
+    "editor.quickSuggestionsDelay": 0
+  },
+  "github.copilot.nextEditSuggestions.enabled": true,
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "AndreaNovelHelper.supportedFileTypes": [
+    "markdown",
+    "plaintext",
+    "json5"
+  ],
+  "markdown-preview-enhanced.previewTheme": "monokai.css",
+  "markdown-preview-enhanced.codeBlockTheme": "auto.css",
+  "workbench.iconTheme": "material-icon-theme",
+  "workbench.editorAssociations": {
+    "*.copilotmd": "vscode.markdown.preview.editor",
+    "*.md": "default"
+  },
+  "editor.mouseWheelZoom": true,
+  "editor.wordWrap": "on"
+
+}
