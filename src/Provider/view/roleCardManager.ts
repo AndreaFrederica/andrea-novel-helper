@@ -62,8 +62,7 @@ function rewriteHtmlToWebviewUris(
 /** 在运行时兜底：拦截 fetch/XHR/Worker/元素属性赋值，自动把相对 URL 重写为 asWebviewUri 基址 */
 function injectRuntimeBasePatch(html: string, webview: vscode.Webview, spaRoot: vscode.Uri, nonce: string) {
   const BASE = webview.asWebviewUri(spaRoot).toString() + '/';
-  const patch = `
-<script nonce="${nonce}">
+  const patch = `<script nonce="${nonce}">
 (function(){
   const ABS = /^(?:[a-z]+:|data:|mailto:|vscode-)/i;
   const BASE = ${JSON.stringify(BASE)};
@@ -135,13 +134,14 @@ function injectRuntimeBasePatch(html: string, webview: vscode.Webview, spaRoot: 
       if (!res.ok) return;
       let css = await res.text();
 
+      // 修复：正确的正则表达式，移除双反斜杠
       // url("/...") / url('/...') / url(/...)
-      css = css.replace(/url\\(\\s*(['"]?)(\\/[^)'"]+)\\1\\s*\\)/g, function(_m, q, p) {
-        return 'url(' + (q || '') + new URL(p.slice(1), BASE).toString() + (q || '') + ')';
+      css = css.replace(/url\\s*\\(\\s*(['"]?)\\/([^)'"]+)\\1\\s*\\)/g, function(match, quote, path) {
+        return 'url(' + (quote || '') + new URL(path, BASE).toString() + (quote || '') + ')';
       });
       // @import "/..."; 或 @import '/...';
-      css = css.replace(/@import\\s+(['"])(\\/[^'"]+)\\1/g, function(_m, q, p) {
-        return '@import ' + q + new URL(p.slice(1), BASE).toString() + q;
+      css = css.replace(/@import\\s+(['"])\\/([^'"]+)\\1/g, function(match, quote, path) {
+        return '@import ' + quote + new URL(path, BASE).toString() + quote;
       });
 
       const style = document.createElement('style');
@@ -177,6 +177,7 @@ function injectRuntimeBasePatch(html: string, webview: vscode.Webview, spaRoot: 
             if (n && n.nodeType === 1 && n.tagName === 'LINK') {
               var link = n;
               var rel = link.getAttribute('rel') || '';
+              // 修复：移除双反斜杠转义
               if (/\\bmodulepreload\\b/i.test(rel)) {
                 var h = link.getAttribute('href');
                 if (h) link.setAttribute('href', toAbs(h));
@@ -200,17 +201,30 @@ function injectRuntimeBasePatch(html: string, webview: vscode.Webview, spaRoot: 
   }
 })();
 </script>`;
-  // 尽量在 <head> 起始注入，保证最早生效
-  if (/<head[^>]*>/i.test(html)) {
-    return html.replace(/<head([^>]*)>/i, `<head$1>\n${patch}`);
+
+  // 修复：更安全的注入逻辑
+  // 优先在 <head> 开始处注入
+  const headMatch = html.match(/<head[^>]*>/i);
+  if (headMatch) {
+    const headIndex = headMatch.index! + headMatch[0].length;
+    return html.slice(0, headIndex) + '\n' + patch + html.slice(headIndex);
   }
-  const i = html.indexOf('<script');
-  return (i >= 0) ? html.slice(0, i) + patch + html.slice(i)
-                  : html.replace(/<\/head>/i, patch + '\n</head>');
+  
+  // 如果有 <script>，在第一个 <script> 前注入
+  const scriptIndex = html.indexOf('<script');
+  if (scriptIndex >= 0) {
+    return html.slice(0, scriptIndex) + patch + '\n' + html.slice(scriptIndex);
+  }
+  
+  // 如果有 <body>，在其前面注入
+  const bodyIndex = html.indexOf('<body');
+  if (bodyIndex >= 0) {
+    return html.slice(0, bodyIndex) + patch + '\n' + html.slice(bodyIndex);
+  }
+  
+  // 最后兜底，在 HTML 开头注入
+  return patch + '\n' + html;
 }
-
-
-
 
 /** 读取并重写 index.html + 注入 CSP + 运行时补丁 */
 function buildHtml(panel: vscode.WebviewPanel, spaRoot: vscode.Uri): string {

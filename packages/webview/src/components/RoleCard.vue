@@ -211,7 +211,7 @@
         <q-btn dense color="primary" icon="add" label="新增字段" @click="openAdd = true" />
       </div>
 
-      <div v-if="mergedEntries.length === 0" class="text-grey-6">
+      <div v-if="mergedEntries.length === 0" :class="[isDark ? 'text-grey-5' : 'text-grey-6']">
         暂无字段。你可以点击「新增字段」添加（默认归入自定义）。
       </div>
 
@@ -224,7 +224,7 @@
           :label="displayLabel(item)"
           :caption="item.bucket === 'extended' ? '扩展字段' : '自定义字段'"
           default-opened
-          header-class="bg-grey-1"
+          :header-class="isDark ? 'bg-grey-9' : 'bg-grey-1'"
         >
           <div class="q-pa-sm q-gutter-sm">
             <div class="row q-col-gutter-md">
@@ -276,7 +276,12 @@
                   :debounce="150"
                   @update:model-value="onExtraValueChange(idx)"
                 />
-                <q-expansion-item dense icon="visibility" label="预览" header-class="bg-grey-2">
+                <q-expansion-item
+                  dense
+                  icon="visibility"
+                  label="预览"
+                  :header-class="isDark ? 'bg-grey-9' : 'bg-grey-2'"
+                >
                   <q-markdown :src="item.valueStr || '（空）'" />
                 </q-expansion-item>
               </div>
@@ -427,6 +432,10 @@
 <script lang="ts" setup>
 import type { BuiltinType, JsonValue, RoleCardModel, RoleType } from 'app/types/role';
 import { computed, reactive, watch, ref } from 'vue';
+import { useQuasar } from 'quasar';
+
+const $q = useQuasar();
+const isDark = computed(() => $q.dark.isActive);
 
 const props = defineProps<{ modelValue: RoleCardModel }>();
 const emit = defineEmits<{
