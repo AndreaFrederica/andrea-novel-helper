@@ -180,11 +180,13 @@ window.addEventListener('message', (event: MessageEvent) => {
 function notifySave() {
   if (applyingRemote) return;
   try {
-    vscodeApi?.postMessage?.({ type: 'saveRoleCards', list: roles.value });
+    const plain = JSON.parse(JSON.stringify(roles.value)); // 深度去 Proxy & 去除不可序列化内容
+    vscodeApi?.postMessage?.({ type: 'saveRoleCards', list: plain });
   } catch (e) {
     console.warn('Failed to post saveRoleCards', e);
   }
 }
+
 
 onMounted(() => {
   if (vscodeApi?.postMessage) vscodeApi.postMessage({ type: 'requestRoleCards' });
