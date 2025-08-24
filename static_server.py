@@ -15,9 +15,7 @@ import logging
 import mimetypes
 import os
 import socketserver
-import sys
 from pathlib import Path
-from typing import Optional
 
 # Ensure common modern types are recognized
 mimetypes.add_type("application/javascript", ".mjs")
@@ -56,7 +54,7 @@ def build_handler(directory: str, enable_cors: bool, disable_cache: bool, spa_mo
             self.send_response(204)  # No Content
             self.end_headers()
 
-        def guess_type(self, path: str) -> str:
+        def guess_type(self, path: str) -> str: # type: ignore
             # Ensure correct types for common modern assets
             ctype = super().guess_type(path)
             if path.endswith(".map"):
