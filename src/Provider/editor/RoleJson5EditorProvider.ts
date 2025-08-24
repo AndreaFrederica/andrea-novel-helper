@@ -139,7 +139,7 @@ function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         fixes: role.fixes ? [...role.fixes] : undefined,
         regex: role.regex,
         regexFlags: role.regexFlags,
-    wordSegmentFilter: typeof role.wordSegmentFilter === 'boolean' ? role.wordSegmentFilter : undefined,
+        wordSegmentFilter: typeof role.wordSegmentFilter === 'boolean' ? role.wordSegmentFilter : undefined,
     };
 
     const extended: ExtendedFields = {};
@@ -160,8 +160,8 @@ function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
                     const n = Array.isArray(v) ? Number(v[0]) : Number(v as any);
                     if (!Number.isNaN(n)) base.priority = n;
                 }
-                    } else if (!base[baseKey as keyof BaseFieldsCommon]) {
-                        (base as any)[baseKey] = Array.isArray(v) ? (v[0] as any) : (v as any);
+            } else if (!(base as any)[baseKey]) {
+                (base as any)[baseKey] = Array.isArray(v) ? (v[0] as any) : (v as any);
             }
             continue;
         }
@@ -261,7 +261,7 @@ function parseRolesFromText(text: string): RoleFlat[] {
             description: rec.description ?? rec.描述,
             aliases: toStringArray(rec.aliases ?? rec.alias ?? rec.别名),
             color: rec.color ?? rec.颜色,
-        wordSegmentFilter: (typeof rec.wordSegmentFilter === 'boolean') ? rec.wordSegmentFilter : (typeof rec['分词过滤'] === 'boolean' ? rec['分词过滤'] : undefined),
+            wordSegmentFilter: (typeof rec.wordSegmentFilter === 'boolean') ? rec.wordSegmentFilter : (typeof rec['分词过滤'] === 'boolean' ? rec['分词过滤'] : undefined),
             regex: rec.regex,
             regexFlags: rec.regexFlags,
             priority: typeof rec.priority === 'number' ? rec.priority : undefined,
@@ -270,8 +270,8 @@ function parseRolesFromText(text: string): RoleFlat[] {
         // 动态键并入（忽略隐藏键与已知基础键）
         for (const [k, v] of Object.entries(rec)) {
             if (HIDDEN_BACKEND_KEYS.has(k)) continue;
-            if (k in role) continue;
-            if (!isEmptyish(v)) role[k] = Array.isArray(v) ? v.map(x => String(x)) : v;
+            if ((role as any)[k] !== undefined) continue;
+            if (!isEmptyish(v)) (role as any)[k] = Array.isArray(v) ? v.map(x => String(x)) : v;
         }
         out.push(role);
     }
@@ -290,7 +290,7 @@ function stringifyRolesToJson5(roles: RoleFlat[]): string {
         put('description', r.description);
         put('aliases', toStringArray(r.aliases));
         put('color', r.color);
-    put('wordSegmentFilter', r.wordSegmentFilter);
+        put('wordSegmentFilter', r.wordSegmentFilter);
         put('regex', r.regex);
         put('regexFlags', r.regexFlags);
         if (typeof r.priority === 'number' && !Number.isNaN(r.priority)) rec.priority = r.priority;
@@ -434,9 +434,11 @@ export interface RoleJson5EditorOptions {
 }
 
 export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider {
+
     public static register(context: vscode.ExtensionContext, opts: RoleJson5EditorOptions): vscode.Disposable {
         const provider = new RoleJson5EditorProvider(context, opts);
-        return vscode.window.registerCustomEditorProvider(
+
+        const reg = vscode.window.registerCustomEditorProvider(
             'andrea.roleJson5Editor',
             provider,
             {
@@ -444,8 +446,30 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                 supportsMultipleEditorsPerDocument: true,
             }
         );
-    }
 
+        // 新增：对外开放的 def 事件命令
+        const defCmd = vscode.commands.registerCommand('andrea.roleJson5Editor.def', async (arg1: any, arg2?: any) => {
+            let name: string | undefined;
+            let filePath: string | undefined;
+
+            if (arg1 && typeof arg1 === 'object') {
+                name = arg1.name ?? arg1.roleName;
+                filePath = arg1.path ?? arg1.filePath;
+            } else {
+                name = arg1 !== null ? String(arg1) : undefined;
+                filePath = typeof arg2 === 'string' ? arg2 : undefined;
+            }
+
+            if (!name || !filePath) {
+                vscode.window.showErrorMessage('[roleJson5Editor.def] 参数缺失：需要 name 与 path');
+                return;
+            }
+
+            await provider.openDef({ name, path: filePath });
+        });
+
+        return vscode.Disposable.from(reg, defCmd);
+    }
     private readonly ctx: vscode.ExtensionContext;
     private readonly opts: RoleJson5EditorOptions;
     private readonly existingById = new Map<string, RoleFlat>(); // 用于保留隐藏字段（packagePath/sourcePath）
@@ -453,6 +477,77 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
     constructor(ctx: vscode.ExtensionContext, opts: RoleJson5EditorOptions) {
         this.ctx = ctx;
         this.opts = opts;
+    }
+
+    // 跳过我们自己触发的那次文档变更，防止回推打断前端
+    private readonly skipOneEchoFor = new Set<string>();
+
+    // autosave=off 时，先把待写入文本缓存到内存
+    private readonly pendingText = new Map<string, string>();
+
+    // autosave 定时器（afterDelay / 其它模式的轻节流）
+    private readonly saveTimers = new Map<string, NodeJS.Timeout>();
+
+    // 文档URI -> WebviewPanel（用于直接 postMessage）
+    private readonly panelsByDoc = new Map<string, vscode.WebviewPanel>();
+    // 文档URI -> 待转发的 def 名字队列（面板未就绪时暂存）
+    private readonly pendingDefByDoc = new Map<string, string[]>();
+
+    /** 打开指定 JSON5 文件的自定义编辑器，并向其 webview 转发 {type:'def', name} */
+    public async openDef(payload: { name: string; path: string }): Promise<void> {
+        const uri = vscode.Uri.file(payload.path);
+        const key = uri.toString();
+
+        const existing = this.panelsByDoc.get(key);
+        if (existing) {
+            try {
+                existing.reveal(existing.viewColumn ?? vscode.ViewColumn.Active);
+                existing.webview.postMessage({ type: 'def', name: payload.name });
+                return;
+            } catch {
+                // 若面板异常，走排队逻辑
+            }
+        }
+
+        // 面板未就绪：先排队，待 resolve 后统一下发
+        const q = this.pendingDefByDoc.get(key) ?? [];
+        q.push(payload.name);
+        this.pendingDefByDoc.set(key, q);
+
+        // 打开自定义编辑器
+        await vscode.commands.executeCommand('vscode.openWith', uri, 'andrea.roleJson5Editor', vscode.ViewColumn.Active);
+    }
+
+
+
+    private getAutoSaveMode(doc: vscode.TextDocument): 'off' | 'afterDelay' | 'onFocusChange' | 'onWindowChange' {
+        return vscode.workspace.getConfiguration('files', doc).get<'off' | 'afterDelay' | 'onFocusChange' | 'onWindowChange'>('autoSave', 'off');
+    }
+
+    private getAutoSaveDelay(doc: vscode.TextDocument): number {
+        const n = vscode.workspace.getConfiguration('files', doc).get<number>('autoSaveDelay', 1000);
+        return Number.isFinite(n) ? Math.max(0, n!) : 1000;
+    }
+
+    private scheduleWrite(document: vscode.TextDocument, text: string) {
+        const key = document.uri.toString();
+        this.pendingText.set(key, text); // 总是先缓存
+
+        const mode = this.getAutoSaveMode(document);
+        if (mode === 'off') {
+            // 不立即写 TextDocument；等用户 Ctrl+S，在 onWillSave 里一次性落盘
+            return;
+        }
+
+        const delay = (mode === 'afterDelay') ? this.getAutoSaveDelay(document) : 200; // 其它模式轻节流
+        const old = this.saveTimers.get(key);
+        if (old) clearTimeout(old);
+
+        this.saveTimers.set(key, setTimeout(async () => {
+            this.saveTimers.delete(key);
+            if (document.getText() === text) return; // 无变化不写
+            await this.replaceWholeDocument(document, text); // 内含 skipOneEcho 标记
+        }, delay));
     }
 
     public async resolveCustomTextEditor(
@@ -489,11 +584,51 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
 
         await updateWebview();
 
-        // 文档变化 -> 刷新 webview
+        const docKey = document.uri.toString();
+        this.panelsByDoc.set(docKey, panel);
+
+        // 文档变化 -> 刷新 webview（带节流 + 跳过自写）
+        let refreshTimer: NodeJS.Timeout | undefined;
+        const scheduleUpdate = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => void updateWebview(), 150);
+        };
+
         const changeSub = vscode.workspace.onDidChangeTextDocument(e => {
-            if (e.document.uri.toString() === document.uri.toString()) {
-                void updateWebview();
+            if (e.document.uri.toString() !== document.uri.toString()) return;
+            const key = e.document.uri.toString();
+            if (this.skipOneEchoFor.delete(key)) {
+                // 跳过我们自己触发的那次回推
+                return;
             }
+            scheduleUpdate();
+        });
+
+        // 保存前：autosave=off 时把 pendingText 写入 TextDocument，再让 VS Code 落盘
+        const willSaveSub = vscode.workspace.onWillSaveTextDocument(e => {
+            if (e.document.uri.toString() !== document.uri.toString()) return;
+
+            const key = e.document.uri.toString();
+            const pending = this.pendingText.get(key);
+            if (!pending || pending === e.document.getText()) return;
+
+            // 这次变更来自我们，后续 onDidChange 要跳过
+            this.skipOneEchoFor.add(key);
+
+            const fullRange = new vscode.Range(
+                e.document.positionAt(0),
+                e.document.positionAt(e.document.getText().length)
+            );
+            e.waitUntil(Promise.resolve([vscode.TextEdit.replace(fullRange, pending)]));
+
+            const t = this.saveTimers.get(key);
+            if (t) { clearTimeout(t); this.saveTimers.delete(key); }
+        });
+
+        // 保存后：清理 pending
+        const didSaveSub = vscode.workspace.onDidSaveTextDocument(d => {
+            if (d.uri.toString() !== document.uri.toString()) return;
+            this.pendingText.delete(d.uri.toString());
         });
 
         // webview 消息
@@ -506,18 +641,44 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                     const list: RoleCardModelWithId[] = Array.isArray(msg.list) ? msg.list : [];
                     const merged = cardModelsToRoles(list, this.existingById);
                     const text = stringifyRolesToJson5(merged);
-                    await this.replaceWholeDocument(document, text);
-                    // 更新 existing
+
+                    // 更新 existingById（即便 off 也要更新，用于后续合并）
                     this.existingById.clear();
                     for (const r of merged) if (r.id) this.existingById.set(r.id, r);
-                    panel.webview.postMessage({ type: 'saveAck', ok: true });
+
+                    // 关键：按 autosave 策略写入/排队
+                    this.scheduleWrite(document, text);
+
+                    // 立即 ACK，若 autosave=off，提示已排队等待用户保存
+                    const queued = this.getAutoSaveMode(document) === 'off';
+                    panel.webview.postMessage({ type: 'saveAck', ok: true, queued });
+                }
+
+                // —— 认为已就绪：把等待中的 def 消息全部转发（仅传 name）
+                const key = document.uri.toString();
+                const pend = this.pendingDefByDoc.get(key);
+                if (pend && pend.length) {
+                    for (const nm of pend) {
+                        panel.webview.postMessage({ type: 'def', name: nm });
+                    }
+                    this.pendingDefByDoc.delete(key); // 清队列，避免重复发送
                 }
             } catch (e) {
                 panel.webview.postMessage({ type: 'saveAck', ok: false, error: String(e) });
             }
         }, undefined, this.ctx.subscriptions);
 
-        panel.onDidDispose(() => changeSub.dispose());
+        panel.onDidDispose(() => {
+            changeSub.dispose();
+            willSaveSub.dispose();
+            didSaveSub.dispose();
+            const key = document.uri.toString();
+            const t = this.saveTimers.get(key);
+            if (t) clearTimeout(t);
+            this.saveTimers.delete(key);
+            this.panelsByDoc.delete(document.uri.toString());
+            this.pendingDefByDoc.delete(document.uri.toString());
+        });
     }
 
     /* ---------------- helpers ---------------- */
@@ -532,10 +693,24 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
     }
 
     private async replaceWholeDocument(document: vscode.TextDocument, text: string): Promise<void> {
+        // 无变化不写，避免回声与撤销栈污染
+        if (document.getText() === text) return;
+
         const edit = new vscode.WorkspaceEdit();
-        const fullRange = new vscode.Range(0, 0, document.lineCount, 0);
+        const fullRange = new vscode.Range(
+            document.positionAt(0),
+            document.positionAt(document.getText().length)
+        );
+
+        // 打标：下一次来自该文档的变更由我们触发，onDidChange 里应忽略
+        const key = document.uri.toString();
+        this.skipOneEchoFor.add(key);
+
         edit.replace(document.uri, fullRange, text);
         await vscode.workspace.applyEdit(edit);
+
+        // 兜底：极端情况下若没有触发 change 事件，避免标记卡死
+        setTimeout(() => this.skipOneEchoFor.delete(key), 0);
     }
 }
 

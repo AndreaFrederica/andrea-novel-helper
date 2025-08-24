@@ -59,10 +59,10 @@ export class PackageNode extends vscode.TreeItem {
 
         // click to open files if not a directory
         if (!isDir) {
-            // 所有文件都使用默认打开方式
+            // 文件节点点击时使用决策命令（会根据全局或每文件偏好决定用角色卡管理器还是文本编辑器）
             this.command = {
-                command: 'AndreaNovelHelper.openFileWithDefault',
-                title: 'Open File with Default',
+                command: 'AndreaNovelHelper.openFile',
+                title: 'Open File',
                 arguments: [this.resourceUri]
             };
         }
