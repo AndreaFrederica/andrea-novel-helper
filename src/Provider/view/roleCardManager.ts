@@ -1,295 +1,257 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
-const COMMAND_ID = 'andrea.roleCardManager.open';
+export const COMMAND_ID = 'andrea.roleCardManager.open';
 
-/** 读取文件为字符串（utf-8） */
-function readFile(filePath: string): string {
-    return fs.readFileSync(filePath, 'utf-8');
+export interface RoleCardPanelOptions {
+    spaRoot: vscode.Uri;
+    connectSrc?: string[];
+    extraLocalResourceRoots?: vscode.Uri[];
+    retainContextWhenHidden?: boolean;
+    title?: string;
+    resourceMapperScriptUri?: string;
 }
 
-/** 生成随机 nonce（给内联脚本用） */
-function getNonce(len = 32): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let s = '';
-    for (let i = 0; i < len; i++) { s += chars.charAt(Math.floor(Math.random() * chars.length)); }
-    return s;
+export function registerRoleCardManager(
+    context: vscode.ExtensionContext,
+    options?: Partial<RoleCardPanelOptions>
+): vscode.Disposable {
+    const opts: RoleCardPanelOptions = { ...DEFAULT_OPTIONS(context), ...options };
+
+    const disposable = vscode.commands.registerCommand(COMMAND_ID, () => {
+        RoleCardPanel.createOrShow(context, opts);
+    });
+
+    context.subscriptions.push(disposable);
+    return disposable;
 }
 
-/** 归一化相对路径（去掉开头的 / 与 ./） */
+export function openRoleCardManager(
+    context: vscode.ExtensionContext,
+    options?: Partial<RoleCardPanelOptions>
+) {
+    RoleCardPanel.createOrShow(context, { ...DEFAULT_OPTIONS(context), ...options });
+}
+
+export const DEFAULT_OPTIONS = (ctx: vscode.ExtensionContext): RoleCardPanelOptions => ({
+    spaRoot: vscode.Uri.joinPath(ctx.extensionUri, 'packages', 'webview', 'dist', 'spa'),
+    connectSrc: ['https:', 'http:'],
+    retainContextWhenHidden: true,
+    title: '角色卡管理器',
+});
+
+export class RoleCardPanel {
+    private static current?: vscode.WebviewPanel;
+
+    static createOrShow(ctx: vscode.ExtensionContext, options?: Partial<RoleCardPanelOptions>) {
+        const opts: RoleCardPanelOptions = { ...DEFAULT_OPTIONS(ctx), ...options };
+        const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
+
+        if (RoleCardPanel.current) {
+            RoleCardPanel.current.title = opts.title ?? RoleCardPanel.current.title;
+            RoleCardPanel.current.reveal(column);
+            try {
+                const mapperFile = vscode.Uri.joinPath(ctx.extensionUri, 'src', 'Provider', 'view', 'resource-mapper.js');
+                opts.resourceMapperScriptUri = RoleCardPanel.current.webview.asWebviewUri(mapperFile).toString();
+            } catch (_) { }
+            RoleCardPanel.current.webview.html = buildHtml(RoleCardPanel.current.webview, opts);
+            return;
+        }
+
+        const panel = vscode.window.createWebviewPanel(
+            'andreaRoleCardManager',
+            opts.title ?? '角色卡管理器',
+            column,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: !!opts.retainContextWhenHidden,
+                localResourceRoots: [opts.spaRoot, vscode.Uri.joinPath(ctx.extensionUri, 'src', 'Provider', 'view'), ...(opts.extraLocalResourceRoots ?? [])],
+            }
+        );
+
+        try {
+            const mapperFile = vscode.Uri.joinPath(ctx.extensionUri, 'src', 'Provider', 'view', 'resource-mapper.js');
+            opts.resourceMapperScriptUri = panel.webview.asWebviewUri(mapperFile).toString();
+        } catch (_) { }
+
+        panel.onDidDispose(() => { RoleCardPanel.current = undefined; });
+        panel.webview.html = buildHtml(panel.webview, opts);
+        RoleCardPanel.current = panel;
+    }
+}
+
+/* ================= 工具函数（纯静态改写，无运行时注入） ================ */
+
+function readFile(fp: string): string {
+    return fs.readFileSync(fp, 'utf-8');
+}
+
 function normalizeRel(p: string): string {
-    return p.replace(/^[/.]+/, '');
+    if (p.startsWith('/')) { return p.slice(1); }
+    if (p.startsWith('./')) { return p.replace(/^\.\/+/, ''); }
+    return p;
 }
 
-/**
- * 把 index.html 里的 src/href 逐个改成 asWebviewUri 绝对地址，并移除 <base>
- * 这样避免由于 <base> 指向 vscode-resource 域而触发 history.replaceState 跨源报错
- */
-function rewriteHtmlToWebviewUris(
-    html: string,
-    webview: vscode.Webview,
-    spaRoot: vscode.Uri
-): string {
-    // 1) 移除任何现存 <base>
-    html = html.replace(/<base\s+[^>]*>/gi, '');
-
-    // 2) 把以 / 开头的路径改相对，便于 joinPath
-    html = html.replace(/(\s(?:src|href))=(["'])\/(.*?)\2/g, (_m, p1, q, p2) => `${p1}=${q}${p2}${q}`);
-
-    // 3) 逐个标签替换资源地址为 asWebviewUri
+function rewriteHtmlToWebviewUris(html: string, webview: vscode.Webview, spaRoot: vscode.Uri): string {
     type Attr = 'src' | 'href';
+    const fixRelFromVscodeWebview = (u: string) => {
+        const m = u.match(/^vscode-webview:\/\/[^/]+\/(.*)$/i);
+        return m ? normalizeRel(m[1]) : normalizeRel(u);
+    };
+
     const replaceAttr = (tag: string, attr: Attr) => {
-        const re = new RegExp(`<${tag}\\b([^>]*?)\\s${attr}=(["'])([^"']+)\\2([^>]*)>`, 'gi');
-        html = html.replace(re, (m, pre, q, url, post) => {
-            // 跳过 data:, http(s):, vscode-webview:, vscode-resource:, mailto:
-            if (/^(data:|https?:|mailto:|vscode-webview:|vscode-resource:)/i.test(url)) { return m; }
-            const rel = normalizeRel(url);
+        const re = new RegExp(
+            `<${tag}\\b([^>]*?)\\s${attr}\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s>]+))([^>]*)>`,
+            'gi'
+        );
+        html = html.replace(re, (m, pre, g1, g2, g3, post) => {
+            const raw = g1 ?? g2 ?? g3 ?? '';
+            // 放过这些：data/mailto/javascript/#/http(s)
+            if (/^(data:|mailto:|javascript:|#|https?:)/i.test(raw)) { return m; }
+
+            // 把任何 vscode-webview://.../xxx 也当作相对路径处理
+            const rel = fixRelFromVscodeWebview(raw);
+
             const fileUri = vscode.Uri.joinPath(spaRoot, rel);
             const webUri = webview.asWebviewUri(fileUri).toString();
-            return `<${tag}${pre} ${attr}=${q}${webUri}${q}${post}>`;
+
+            const quoted = (g1 !== null && g1 !== undefined) ? `"${webUri}"` : ((g2 !== null && g2 !== undefined) ? `'${webUri}'` : webUri);
+            return `<${tag}${pre} ${attr}=${quoted}${post}>`;
         });
     };
 
-    // 常见需要处理的标签
     replaceAttr('script', 'src');
-    replaceAttr('link', 'href');
+    replaceAttr('link', 'href');     // 覆盖 <link rel="modulepreload"> 等
     replaceAttr('img', 'src');
     replaceAttr('source', 'src');
-
+    replaceAttr('video', 'src');
+    replaceAttr('audio', 'src');
+    replaceAttr('iframe', 'src');
     return html;
 }
 
-/** 在运行时兜底：拦截 fetch/XHR/Worker/元素属性赋值，自动把相对 URL 重写为 asWebviewUri 基址 */
-function injectRuntimeBasePatch(html: string, webview: vscode.Webview, spaRoot: vscode.Uri, nonce: string) {
-  const BASE = webview.asWebviewUri(spaRoot).toString() + '/';
-  const patch = `<script nonce="${nonce}">
-(function(){
-  const ABS = /^(?:[a-z]+:|data:|mailto:|vscode-)/i;
-  const BASE = ${JSON.stringify(BASE)};
-  const toAbs = (u) => {
-    if (typeof u !== 'string' || ABS.test(u)) return u;
-    if (u.startsWith('/')) u = u.slice(1);     // 修正 /assets/... -> assets/...
-    return new URL(u, BASE).toString();
-  };
 
-  // fetch
-  const _fetch = window.fetch;
-  window.fetch = function(input, init) {
-    const u = (typeof input === 'string') ? toAbs(input) : input;
-    return _fetch(u, init);
-  };
 
-  // XHR
-  const _open = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-    return _open.call(this, method, toAbs(url), ...rest);
-  };
+function injectResourceMapper(html: string, webview: vscode.Webview, spaRoot: vscode.Uri, mapperScriptUri?: string): string {
+    // ✅ 正确的基准：构建出来就是 *.vscode-cdn.net 的 https 链接
+    const baseUri = webview.asWebviewUri(spaRoot).toString().replace(/\/$/, '');
 
-  // Worker / SharedWorker
-  if ('Worker' in window) {
-    const _Worker = window.Worker;
-    window.Worker = function(spec, opts) {
-      const u = typeof spec === 'string' ? toAbs(spec) : spec;
-      return new _Worker(u, opts);
-    };
-  }
-  if ('SharedWorker' in window) {
-    const _SharedWorker = window.SharedWorker;
-    window.SharedWorker = function(spec, opts) {
-      const u = typeof spec === 'string' ? toAbs(spec) : spec;
-      return new _SharedWorker(u, opts);
-    };
-  }
-
-  // 动态创建/赋值到 href/src 的统一改写
-  const origSetAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function(name, value) {
-    if (typeof value === 'string' && (name === 'src' || name === 'href')) {
-      value = toAbs(value);
-    }
-    return origSetAttribute.call(this, name, value);
-  };
-  function rewriteProp(ctor, prop) {
-    const d = ctor && ctor.prototype && Object.getOwnPropertyDescriptor(ctor.prototype, prop);
-    if (!d || !d.set) return;
-    Object.defineProperty(ctor.prototype, prop, {
-      ...d,
-      set(v) { d.set.call(this, (typeof v === 'string') ? toAbs(v) : v); }
-    });
-  }
-  rewriteProp(HTMLScriptElement, 'src');
-  rewriteProp(HTMLLinkElement,   'href');   // 覆盖 rel=stylesheet/modulepreload
-  rewriteProp(HTMLImageElement,  'src');
-  rewriteProp(HTMLSourceElement, 'src');
-  rewriteProp(HTMLAudioElement,  'src');
-  rewriteProp(HTMLVideoElement,  'src');
-  rewriteProp(HTMLIFrameElement, 'src');
-
-  // ===== 样式重写：把 CSS 内的 url(/...) / @import "/..." 改为 BASE 下的绝对地址，并内联 =====
-  async function inlineStylesheet(link) {
+    // 扫描 /assets 映射
+    const assetsPath = vscode.Uri.joinPath(spaRoot, 'assets').fsPath;
+    const resourceMap: Record<string, string> = {};
     try {
-      const href = link.getAttribute('href');
-      if (!href) return;
-      const res = await fetch(href, { credentials: 'same-origin' });
-      if (!res.ok) return;
-      let css = await res.text();
-
-      // 修复：正确的正则表达式，移除双反斜杠
-      // url("/...") / url('/...') / url(/...)
-      css = css.replace(/url\\s*\\(\\s*(['"]?)\\/([^)'"]+)\\1\\s*\\)/g, function(match, quote, path) {
-        return 'url(' + (quote || '') + new URL(path, BASE).toString() + (quote || '') + ')';
-      });
-      // @import "/..."; 或 @import '/...';
-      css = css.replace(/@import\\s+(['"])\\/([^'"]+)\\1/g, function(match, quote, path) {
-        return '@import ' + quote + new URL(path, BASE).toString() + quote;
-      });
-
-      const style = document.createElement('style');
-      style.setAttribute('data-inlined-from', href);
-      style.textContent = css; // style-src 'unsafe-inline' 已允许
-      const media = link.getAttribute('media');
-      if (media) style.setAttribute('media', media);
-
-      link.rel = 'prefetch';
-      link.disabled = true;
-      if (link.parentNode) link.parentNode.insertBefore(style, link.nextSibling);
-    } catch (e) {}
-  }
-
-  function fixExistingLinks() {
-    // 先把现有的 modulepreload 改成绝对（避免 /assets/...）
-    var mpl = document.querySelectorAll('link[rel~="modulepreload"][href]');
-    for (var i=0;i<mpl.length;i++){
-      var h = mpl[i].getAttribute('href');
-      if (h) mpl[i].setAttribute('href', toAbs(h));
-    }
-    // 把现有的 stylesheet 内联并改写 url(...)
-    var cssL = document.querySelectorAll('link[rel~="stylesheet"]');
-    for (var j=0;j<cssL.length;j++) inlineStylesheet(cssL[j]);
-  }
-
-  function observeNewLinks() {
-    var mo = new MutationObserver(function(list){
-      for (var k=0;k<list.length;k++){
-        var rec = list[k];
-        if (rec.type === 'childList') {
-          rec.addedNodes.forEach(function(n){
-            if (n && n.nodeType === 1 && n.tagName === 'LINK') {
-              var link = n;
-              var rel = link.getAttribute('rel') || '';
-              // 修复：移除双反斜杠转义
-              if (/\\bmodulepreload\\b/i.test(rel)) {
-                var h = link.getAttribute('href');
-                if (h) link.setAttribute('href', toAbs(h));
-              } else if (/\\bstylesheet\\b/i.test(rel)) {
-                inlineStylesheet(link);
-              }
+        if (fs.existsSync(assetsPath)) {
+            for (const file of fs.readdirSync(assetsPath)) {
+                const key = `/assets/${file}`;
+                const val = webview.asWebviewUri(vscode.Uri.joinPath(spaRoot, 'assets', file)).toString(); // ✅ 只信 asWebviewUri
+                resourceMap[key] = val;
             }
-          });
         }
-      }
-    });
-    mo.observe(document.documentElement, { subtree: true, childList: true });
-  }
+    } catch (e) {
+        console.warn('Failed to scan assets directory:', e);
+    }
 
-  // 立即执行一次，随后继续监听（不等 DOMContentLoaded）
-  try { fixExistingLinks(); } catch (e) {}
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function(){ fixExistingLinks(); observeNewLinks(); }, { once: true });
-  } else {
-    observeNewLinks();
-  }
-})();
-</script>`;
+    const safeResourceMap = JSON.stringify(resourceMap).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+    const safeBaseUri = baseUri.replace(/"/g, '\\"');
 
-  // 修复：更安全的注入逻辑
-  // 优先在 <head> 开始处注入
-  const headMatch = html.match(/<head[^>]*>/i);
-  if (headMatch) {
-    const headIndex = headMatch.index! + headMatch[0].length;
-    return html.slice(0, headIndex) + '\n' + patch + html.slice(headIndex);
-  }
-  
-  // 如果有 <script>，在第一个 <script> 前注入
-  const scriptIndex = html.indexOf('<script');
-  if (scriptIndex >= 0) {
-    return html.slice(0, scriptIndex) + patch + '\n' + html.slice(scriptIndex);
-  }
-  
-  // 如果有 <body>，在其前面注入
-  const bodyIndex = html.indexOf('<body');
-  if (bodyIndex >= 0) {
-    return html.slice(0, bodyIndex) + patch + '\n' + html.slice(bodyIndex);
-  }
-  
-  // 最后兜底，在 HTML 开头注入
-  return patch + '\n' + html;
+    // 注入最小的全局数据，然后通过外部脚本加载完整的 mapper 实现（放在扩展主体目录，而不是 spa）
+    const injectedData = `<script>window.__vscode_resource_map__ = ${safeResourceMap}; window.__vscode_resource_baseUri__ = "${safeBaseUri}";</script>`;
+
+    // 脚本 URI 优先使用传入的 mapperScriptUri（已经是 asWebviewUri 字符串），否则尝试从 spaRoot 寻找 resource-mapper.js
+    let mapperSrc = mapperScriptUri;
+    if (!mapperSrc) {
+        try {
+            mapperSrc = webview.asWebviewUri(vscode.Uri.joinPath(spaRoot, '..', 'src', 'Provider', 'view', 'resource-mapper.js')).toString();
+        } catch (_) { mapperSrc = undefined; }
+    }
+
+    const injectedScript = injectedData + (mapperSrc ? `\n<script src="${mapperSrc}"></script>` : '');
+
+    return html.replace(/<head([^>]*)>/i, `<head$1>\n${injectedScript}`);
 }
 
-/** 读取并重写 index.html + 注入 CSP + 运行时补丁 */
-function buildHtml(panel: vscode.WebviewPanel, spaRoot: vscode.Uri): string {
-    const indexHtmlUri = vscode.Uri.joinPath(spaRoot, 'index.html');
+/** 修复所有资源路径并处理动态导入 */
+function fixAllAssetUrls(html: string, webview: vscode.Webview, spaRoot: vscode.Uri): string {
+    const base = webview.asWebviewUri(spaRoot).toString().replace(/\/$/, '');
+
+    // 修复各种静态路径引用
+    html = html.replace(/(\s(?:href|src)\s*=\s*)(["'])\/assets\//gi, (_m, p1, q) => `${p1}${q}${base}/assets/`);
+    html = html.replace(/(\s(?:href|src)\s*=\s*)(["'])(?:\.\/)?assets\//gi, (_m, p1, q) => `${p1}${q}${base}/assets/`);
+
+    // 处理 JavaScript 中的各种动态导入和路径引用
+    html = html.replace(/(import\s*\(\s*)(["'`])([^"'`]*\/assets\/[^"'`]*)\2/g, (match, prefix, quote, path) => {
+        const normalizedPath = path.replace(/^\.?\//, '');
+        return `${prefix}${quote}${base}/${normalizedPath}${quote}`;
+    });
+
+    // 处理字符串中的路径拼接
+    html = html.replace(/(["'`])\/assets\//g, `$1${base}/assets/`);
+    html = html.replace(/(["'`])\.\/assets\//g, `$1${base}/assets/`);
+
+    // 处理更复杂的路径构建模式
+    html = html.replace(/(['"`])assets\//g, `$1${base}/assets/`);
+    console.log('After fixAllAssetUrls, base:', base);
+    console.log('After fixAllAssetUrls, html:', html);
+    return html;
+}
+
+/** 注入兼容的 CSP，允许必要的内联脚本 */
+function applyCsp(html: string, webview: vscode.Webview, connectSrcExtra: string[] = []): string {
+    const connectSrc = [webview.cspSource, ...connectSrcExtra].join(' ');
+    const csp = [
+        `default-src 'none';`,
+        `img-src ${webview.cspSource} https: data: blob:;`,
+        `style-src ${webview.cspSource} 'unsafe-inline';`,
+        `font-src ${webview.cspSource} data:;`,
+        `script-src ${webview.cspSource} https: 'unsafe-inline';`,
+        `connect-src ${connectSrc};`,
+        `frame-src 'none';`, // 禁止框架，避免 CSP 错误
+        `worker-src ${webview.cspSource} blob:;`,
+        `child-src ${webview.cspSource} blob:;`,
+    ].join(' ');
+
+    if (/<meta http-equiv="Content-Security-Policy"/i.test(html)) {
+        return html.replace(
+            /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
+            `<meta http-equiv="Content-Security-Policy" content="${csp}">`
+        );
+    }
+    return html.replace(
+        /<head([^>]*)>/i,
+        `<head$1>\n  <meta http-equiv="Content-Security-Policy" content="${csp}">`
+    );
+}
+
+function buildHtml(webview: vscode.Webview, opts: RoleCardPanelOptions): string {
+    const indexHtmlUri = vscode.Uri.joinPath(opts.spaRoot, 'index.html');
     const indexHtmlPath = indexHtmlUri.fsPath;
     if (!fs.existsSync(indexHtmlPath)) {
         return `<html><body><h3>角色卡管理器</h3><p>未找到 index.html：<code>${indexHtmlPath}</code></p></body></html>`;
     }
-
     let html = readFile(indexHtmlPath);
 
-    // 首批资源改成 asWebviewUri（不再用 <base>）
-    html = rewriteHtmlToWebviewUris(html, panel.webview, spaRoot);
+    // 先处理基本的 src/href 属性
+    html = rewriteHtmlToWebviewUris(html, webview, opts.spaRoot);
 
-    // 带 nonce 的 CSP，允许补丁脚本执行；如用到 Worker，加上 blob:
-    const nonce = getNonce();
-    const csp = [
-        `default-src 'none';`,
-        `img-src ${panel.webview.cspSource} https: data:;`,
-        `style-src ${panel.webview.cspSource} 'unsafe-inline';`,
-        `font-src ${panel.webview.cspSource} data:;`,
-        `script-src ${panel.webview.cspSource} 'nonce-${nonce}';`,
-        `connect-src ${panel.webview.cspSource} https: http:;`,
-        `frame-src ${panel.webview.cspSource};`,
-        `worker-src ${panel.webview.cspSource} blob:;`
-    ].join(' ');
+    // 修复所有静态资源路径
+    html = fixAllAssetUrls(html, webview, opts.spaRoot);
 
-    if (/<meta http-equiv="Content-Security-Policy"/i.test(html)) {
-        html = html.replace(
-            /<meta http-equiv="Content-Security-Policy"[^>]*>/i,
-            `<meta http-equiv="Content-Security-Policy" content="${csp}">`
-        );
-    } else {
-        html = html.replace(
-            /<head([^>]*)>/i,
-            `<head$1>\n  <meta http-equiv="Content-Security-Policy" content="${csp}">`
-        );
-    }
+    // 注入动态资源映射和转换函数（脚本文件位于扩展主体：src/Provider/view/resource-mapper.js）
+    html = injectResourceMapper(html, webview, opts.spaRoot, opts.resourceMapperScriptUri);
 
-    // 注入运行时补丁，兜底后续动态请求与模块预加载
-    html = injectRuntimeBasePatch(html, panel.webview, spaRoot, nonce);
+
+
+    // 添加 base 标签作为备用方案
+    html = addBaseTag(html, webview, opts.spaRoot);
+
+    // 应用 CSP
+    html = applyCsp(html, webview, opts.connectSrc);
 
     return html;
 }
 
-export function activate(context: vscode.ExtensionContext) {
-    const disposable = vscode.commands.registerCommand(COMMAND_ID, () => {
-        // 你的 dist/spa 打包到扩展里的路径
-        const spaRoot = vscode.Uri.joinPath(context.extensionUri, 'packages', 'webview', 'dist', 'spa');
-
-        const panel = vscode.window.createWebviewPanel(
-            'andreaRoleCardManager',
-            '角色卡管理器',
-            vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-                localResourceRoots: [spaRoot],
-            }
-        );
-
-        panel.webview.html = buildHtml(panel, spaRoot);
-    });
-
-    context.subscriptions.push(disposable);
+/** 不再注入 base；若原文件有 base，直接移除 */
+function addBaseTag(html: string, _webview: vscode.Webview, _spaRoot: vscode.Uri): string {
+    // 移除任何已有的 <base>，避免跨源路由/解析
+    return html.replace(/<base\s+[^>]*>/gi, '');
 }
-
-export function deactivate() { }

@@ -51,7 +51,7 @@ import { registerFontManager } from './typeset/fontManager';
 import { registerContextKeys } from './typeset/contextKeys';
 import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOverride';
 
-import {activate as roleCardManagerActivate} from './Provider/view/roleCardManager';
+import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCardManager';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
