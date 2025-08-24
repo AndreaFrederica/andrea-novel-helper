@@ -17,7 +17,7 @@ function escapeRegExp(string: string): string {
 /**
  * 在指定文件中查找角色定义
  */
-function findDefinitionInFile(role: Role, filePath: string): vscode.Location | null {
+export function findDefinitionInFile(role: Role, filePath: string): vscode.Location | null {
     if (!fs.existsSync(filePath)) return null;
 
     try {
@@ -65,8 +65,8 @@ function findDefinitionInFile(role: Role, filePath: string): vscode.Location | n
                 );
             }
         } else if (fileExt === '.md') {
-            // Markdown 文件：查找一级标题或内容中的角色名
-            const titlePattern = new RegExp(`^#\\s+.*${escapeRegExp(role.name)}.*$`);
+            // Markdown 文件：查找任意级别的标题或内容中的角色名
+            const titlePattern = new RegExp(`^#{1,6}\\s+.*${escapeRegExp(role.name)}.*$`);
             const titleIdx = lines.findIndex(l => titlePattern.test(l));
             if (titleIdx >= 0) {
                 const col = lines[titleIdx].indexOf(role.name);
@@ -101,7 +101,7 @@ export function activateDef(context: vscode.ExtensionContext) {
     const defProv = vscode.languages.registerDefinitionProvider(
         { scheme: 'file' },
         {
-            provideDefinition(document, position) {
+            async provideDefinition(document, position) {
                 // 语言/扩展双重过滤，保证 json5 等被支持
                 const supportedLangs = getSupportedLanguages();
                 const supportedExts = new Set(getSupportedExtensions().map(e=>e.toLowerCase()));

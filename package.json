@@ -821,7 +821,7 @@
         "andrea.roleJson5.openWithRoleManager": {
           "type": "boolean",
           "default": true,
-          "description": "是否默认使用角色卡管理器打开 JSON5 角色文件（可被每个文件的右键覆盖）"
+          "description": "是否默认使用角色卡管理器打开 JSON5 角色文件"
         },
         "AndreaNovelHelper.sensitiveWordsFile": {
           "type": "string",

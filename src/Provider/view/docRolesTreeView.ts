@@ -117,7 +117,21 @@ export function registerDocRolesTreeView(context: vscode.ExtensionContext) {
 	context.subscriptions.push(model.onDidChange(()=> provider.refresh()));
 	context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.openDocRoleDefinition', async (role: Role) => {
 		if (!role.sourcePath) { return; }
+		// If the role comes from a .json5 file, optionally open it with the role manager editor
 		try {
+			const srcPath = role.sourcePath;
+			if (srcPath && srcPath.toLowerCase().endsWith('.json5')) {
+				const andreaCfg = vscode.workspace.getConfiguration('andrea');
+				const openWithRoleManager = andreaCfg.get<boolean>('roleJson5.openWithRoleManager', false);
+				if (openWithRoleManager) {
+					try {
+						await vscode.commands.executeCommand('andrea.roleJson5Editor.def', { name: role.name, path: srcPath });
+						return;
+					} catch (e) {
+						console.warn('[DocRolesTreeView] andrea.roleJson5Editor.def failed', e);
+					}
+				}
+			}
 			const doc = await vscode.workspace.openTextDocument(role.sourcePath);
 			const editor = await vscode.window.showTextDocument(doc, { preview: true });
 			const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');

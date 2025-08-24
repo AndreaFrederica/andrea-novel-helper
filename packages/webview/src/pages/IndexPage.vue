@@ -130,43 +130,36 @@
     </q-drawer>
 
     <!-- 右侧主体：100vh 可滚动 -->
-    <q-page-container
-    class="layout-no-size" style="height: 100vh; overflow: hidden">
+    <q-page-container class="layout-no-size" style="height: 100vh; overflow: hidden">
       <!-- <q-page > -->
-        <q-scroll-area class="fit">
-          <div class="column q-gutter-md">
-            <!-- 每个角色卡放入可折叠容器，容器 header 包含删除按钮；默认展开 -->
-            <q-expansion-item
-              v-for="(r, idx) in roles"
-              :key="r.id"
-              class="role-panel q-mb-sm"
-              expand-separator
-              :model-value="mainOpened[r.id] ?? true"
-              @update:model-value="(val: boolean | null) => (mainOpened[r.id] = !!val)"
-            >
-              <template #header>
-                <div class="row items-center justify-between" style="width: 100%">
-                  <div class="text-subtitle1">{{ r.base?.name || `未命名角色 ${idx + 1}` }}</div>
-                  <div>
-                    <q-btn
-                      dense
-                      flat
-                      color="negative"
-                      icon="delete"
-                      @click.stop="removeRole(r.id)"
-                    />
-                  </div>
+      <q-scroll-area class="fit">
+        <div class="column q-gutter-md">
+          <!-- 每个角色卡放入可折叠容器，容器 header 包含删除按钮；默认展开 -->
+          <q-expansion-item
+            v-for="(r, idx) in roles"
+            :key="r.id"
+            class="role-panel q-mb-sm"
+            expand-separator
+            :model-value="mainOpened[r.id] ?? true"
+            @update:model-value="(val: boolean | null) => (mainOpened[r.id] = !!val)"
+          >
+            <template #header>
+              <div class="row items-center justify-between" style="width: 100%">
+                <div class="text-subtitle1">{{ r.base?.name || `未命名角色 ${idx + 1}` }}</div>
+                <div>
+                  <q-btn dense flat color="negative" icon="delete" @click.stop="removeRole(r.id)" />
                 </div>
-              </template>
-
-              <div :ref="(el) => setRoleRef(r.id, el as HTMLElement)">
-                <role-card
-                  v-model="roles[idx]!"
-                  @changed="(e) => onChanged(idx, e)"
-                  @type-changed="(e) => onTypeChanged(idx, e)"
-                />
               </div>
-            </q-expansion-item>
+            </template>
+
+            <div :ref="(el) => setRoleRef(r.id, el as HTMLElement)">
+              <role-card
+                v-model="roles[idx]!"
+                @changed="(e) => onChanged(idx, e)"
+                @type-changed="(e) => onTypeChanged(idx, e)"
+              />
+            </div>
+          </q-expansion-item>
 
           <!-- 列表风格的“添加角色”项，和上方条目样式保持一致 -->
           <div class="q-pa-sm">
@@ -180,17 +173,17 @@
             </q-item>
           </div>
 
-            <q-separator class="q-my-md" />
+          <q-separator class="q-my-md" />
 
-            <q-expansion-item label="当前数据快照" icon="visibility" expand-separator>
-              <q-card flat bordered>
-                <q-card-section>
-                  <pre style="white-space: pre-wrap">{{ roles }}</pre>
-                </q-card-section>
-              </q-card>
-            </q-expansion-item>
-          </div>
-        </q-scroll-area>
+          <q-expansion-item label="当前数据快照" icon="visibility" expand-separator>
+            <q-card flat bordered>
+              <q-card-section>
+                <pre style="white-space: pre-wrap">{{ roles }}</pre>
+              </q-card-section>
+            </q-card>
+          </q-expansion-item>
+        </div>
+      </q-scroll-area>
       <!-- </q-page> -->
     </q-page-container>
   </q-layout>
@@ -209,6 +202,12 @@ import type { RoleCardModel } from '../../types/role';
 type RoleWithId = RoleCardModel & { id: string };
 
 const drawerOpen = ref(true);
+
+// 是否已拿到 roleCards（视为就绪）
+const rolesReady = ref(false);
+
+// 尚未 ready 时积压的 def 名字
+const pendingDefs = ref<string[]>([]);
 
 // 初始数据由扩展提供：先建空数组
 const roles = ref<RoleWithId[]>([]);
@@ -243,6 +242,87 @@ window.addEventListener('message', (event: MessageEvent) => {
     });
   }
 });
+
+window.addEventListener('message', (event: MessageEvent) => {
+  const msg = event.data;
+  if (!msg || typeof msg.type !== 'string') return;
+
+  if (msg.type === 'roleCards' && Array.isArray(msg.list)) {
+    applyingRemote = true;
+    roles.value = (msg.list as RoleWithId[]).map((r) => ({ ...r }));
+    void nextTick(() => {
+      applyingRemote = false;
+      rolesReady.value = true; // 视为 webview 已就绪
+      flushPendingDefs(); // 处理积压的 def
+    });
+    return;
+  }
+
+  if (msg.type === 'def' && typeof msg.name === 'string') {
+    if (!rolesReady.value) {
+      pendingDefs.value.push(msg.name);
+    } else {
+      focusRoleByName(msg.name);
+    }
+    return;
+  }
+});
+
+function findRoleIdByName(name: string): string | null {
+  const target = (name ?? '').trim();
+  if (!target) return null;
+
+  // 1) 严格匹配（区分大小写）
+  const r = roles.value.find((r) => r.base?.name?.trim?.() === target);
+  if (r) return r.id;
+
+  //   // 2) 不区分大小写
+  //   const tLower = target.toLowerCase();
+  //   r = roles.value.find(r => (r.base)?.name && String((r.base)?.name).trim().toLowerCase() === tLower);
+  //   if (r) return r.id;
+
+  //   // 3) （可选）按别名匹配 —— 若你的 base 里含 aliases
+  //   const hasAliases = (x: any) => Array.isArray(x?.aliases) && x.aliases.length > 0;
+  //   r = roles.value.find(r => {
+  //     const b = (r.base as any);
+  //     return hasAliases(b) && b.aliases.some((al: any) => String(al).trim().toLowerCase() === tLower);
+  //   });
+  if (r === undefined) {
+    return null;
+  }
+  return r;
+}
+
+const _flashTimers = new Map<string, number>();
+function flashRoleCard(id: string) {
+  const el = roleRefs.get(id);
+  if (!el) return;
+  el.classList.add('flash-target');
+  const old = _flashTimers.get(id);
+  if (old) window.clearTimeout(old);
+  const t = window.setTimeout(() => el.classList.remove('flash-target'), 1500);
+  _flashTimers.set(id, t);
+}
+
+function focusRoleByName(name: string) {
+  const id = findRoleIdByName(name);
+  if (!id) {
+    $q.notify({ type: 'warning', message: `未找到角色：${name}` });
+    return;
+  }
+  drawerOpen.value = true; // 打开左侧列表
+  mainOpened[id] = true; // 确保右侧该卡片展开
+  scrollToRole(id); // 滚过去
+  void nextTick(() => flashRoleCard(id)); // 闪烁高亮
+}
+
+function flushPendingDefs() {
+  if (!rolesReady.value || pendingDefs.value.length === 0) return;
+  // 去重后顺序处理
+  const uniq = Array.from(new Set(pendingDefs.value));
+  pendingDefs.value = [];
+  for (const nm of uniq) focusRoleByName(nm);
+}
 
 function notifySave() {
   if (applyingRemote) return;
@@ -432,14 +512,13 @@ function removeRole(id: string) {
   border-radius: 8px;
 }
 
-
 /* 让主视图中的角色面板以卡片形式堆叠，更易区分 */
 .role-panel {
   border-radius: 10px;
   overflow: visible; /* 允许内部阴影/溢出效果 */
-  background: var(--q-card-bg, rgba(255,255,255,0.02));
-  border: 1px solid rgba(0,0,0,0.06);
-  box-shadow: 0 4px 5px rgba(16,24,40,0.04);
+  background: var(--q-card-bg, rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 5px rgba(16, 24, 40, 0.04);
 }
 
 /* 缩小堆叠卡片之间的垂直间距，覆盖 q-mb-sm 提供的较大外边距 */
@@ -461,20 +540,37 @@ function removeRole(id: string) {
 
 /* Dark mode tweaks */
 .q-dark .role-panel {
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.04);
-  box-shadow: 0 6px 14px rgba(0,0,0,0.6);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6);
 }
-
 
 /* 让抽屉内部滚动区独立占满视口，从而有自己的滚动条 */
 .drawer-fullheight .q-scrollarea__container,
 .drawer-fullheight .q-scrollarea__scrollbar {
   height: 100vh;
 }
+
+.flash-target {
+  animation: flashOutline 1.5s ease-out 1;
+  box-shadow:
+    0 0 0 3px rgba(25, 118, 210, 0.35) inset,
+    0 0 0 2px rgba(25, 118, 210, 0.6);
+  border-radius: 8px;
+}
+@keyframes flashOutline {
+  0% {
+    box-shadow:
+      0 0 0 8px rgba(25, 118, 210, 0.45) inset,
+      0 0 0 4px rgba(25, 118, 210, 0.8);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(25, 118, 210, 0) inset,
+      0 0 0 0 rgba(25, 118, 210, 0);
+  }
+}
 </style>
 
-/* 不占用布局体积的布局容器（display: contents 会让容器自身不生成 box） */
-.layout-no-size {
-  display: contents;
-}
+/* 不占用布局体积的布局容器（display: contents 会让容器自身不生成 box） */ .layout-no-size {
+display: contents; }

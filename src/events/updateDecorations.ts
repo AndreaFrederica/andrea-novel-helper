@@ -23,6 +23,9 @@ function getPerDocHashes(docUri: string): Map<string, string> {
 
 // —— Diagnostics 集合 —— 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
+// [ANCHOR C-1] 记录已应用过装饰的 editor 实例，避免“新实例但哈希相同”的漏刷
+const seenEditors = new WeakSet<vscode.TextEditor>();
+
 // uri.fsPath -> 上次的 Diagnostic 数组
 const prevDiagnostics = new Map<string, vscode.Diagnostic[]>();
 
@@ -52,15 +55,16 @@ function rangesEqual(a: vscode.Range[], b: vscode.Range[]): boolean {
 }
 
 /** 仅在 color/type 变化时（或新增/删除角色时）更新所有 DecorationType */
-function ensureDecorationTypes() {
+function ensureDecorationTypes(): Set<string> {
+    const changedRoles = new Set<string>(); // [ANCHOR A-1] 新增：记录本轮变化的角色名
+
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const defaultColor = cfg.get<string>('defaultColor')!;
     // 1) 计算每个角色当前应有的 propsHash
     const newHashMap = new Map<string, string>();
-    const rangeBehavior = vscode.DecorationRangeBehavior.ClosedClosed; // 两端关闭：避免尾部输入继续扩展已匹配角色着色
+    const rangeBehavior = vscode.DecorationRangeBehavior.ClosedClosed; // 两端关闭
     for (const r of roles) {
         const color = r.color ?? typeColorMap[r.type] ?? defaultColor;
-        // 将 rangeBehavior 纳入哈希，变更策略时强制重建 decorationType
         const props = JSON.stringify({ color, type: r.type, rb: 'ClosedClosed' });
         newHashMap.set(r.name, props);
     }
@@ -73,9 +77,10 @@ function ensureDecorationTypes() {
             const color = JSON.parse(propsHash).color as string;
             const deco = vscode.window.createTextEditorDecorationType({
                 color,
-                rangeBehavior // 末尾不扩展，修复“新打字继承上一次角色颜色”问题
+                rangeBehavior
             });
             decorationMeta.set(roleName, { deco, propsHash });
+            changedRoles.add(roleName); // [ANCHOR A-1] 记录变化
         }
     }
 
@@ -84,18 +89,27 @@ function ensureDecorationTypes() {
         if (!newHashMap.has(oldName)) {
             decorationMeta.get(oldName)!.deco.dispose();
             decorationMeta.delete(oldName);
+            changedRoles.add(oldName); // [ANCHOR A-1] 删除也算变化
         }
     }
+
+    return changedRoles; // [ANCHOR A-1]
 }
+
 
 /** 遍历所有可见编辑器，更新装饰 & 诊断 */
 let hugeWarnedFiles = new Set<string>();
 export async function updateDecorations() {
     // 先确保 DecorationType 同步最新
-    ensureDecorationTypes();
+    const changedRoles = ensureDecorationTypes(); // [ANCHOR A-2]
+
 
     // 每个可见编辑器单独处理
     for (const editor of vscode.window.visibleTextEditors) {
+        // [ANCHOR C-2] 本次这个 TextEditor 是否是新实例（第一次见到）
+        const forceApplyForNewEditor = !seenEditors.has(editor);
+        if (forceApplyForNewEditor) seenEditors.add(editor);
+
         const doc = editor.document;
         const bigCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
         const hugeTh = bigCfg.get<number>('hugeFile.thresholdBytes', 50 * 1024)!;
@@ -351,30 +365,55 @@ export async function updateDecorations() {
         // —— 按“文档×角色”做哈希比对，避免跨编辑器串扰 —— //
         const docKey = doc.uri.toString();               // 也可用 toString(true)
         const perDoc = getPerDocHashes(docKey);
+        // [ANCHOR A-3] 若本轮有重建/删除的 DecorationType，则强制让这些角色在本 doc 里重绘
+        if (changedRoles.size) {
+            for (const rn of changedRoles) perDoc.delete(rn);
+        }
+
 
         // 1) 给出现的角色 setRanges（若与上次相同则跳过）
         for (const [role, ranges] of roleToRanges) {
             const meta = decorationMeta.get(role.name)!;
 
-            const prev = perDoc.get(role.name) || '';
-            const hash = ranges
+            const rangesHash = ranges
                 .map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`)
                 .join('|');
 
-            if (prev !== hash) {
-                editor.setDecorations(meta.deco, ranges);
-                perDoc.set(role.name, hash);
+            // ✅ 关键：把 DecorationType 的 propsHash 一并纳入比较
+            const appliedKey = `${meta.propsHash}@${rangesHash}`;
+            const prevKey = perDoc.get(role.name) || '';
+
+            // 1) 给出现的角色 setRanges（若与上次相同则跳过；新 editor 一律强制）
+            for (const [role, ranges] of roleToRanges) {
+                const meta = decorationMeta.get(role.name)!;
+
+                const rangesHash = ranges
+                    .map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`)
+                    .join('|');
+
+                const appliedKey = `${meta.propsHash}@${rangesHash}`;
+                const prevKey = perDoc.get(role.name) || '';
+
+                // [ANCHOR C-3] 新 editor 或 键不同 → 必须重绘
+                if (forceApplyForNewEditor || prevKey !== appliedKey) {
+                    editor.setDecorations(meta.deco, ranges);
+                    perDoc.set(role.name, appliedKey);
+                }
             }
+
         }
+
 
         // 2) 给没出现的角色 clear（仅影响当前文档）
         const presentNames = new Set(Array.from(roleToRanges.keys()).map(r => r.name));
-        for (const [roleName, { deco }] of decorationMeta) {
+        for (const [roleName, { deco, propsHash }] of decorationMeta) {
             if (!presentNames.has(roleName)) {
                 editor.setDecorations(deco, []);
-                perDoc.set(roleName, ''); // 标记该文档此角色为空
+                // ✅ 关键：把“这个文档×角色在当前 props 下为空”的状态也带上 propsHash
+                perDoc.set(roleName, `${propsHash}@`);
             }
         }
+
 
 
         // 写入缓存供“当前文章角色”视图复用
@@ -462,4 +501,28 @@ export async function updateDecorations() {
             });
         } catch { }
     }
+}
+
+
+// [ANCHOR B-1] 主题与配置变化监听（在 extension activate 时调用）
+export function registerDecorationWatchers(context: vscode.ExtensionContext) {
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(() => {
+            // [ANCHOR B-3] 切换激活编辑器时也刷新，覆盖“可见集未变化”的情况
+            updateDecorations();
+        }),
+        vscode.window.onDidChangeActiveColorTheme(() => {
+            // 主题改变可能影响颜色映射 → 触发一次重绘
+            updateDecorations();
+        }),
+        vscode.workspace.onDidChangeConfiguration(e => {
+            // 插件配置变更（默认色、hugeFile 阈值、受支持语言/后缀等）
+            if (
+                e.affectsConfiguration('AndreaNovelHelper') ||
+                e.affectsConfiguration('workbench.colorTheme')
+            ) {
+                updateDecorations();
+            }
+        })
+    );
 }

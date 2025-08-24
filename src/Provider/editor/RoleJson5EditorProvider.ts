@@ -448,25 +448,33 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
         );
 
         // 新增：对外开放的 def 事件命令
-        const defCmd = vscode.commands.registerCommand('andrea.roleJson5Editor.def', async (arg1: any, arg2?: any) => {
+        const defCmd = vscode.commands.registerCommand('andrea.roleJson5Editor.def', async (...args: any[]) => {
+            // Debug: log raw received arguments for diagnostics
+            try {
+                console.log('[andrea.roleJson5Editor.def] raw args:', JSON.stringify(args));
+            } catch (e) {
+                console.log('[andrea.roleJson5Editor.def] raw args (non-serializable):', args);
+            }
             let name: string | undefined;
             let filePath: string | undefined;
 
-            if (arg1 && typeof arg1 === 'object') {
-                name = arg1.name ?? arg1.roleName;
-                filePath = arg1.path ?? arg1.filePath;
-            } else {
-                name = arg1 !== null ? String(arg1) : undefined;
-                filePath = typeof arg2 === 'string' ? arg2 : undefined;
+            if (args.length >= 2 && typeof args[0] === 'string' && typeof args[1] === 'string') {
+                [name, filePath] = args as [string, string];               // ← 推荐路径（二元组）
+            } else if (args.length === 1 && args[0]) {
+                const a0 = typeof args[0] === 'string' ? (() => { try { return JSON.parse(args[0]); } catch { return undefined; } })() : args[0];
+                if (a0 && typeof a0 === 'object') {
+                    name = a0.name ?? a0.roleName;
+                    filePath = a0.path ?? a0.filePath;
+                }
             }
 
             if (!name || !filePath) {
-                vscode.window.showErrorMessage('[roleJson5Editor.def] 参数缺失：需要 name 与 path');
+                vscode.window.showErrorMessage('[andrea.roleJson5Editor.def] 参数缺失：需要 name 与 path');
                 return;
             }
-
             await provider.openDef({ name, path: filePath });
         });
+
 
         return vscode.Disposable.from(reg, defCmd);
     }

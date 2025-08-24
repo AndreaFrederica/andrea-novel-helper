@@ -6,10 +6,11 @@ import * as vscode from 'vscode';
 import { Role } from './extension';
 import { getSupportedLanguages, loadRoles } from './utils/utils';
 import { createRoleCompletionProvider } from './Provider/completionProvider';
-import { initAutomaton, updateDecorations } from './events/updateDecorations';
+import { initAutomaton, registerDecorationWatchers, updateDecorations } from './events/updateDecorations';
 import { registerWordCountPlainTextCommands, WordCountProvider } from './Provider/view/wordCountProvider';
 import { WordCountOrderManager } from './utils/Order/wordCountOrder';
 import { ensureRegisterOpenWith } from './commands/openWith';
+import ensureRegisterOpenFileAt from './commands/openFileAt';
 import { initAhoCorasickManager } from './utils/AhoCorasick/ahoCorasickManager';
 
 import { addRoleFromSelection } from './commands/addRuleFormSelection';
@@ -53,6 +54,7 @@ import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOv
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
+import { activateDefLinks } from './Provider/defLinksProvider';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -486,6 +488,8 @@ export async function activate(context: vscode.ExtensionContext) {
         // Hover 和 Definition 提供器
         activateHover(context);
         activateDef(context);
+        activateDefLinks(context);
+        registerDecorationWatchers(context);
         // 敏感词修复 CodeAction
         try {
             const { registerFixsCodeAction } = await import('./Provider/fixsCodeActionProvider.js');
@@ -496,8 +500,10 @@ export async function activate(context: vscode.ExtensionContext) {
         activateMarkdownToolbar(context);
 
 
-        // 确保 openWith 命令注册一次
-        ensureRegisterOpenWith(context);
+    // 确保 openWith 命令注册一次
+    ensureRegisterOpenWith(context);
+    // 确保 andrea.openFileAt 命令注册一次，用于稳定的文件打开并定位
+    ensureRegisterOpenFileAt(context);
 
         // Word Count 树视图
         // 手动排序管理器
