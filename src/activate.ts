@@ -52,6 +52,7 @@ import { registerContextKeys } from './typeset/contextKeys';
 import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOverride';
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
+import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -222,6 +223,7 @@ export async function activate(context: vscode.ExtensionContext) {
         );
 
         roleCardManagerActivate(context);
+        registerRoleCardEditor(context);
 
         registerAutoPairs(context);
         registerSmartEnter(context);
@@ -441,6 +443,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 refreshRoles
             )
         );
+
+
 
         // 自动补全提供器：使用纯 provider 工厂 + 显式语言列表（附加 scheme 与触发字符）
         let completionDisposable: vscode.Disposable | undefined;

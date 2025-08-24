@@ -338,6 +338,23 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
+    // Helper: per-file preference store key
+    const PER_FILE_KEY = 'andrea.roleJson5.perFileOpen';
+
+    function getPerFilePrefs(): Record<string, boolean> {
+        return context.workspaceState.get<Record<string, boolean>>(PER_FILE_KEY, {});
+    }
+
+    async function togglePerFilePref(uri: vscode.Uri) {
+        const prefs = getPerFilePrefs();
+        const key = uri.fsPath;
+        const current = !!prefs[key];
+        prefs[key] = !current;
+        await context.workspaceState.update(PER_FILE_KEY, prefs);
+        vscode.window.setStatusBarMessage(`文件 ${path.basename(key)}: 使用角色卡管理器打开 = ${prefs[key]}`, 3000);
+        provider.refresh();
+    }
+
     // —— 复制 / 剪切 / 粘贴 命令 ——
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.package.copy', (node: PackageNode | PackageNode[]) => {
@@ -365,12 +382,50 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             try {
                 // 如果传入的是 PackageNode，提取 resourceUri
                 const fileUri = uri instanceof vscode.Uri ? uri : (uri as PackageNode).resourceUri;
+
+                // consult per-file preference and global config
+                const prefs = getPerFilePrefs();
+                const pref = prefs[fileUri.fsPath];
+                const globalDefault = vscode.workspace.getConfiguration().get<boolean>('andrea.roleJson5.openWithRoleManager', true);
+
+                const shouldOpenWithManager = typeof pref === 'boolean' ? pref : !!globalDefault;
+
+                if (shouldOpenWithManager) {
+                    // try to open using custom editor viewType
+                    try {
+                        await vscode.commands.executeCommand('vscode.openWith', fileUri, 'andrea.roleJson5Editor');
+                        return;
+                    } catch (err) {
+                        // fallback to text editor
+                        console.warn('openWith andrea.roleJson5Editor failed, fallback to text document', err);
+                    }
+                }
+
                 await vscode.window.showTextDocument(fileUri);
             } catch (error) {
                 vscode.window.showErrorMessage(`无法打开文件: ${error}`);
             }
         })
     );
+
+        // 右键快速切换：是否使用角色卡管理器打开 JSON5 文件（全局布尔开关）
+        context.subscriptions.push(
+            vscode.commands.registerCommand('AndreaNovelHelper.toggleRoleManagerOpenForFile', async (resource?: vscode.Uri) => {
+                try {
+                    const config = vscode.workspace.getConfiguration();
+                    const key = 'andrea.roleJson5.openWithRoleManager';
+                    const current = config.get<boolean>(key, true);
+                    const target = !current;
+                    // 优先更新工作区设置（如果有工作区），否则用户设置
+                    const targetScope = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+                    await config.update(key, target, targetScope);
+                    vscode.window.showInformationMessage(`已${target ? '启用' : '禁用'}：使用角色卡管理器打开 JSON5 文件（全局设置）`);
+                } catch (e) {
+                    console.error('[ANH] toggleRoleManagerOpenForFile error', e);
+                    vscode.window.showErrorMessage('切换角色卡管理器打开方式失败，请在设置中手动修改。');
+                }
+            })
+        );
 
     // Command: open with specific application
     context.subscriptions.push(

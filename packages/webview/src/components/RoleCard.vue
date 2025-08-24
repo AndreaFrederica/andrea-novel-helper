@@ -29,6 +29,17 @@
 
         <div class="col-12 col-md-6">
           <q-input
+            v-model="draft.base.description"
+            label="描述 (description)"
+            dense
+            filled
+            :debounce="150"
+            @update:model-value="commit(['base.description'])"
+          />
+        </div>
+
+        <div class="col-12 col-md-6">
+          <q-input
             v-model="draft.base.affiliation"
             label="从属 (affiliation)"
             dense
@@ -58,6 +69,17 @@
             filled
             :debounce="150"
             @update:model-value="commit(['base.priority'])"
+          />
+        </div>
+
+        <div class="col-12 col-md-6">
+          <q-toggle
+            label="是否受到分词器过滤影响 (wordSegmentFilter)"
+            color="pink"
+            false-value="Disagreed"
+            true-value="Agreed"
+            v-model="draft.base.wordSegmentFilter"
+            @update:model-value="commit(['base.wordSegmentFilter'])"
           />
         </div>
 
@@ -206,9 +228,9 @@
 
     <!-- ===== 扩展 & 自定义 字段（统一列表）===== -->
     <q-card-section>
-      <div class="row items-center justify-between q-mb-sm">
+        <div class="row items-center justify-between q-mb-sm">
         <div class="text-subtitle2">扩展 / 自定义字段</div>
-        <q-btn dense color="primary" icon="add" label="新增字段" @click="openAdd = true" />
+        <q-btn dense color="primary" icon="add" label="新增字段" @click="onOpenAdd" />
       </div>
 
       <div v-if="mergedEntries.length === 0" :class="[isDark ? 'text-grey-5' : 'text-grey-6']">
@@ -257,7 +279,7 @@
                   :options="bucketOptions"
                   dense
                   filled
-                  label="归属"
+                  label="类别（扩展/自定义）"
                   emit-value
                   map-options
                   @update:model-value="onExtraBucketChange(idx)"
@@ -361,10 +383,16 @@
       <q-card style="min-width: 540px; max-width: 90vw">
         <q-card-section class="text-h6">新增字段</q-card-section>
         <q-card-section class="q-gutter-md">
-          <q-input v-model="addForm.key" label="字段 key" dense filled />
+          <div v-if="addForm.bucket === 'extended'">
+            <q-select v-model="addForm.key" :options="EXTENDED_KEY_OPTIONS" label="字段 key（扩展字段：从列表选择）" dense filled emit-value map-options />
+          </div>
+          <div v-else>
+            <q-input v-model="addForm.key" label="字段 key" dense filled />
+          </div>
           <q-select
             v-model="addForm.valueType"
             :options="valueTypeOptions"
+            :disable="addTypeLocked"
             emit-value
             map-options
             dense
@@ -378,7 +406,7 @@
             map-options
             dense
             filled
-            label="归属"
+            label="类别（扩展/自定义）"
           />
           <q-input
             v-if="addForm.valueType === 'string'"
@@ -433,6 +461,10 @@
 import type { BuiltinType, JsonValue, RoleCardModel, RoleType } from 'app/types/role';
 import { computed, reactive, watch, ref } from 'vue';
 import { useQuasar } from 'quasar';
+
+// 是否在「新增字段」对话框打开时，强制把值类型锁定为字符串（只读）
+// NOTE: 将来应由扩展（extension 主体）通过配置或消息提供此开关，本地先用常量占位以便测试。
+const DEFAULT_LOCK_NEW_FIELD_TYPE = true;
 
 const $q = useQuasar();
 const isDark = computed(() => $q.dark.isActive);
@@ -704,6 +736,16 @@ const bucketOptions = [
   { label: '自定义字段', value: 'custom' },
 ];
 
+// 扩展字段可选 key 列表（只能从中选择）
+const EXTENDED_KEY_LIST = [
+  'age', '年龄', 'gender', '性别', 'occupation', '职业', 'personality', '性格', 'appearance', '外貌', 'background', '背景',
+  'relationship', 'relationships', '关系', 'skill', 'skills', '技能', 'weakness', 'weaknesses', '弱点',
+  'goal', 'goals', '目标', 'motivation', '动机', 'fear', 'fears', '恐惧', 'secret', 'secrets', '秘密',
+  'quote', 'quotes', '台词', 'note', 'notes', '备注', 'tag', 'tags', '标签', 'category', '分类', 'level', '等级',
+  'status', '状态', 'location', '位置', 'origin', '出身', 'family', '家庭', 'education', '教育', 'hobby', 'hobbies', '爱好'
+];
+const EXTENDED_KEY_OPTIONS = EXTENDED_KEY_LIST.map((k) => ({ label: k, value: k }));
+
 /** 归并为一个可编辑数组，保持“类型锁定” */
 interface ExtraEntry {
   key: string;
@@ -773,7 +815,7 @@ function onExtraTypeChange(idx: number) {
     return;
   }
 }
-function onExtraBucketChange(idx: number) {
+function onExtraBucketChange(_idx: number) {
   syncExtrasToDraft();
   commit([]);
 }
@@ -828,6 +870,25 @@ const addForm = reactive<ExtraEntry>({
   locked: false,
   valueStr: '',
 });
+const addTypeLocked = ref(false);
+
+function onOpenAdd() {
+  // 只允许新增字符串字段（UI 上锁定类型选择）
+  addForm.valueType = 'string';
+  addForm.valueStr = '';
+  delete addForm.valueNum;
+  delete addForm.valueBool;
+  addForm.valueArr = [];
+  addForm.bucket = 'custom';
+  addForm.key = '';
+  addTypeLocked.value = DEFAULT_LOCK_NEW_FIELD_TYPE;
+  openAdd.value = true;
+}
+
+// 当对话框关闭时，解除类型锁定（防止取消后仍保持锁定）
+watch(() => openAdd.value, (v) => {
+  if (!v) addTypeLocked.value = false;
+});
 function appendExtra() {
   if (!addForm.key) return;
   if (mergedEntries.some((e) => e.key === addForm.key)) {
@@ -850,6 +911,7 @@ function appendExtra() {
   delete addForm.valueNum;
   delete addForm.valueBool;
   addForm.valueArr = [];
+  addTypeLocked.value = false;
   syncExtrasToDraft();
   commit([]);
 }

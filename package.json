@@ -24,6 +24,18 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "andrea.roleJson5Editor",
+        "displayName": "角色 JSON5 编辑器",
+        "selector": [
+          {
+            "filenamePattern": "**/*.json5"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "configurationDefaults": {
       "[markdown]": {
         "editor.quickSuggestions": {
@@ -83,8 +95,12 @@
     ],
     "commands": [
       {
+        "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
+        "title": "切换：使用角色卡管理器打开json5"
+      },
+      {
         "command": "andrea.roleCardManager.open",
-        "title": "打开角色卡管理器"
+        "title": "打开角色卡管理器测试页面"
       },
       {
         "command": "andrea.ensureEnterOverrides",
@@ -476,6 +492,13 @@
       }
     ],
     "menus": {
+      "explorer/context": [
+        {
+          "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
+          "when": "resourceExtname == .json5",
+          "group": "navigation"
+        }
+      ],
       "view/item/context": [
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
@@ -642,6 +665,11 @@
           "command": "AndreaNovelHelper.wordCount.paste",
           "group": "5_clip@3"
         },
+          {
+          "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
+          "when": "view == packageManagerView && ( viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "group": "navigation"
+        },
         {
           "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
           "command": "AndreaNovelHelper.package.copy",
@@ -789,6 +817,11 @@
           "type": "string",
           "default": "novel-helper/character-gallery.json5",
           "description": "%config.rolesFile.description%"
+        },
+        "andrea.roleJson5.openWithRoleManager": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否默认使用角色卡管理器打开 JSON5 角色文件（可被每个文件的右键覆盖）"
         },
         "AndreaNovelHelper.sensitiveWordsFile": {
           "type": "string",

@@ -11,6 +11,7 @@ export interface BaseFieldsCommon {
   priority?: number;
   description?: string;
   affiliation?: string;
+  wordSegmentFilter?: boolean; // 是否受到分词器影响
   aliases?: string[] | undefined; // 独立：基础字段
   fixes?: string[] | undefined; // 独立：基础字段（仅敏感词可编辑）
   regex?: string | undefined; // 正则专用：基础字段
