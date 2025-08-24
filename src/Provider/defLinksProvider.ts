@@ -53,22 +53,16 @@ export function activateDefLinks(context: vscode.ExtensionContext) {
                         `command:andrea.roleJson5Editor.def?${encodeURIComponent(JSON.stringify(tuple))}`
                     );
                     const link = new vscode.DocumentLink(h.range, uri);
-                    link.tooltip = '在角色管理器中打开（JSON5）';
+                    // link.tooltip = '在角色管理器中打开（JSON5）';
                     links.push(link);
                 } else {
-                    // 其它类型：改用我们自己的命令，传原始参数，避免 Range/Uri JSON 序列化问题
-                    const loc =
-                        findDefinitionInFile(role, src) ??
-                        new vscode.Location(vscode.Uri.file(src), new vscode.Position(0, 0));
-
-                    const start = loc.range?.start ?? new vscode.Position(0, 0);
-                    const tuple = [vscode.Uri.file(src).fsPath, start.line, start.character]; // 纯 JSON
-
+                    // 其它类型：二元组 [roleName, fsPath]，避免复杂对象
+                    const tuple = [role.name, vscode.Uri.file(src).fsPath];
                     const uri = vscode.Uri.parse(
-                        `command:andrea.openFileAt?${encodeURIComponent(JSON.stringify(tuple))}`
+                        `command:andrea.openRoleSource?${encodeURIComponent(JSON.stringify(tuple))}`
                     );
                     const link = new vscode.DocumentLink(h.range, uri);
-                    link.tooltip = '打开源文件并定位';
+                    // link.tooltip = '打开源文件并定位';
                     links.push(link);
                 }
             }

@@ -10,6 +10,15 @@ import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
 import { getRoleMatches } from '../context/roleAsyncShared';
 import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../context/documentRolesCache';
 
+// 输出到扩展统一的 OutputChannel（替代 console.log）
+const _anh_log_channel = vscode.window.createOutputChannel('Andrea Novel Helper:Decorations');
+function anhLog(...args: any[]) {
+    try {
+        const parts = args.map(a => typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })());
+        _anh_log_channel.appendLine('[Decorations] ' + parts.join(' '));
+    } catch { /* ignore */ }
+}
+
 // —— 每文档每角色的 ranges 哈希：docUri -> (roleName -> hash) —— 
 const appliedHashes = new Map<string, Map<string, string>>();
 
@@ -158,7 +167,7 @@ export async function updateDecorations() {
             }
             if (hits.length === 0 && roles.length > 0) {
                 // 可能是构建 race / 词数过少；同步 fallback
-                console.log('[Decorations] 异步空结果 fallback 同步');
+                anhLog('[Decorations] 异步空结果 fallback 同步');
                 fullText = doc.getText();
                 const rawHits = ahoCorasickManager.search(fullText);
                 hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]]);
@@ -170,8 +179,8 @@ export async function updateDecorations() {
             hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]]);
         }
         const acCost = Date.now() - startMs;
-        console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
-        console.log('[Decorations] 找到的匹配:', hits.slice(0, 5)); // 只显示前5个匹配，避免日志过长
+    anhLog('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
+    anhLog('[Decorations] 找到的匹配:', hits.slice(0, 5)); // 只显示前5个匹配，避免日志过长
 
         // 预构建 pattern -> role 映射（包含别名和fixes），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
         const patternRoleMap = new Map<string, Role>();
@@ -207,12 +216,12 @@ export async function updateDecorations() {
                 }
                 if (!role) {
                     // 调试日志（避免噪音，仅在开发者控制台）
-                    console.log('[Decorations] 未解析到匹配角色(可能为过期缓存) pattern=', pat);
+                    anhLog('[Decorations] 未解析到匹配角色(可能为过期缓存) pattern=', pat);
                     continue;
                 }
                 // 添加调试信息：显示找到的匹配
                 const startPos = endIdx - pat.length + 1;
-                console.log(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx + 1}) -> 角色 "${role.name}"`);
+                    anhLog(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx + 1}) -> 角色 "${role.name}"`);
                 candidates.push({
                     role,
                     text: pat,
@@ -260,7 +269,7 @@ export async function updateDecorations() {
                 }
             };
             await sliceBatch();
-            console.log('[Decorations] Regex阶段耗时', Date.now() - regexStart, 'ms');
+            anhLog('[Decorations] Regex阶段耗时', Date.now() - regexStart, 'ms');
         }
 
         // 按优先级和长度排序：优先级高的先处理，同优先级按长度倒序

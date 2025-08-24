@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as JSON5 from 'json5';
+import { hoverRangesMap } from '../hoverProvider';
 
 /* =========================
    类型与模型（内置转换器用）
@@ -467,6 +468,24 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                     filePath = a0.path ?? a0.filePath;
                 }
             }
+
+            // ===== 在这里插入兜底 START =====
+            if (!name || !filePath) {
+                const ed = vscode.window.activeTextEditor;
+                if (ed) {
+                    const key = ed.document.uri.toString();
+                    const pos = ed.selection.active;
+                    // 从 hoverRangesMap 反查命中角色
+                    const hit = (hoverRangesMap.get(key) || []).find(h => h.range.contains(pos));
+                    const r = hit?.role as Role | undefined;
+                    if (r?.sourcePath && r.sourcePath.toLowerCase().endsWith('.json5')) {
+                        name = r.name;
+                        // 用 fsPath 更稳（Windows 也 OK）
+                        filePath = vscode.Uri.file(r.sourcePath).fsPath;
+                    }
+                }
+            }
+            // ===== 在这里插入兜底 END =====
 
             if (!name || !filePath) {
                 vscode.window.showErrorMessage('[andrea.roleJson5Editor.def] 参数缺失：需要 name 与 path');

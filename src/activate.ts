@@ -55,6 +55,7 @@ import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOv
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
 import { activateDefLinks } from './Provider/defLinksProvider';
+import { registerOpenRoleSource } from './commands/openRoleSource';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -504,6 +505,7 @@ export async function activate(context: vscode.ExtensionContext) {
     ensureRegisterOpenWith(context);
     // 确保 andrea.openFileAt 命令注册一次，用于稳定的文件打开并定位
     ensureRegisterOpenFileAt(context);
+    registerOpenRoleSource(context);
 
         // Word Count 树视图
         // 手动排序管理器
