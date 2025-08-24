@@ -144,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue';
+import { ref, nextTick, computed, onMounted, watch } from 'vue';
 import { useQuasar } from 'quasar';
 
 const $q = useQuasar();
@@ -156,221 +156,53 @@ import type { RoleCardModel } from '../../types/role';
 type RoleWithId = RoleCardModel & { id: string };
 
 const drawerOpen = ref(true);
-const drawerWidth = 300;
+
+// 初始数据由扩展提供：先建空数组
+const roles = ref<RoleWithId[]>([]);
+
+// VS Code webview API (typed)
+const vscodeApi = (window as unknown as { acquireVsCodeApi?: () => { postMessage?: (msg: unknown) => void } }).acquireVsCodeApi?.();
+
+// 避免回环：当应用来自扩展的列表时，不把它再次发送回去
+let applyingRemote = false;
+
+// 监听扩展消息，处理 roleCards
+window.addEventListener('message', (event: MessageEvent) => {
+  const msg = event.data;
+  if (!msg || typeof msg.type !== 'string') return;
+  if (msg.type === 'roleCards' && Array.isArray(msg.list)) {
+    applyingRemote = true;
+    roles.value = (msg.list as RoleWithId[]).map((r) => ({ ...r }));
+    void nextTick(() => { applyingRemote = false; });
+  }
+});
+
+function notifySave() {
+  if (applyingRemote) return;
+  try {
+    vscodeApi?.postMessage?.({ type: 'saveRoleCards', list: roles.value });
+  } catch (e) {
+    console.warn('Failed to post saveRoleCards', e);
+  }
+}
+
+onMounted(() => {
+  if (vscodeApi?.postMessage) vscodeApi.postMessage({ type: 'requestRoleCards' });
+});
+
+// 深度监听 roles，去抖后发送保存
+let saveTimer: number | undefined;
+watch(roles, () => {
+  if (applyingRemote) return;
+  if (saveTimer) window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    notifySave();
+    saveTimer = undefined;
+  }, 150);
+}, { deep: true });
 
 // 用 Set 存已展开的角色 id；克隆再赋值以触发更新
 const opened = ref<Set<string>>(new Set());
-
-// 初始示例
-const roles = ref<RoleWithId[]>([
-  // ===== 正则表达式示例 =====
-  {
-    id: genId(),
-    base: {
-      name: '中文对话',
-      type: '正则表达式',
-      regex: '“[^”]*”',
-      regexFlags: 'g',
-      color: '#fbdc98ff',
-      priority: 100,
-      description: '匹配中文引号内的对话内容',
-    },
-    extended: {
-      说明: '用于标注中文引号中的对白。',
-    },
-    custom: {
-      标签: '- dialogue\n- zh-CN',
-    },
-  },
-
-  // ===== 主角：博丽灵梦 =====
-  {
-    id: genId(),
-    base: {
-      name: '博丽灵梦',
-      type: '主角',
-      affiliation: '博丽神社',
-      color: '#e94152ff',
-      priority: 10,
-      description: '乐园的巫女，博丽神社现任巫女。',
-      aliases: ['灵梦', 'Reimu'],
-    },
-    extended: {
-      外貌: '- 红白巫女服\n- 大红蝴蝶结\n- 阴阳玉随身',
-      性格: '- 大而化之\n- 懒散随性\n- 直觉敏锐',
-      背景: '人类；幻想乡“博丽神社”的巫女，调停人妖两界的平衡。',
-      技能: '- **在空中飞行程度的能力**\n- 御札/御币/结界术\n- 阴阳玉运用',
-      代表符卡: '- 梦符「梦想封印」\n- 霊符「封魔阵」\n- 結界「八方鬼缚阵」',
-      爱好: '泡茶，偶尔打扫神社（如果想起来）。',
-    },
-    custom: {
-      称号: '- **乐园的巫女**',
-      备注: '香火清淡与钱包清冷，是常年烦恼。',
-    },
-  },
-
-  // ===== 主角：雾雨魔理沙 =====
-  {
-    id: genId(),
-    base: {
-      name: '雾雨魔理沙',
-      type: '主角',
-      affiliation: '魔法森林',
-      color: '#FFD700',
-      description: '人类魔法使，居住于魔法森林。',
-      aliases: ['魔理沙', 'Marisa'],
-    },
-    extended: {
-      外貌: '- 黑色魔女服+白围裙\n- 尖顶帽（星月装饰）',
-      性格: '- 开朗外向\n- 自信好胜\n- 实用主义',
-      背景: '平民出身，自学魔法+物理结合；爱收集禁书与古器。',
-      技能: '- 光热系魔法\n- 魔炮\n- 道具改造\n- 高速机动',
-      代表符卡: '- 「魔砲・散射の弾幕」\n- 「光热魔炮」',
-    },
-    custom: {
-      称号: '- **魔女的发明家**\n- **月下的弹幕猎手**',
-      备注: '口头禅：DA☆ZE',
-    },
-  },
-
-  // ===== 敏感词示例 =====
-  {
-    id: genId(),
-    base: {
-      name: '禁忌术',
-      type: '敏感词',
-      description: '需要替换/规避的高危词汇。',
-      fixes: ['禁止术', '秘法', '封印术'],
-      color: '#ff0000',
-    },
-    extended: {
-      风险等级: '**高危**\n需重点替换',
-    },
-  },
-
-  // ===== 词汇示例 =====
-  {
-    id: genId(),
-    base: {
-      name: '魔能',
-      type: '词汇',
-      description: '世界观中的能量单位',
-    },
-    custom: {
-      分类: '能量体系',
-      补充说明: '常规范围：0~100；>100 为危险阈值',
-    },
-  },
-
-  // ===== 联动角色 =====
-  {
-    id: genId(),
-    base: {
-      name: '张三丰',
-      type: '联动角色',
-      affiliation: '武当派',
-      description: '武当派开山祖师，太极拳创始人。',
-      aliases: ['张真人'],
-    },
-    extended: {
-      技能: '- 太极拳\n- 纯阳无极功\n- 太极剑法',
-      性格: '超凡脱俗，主张三教合一',
-    },
-    custom: {
-      称号: '“通微显化真人”',
-    },
-  },
-
-  // ===== 自定义类型 =====
-  {
-    id: genId(),
-    base: {
-      name: '黑曜导师',
-      type: '炼金顾问',
-      affiliation: '旧王廷密会',
-      description: '沉默而克制的炼金顾问，偏防御反击，善用环境。',
-      color: '#222233',
-    },
-    extended: {
-      战斗风格: '防御反击，环境利用与反制',
-      信仰: '旧王廷秘教',
-      装备: '- 黑曜法杖\n- 腐蚀手甲',
-    },
-    custom: {
-      备注: '只在主线第三幕短暂现身',
-    },
-  },
-
-  // ===== 更多测试角色（批量） =====
-  {
-    id: genId(),
-    base: {
-      name: '十六夜咲夜',
-      type: '配角',
-      affiliation: '红魔馆',
-      description: '红魔馆女仆长，能操纵时间。',
-      aliases: ['咲夜', 'Sakuya'],
-    },
-    extended: {
-      技能: '- 投掷银制小刀\n- 停止时间的能力',
-      性格: '冷静严谨，绝对忠诚',
-    },
-  },
-  {
-    id: genId(),
-    base: {
-      name: '帕秋莉·诺蕾姬',
-      type: '配角',
-      affiliation: '红魔馆',
-      description: '大图书馆的魔法师，体质虚弱但知识渊博。',
-      aliases: ['帕秋莉', 'Patchouli'],
-    },
-    extended: {
-      技能: '- 元素魔法\n- 炼金术',
-      爱好: '阅读、研究',
-    },
-  },
-  {
-    id: genId(),
-    base: {
-      name: '琪露诺',
-      type: '配角',
-      affiliation: '雾之湖',
-      description: '冰之妖精，自称“最强”。',
-      aliases: ['Cirno'],
-    },
-    extended: {
-      技能: '操控冷气，制造冰锥弹幕',
-      性格: '好胜单纯',
-    },
-  },
-  {
-    id: genId(),
-    base: {
-      name: '奈芙尼丝',
-      type: '主角',
-      affiliation: '多萝西的禁密书典',
-      description: '学姐角色',
-    },
-    extended: {
-      外貌: '黑发长裙，神秘气质',
-      性格: '冷静、成熟',
-    },
-  },
-  {
-    id: genId(),
-    base: {
-      name: '凡尼娅',
-      type: '主角',
-      affiliation: '多萝西的禁密书典',
-      description: '灯教修女',
-      aliases: ['修女'],
-    },
-    extended: {
-      背景: '灯教的修女，信仰不太虔诚',
-    },
-  },
-]);
 
 // refs for scrollToRole（直接存 DOM 元素）
 const roleRefs = new Map<string, HTMLElement>();
@@ -400,15 +232,15 @@ function close(id: string) {
 }
 
 // 展开/收起全部
-function expandAll() {
+function _expandAll() {
   opened.value = new Set(roles.value.map((r: RoleWithId) => r.id));
 }
-function collapseAll() {
+function _collapseAll() {
   opened.value = new Set();
 }
 
-function onChanged(index: number, e: any) {}
-function onTypeChanged(index: number, e: any) {}
+function onChanged(_index: number, _e: unknown) {}
+function onTypeChanged(_index: number, _e: unknown) {}
 
 // 添加角色
 function addRole() {
