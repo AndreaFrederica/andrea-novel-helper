@@ -116,10 +116,86 @@
             font-size: 12px;
             margin-left: 8px;
         }
+
+        .sep {
+            margin: 0 8px;
+            opacity: .5;
+        }
+
+        /* ----- 宽屏：保持你原来的 1.5fr + 1fr 两列 ----- */
+        .grid {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 16px;
+            /* 用 gap 也行，和 grid-gap 等价 */
+        }
+
+        /* ----- 中等及以下宽度：并排改为竖向堆叠 ----- */
+        @media (max-width: 980px) {
+            .grid {
+                grid-template-columns: 1fr;
+                /* 单列 */
+            }
+
+            /* 控制条改为纵向，更好换行 */
+            #lineControls {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+            }
+
+            #lineControls .sep {
+                display: none;
+                /* 竖排时隐藏分隔竖线 */
+            }
+
+            /* 竖排时适当降低高度，避免页面太长 */
+            .h300 {
+                height: 240px;
+            }
+
+            .h260 {
+                height: 210px;
+            }
+
+            .h220 {
+                height: 190px;
+            }
+
+            .h180 {
+                height: 160px;
+            }
+
+            /* .h140 可以保持不变 */
+        }
+
+        /* ----- 更窄的极端窗口：KPI 柔性占满一行，更易读 ----- */
+        @media (max-width: 560px) {
+            .kpi {
+                flex: 1 1 100%;
+            }
+
+            body {
+                padding: 12px;
+            }
+        }
+
+        .grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        }
+
+        /* 再加一个兜底，极窄时强制单列 */
+        @media (max-width: 380px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
-<body>
+<body data-gap-minutes="10" data-continuity-gap-minutes="120">
     <h2>写作统计仪表板 <span id="scopeTag" class="tag"></span></h2>
 
     <div class="row" id="kpis">
@@ -143,10 +219,34 @@
 
     <div class="grid" style="margin-top:16px;">
         <div class="card">
-            <div class="muted">当前文件速度曲线（CPM）- 若无活动文件则为空</div>
+            <div class="row muted" id="lineControls" style="justify-content: space-between; align-items: center;">
+                <span>当前文件速度曲线（CPM）- 若无活动文件则为空</span>
+                <div>
+                    范围：
+                    <label><input type="radio" name="rangeMode" id="rangeFull" checked> 全程</label>
+                    <label><input type="radio" name="rangeMode" id="rangeRecent"> 最近一次连续访问</label>
+                    <span class="sep">|</span>
+                    缺口：
+                    <label><input type="radio" name="gapPolicy" id="gapZero" checked> 零填充</label>
+                    <label><input type="radio" name="gapPolicy" id="gapBreak"> 断线</label>
+                    <span class="sep">|</span>
+                    连续窗口：
+                    <select id="contWindow">
+                        <option value="30">30 分钟</option>
+                        <option value="60">1 小时</option>
+                        <option value="120" selected>2 小时</option>
+                        <option value="240">4 小时</option>
+                        <option value="480">8 小时</option>
+                        <option value="1440">24 小时</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="chart h300"><canvas id="lineChart"></canvas></div>
         </div>
+    </div>
 
+    <div class="grid" style="margin-top:16px;">
         <div class="card">
             <div class="muted">今日码字（按小时）</div>
             <div class="chart h260"><canvas id="todayBars"></canvas></div>

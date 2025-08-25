@@ -1092,7 +1092,7 @@
       "explorer": [
         {
           "id": "wordCountExplorer",
-          "name": "小说助手",
+          "name": "写作资源管理器（小说助手）",
           "icon": "images/checklist_dark.svg"
         },
         {

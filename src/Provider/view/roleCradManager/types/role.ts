@@ -1,6 +1,5 @@
 /** ====== 类型声明（与约束一致） ====== */
 export type BuiltinType = '主角' | '配角' | '联动角色' | '敏感词' | '词汇' | '正则表达式';
-// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 export type RoleType = BuiltinType | string;
 export type JsonValue = string | number | boolean | null | string[];
 

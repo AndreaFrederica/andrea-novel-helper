@@ -1,6 +1,19 @@
 /* time-stats.js — Chart.js 版本 */
 const vscode = acquireVsCodeApi();
 
+// —— 交互状态 —— //
+const uiState = {
+    rangeMode: localStorage.getItem('rangeMode') || 'full',   // 'full' | 'recent'
+    gapPolicy: localStorage.getItem('gapPolicy') || 'zero',   // 'zero' | 'break'
+};
+
+// —— 缺口与连续段阈值（分钟） —— //
+const GAP_MINUTES = +(document.body.dataset.gapMinutes || 10);                 // 用于“断线”策略
+const MAX_FILL_POINTS = 24 * 60;                                              // 零填充上限
+const CONTINUITY_GAP_MINUTES = +(document.body.dataset.continuityGapMinutes || 120); // 最近连续段：2h
+const CONTINUITY_GAP_MS = CONTINUITY_GAP_MINUTES * 60_000;
+
+
 // —— 小工具 —— //
 function fmtMinutes(ms) {
     const mins = Math.round(ms / 60000);
@@ -12,6 +25,95 @@ function cssVar(name, fallback) {
 }
 function clamp01(x) { return Math.max(0, Math.min(1, x)); }
 function lerp(a, b, t) { return a + (b - a) * t; }
+
+function bindControls() {
+    const full = document.getElementById('rangeFull');
+    const recent = document.getElementById('rangeRecent');
+    const zero = document.getElementById('gapZero');
+    const brk = document.getElementById('gapBreak');
+
+    // 初始勾选（从 localStorage 恢复）
+    if (uiState.rangeMode === 'recent') {recent.checked = true;} else {full.checked = true;}
+    if (uiState.gapPolicy === 'break') {brk.checked = true;} else {zero.checked = true;}
+
+    const rerender = () => rerenderLine();  // 只重绘折线图
+
+    full?.addEventListener('change', () => {
+        uiState.rangeMode = full.checked ? 'full' : 'recent';
+        localStorage.setItem('rangeMode', uiState.rangeMode);
+        rerender();
+    });
+    recent?.addEventListener('change', () => {
+        uiState.rangeMode = recent.checked ? 'recent' : 'full';
+        localStorage.setItem('rangeMode', uiState.rangeMode);
+        rerender();
+    });
+    zero?.addEventListener('change', () => {
+        uiState.gapPolicy = zero.checked ? 'zero' : 'break';
+        localStorage.setItem('gapPolicy', uiState.gapPolicy);
+        rerender();
+    });
+    brk?.addEventListener('change', () => {
+        uiState.gapPolicy = brk.checked ? 'break' : 'zero';
+        localStorage.setItem('gapPolicy', uiState.gapPolicy);
+        rerender();
+    });
+}
+
+function sliceToRecentContinuous(rows, gapMs = CONTINUITY_GAP_MS) {
+    if (!rows || !rows.length) {return rows || [];}
+    const sorted = [...rows].sort((a, b) => new Date(a.t) - new Date(b.t));
+    let end = sorted.length - 1;
+    let prev = new Date(sorted[end].t).getTime();
+    let i = end - 1;
+    for (; i >= 0; i--) {
+        const ts = new Date(sorted[i].t).getTime();
+        if ((prev - ts) >= gapMs) {break;} // 断开
+        prev = ts;
+    }
+    const start = Math.max(0, i + 1);
+    return sorted.slice(start);       // 最近一段连续区间
+}
+
+function buildLinePoints(rows, gapPolicy = uiState.gapPolicy) {
+    if (!rows || !rows.length) {return [];}
+    const sorted = [...rows].sort((a, b) => new Date(a.t) - new Date(b.t));
+
+    const STEP = 60_000;
+    const GAP = GAP_MINUTES * STEP;
+    const out = [];
+    let lastTs = null;
+
+    for (const r of sorted) {
+        const curTs = new Date(r.t).getTime();
+        const curY = r.cpm ?? 0;
+
+        if (lastTs !== null && curTs > lastTs) {
+            const delta = curTs - lastTs;
+            if (gapPolicy === 'zero') {
+                const miss = Math.min(MAX_FILL_POINTS, Math.floor(delta / STEP) - 1);
+                for (let k = 1; k <= miss; k++) {
+                    out.push({ x: new Date(lastTs + k * STEP), y: 0 });
+                }
+            } else if (gapPolicy === 'break' && delta >= GAP) {
+                out.push({ x: new Date(lastTs + 1), y: null }); // 让 Chart.js 断线
+            }
+        }
+
+        out.push({ x: new Date(curTs), y: curY });
+        lastTs = curTs;
+    }
+    return out;
+}
+
+function rerenderLine() {
+    const canvas = document.getElementById('lineChart');
+    const rows = dataCache.perFileLine || [];
+    const scope = (uiState.rangeMode === 'recent') ? sliceToRecentContinuous(rows) : rows;
+    drawLineChart(canvas, scope);
+}
+
+
 
 // 用于主题 &网格配色
 const COLOR_FG = () => cssVar('--fg', '#aab');
@@ -52,6 +154,7 @@ function requestStatsData() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    bindControls();
     requestStatsData();
     // 每 1 秒刷新一次
     setInterval(requestStatsData, 1 * 1000);
@@ -59,9 +162,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
 window.addEventListener('message', (e) => {
     const data = e.data;
-    if (!data) return;
+    if (!data) {return;}
 
-    if (data.type !== 'time-stats-data') return;
+    if (data.type !== 'time-stats-data') {return;}
 
     // KPI
     document.getElementById('k_total').textContent = fmtMinutes(data.totalMillisAll);
@@ -78,8 +181,14 @@ window.addEventListener('message', (e) => {
 
     if (hasDataChanged(newPerFileLine, dataCache.perFileLine)) {
         console.log('Line chart data changed, redrawing...');
-        drawLineChart(document.getElementById('lineChart'), newPerFileLine);
+        const scoped = (uiState.rangeMode === 'recent')
+            ? sliceToRecentContinuous(newPerFileLine)
+            : newPerFileLine;
+        drawLineChart(document.getElementById('lineChart'), scoped);
         dataCache.perFileLine = JSON.parse(JSON.stringify(newPerFileLine));
+    } else {
+        // 数据没变但用户切换了模式时也能即时重绘
+        rerenderLine();
     }
 
     if (hasDataChanged(newTodayHourly, dataCache.todayHourly)) {
@@ -107,89 +216,18 @@ window.addEventListener('message', (e) => {
         if (monthEl) {
             drawMonthlyHeatmap(monthEl, newHeatmap, new Date());
         }
-        
+
         dataCache.heatmap = JSON.parse(JSON.stringify(newHeatmap));
     }
 });
 
-// // ===== 折线图：每分钟 CPM 变化（perFileLine） =====
-// function drawLineChart(canvas, rows) {
-//     destroyChart('line');
-//     const ctx = canvas.getContext('2d');
-
-//     // 筛出 x/y
-//     const labels = rows.map(r => new Date(r.t));
-//     const values = rows.map(r => r.cpm ?? 0);
-
-//     const dsColor = COLOR_ACCENT();
-
-//     charts.line = new Chart(ctx, {
-//         type: 'line',
-//         data: {
-//             labels,
-//             datasets: [{
-//                 label: 'CPM',
-//                 data: values,
-//                 borderColor: dsColor,
-//                 backgroundColor: dsColor,
-//                 pointRadius: 0,
-//                 tension: 0.25,
-//                 borderWidth: 2,
-//             }]
-//         },
-//         options: {
-//             responsive: true,
-//             maintainAspectRatio: false,
-//             parsing: false,
-//             scales: {
-//                 x: {
-//                     type: 'time',
-//                     time: { unit: 'minute' },
-//                     ticks: {
-//                         color: COLOR_FG(),
-//                         autoSkip: true,
-//                         maxTicksLimit: 8,
-//                         // 直接用本地格式化为 24h，避免 a.m./p.m.
-//                         callback: (v) => new Date(v).toLocaleTimeString([], {
-//                             hour: '2-digit', minute: '2-digit', hour12: false
-//                         })
-//                     },
-//                     grid: { color: 'rgba(127,127,127,0.15)' }
-//                 },
-//                 y: {
-//                     beginAtZero: true,
-//                     ticks: { color: COLOR_FG() },
-//                     grid: { color: 'rgba(127,127,127,0.15)' },
-//                     title: { display: true, text: 'CPM', color: COLOR_FG() },
-//                     suggestedMax: Math.max(60, ...values) // 让曲线不贴边
-//                 }
-//             },
-//             layout: { padding: 4 },
-//             animation: false,
-
-//             plugins: {
-//                 legend: { display: false },
-//                 tooltip: {
-//                     callbacks: {
-//                         title: (items) => {
-//                             const d = items[0]?.label;
-//                             return d ? `时间：${d}` : '';
-//                         },
-//                         label: (item) => `CPM：${item.raw}`
-//                     }
-//                 }
-//             }
-//         }
-//     });
-// }
 
 function drawLineChart(canvas, rows) {
     destroyChart('line');
-    if (!canvas) return;                       // 防空
+    if (!canvas) {return;}
     const ctx = canvas.getContext('2d');
 
-    // rows: [{ t: 时间戳/ISO, cpm: number }]
-    const points = rows.map(r => ({ x: new Date(r.t), y: r.cpm ?? 0 }));
+    const points = buildLinePoints(rows, uiState.gapPolicy);
     const dsColor = COLOR_ACCENT();
 
     charts.line = new Chart(ctx, {
@@ -203,15 +241,14 @@ function drawLineChart(canvas, rows) {
                 pointRadius: 0,
                 tension: 0.25,
                 borderWidth: 2,
+                spanGaps: false, // y=null 处断线
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-
-            // 显式解析 {x,y}
             parsing: { xAxisKey: 'x', yAxisKey: 'y' },
-
+            normalized: true,
             scales: {
                 x: {
                     type: 'time',
@@ -231,7 +268,7 @@ function drawLineChart(canvas, rows) {
                     ticks: { color: COLOR_FG() },
                     grid: { color: 'rgba(127,127,127,0.15)' },
                     title: { display: true, text: 'CPM', color: COLOR_FG() },
-                    suggestedMax: Math.max(60, ...points.map(p => p.y))
+                    suggestedMax: Math.max(60, ...points.map(p => p?.y ?? 0))
                 }
             },
             layout: { padding: 4 },
@@ -306,107 +343,6 @@ function drawTodayBars(canvas, hourly) {
     });
 }
 
-// ===== “矩阵式”热力图：今日 24×4（15 分钟粒度） =====
-// function drawTodayHeatmap(canvas, quarterHourly) {
-//     destroyChart('todayHeatmap');
-//     const ctx = canvas.getContext('2d');
-
-//     // 24 小时 * 4 刻度，共 96 点
-//     // 用“条形图”模拟矩阵：y 轴为 4 个刻度，x 轴为 24 小时。
-//     const yLabels = ['00', '15', '30', '45'];
-//     const xLabels = Array.from({ length: 24 }, (_, h) => h);
-
-//     // 找最大值用于颜色映射
-//     let maxVal = 0;
-//     const values = [];
-//     for (let h = 0; h < 24; h++) {
-//         for (let q = 0; q < 4; q++) {
-//             const idx = h * 4 + q;
-//             const v = quarterHourly[idx] || 0;
-//             values.push({ h, q, v });
-//             if (v > maxVal) maxVal = v;
-//         }
-//     }
-//     // 生成每个“格子”的颜色（浅->深）
-//     const base = { r: 102, g: 170, b: 255 }; // #66aaff
-//     function colorFor(v) {
-//         if (maxVal <= 0) return `rgba(${base.r},${base.g},${base.b},0.15)`;
-//         const t = clamp01(v / maxVal);
-//         const a = lerp(0.15, 1.0, Math.sqrt(t));
-//         return `rgba(${base.r},${base.g},${base.b},${a})`;
-//     }
-
-//     // 我们创建 4 个数据集（对应 y=00/15/30/45），每个数据集 24 个柱子
-//     const datasets = yLabels.map((ylab, q) => ({
-//         label: `: ${ylab}`,
-//         data: xLabels.map((h) => {
-//             const v = quarterHourly[h * 4 + q] || 0;
-//             return {
-//                 x: h,
-//                 y: yLabels[q],   // 类别刻度
-//                 v,
-//             };
-//         }),
-//         parsing: {
-//             xAxisKey: 'x',
-//             yAxisKey: 'y',
-//         },
-//         borderWidth: 1,
-//         borderColor: 'transparent',
-//         backgroundColor: (ctx) => {
-//             const v = ctx.raw?.v ?? 0;
-//             return colorFor(v);
-//         },
-//         // 调小条宽，看起来更接近方块
-//         barPercentage: 1.0,
-//         categoryPercentage: 1.0,
-//     }));
-
-//     charts.todayHeatmap = new Chart(ctx, {
-//         type: 'bar',
-//         data: { datasets },
-//         options: {
-//             responsive: true,
-//             maintainAspectRatio: false,
-//             indexAxis: 'x',
-//             scales: {
-//                 x: {
-//                     type: 'linear',
-//                     min: 0,
-//                     max: 23,
-//                     ticks: {
-//                         color: COLOR_FG(),
-//                         stepSize: 1,
-//                         callback: (v) => String(v).padStart(2, '0')
-//                     },
-//                     grid: { display: false },
-//                     stacked: true,
-//                 },
-//                 y: {
-//                     type: 'category',
-//                     labels: yLabels,
-//                     ticks: { color: COLOR_FG() },
-//                     grid: { display: false },
-//                     stacked: true,
-//                 }
-//             },
-//             plugins: {
-//                 legend: { display: false },
-//                 tooltip: {
-//                     callbacks: {
-//                         title: (items) => {
-//                             const h = items[0]?.raw?.x ?? 0;
-//                             const q = items[0]?.raw?.y ?? '00';
-//                             return `时间 ${String(h).padStart(2, '0')}:${q}`;
-//                         },
-//                         label: (item) => `字符：${item.raw?.v ?? 0}`
-//                     }
-//                 }
-//             }
-//         }
-//     });
-// }
-// ===== “矩阵式”热力图：今日 24×4（15 分钟粒度，修正版） =====
 function drawTodayHeatmap(canvas, quarterHourly) {
     destroyChart('todayHeatmap');
     const ctx = canvas.getContext('2d');
@@ -416,10 +352,10 @@ function drawTodayHeatmap(canvas, quarterHourly) {
 
     // 颜色映射
     let maxVal = 0;
-    for (let i = 0; i < 96; i++) maxVal = Math.max(maxVal, quarterHourly[i] || 0);
+    for (let i = 0; i < 96; i++) {maxVal = Math.max(maxVal, quarterHourly[i] || 0);}
     const base = { r: 102, g: 170, b: 255 };
     const colorFor = (v) => {
-        if (maxVal <= 0) return `rgba(${base.r},${base.g},${base.b},0.15)`;
+        if (maxVal <= 0) {return `rgba(${base.r},${base.g},${base.b},0.15)`;}
         const t = Math.min(1, v / maxVal);
         const a = 0.15 + 0.85 * Math.sqrt(t);
         return `rgba(${base.r},${base.g},${base.b},${a})`;
@@ -443,7 +379,7 @@ function drawTodayHeatmap(canvas, quarterHourly) {
         categoryPercentage: 1,
         barThickness: (ctx) => {
             const ca = ctx.chart.chartArea;
-            if (!ca) return;
+            if (!ca) {return;}
             const rowH = ca.height / yLabels.length;
             return Math.max(2, Math.floor(rowH)); // 每行留 2px 间隙
         },
@@ -533,14 +469,14 @@ function drawMonthlyHeatmap(canvas, heatmap, refDate = new Date()) {
             const v = heatmap[ts] || 0;
             const out = (ts < monthStart || ts > monthEnd); // 非当月的灰格
             matrix.push({ col: c, rowLabel: yLabels[d], ts, v, out });
-            if (!out && v > maxVal) maxVal = v;
+            if (!out && v > maxVal) {maxVal = v;}
         }
     }
 
     // 颜色映射
     const base = { r: 102, g: 170, b: 255 };
     const colorFor = (v, out) => {
-        if (maxVal <= 0) return `rgba(${base.r},${base.g},${base.b},${out ? 0.08 : 0.15})`;
+        if (maxVal <= 0) {return `rgba(${base.r},${base.g},${base.b},${out ? 0.08 : 0.15})`;}
         const t = Math.min(1, v / maxVal);
         const a = (out ? 0.08 : 0.15) + 0.85 * Math.sqrt(t);
         return `rgba(${base.r},${base.g},${base.b},${a})`;
@@ -564,7 +500,7 @@ function drawMonthlyHeatmap(canvas, heatmap, refDate = new Date()) {
         categoryPercentage: 1,
         barThickness: (ctx) => {
             const ca = ctx.chart.chartArea;
-            if (!ca) return;
+            if (!ca) {return;}
             const rowH = ca.height / 7;
             return Math.max(2, Math.floor(rowH));
         },
@@ -638,13 +574,13 @@ function drawThisWeekBars(canvas, dailyMap) {
         const ts = weekStart + i * dayMs;
         const v = dailyMap[ts] || 0;
         points.push({ x: `周${yLabels[i]}`, y: v, ts, isToday: i === weekdayMon0 });
-        if (v > maxVal) maxVal = v;
+        if (v > maxVal) {maxVal = v;}
     }
 
     // 颜色映射（和你热力图同风格）
     const base = { r: 102, g: 170, b: 255 };
     const colorFor = (v, emph) => {
-        if (maxVal <= 0) return `rgba(${base.r},${base.g},${base.b},0.18)`;
+        if (maxVal <= 0) {return `rgba(${base.r},${base.g},${base.b},0.18)`;}
         const t = Math.min(1, v / maxVal);
         const a = 0.18 + 0.82 * Math.sqrt(t);
         // 今天稍微强调一点透明度
