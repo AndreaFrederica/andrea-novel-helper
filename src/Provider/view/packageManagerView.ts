@@ -345,15 +345,6 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         return context.workspaceState.get<Record<string, boolean>>(PER_FILE_KEY, {});
     }
 
-    async function togglePerFilePref(uri: vscode.Uri) {
-        const prefs = getPerFilePrefs();
-        const key = uri.fsPath;
-        const current = !!prefs[key];
-        prefs[key] = !current;
-        await context.workspaceState.update(PER_FILE_KEY, prefs);
-        vscode.window.setStatusBarMessage(`文件 ${path.basename(key)}: 使用角色卡管理器打开 = ${prefs[key]}`, 3000);
-        provider.refresh();
-    }
 
     // —— 复制 / 剪切 / 粘贴 命令 ——
     context.subscriptions.push(
@@ -390,18 +381,28 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
                 const shouldOpenWithManager = typeof pref === 'boolean' ? pref : !!globalDefault;
 
-                if (shouldOpenWithManager) {
-                    // try to open using custom editor viewType
-                    try {
-                        await vscode.commands.executeCommand('vscode.openWith', fileUri, 'andrea.roleJson5Editor');
-                        return;
-                    } catch (err) {
-                        // fallback to text editor
-                        console.warn('openWith andrea.roleJson5Editor failed, fallback to text document', err);
+                // Decide by extension: only .json5 is eligible for role manager.
+                const ext = path.extname(fileUri.fsPath).toLowerCase();
+                if (ext === '.json5') {
+                    if (shouldOpenWithManager) {
+                        try {
+                            // ensure it's recognized as role-related before opening with manager
+                            if (shouldUpdateRoles(fileUri)) {
+                                await vscode.commands.executeCommand('vscode.openWith', fileUri, 'andrea.roleJson5Editor');
+                                return;
+                            }
+                        } catch (err) {
+                            console.warn('openWith andrea.roleJson5Editor failed, fallback to vscode.open', err);
+                        }
                     }
+                    // fallback to VS Code default open for .json5
+                    await vscode.commands.executeCommand('vscode.open', fileUri);
+                    return;
                 }
 
-                await vscode.window.showTextDocument(fileUri);
+                // For markdown and all other types use VS Code default opening behavior
+                await vscode.commands.executeCommand('vscode.open', fileUri);
+                return;
             } catch (error) {
                 vscode.window.showErrorMessage(`无法打开文件: ${error}`);
             }

@@ -95,6 +95,46 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.window.showInformationMessage(`自动换行已设置为：${pick.value}`);
     }
 
+    // 编辑器字体大小（workspace 级别 + 可对常用语言作用域写入）
+    async function changeEditorFontSize() {
+        const editorCfg = vscode.workspace.getConfiguration('editor');
+        const cur = editorCfg.get<number>('fontSize', 14) ?? 14;
+        const presets = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32];
+        const items = presets.map(n => ({ label: `${n}${n === cur ? '  (当前)' : ''}`, value: n }));
+        items.push({ label: '自定义...', value: 'custom' as any });
+
+        const pick = await vscode.window.showQuickPick(items as any[], { placeHolder: '选择编辑器字体大小 (editor.fontSize)' });
+    if (!pick) { return; }
+
+        let newSize: number | undefined;
+        if (pick.value === 'custom') {
+            const input = await vscode.window.showInputBox({ prompt: '输入字体大小（数字，例如 14）', value: String(cur) });
+            if (!input) { return; }
+            const n = Number(input.trim());
+            if (!Number.isFinite(n) || n <= 0) {
+                vscode.window.showErrorMessage('请输入有效的正数字体大小');
+                return;
+            }
+            newSize = Math.floor(n);
+        } else {
+            newSize = pick.value as number;
+        }
+
+    if (newSize === undefined) { return; }
+
+        // 写入全局（与字体家族管理一致，直接更新用户设置）
+        await editorCfg.update('fontSize', newSize, vscode.ConfigurationTarget.Global);
+
+        // 对常用文本/Markdown 语言也写入全局作用域，避免被语言配置覆盖
+        for (const lang of ['markdown', 'plaintext']) {
+            const langCfg = vscode.workspace.getConfiguration('editor', { languageId: lang });
+            await langCfg.update('fontSize', newSize, vscode.ConfigurationTarget.Global, true);
+        }
+
+        onRefreshStatus();
+        vscode.window.showInformationMessage(`编辑器字体大小已设置为 ${newSize}（全局用户设置）`);
+    }
+
     //! 一键注入：把 Enter 路由给 Andrea，并禁用 MAIO 的 Enter（带已注入检测）
     async function injectEnterKeybindings() {
         const MAIO_ENTER = 'markdown.extension.onEnterKey';
@@ -172,7 +212,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         const pick = await vscode.window.showQuickPick(
             [
                 { label: `${wrap !== 'off' ? '$(check)' : '$(circle-slash)'} 切换：自动换行（当前 ${wrap}）`, cmd: 'andrea.toggleWordWrap' },
-                { label: '$(wrap) 设置：自动换行模式', cmd: 'andrea.changeWordWrap' },
+                { label: '$(settings) 设置：自动换行模式', cmd: 'andrea.changeWordWrap' },
 
                 { label: `${ap ? '$(check)' : '$(circle-slash)'} 切换：智慧补齐括号`, cmd: 'andrea.toggleAutoPairs' },
                 { label: `${sx ? '$(check)' : '$(circle-slash)'} 切换：智慧跳出括号/引号`, cmd: 'andrea.toggleSmartExit' },
@@ -184,10 +224,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
                 { label: '$(settings) 设置：缩进宽度（editor.insertSpaces / tabSize）', cmd: 'andrea.changeIndentSize' },
 
-                { label: '$(typography) 管理：编辑器字体家族（图形化）', cmd: 'andrea.manageEditorFontFamily' },
+                { label: '$(symbol-text) 管理：编辑器字体家族（图形化）', cmd: 'andrea.manageEditorFontFamily' },
+                { label: '$(zoom-in) 设置：编辑器字体大小', cmd: 'andrea.changeEditorFontSize' },
                 { label: '$(paintcan) 立即排版全文', cmd: 'andrea.formatDocument' },
 
-                { label: '$(keyboard) 【仅需执行一次｜失效时再用】一键注入：Enter → Andrea（覆盖 MAIO）', cmd: 'andrea.injectEnterKeybindings' },
+                { label: '$(keyboard) [仅需执行一次｜智能回车失效时使用] 一键注入：Enter → Andrea（覆盖 MAIO）', cmd: 'andrea.injectEnterKeybindings' },
             ],
             { placeHolder: '小说版式：快速设置', canPickMany: false }
         );
@@ -209,6 +250,8 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
         vscode.commands.registerCommand('andrea.changeBlankLines', changeBlankLines),
         vscode.commands.registerCommand('andrea.changeIndentSize', changeIndentSize),
+
+    vscode.commands.registerCommand('andrea.changeEditorFontSize', changeEditorFontSize),
 
         vscode.commands.registerCommand('andrea.toggleAutoPairs', () => toggle('andrea.typeset.enableAutoPairs')),
         vscode.commands.registerCommand('andrea.toggleSmartEnter', () => toggle('andrea.typeset.enableSmartEnter')),

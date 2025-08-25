@@ -30,6 +30,8 @@
         <div class="col-12 col-md-6">
           <q-input
             v-model="draft.base.description"
+            type="textarea"
+            autogrow
             label="描述 (description)"
             dense
             filled
@@ -246,7 +248,7 @@
           :label="displayLabel(item)"
           :caption="item.bucket === 'extended' ? '扩展字段' : '自定义字段'"
           default-opened
-          :header-class="isDark ? 'bg-grey-9' : 'bg-grey-1'"
+          :header-class="[(isDark ? 'bg-grey-9' : 'bg-grey-1'), 'expansion-header-wrap']"
         >
           <div class="q-pa-sm q-gutter-sm">
             <div class="row q-col-gutter-md">
@@ -636,11 +638,18 @@ watch(
   },
 );
 
-function normalizeStrList(vals: any[]): string[] {
+function normalizeStrList(vals: unknown[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const v of vals || []) {
-    const s = String(v ?? '').trim();
+    if (v === null || v === undefined) continue;
+    let s: string;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      s = String(v).trim();
+    } else {
+      // skip objects/arrays/non-primitive values
+      continue;
+    }
     if (!s) continue;
     if (!seen.has(s)) {
       seen.add(s);
@@ -758,14 +767,14 @@ interface ExtraEntry {
   valueArr?: string[];
 }
 
-function inferType(v: any): ValueType {
+function inferType(v: unknown): ValueType {
   if (Array.isArray(v)) return 'string[]';
   const t = typeof v;
   if (t === 'number') return 'number';
   if (t === 'boolean') return 'boolean';
   return 'string';
 }
-function toEntry(k: string, v: any, bucket: 'extended' | 'custom'): ExtraEntry {
+function toEntry(k: string, v: JsonValue, bucket: 'extended' | 'custom'): ExtraEntry {
   const typ = inferType(v);
   const e: ExtraEntry = { key: k, bucket, valueType: typ, locked: true };
   if (typ === 'string') e.valueStr = String(v ?? '');
@@ -781,12 +790,14 @@ const BASE_KEYS_BLOCKLIST = new Set(['aliases', 'fixes', 'regex', 'regexFlags', 
 const mergedEntries = reactive<ExtraEntry[]>([]);
 function reloadExtras() {
   mergedEntries.splice(0);
-  const pushFrom = (obj: Record<string, any> | undefined, bucket: 'extended' | 'custom') => {
+  const pushFrom = (obj: Record<string, JsonValue> | undefined, bucket: 'extended' | 'custom') => {
     if (!obj) return;
     Object.keys(obj).forEach((k) => {
-      if (BASE_KEYS_BLOCKLIST.has(k)) return;
-      mergedEntries.push(toEntry(k, obj[k], bucket));
-    });
+        if (BASE_KEYS_BLOCKLIST.has(k)) return;
+        const val = obj[k];
+        if (val === undefined) return;
+        mergedEntries.push(toEntry(k, val, bucket));
+      });
   };
   pushFrom(draft.extended, 'extended');
   pushFrom(draft.custom, 'custom');
@@ -931,5 +942,19 @@ function cloneRole(r: RoleCardModel): RoleCardModel {
   height: 20px;
   border-radius: 4px;
   border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Allow long field labels in expansion header to wrap instead of truncating */
+.expansion-header-wrap {
+  /* ensure header content can use multiple lines */
+  white-space: normal !important;
+  word-break: break-word; /* break long words if needed */
+  overflow-wrap: anywhere; /* modern fallback */
+}
+
+/* Make sure the label and caption inside the header can wrap */
+.expansion-header-wrap .q-expansion-item__header__label,
+.expansion-header-wrap .q-expansion-item__header__caption {
+  white-space: normal !important;
 }
 </style>
