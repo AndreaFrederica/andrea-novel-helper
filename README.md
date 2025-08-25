@@ -15,8 +15,9 @@
 [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/andrea-novel-helper?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 [![Open VSX Downloads](https://img.shields.io/open-vsx/dt/andreafrederica/andrea-novel-helper?label=Open%20VSX%20Downloads)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 
-> 最新版本：**0.3.12 (2025-08-25)**  
+> 最新版本：**0.3.16 (2025-08-25)**  
 > 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节“近期版本速览”。
+> 近期版添加了大量新功能，若从老版本升级，请阅读ChangeLog
 
 一个围绕“设定集 / 资料集”组织写作资产的 VS Code 小说写作增强扩展。核心理念：把你的世界观、角色、敏感词、专业词汇、正则高亮规则和章节文件放进一个“包”（Package），由“包管理器”统一可视化管理与快速生成。
 ## 反馈和交流
