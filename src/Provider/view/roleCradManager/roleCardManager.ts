@@ -52,7 +52,7 @@ export class RoleCardPanel {
             RoleCardPanel.current.title = opts.title ?? RoleCardPanel.current.title;
             RoleCardPanel.current.reveal(column);
             try {
-                const mapperFile = vscode.Uri.joinPath(ctx.extensionUri, 'src', 'Provider', 'view', 'resource-mapper.js');
+                const mapperFile = vscode.Uri.joinPath(ctx.extensionUri, 'media', 'resource-mapper.js');
                 opts.resourceMapperScriptUri = RoleCardPanel.current.webview.asWebviewUri(mapperFile).toString();
             } catch (_) { }
             RoleCardPanel.current.webview.html = buildHtml(RoleCardPanel.current.webview, opts);
@@ -66,12 +66,12 @@ export class RoleCardPanel {
             {
                 enableScripts: true,
                 retainContextWhenHidden: !!opts.retainContextWhenHidden,
-                localResourceRoots: [opts.spaRoot, vscode.Uri.joinPath(ctx.extensionUri, 'src', 'Provider', 'view'), ...(opts.extraLocalResourceRoots ?? [])],
+                localResourceRoots: [opts.spaRoot, vscode.Uri.joinPath(ctx.extensionUri, 'media'), ...(opts.extraLocalResourceRoots ?? [])],
             }
         );
 
         try {
-            const mapperFile = vscode.Uri.joinPath(ctx.extensionUri, 'src', 'Provider', 'view', 'resource-mapper.js');
+            const mapperFile = vscode.Uri.joinPath(ctx.extensionUri, 'media', 'resource-mapper.js');
             opts.resourceMapperScriptUri = panel.webview.asWebviewUri(mapperFile).toString();
         } catch (_) { }
 
@@ -218,7 +218,7 @@ function injectResourceMapper(html: string, webview: vscode.Webview, spaRoot: vs
     let mapperSrc = mapperScriptUri;
     if (!mapperSrc) {
         try {
-            mapperSrc = webview.asWebviewUri(vscode.Uri.joinPath(spaRoot, '..', 'src', 'Provider', 'view', 'resource-mapper.js')).toString();
+            mapperSrc = webview.asWebviewUri(vscode.Uri.joinPath(spaRoot, '..', 'media', 'resource-mapper.js')).toString();
         } catch (_) { mapperSrc = undefined; }
     }
 
@@ -293,7 +293,7 @@ function buildHtml(webview: vscode.Webview, opts: RoleCardPanelOptions): string 
     // 修复所有静态资源路径
     html = fixAllAssetUrls(html, webview, opts.spaRoot);
 
-    // 注入动态资源映射和转换函数（脚本文件位于扩展主体：src/Provider/view/resource-mapper.js）
+    // 注入动态资源映射和转换函数（脚本文件位于扩展主体：media/resource-mapper.js）
     html = injectResourceMapper(html, webview, opts.spaRoot, opts.resourceMapperScriptUri);
 
 

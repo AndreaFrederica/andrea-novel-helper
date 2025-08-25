@@ -1,7 +1,4 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-import JSON5 from 'json5';
 import { activate as activateRoles, deactivate as deactivateRoles } from './activate';
 
 // 角色定义接口

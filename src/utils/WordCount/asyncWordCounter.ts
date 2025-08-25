@@ -8,6 +8,8 @@ import { TextStats } from './wordCountCore';
 
 interface Pending { resolve:(s:TextStats)=>void; reject:(e:any)=>void; }
 
+let theContext: vscode.ExtensionContext | undefined;
+
 interface WorkerInfo {
   worker: Worker;
   ready: boolean;
@@ -40,9 +42,13 @@ class AsyncWordCounter {
   }
 
   private spawnOne(index: number) {
-  const workerPath = path.join(__dirname, '..', '..', 'workers', 'wordCountWorker.js');
+    if(theContext === undefined) {
+      throw new Error('AsyncWordCounter context not set');
+    }
+    const workerPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'roleAcWorker.js');
+    // const workerPath = path.join(__dirname, '..', '..', 'workers', 'wordCountWorker.js');
     try {
-      const worker = new Worker(workerPath);
+      const worker = new Worker(workerPath.fsPath);
       const info: WorkerInfo = { worker, ready: false, queue: [] };
       worker.on('message', (msg:any)=> this.onMessage(msg, info));
       worker.on('error', err=>{
@@ -123,3 +129,8 @@ class AsyncWordCounter {
 let singleton: AsyncWordCounter | undefined;
 export function getAsyncWordCounter(): AsyncWordCounter { if (!singleton) { singleton = new AsyncWordCounter(); } return singleton; }
 export async function countAndAnalyzeOffThread(filePath: string) { return getAsyncWordCounter().countFile(filePath); }
+
+
+export function setWordCounterContext(context: vscode.ExtensionContext) {
+  theContext = context;
+}

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.3.12",
+  "version": "0.3.15",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -665,7 +665,7 @@
           "command": "AndreaNovelHelper.wordCount.paste",
           "group": "5_clip@3"
         },
-          {
+        {
           "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
           "when": "view == packageManagerView && ( viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
           "group": "navigation"
@@ -1136,9 +1136,10 @@
     "packages/webview"
   ],
   "scripts": {
-    "build:webview": "npm --workspace=webview run build",
-    "dev:webview": "npm --workspace=webview run dev",
-    "vscode:prepublish": "npm run compile",
+    "bundle:ext": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --main-fields=module,main --outfile=out/extension.js --sourcemap",
+    "build:webview": "npm --workspace=packages/webview run build",
+    "dev:webview": "npm --workspace=packages/webview run dev",
+    "vscode:prepublish": "npm run build:webview && npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
@@ -1153,6 +1154,7 @@
     "@typescript-eslint/parser": "^8.31.1",
     "@vscode/test-cli": "^0.0.11",
     "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.9",
     "eslint": "^9.25.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
@@ -1164,7 +1166,6 @@
     "chart.js": "^4.5.0",
     "chartjs-adapter-date-fns": "^3.0.0",
     "font-list": "^1.5.1",
-    "iconv": "^3.0.1",
     "iconv-lite": "^0.6.3",
     "jschardet": "^3.1.4",
     "json5": "^2.2.3",

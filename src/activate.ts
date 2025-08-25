@@ -56,6 +56,8 @@ import {registerRoleCardManager as roleCardManagerActivate} from './Provider/vie
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
 import { activateDefLinks } from './Provider/defLinksProvider';
 import { registerOpenRoleSource } from './commands/openRoleSource';
+import { setWordCounterContext } from './utils/WordCount/asyncWordCounter';
+import { setAsyncRoleMatcherContext } from './utils/asyncRoleMatcher';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -100,6 +102,8 @@ export const onDidFinishRoles = _onDidFinishRoles.event;
 export async function activate(context: vscode.ExtensionContext) {
     // 输出通道用于调试激活阶段错误/栈
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
+    setWordCounterContext(context);
+    setAsyncRoleMatcherContext(context);
     registerContextKeys(context);
     // registerTypeInterceptor(context);
     context.subscriptions.push(logChannel);

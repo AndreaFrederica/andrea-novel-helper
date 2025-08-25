@@ -6,6 +6,8 @@ import * as vscode from 'vscode';
 interface WorkerMatch { end:number; pats:string[] }
 interface PendingReq { resolve: (m:WorkerMatch[])=>void; reject:(e:any)=>void; ts:number; docVersion?:number; }
 
+let theContext: vscode.ExtensionContext | undefined;
+
 class AsyncRoleMatcher {
   private worker: Worker | null = null;
   private ready = false;
@@ -40,7 +42,11 @@ class AsyncRoleMatcher {
   private spawn() {
   if (this.worker) { return; }
     try {
-      const workerPath = path.join(__dirname, '..', 'workers', 'roleAcWorker.js');
+      if (!theContext) {
+        throw new Error('AsyncRoleMatcher context not set');
+      }
+      const workerPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'roleAcWorker.js').fsPath;
+      // const workerPath = path.join(__dirname, '..', 'workers', 'roleAcWorker.js');
       this.worker = new Worker(workerPath);
       this.worker.on('message', (msg: any)=> this.onMessage(msg));
       this.worker.on('error', err=>{
@@ -141,4 +147,8 @@ let singleton: AsyncRoleMatcher | undefined;
 export function getAsyncRoleMatcher(): AsyncRoleMatcher {
   if (!singleton) { singleton = new AsyncRoleMatcher(); }
   return singleton;
+}
+
+export function setAsyncRoleMatcherContext(context: vscode.ExtensionContext) {
+  theContext = context;
 }

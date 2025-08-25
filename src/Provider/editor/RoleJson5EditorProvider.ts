@@ -586,7 +586,7 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
             enableScripts: true,
             localResourceRoots: [
                 this.opts.spaRoot,
-                vscode.Uri.joinPath(this.ctx.extensionUri, 'src', 'Provider', 'view'),
+                vscode.Uri.joinPath(this.ctx.extensionUri, 'media'),
             ],
         };
         // 生成 Webview HTML
@@ -712,7 +712,7 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
 
     private getMapperScriptUri(webview: vscode.Webview): string | undefined {
         try {
-            const mapperFile = vscode.Uri.joinPath(this.ctx.extensionUri, 'src', 'Provider', 'view', 'resource-mapper.js');
+            const mapperFile = vscode.Uri.joinPath(this.ctx.extensionUri, 'media', 'resource-mapper.js');
             return webview.asWebviewUri(mapperFile).toString();
         } catch {
             return undefined;

@@ -34,7 +34,9 @@ builder
 **/*.map
 
 # ============= 忽略 webview 开发目录 =============
+packages/webview/**
 packages/webview/src/
+packages/webview/public/
 packages/webview/quasar.config.ts
 packages/webview/node_modules/
 packages/webview/.quasar/
@@ -44,10 +46,7 @@ packages/webview/README.md
 packages/webview/**/*.config.*
 
 # ============= 忽略扩展打包中间产物 =============
-out/
-dist/
-node_modules/
-
+# node_modules/
 # ============= 忽略其它管理文件夹 =============
 .vscode/
 .history/
@@ -60,3 +59,17 @@ node_modules/
 
 .pixi/*
 !.pixi/config.toml
+# ============ 根目录杂项 ============
+# 你 VSIX 里这几个都不需要
+.pixi/**
+pixi.lock
+pixi.toml
+vsc透明化测试1.txt
+.out-of-code-insights/**
+builder/**
+novel-helper/**
+
+BuildNovelHelper.nsi
+
+node_modules/webview
+node_modules/webview/**
