@@ -25,5 +25,7 @@ web_dev = { cmd = ["npm", "run", "dev:webview"] }
 
 publish = { cmd = ["npx", "vsce", "publish"], depends-on = ["build_all"] }
 
+publish_ovsx = { cmd = ["npx", "ovsx", "publish"], depends-on = ["build_all"] }
+
 [dependencies]
 python = ">=3.13.5,<3.14"

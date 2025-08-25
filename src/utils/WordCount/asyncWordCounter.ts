@@ -45,7 +45,7 @@ class AsyncWordCounter {
     if(theContext === undefined) {
       throw new Error('AsyncWordCounter context not set');
     }
-    const workerPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'roleAcWorker.js');
+  const workerPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'wordCountWorker.js');
     // const workerPath = path.join(__dirname, '..', '..', 'workers', 'wordCountWorker.js');
     try {
       const worker = new Worker(workerPath.fsPath);
