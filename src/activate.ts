@@ -56,7 +56,7 @@ import {registerRoleCardManager as roleCardManagerActivate} from './Provider/vie
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
 import { activateDefLinks } from './Provider/defLinksProvider';
 import { registerOpenRoleSource } from './commands/openRoleSource';
-import { setWordCounterContext } from './utils/WordCount/asyncWordCounter';
+import { setWordCounterContext, setWordCounterGitGuard } from './utils/WordCount/asyncWordCounter';
 import { setAsyncRoleMatcherContext } from './utils/asyncRoleMatcher';
 
 // 避免重复注册相同命令
@@ -525,6 +525,7 @@ export async function activate(context: vscode.ExtensionContext) {
             });
         }
         const wordCountProvider = new WordCountProvider(context.workspaceState, orderManager || undefined);
+        setWordCounterGitGuard(wordCountProvider.gitGuard);
 
         // 拖拽排序控制器（需在 createTreeView 选项中声明才能真正启用）
         const dndController: vscode.TreeDragAndDropController<any> = {

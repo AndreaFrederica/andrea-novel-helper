@@ -99,7 +99,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private largeProcessingRunning = false; // 是否在运行队列
 
     // Git Guard 用于缓存优化
-    private gitGuard: GitGuard;
+    public gitGuard: GitGuard;
     private orderManager: WordCountOrderManager | null = null;
     // 强制重算列表：包含后一次访问时无条件重新计算并跳过持久化缓存
     private forcedPaths = new Set<string>();

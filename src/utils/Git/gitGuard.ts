@@ -225,4 +225,15 @@ export class GitGuard {
         // 也可以在这里屏蔽临时/备份/编译产物
         return false;
     };
+    // 在 GitGuard 里新增一个方法（贴到 class GitGuard 内）
+    public async shouldCountByGitOnly(doc: vscode.TextDocument | vscode.Uri): Promise<boolean> {
+        const uri = this.toUri(doc);
+        const langId = this.getLangId(doc);
+        if (this.options.allowedLanguageIds.length > 0) {
+            if (!langId || !this.options.allowedLanguageIds.includes(langId)) return false;
+        }
+        if (this.options.ignore(uri)) return false;
+        return this.isModifiedByGit(uri);
+    }
+
 }

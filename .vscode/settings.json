@@ -42,6 +42,7 @@
 		"hmode",
 		"hoverable",
 		"hugewarn",
+		"inited",
 		"intlify",
 		"jieba",
 		"jschardet",
@@ -53,6 +54,7 @@
 		"ovsx",
 		"pagebar",
 		"paintcan",
+		"pcache",
 		"pixi",
 		"Prefs",
 		"qian",
@@ -84,6 +86,7 @@
 		"wordsegmentfilter",
 		"WORKTREE",
 		"worldbuilding",
+		"wpath",
 		"yarnrc"
 	],
 	"editor.suggestOnTriggerCharacters": false,
