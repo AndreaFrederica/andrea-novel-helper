@@ -1,5 +1,11 @@
 # Andrea Novel Helper
 
+[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.andrea-novel-helper?logo=visualstudiocode&label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/andreafrederica.andrea-novel-helper)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
+[![Downloads](https://img.shields.io/visual-studio-marketplace/d/andreafrederica.andrea-novel-helper)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
+[![Rating](https://img.shields.io/visual-studio-marketplace/stars/andreafrederica.andrea-novel-helper)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
+
+
 > 最新版本：**0.3.12 (2025-08-25)**  
 > 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节“近期版本速览”。
 
