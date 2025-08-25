@@ -1,10 +1,19 @@
 # Andrea Novel Helper
 
-[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.andrea-novel-helper?logo=visualstudiocode&label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
+[![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-42b883?logo=vuedotjs&logoColor=white)
+![Quasar](https://img.shields.io/badge/Quasar-1976D2?logo=quasar&logoColor=white)
+
+[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.andrea-novel-helper?label=VS%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
 [![Installs](https://img.shields.io/visual-studio-marketplace/i/andreafrederica.andrea-novel-helper)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
 [![Downloads](https://img.shields.io/visual-studio-marketplace/d/andreafrederica.andrea-novel-helper)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
 [![Rating](https://img.shields.io/visual-studio-marketplace/stars/andreafrederica.andrea-novel-helper)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper)
 
+[![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/andrea-novel-helper?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
+[![Open VSX Downloads](https://img.shields.io/open-vsx/dt/andreafrederica/andrea-novel-helper?label=Open%20VSX%20Downloads)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 
 > 最新版本：**0.3.12 (2025-08-25)**  
 > 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节“近期版本速览”。
