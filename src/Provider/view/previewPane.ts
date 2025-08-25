@@ -16,6 +16,13 @@ const MUTE_MS = 350;  // 与 webview 一致的“静音窗口”
 export function registerPreviewPane(context: vscode.ExtensionContext) {
     const manager = new PreviewManager(context);
     context.subscriptions.push(
+        vscode.window.registerWebviewPanelSerializer('myPreview', {
+            deserializeWebviewPanel: async (panel, state) => {
+                await manager.deserialize(panel, state).catch(() => {
+                    try { panel.dispose(); } catch { }
+                });
+            }
+        }),
         vscode.commands.registerCommand('myPreview.open', () => manager.openPreviewForActiveEditor()),
         vscode.commands.registerCommand('myPreview.exportTxt', () => manager.exportTxtOfActiveEditor()),
         vscode.commands.registerCommand('myPreview.ttsPlay', () => manager.sendTTSCommand('play')),
@@ -45,9 +52,10 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
                 vscode.window.setStatusBarMessage('已复制纯文本（全文）', 1200);
             } catch (e) { /* ignore */ }
         }),
+
     );
     // 启动后尝试恢复上次的预览
-    setTimeout(() => manager.restorePrimaryPanel().catch(() => { }), 150);
+    // setTimeout(() => manager.restorePrimaryPanel().catch(() => { }), 150);
     return manager;
 }
 
@@ -85,6 +93,109 @@ export class PreviewManager {
 
     // —— 字体清单缓存（避免频繁枚举系统目录）
     private fontsCache?: { list: string[]; ts: number };
+
+
+    /** 把一个已存在的 panel 绑定到指定 doc（统一监听与渲染） */
+    private attachPanelToDoc(panel: vscode.WebviewPanel, doc: vscode.TextDocument) {
+        const key = doc.uri.toString();
+
+        // 反序列化后需要明确设置 webview 选项（尤其 localResourceRoots）
+        // ✅ 只设置 WebviewOptions 允许的字段
+        panel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
+        };
+
+        // 可选：如果你的 VS Code 类型存在该属性，也可以单独设置（不强求）
+        // （很多版本不需要/不可设；如有类型错误就删除这行即可）
+        // panel.retainContextWhenHidden = true;
+
+
+        // 放入映射（一个文档对应一个 panel）
+        this.panels.set(key, panel);
+
+        // 消息：动态取 doc
+        panel.webview.onDidReceiveMessage(msg => {
+            const d = this.docOfPanel(panel);
+            if (d) { this.onWebviewMessage(d, msg); }
+        }, null, this.context.subscriptions);
+
+        // 视图状态：激活标记
+        panel.onDidChangeViewState(e => {
+            try {
+                const d = this.docOfPanel(e.webviewPanel);
+                if (e.webviewPanel.active && d) { setActivePreview(d.uri.toString()); }
+                else { setActivePreview(undefined); }
+            } catch { /* ignore */ }
+        }, null, this.context.subscriptions);
+
+        // 关闭清理
+        panel.onDidDispose(() => {
+            try { this.panels.delete(key); } catch { }
+            if (this.primaryPanel === panel) { this.primaryPanel = undefined; this.primaryDocUri = undefined; }
+            this.persistPrimaryDoc(undefined);
+            try { setActivePreview(undefined); } catch { }
+        }, null, this.context.subscriptions);
+
+        // 标题与内容
+        panel.title = `Preview: ${path.basename(doc.fileName)}`;
+        const { htmlBody } = this.render(doc);
+        panel.webview.html = this.wrapHtml(panel, htmlBody);
+
+        // 如果此刻就是激活的 webview，把有效文档上报出去
+        try {
+            if (panel.active) {
+                setActivePreview(doc.uri.toString());
+            }
+        } catch { /* ignore */ }
+
+        // 通知 webview 当前绑定的文档与是否为主面板（用于 setState 持久化）
+        try {
+            panel.webview.postMessage({
+                type: 'init',
+                docUri: key,
+                isPrimary: (this.primaryPanel === panel)
+            });
+        } catch { }
+    }
+
+    /** 供 WebviewPanelSerializer 调用：窗口重载后复活面板 */
+    async deserialize(panel: vscode.WebviewPanel, state: any) {
+        // 优先使用 webview setState 持久化的 docUri；没有则退化到 workspaceState 的主文档
+        const savedPrimary = this.context.workspaceState.get<string | undefined>(PREVIEW_STATE_KEY);
+        const docUriStr = (state && typeof state.docUri === 'string') ? state.docUri : savedPrimary;
+        if (!docUriStr) { throw new Error('No persisted docUri'); }
+
+        const uri = vscode.Uri.parse(docUriStr);
+        if (uri.scheme !== 'file') { throw new Error('Unsupported scheme'); }
+
+        const doc = await vscode.workspace.openTextDocument(uri);
+        if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) {
+            throw new Error('Unsupported language');
+        }
+
+        // 绑定/渲染
+        this.attachPanelToDoc(panel, doc);
+
+        // 恢复主面板引用
+        if ((state && state.isPrimary) || docUriStr === savedPrimary) {
+            this.primaryPanel = panel;
+            this.primaryDocUri = docUriStr;
+        }
+
+        // 可选：恢复滚动位置
+        if (typeof state?.scrollRatio === 'number' || Number.isInteger(state?.topLine)) {
+            setTimeout(() => {
+                try {
+                    panel.webview.postMessage({
+                        type: 'restoreScroll',
+                        ratio: (typeof state.scrollRatio === 'number') ? state.scrollRatio : undefined,
+                        topLine: Number.isInteger(state.topLine) ? state.topLine : undefined
+                    });
+                } catch { }
+            }, 60);
+        }
+    }
 
     /** 扩展侧枚举本机字体并回发给 webview */
     private async sendFontFamilies(doc: vscode.TextDocument) {
@@ -165,6 +276,7 @@ export class PreviewManager {
         return vscode.workspace.textDocuments.find(d => d.uri.toString() === uriStr);
     }
 
+    // [PREVIEW_PERSIST:A3] ensurePanelFor (refactor to use attachPanelToDoc)
     private async ensurePanelFor(doc: vscode.TextDocument): Promise<vscode.WebviewPanel> {
         const key = doc.uri.toString();
         let panel = this.panels.get(key);
@@ -180,36 +292,13 @@ export class PreviewManager {
                 localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
             }
         );
-        this.panels.set(key, panel);
-
-        panel.onDidDispose(() => this.panels.delete(key), null, this.context.subscriptions);
-        // 2) ensurePanelFor(): 绑定消息 – 动态取 doc
-        panel.webview.onDidReceiveMessage(msg => {
-            const d = this.docOfPanel(panel!);
-            if (d) { this.onWebviewMessage(d, msg); }
-        }, null, this.context.subscriptions);
 
 
-        // 3) ensurePanelFor(): 绑定 viewState – 动态取 doc
-        panel.onDidChangeViewState(e => {
-            try {
-                const d = this.docOfPanel(e.webviewPanel);
-                if (e.webviewPanel.active && d) { setActivePreview(d.uri.toString()); }
-                else { setActivePreview(undefined); }
-            } catch { /* ignore */ }
-        }, null, this.context.subscriptions);
-
-        // 若这是 primaryPanel，被关闭后重置引用
-        panel.onDidDispose(() => {
-            if (this.primaryPanel === panel) { this.primaryPanel = undefined; this.primaryDocUri = undefined; }
-            // 清除持久化状态
-            this.persistPrimaryDoc(undefined);
-            // 清理 active preview override 若它指向该文档
-            try { setActivePreview(undefined); } catch { }
-        });
-
+        this.attachPanelToDoc(panel, doc);
         return panel;
     }
+    // [/PREVIEW_PERSIST:A3]
+
 
     /** 处理活动编辑器变化：复用 primaryPanel 展示新文档，切换前先停止旧文档的 TTS */
     private handleActiveEditorChange(newDoc: vscode.TextDocument) {
@@ -232,6 +321,8 @@ export class PreviewManager {
             // 3. 用新文档内容刷新 panel
             try {
                 this.updatePanel(this.primaryPanel!, newDoc);
+                try { setActivePreview(newDoc.uri.toString()); } catch { }
+                setTimeout(() => this.sendEditorTop(newDoc), 50);
             } catch (e) {
                 // primaryPanel 可能已失效，清理并创建新的 panel
                 this.primaryPanel = undefined;
@@ -460,10 +551,10 @@ export class PreviewManager {
             const src = doc.getText();
             return mdToPlainText(src);
         }
-    const text = doc.getText();
-    const blocks = (doc.languageId === 'plaintext') ? txtToPlainText(text).blocks : [{ srcLine: 0, text }];
-    const outText = (doc.languageId === 'plaintext') ? txtToPlainText(text).text : text;
-    return { text: outText, blocks };
+        const text = doc.getText();
+        const blocks = (doc.languageId === 'plaintext') ? txtToPlainText(text).blocks : [{ srcLine: 0, text }];
+        const outText = (doc.languageId === 'plaintext') ? txtToPlainText(text).text : text;
+        return { text: outText, blocks };
     }
 
     private sendEditorTop(doc: vscode.TextDocument) {

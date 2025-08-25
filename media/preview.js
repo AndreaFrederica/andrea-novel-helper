@@ -9,6 +9,8 @@ var PAGE_HEIGHT_RATIO = 0.7;    // 分页模式下页面高度相对于窗口高
 var vscodeFontFamily = '';
 var localFontFamilies = [];
 
+
+
 function dlog(tag, payload) {
     if (!DEBUG_TTS) { return; }
     try { console.log('[TTS]', tag, payload); } catch { }
@@ -19,6 +21,11 @@ function dlog(tag, payload) {
 
 /* ================== VS Code API & 错误上报 ================== */
 var vscode = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
+
+// [PREVIEW_PERSIST:B1] persist state across reload
+let persisted = vscode.getState() || {}; // { docUri, isPrimary, scrollRatio, topLine }
+// [/PREVIEW_PERSIST:B1]
+
 
 window.addEventListener('error', function (e) {
     try { vscode && vscode.postMessage({ type: 'jsError', message: String(e.message || 'Unknown'), line: e.lineno, col: e.colno }); } catch { }
@@ -861,6 +868,36 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             vscodeFontFamily = String(msg.value || '').trim();
             if (typeof reflect === 'function') { reflect(); }
         }
+        // [PREVIEW_PERSIST:B2] message handlers for persistence
+        if (msg?.type === 'init') {
+            // 扩展端告知当前绑定的文档以及是否为主面板
+            persisted = { ...persisted, docUri: msg.docUri, isPrimary: !!msg.isPrimary };
+            vscode.setState(persisted);
+        }
+
+        if (msg?.type === 'editorScroll') {
+            // 你原有的渲染/同步逻辑...
+
+            // 顺手把滚动位置快照下来
+            persisted = {
+                ...persisted,
+                scrollRatio: (typeof msg.ratio === 'number') ? msg.ratio : persisted.scrollRatio,
+                topLine: Number.isInteger(msg.topLine) ? msg.topLine : persisted.topLine
+            };
+            vscode.setState(persisted);
+        }
+
+        if (msg?.type === 'restoreScroll') {
+            // 扩展端在反序列化后请求恢复滚动位置（任选一种策略）
+            if (Number.isInteger(msg.topLine)) {
+                // 需要你已有的滚动函数；没有可自行实现
+                if (typeof scrollToLine === 'function') {scrollToLine(msg.topLine);}
+            } else if (typeof msg.ratio === 'number') {
+                if (typeof scrollToRatio === 'function') {scrollToRatio(msg.ratio);}
+            }
+        }
+        // [/PREVIEW_PERSIST:B2]
+
     });
 
 

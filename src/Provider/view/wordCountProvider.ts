@@ -78,9 +78,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     // 格式化缓存年龄
     private formatCacheAge(ms: number): string {
         if (ms < 1000) return '<1s';
-        if (ms < 60_000) return (ms/1000).toFixed(ms < 5000 ? 1 : 0) + 's';
-        const m = Math.floor(ms/60000); const s = Math.floor((ms%60000)/1000);
-        return `${m}m${s > 0 ? s+'s' : ''}`;
+        if (ms < 60_000) return (ms / 1000).toFixed(ms < 5000 ? 1 : 0) + 's';
+        const m = Math.floor(ms / 60000); const s = Math.floor((ms % 60000) / 1000);
+        return `${m}m${s > 0 ? s + 's' : ''}`;
     }
     // 目录聚合进行中的 Promise，用于并发去重
     private inFlightDirAgg = new Map<string, Promise<TextStats>>();
@@ -111,6 +111,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private cacheTrusted = false;          // 仅在有 Git 时才认为缓存可信
     private verifying = new Set<string>(); // 正在校验的文件，避免并发重复
 
+    // 新增：在类里加一个去重用的集合
+    private inFlightFileStats = new Set<string>();
+
+
     constructor(memento: vscode.Memento, orderManager?: WordCountOrderManager) {
         this.memento = memento;
         this.gitGuard = new GitGuard();
@@ -124,59 +128,34 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         this.initializeGitGuard();
 
         vscode.workspace.onDidSaveTextDocument((doc) => {
-            // 检查是否是 .gitignore 或 .wcignore 文件
-            const fileName = path.basename(doc.uri.fsPath);
-            // Add logic to handle orderManager if needed
+            const fsPath = doc.uri.fsPath;
+            const fileName = path.basename(fsPath);
+
+            // 1) 忽略文件变化：轻操作 + 立即刷新
             if (fileName === '.gitignore' || fileName === '.wcignore') {
-                // 重新初始化忽略解析器
-                this.initIgnoreParser();
-                this.clearCache();
-                this.refresh();
+                this.refreshIgnoreParser(); // 内部: initIgnoreParser + clearCache + refresh
                 return;
             }
 
-            const fsPath = doc.uri.fsPath;
+            // 2) 非跟踪类型直接忽略
+            const ext = path.extname(fileName).slice(1).toLowerCase();
+            if (!isSpecialVisibleFile(fileName) && !getSupportedExtensions().includes(ext)) return;
+
+            // 3) 只做轻操作（标脏、占位、触发链）
             this.invalidateCache(fsPath);
-            // 尝试从 timeStats 运行时状态复用实时字数（避免依赖全局追踪缓存）
-            let reused = false;
-            try {
-                const timeStats = timeStatsModule;
-                // 使用 timeStats 全量 analyzeText 结果（computeZhEnCount 已包装）
-                const active = vscode.window.visibleTextEditors.find(ed=>ed.document.uri.fsPath===fsPath);
-                if (active) {
-                    const text = active.document.getText();
-                    const compute = timeStats.computeZhEnCount;
-                    const cnt = compute ? compute(text) : null;
-                    const full: TextStats | null = cnt?.full || null;
-                    if (full) {
-                        this.statsCache.set(fsPath, { stats: full, mtime: fs.statSync(fsPath).mtimeMs });
-                        reused = true;
-            // 复用实时统计时也需要向上触发目录聚合重算，否则父目录 totals 可能保持旧值
             const parent = path.dirname(fsPath);
             this.markDirDirty(parent);
             this.enqueueDirRecompute(parent);
-                    } else {
-                        // 兜底：强制重算（避免不一致）
-                        console.warn('无法复用实时字数统计，强制重算:', fsPath);
-                        this.forcedPaths.add(path.resolve(fsPath));
-                    }
-                }
-            } catch { /* ignore */ }
-            if (!reused) {
-                // 更新统计数据失败
-                console.error('更新统计数据失败:', fsPath);
-        // 失败时已加入 forcedPaths，后续正常 recount 路径会触发父目录更新；这里仍可显式标记
-        const parent = path.dirname(fsPath);
-        this.markDirDirty(parent);
-        this.enqueueDirRecompute(parent);
-            }
             this.refreshDebounced();
+
+            // 4) 重活丢后台：由 scheduleFileStat 去 worker 线程精算并二次触发父目录聚合
+            this.scheduleFileStat(fsPath);
         });
+
         vscode.workspace.onDidChangeWorkspaceFolders(() => {
-            this.clearCache();
-            this.initIgnoreParser();
-            this.refresh();
+            this.refreshIgnoreParser(); // 简化：统一进这个方法
         });
+
 
         // 删除事件：失效相关目录聚合缓存与文件缓存
         vscode.workspace.onDidDeleteFiles(evt => {
@@ -237,9 +216,26 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         this.detectGitRepoAndMaybeRescan();
 
         // 延迟执行一次文件排序键迁移（确保 globalFileTracking 有时间生成 UUID）
-        setTimeout(()=>{
+        setTimeout(() => {
             try { this.orderManager?.migrateAllFileKeys?.(); } catch { /* ignore */ }
         }, 1500);
+    }
+
+    // 新增：非阻塞地安排单文件统计
+    private scheduleFileStat(full: string) {
+        if (this.inFlightFileStats.has(full)) return;
+        this.inFlightFileStats.add(full);
+        setTimeout(async () => {
+            try {
+                await this.getOrCalculateFileStats(full);   // 真正算在后台
+            } finally {
+                this.inFlightFileStats.delete(full);
+                const parent = path.dirname(full);
+                this.markDirDirty(parent);                  // 标脏父目录
+                this.enqueueDirRecompute(parent);           // 再次触发聚合（这次能命中缓存）
+                this.refreshDebounced();
+            }
+        }, 0);
     }
 
     private detectGitRepoAndMaybeRescan() {
@@ -333,7 +329,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private clearCache() {
         this.statsCache.clear();
         this.itemsById.clear();
-    this.dirAggCache.clear();
+        this.dirAggCache.clear();
     }
 
     private invalidateCache(filePath: string) {
@@ -345,17 +341,17 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
      * 强制重算：清空全部缓存+GitGuard哈希并刷新。
      */
     public forceRecountAll() {
-    wcDebug('forceRecount:all');
-    const roots = vscode.workspace.workspaceFolders?.map(f=>f.uri.fsPath) || [];
-    // 清空缓存但保留 previousDirAgg 供 UI 占位
-    for (const [k,v] of this.dirAggCache.entries()) this.previousDirAggCache.set(k,v);
-    this.statsCache.clear();
-    this.dirAggCache.clear();
-    try { (this.gitGuard as any)?.reset?.(); } catch { /* ignore */ }
-    roots.forEach(r=>this.forcedPaths.add(path.resolve(r)));
-    this.refresh();
-    // 复用首次扫描：对每个根目录触发一次 getChildren -> calculateStatsAsync
-    setTimeout(()=>{ this.refresh(); }, 0);
+        wcDebug('forceRecount:all');
+        const roots = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
+        // 清空缓存但保留 previousDirAgg 供 UI 占位
+        for (const [k, v] of this.dirAggCache.entries()) this.previousDirAggCache.set(k, v);
+        this.statsCache.clear();
+        this.dirAggCache.clear();
+        try { (this.gitGuard as any)?.reset?.(); } catch { /* ignore */ }
+        roots.forEach(r => this.forcedPaths.add(path.resolve(r)));
+        this.refresh();
+        // 复用首次扫描：对每个根目录触发一次 getChildren -> calculateStatsAsync
+        setTimeout(() => { this.refresh(); }, 0);
     }
 
     /**
@@ -364,7 +360,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     public forceRecountPath(targetPath: string) {
         if (!targetPath) return;
         wcDebug('forceRecount:path', targetPath);
-        const stat = (()=>{ try { return fs.statSync(targetPath); } catch { return null; } })();
+        const stat = (() => { try { return fs.statSync(targetPath); } catch { return null; } })();
         if (!stat) return;
         // 迁移现有聚合到 previous 以显示旧值旋转动画
         if (stat.isDirectory()) {
@@ -373,8 +369,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         }
         // 清除目标自身文件/目录聚合，不递归删子目录聚合（保留旧值逐层替换）
         if (stat.isDirectory()) {
-            for (const [k,v] of this.dirAggCache.entries()) {
-                if (k===targetPath) { this.previousDirAggCache.set(k,v); this.dirAggCache.delete(k); }
+            for (const [k, v] of this.dirAggCache.entries()) {
+                if (k === targetPath) { this.previousDirAggCache.set(k, v); this.dirAggCache.delete(k); }
             }
         } else {
             this.statsCache.delete(targetPath);
@@ -387,8 +383,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             this.markDirDirty(path.dirname(targetPath));
             this.enqueueDirRecompute(path.dirname(targetPath));
         }
-    this.refresh();
-    setTimeout(()=>{ this.refresh(); },0);
+        this.refresh();
+        setTimeout(() => { this.refresh(); }, 0);
     }
 
     /**
@@ -403,7 +399,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         if (this.verifying.has(filePath)) return;
         this.verifying.add(filePath);
         try {
-            const stat = await fs.promises.stat(filePath).catch(()=>null);
+            const stat = await fs.promises.stat(filePath).catch(() => null);
             if (!stat || !stat.isFile()) return;
             const mtime = stat.mtimeMs;
 
@@ -483,7 +479,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         const items: (WordCountItem | NewItemNode)[] = [];
         let needsAsync = false;
 
-    for (const d of dirents) {
+        for (const d of dirents) {
             const full = path.join(root, d.name);
             const uri = vscode.Uri.file(full);
 
@@ -599,7 +595,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         if (this.orderManager) {
             const parentFolder = element ? element.resourceUri.fsPath : (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '');
             if (parentFolder && this.orderManager.isManual(parentFolder)) {
-                wordCountItems.sort((a,b)=>{
+                wordCountItems.sort((a, b) => {
                     const aIsDir = a.collapsibleState !== vscode.TreeItemCollapsibleState.None;
                     const bIsDir = b.collapsibleState !== vscode.TreeItemCollapsibleState.None;
                     if (aIsDir !== bIsDir) return aIsDir ? -1 : 1;
@@ -612,7 +608,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     } else if (ib !== undefined) {
                         return 1;
                     }
-                    return a.label.localeCompare(b.label,'zh');
+                    return a.label.localeCompare(b.label, 'zh');
                 });
             } else {
                 sortItems(wordCountItems);
@@ -631,7 +627,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 // 在手动模式下为所有已排序项显示 [序号] 或 tooltip 索引
                 // 先根据当前显示顺序派生用户可见的序号（忽略没有 index 的项）
                 let visibleSeq = 1;
-                for (let i=0;i<wordCountItems.length;i++) {
+                for (let i = 0; i < wordCountItems.length; i++) {
                     const it = wordCountItems[i];
                     const idxVal = this.orderManager.getIndex(it.resourceUri.fsPath);
                     if (idxVal === undefined) continue;
@@ -723,8 +719,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const forcedInner = this.forcedPaths.has(path.resolve(folder));
                 // 先处理文件（并发批次）
                 const fileBatchSize = 6;
-                for (let i=0;i<files.length;i+=fileBatchSize) {
-                    const batch = files.slice(i,i+fileBatchSize);
+                for (let i = 0; i < files.length; i += fileBatchSize) {
+                    const batch = files.slice(i, i + fileBatchSize);
                     const statsArr = await Promise.all(batch.map(async d => {
                         const full = path.join(folder, d.name);
                         const ext = path.extname(d.name).slice(1).toLowerCase();
@@ -734,18 +730,18 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     }));
                     for (const st of statsArr) if (st) agg = mergeStats(agg, st);
                     // 让出事件循环，避免长任务
-                    await new Promise(r=>setTimeout(r,0));
+                    await new Promise(r => setTimeout(r, 0));
                 }
                 // 再处理子目录（并发+分批）
                 const dirBatchSize = 2; // 控制递归并发
-                for (let i=0;i<subDirs.length;i+=dirBatchSize) {
-                    const batch = subDirs.slice(i,i+dirBatchSize);
+                for (let i = 0; i < subDirs.length; i += dirBatchSize) {
+                    const batch = subDirs.slice(i, i + dirBatchSize);
                     const subStats = await Promise.all(batch.map(async d => {
                         const full = path.join(folder, d.name);
                         try { return await this.analyzeFolderDynamic(full, exts); } catch { return null; }
                     }));
                     for (const st of subStats) if (st) agg = mergeStats(agg, st);
-                    await new Promise(r=>setTimeout(r,0));
+                    await new Promise(r => setTimeout(r, 0));
                 }
             } catch { /* ignore */ }
             const now = Date.now();
@@ -986,7 +982,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             if (!this.largeApproxPending.has(fp)) continue; // 已经被其它途径精确统计
             try {
                 wcDebug('largeFile:processing:start', fp);
-                const stat = await fs.promises.stat(fp).catch(()=>null);
+                const stat = await fs.promises.stat(fp).catch(() => null);
                 if (!stat || !stat.isFile()) { this.largeApproxPending.delete(fp); continue; }
                 const mtime = stat.mtimeMs;
                 const stats = await countAndAnalyzeOffThread(fp);
@@ -1003,7 +999,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 this.largeApproxPending.delete(fp);
             }
             // 小延迟让出事件循环，避免长时间占用
-            await new Promise(res=>setTimeout(res, 5));
+            await new Promise(res => setTimeout(res, 5));
         }
         this.largeProcessingRunning = false;
     }
@@ -1040,7 +1036,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
             if (parent && parent !== dir && parent.startsWith(root)) this.enqueueDirRecompute(parent);
             this.refresh();
-            await new Promise(r=>setTimeout(r,0));
+            await new Promise(r => setTimeout(r, 0));
         }
         this.dirRecalcProcessing = false;
     }
@@ -1049,10 +1045,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private async recomputeDirAggregate(dir: string) {
         let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
         try {
-            const dirents = await fs.promises.readdir(dir,{withFileTypes:true});
+            const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
             const exts = getSupportedExtensions();
             for (const d of dirents) {
-                const full = path.join(dir,d.name);
+                const full = path.join(dir, d.name);
                 if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
                     workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
                     respectWcignore: true
@@ -1064,8 +1060,14 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     const ext = path.extname(d.name).slice(1).toLowerCase();
                     const special = isSpecialVisibleFile(d.name);
                     if (!special && !exts.includes(ext)) continue;
-                    const fileStats = this.statsCache.get(full)?.stats || await this.getOrCalculateFileStats(full);
-                    agg = mergeStats(agg, fileStats);
+                    const cached = this.statsCache.get(full)?.stats;
+                    if (cached) {
+                        agg = mergeStats(agg, cached);
+                    } else {
+                        // 不阻塞链式聚合；安排后台计算，等结果回写后会再次聚合刷新
+                        this.scheduleFileStat(full);
+                    }
+
                 }
             }
         } catch (e) { wcDebug('recomputeDirAggregate:error', dir, e); }
@@ -1160,17 +1162,17 @@ export class WordCountItem extends vscode.TreeItem {
             switch (mode) {
                 case 'wan':
                     if (total >= 10000) {
-                        formatted = (total / 10000).toFixed(3).replace(/\.0+$/,'') + '万';
+                        formatted = (total / 10000).toFixed(3).replace(/\.0+$/, '') + '万';
                     } else formatted = String(total);
                     break;
                 case 'k':
                     if (total >= 1000) {
-                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/,'') + 'k';
+                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/, '') + 'k';
                     } else formatted = String(total);
                     break;
                 case 'qian':
                     if (total >= 1000) {
-                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/,'') + '千';
+                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/, '') + '千';
                     } else formatted = String(total);
                     break;
                 case 'raw':
@@ -1242,9 +1244,9 @@ export interface HasOrderManager {
 }
 
 // 为 provider 添加访问方法
-export interface WordCountProvider extends HasOrderManager {}
-(WordCountProvider.prototype as any).setOrderManager = function(mgr: WordCountOrderManager){ this.orderManager = mgr; };
-(WordCountProvider.prototype as any).getOrderManager = function(){ return this.orderManager; };
+export interface WordCountProvider extends HasOrderManager { }
+(WordCountProvider.prototype as any).setOrderManager = function (mgr: WordCountOrderManager) { this.orderManager = mgr; };
+(WordCountProvider.prototype as any).getOrderManager = function () { return this.orderManager; };
 
 // // —— 打开方式工具函数（与包管理器一致）——
 // async function executeOpenAction(action: string, uri: vscode.Uri): Promise<void> {

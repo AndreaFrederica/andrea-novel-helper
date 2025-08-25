@@ -1,18 +1,30 @@
 /* time-stats.js — Chart.js 版本 */
 const vscode = acquireVsCodeApi();
 
-// —— 交互状态 —— //
+// ====== 常量与持久化键 ======
+const LS_PREFIX = 'ANH_TIME_';
+const PRESET_VALUES = [15, 30, 60, 120];     // 预设列表（最大 2 小时）
+const CUSTOM_MIN = 15;                       // 自定义最小 15 分
+const CUSTOM_MAX = 1440;                     // 自定义最大 24 小时
+
+// —— 交互状态（带持久化） —— //
 const uiState = {
-    rangeMode: localStorage.getItem('rangeMode') || 'full',   // 'full' | 'recent'
-    gapPolicy: localStorage.getItem('gapPolicy') || 'zero',   // 'zero' | 'break'
+    rangeMode: localStorage.getItem(LS_PREFIX + 'rangeMode') || 'full',          // 'full' | 'recent'
+    gapPolicy: localStorage.getItem(LS_PREFIX + 'gapPolicy') || 'zero',          // 'zero' | 'break'
+    continuityGapMinutes: +(localStorage.getItem(LS_PREFIX + 'continuityGapMinutes')
+        || document.body.dataset.continuityGapMinutes
+        || 120),
+    // 新增：周图的“日偏移”，单位=天。0 表示“今天在最右侧”。
+    weekOffsetDays: +(localStorage.getItem(LS_PREFIX + 'weekOffsetDays') || 0),
+    weekButtonPressed: false,
+    weekButtonLast: null
 };
+
+function saveState(key, val) { localStorage.setItem(LS_PREFIX + key, String(val)); }
 
 // —— 缺口与连续段阈值（分钟） —— //
 const GAP_MINUTES = +(document.body.dataset.gapMinutes || 10);                 // 用于“断线”策略
 const MAX_FILL_POINTS = 24 * 60;                                              // 零填充上限
-const CONTINUITY_GAP_MINUTES = +(document.body.dataset.continuityGapMinutes || 120); // 最近连续段：2h
-const CONTINUITY_GAP_MS = CONTINUITY_GAP_MINUTES * 60_000;
-
 
 // —— 小工具 —— //
 function fmtMinutes(ms) {
@@ -26,57 +38,29 @@ function cssVar(name, fallback) {
 function clamp01(x) { return Math.max(0, Math.min(1, x)); }
 function lerp(a, b, t) { return a + (b - a) * t; }
 
-function bindControls() {
-    const full = document.getElementById('rangeFull');
-    const recent = document.getElementById('rangeRecent');
-    const zero = document.getElementById('gapZero');
-    const brk = document.getElementById('gapBreak');
 
-    // 初始勾选（从 localStorage 恢复）
-    if (uiState.rangeMode === 'recent') {recent.checked = true;} else {full.checked = true;}
-    if (uiState.gapPolicy === 'break') {brk.checked = true;} else {zero.checked = true;}
+// ====== 最近连续段切片（使用 uiState.continuityGapMinutes） ======
+function sliceToRecentContinuous(rows, gapMs) {
+    if (!rows || !rows.length) { return rows || []; }
+    const gms = gapMs ?? (uiState.continuityGapMinutes * 60_000); // ← 关键修复
 
-    const rerender = () => rerenderLine();  // 只重绘折线图
-
-    full?.addEventListener('change', () => {
-        uiState.rangeMode = full.checked ? 'full' : 'recent';
-        localStorage.setItem('rangeMode', uiState.rangeMode);
-        rerender();
-    });
-    recent?.addEventListener('change', () => {
-        uiState.rangeMode = recent.checked ? 'recent' : 'full';
-        localStorage.setItem('rangeMode', uiState.rangeMode);
-        rerender();
-    });
-    zero?.addEventListener('change', () => {
-        uiState.gapPolicy = zero.checked ? 'zero' : 'break';
-        localStorage.setItem('gapPolicy', uiState.gapPolicy);
-        rerender();
-    });
-    brk?.addEventListener('change', () => {
-        uiState.gapPolicy = brk.checked ? 'break' : 'zero';
-        localStorage.setItem('gapPolicy', uiState.gapPolicy);
-        rerender();
-    });
-}
-
-function sliceToRecentContinuous(rows, gapMs = CONTINUITY_GAP_MS) {
-    if (!rows || !rows.length) {return rows || [];}
     const sorted = [...rows].sort((a, b) => new Date(a.t) - new Date(b.t));
     let end = sorted.length - 1;
     let prev = new Date(sorted[end].t).getTime();
+
     let i = end - 1;
     for (; i >= 0; i--) {
         const ts = new Date(sorted[i].t).getTime();
-        if ((prev - ts) >= gapMs) {break;} // 断开
+        if ((prev - ts) >= gms) { break; } // 断开
         prev = ts;
     }
     const start = Math.max(0, i + 1);
-    return sorted.slice(start);       // 最近一段连续区间
+    return sorted.slice(start);
 }
 
+
 function buildLinePoints(rows, gapPolicy = uiState.gapPolicy) {
-    if (!rows || !rows.length) {return [];}
+    if (!rows || !rows.length) { return []; }
     const sorted = [...rows].sort((a, b) => new Date(a.t) - new Date(b.t));
 
     const STEP = 60_000;
@@ -125,7 +109,8 @@ const charts = {
     line: null,
     todayBars: null,
     todayHeatmap: null,
-    yearlyHeatmap: null,
+    weekBars: null,
+    monthlyHeatmap: null,
 };
 
 // 数据缓存，用于避免不必要的重绘
@@ -154,17 +139,160 @@ function requestStatsData() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    // ====== 绑定控件（新增 preset + custom 逻辑，持久化到 ANH_TIME_*） ======
+    function bindControls() {
+        const full = document.getElementById('rangeFull');
+        const recent = document.getElementById('rangeRecent');
+        const zero = document.getElementById('gapZero');
+        const brk = document.getElementById('gapBreak');
+
+        const contPreset = document.getElementById('contPreset');
+        const contCustom = document.getElementById('contCustom');
+        const contHint = document.getElementById('contHint');
+
+        // —— 恢复勾选 —— //
+        (uiState.rangeMode === 'recent' ? recent : full).checked = true;
+        (uiState.gapPolicy === 'break' ? brk : zero).checked = true;
+
+        // preset/custom 初始同步
+        function syncPresetFromState() {
+            const val = +uiState.continuityGapMinutes || 120;
+            const isPreset = PRESET_VALUES.includes(val);
+            contPreset.value = isPreset ? String(val) : '__custom__';
+            contCustom.value = String(val);
+            contCustom.disabled = (contPreset.value !== '__custom__');
+            contHint.textContent = (contPreset.value === '__custom__')
+                ? `自定义：${Math.max(CUSTOM_MIN, Math.min(CUSTOM_MAX, val))} 分`
+                : '';
+        }
+
+        function clampCustom(v) {
+            if (!Number.isFinite(v)) { return CUSTOM_MIN; }
+            return Math.max(CUSTOM_MIN, Math.min(CUSTOM_MAX, Math.round(v)));
+        }
+
+        function setContinuityMinutes(mins, rerender = true) {
+            const vv = clampCustom(mins);
+            uiState.continuityGapMinutes = vv;
+            saveState('continuityGapMinutes', vv);
+            syncPresetFromState();
+            if (rerender) { rerenderLine(); }
+        }
+
+        function setContDisabledByRange() {
+            const disabled = (uiState.rangeMode !== 'recent');
+            contPreset.disabled = disabled;
+            contCustom.disabled = disabled || (contPreset.value !== '__custom__');
+            contHint.style.opacity = disabled ? 0.5 : 1;
+        }
+
+
+        syncPresetFromState();
+        setContDisabledByRange();
+
+        // —— 事件 —— //
+        full?.addEventListener('change', () => {
+            uiState.rangeMode = full.checked ? 'full' : 'recent';
+            saveState('rangeMode', uiState.rangeMode);
+            setContDisabledByRange();
+            rerenderLine();
+        });
+
+        recent?.addEventListener('change', () => {
+            uiState.rangeMode = recent.checked ? 'recent' : 'full';
+            saveState('rangeMode', uiState.rangeMode);
+            setContDisabledByRange();
+            rerenderLine();
+        });
+
+        zero?.addEventListener('change', () => {
+            uiState.gapPolicy = zero.checked ? 'zero' : 'break';
+            saveState('gapPolicy', uiState.gapPolicy);
+            rerenderLine();
+        });
+
+        brk?.addEventListener('change', () => {
+            uiState.gapPolicy = brk.checked ? 'break' : 'zero';
+            saveState('gapPolicy', uiState.gapPolicy);
+            rerenderLine();
+        });
+
+        contPreset?.addEventListener('change', () => {
+            if (contPreset.value === '__custom__') {
+                contCustom.disabled = (uiState.rangeMode !== 'recent') ? true : false;
+                contCustom.focus();
+                contCustom.select();
+                contHint.textContent = `自定义：${contCustom.value || uiState.continuityGapMinutes} 分`;
+            } else {
+                const mins = +contPreset.value;
+                setContinuityMinutes(mins);
+            }
+        });
+
+        // 用 input 让用户边敲边生效太“抖”，这里用 change；想更灵敏可改成 input + 防抖
+        contCustom?.addEventListener('change', () => {
+            const val = clampCustom(+contCustom.value || uiState.continuityGapMinutes);
+            // 如果正好落在预设上，自动切回预设项；否则保持自定义
+            if (PRESET_VALUES.includes(val)) {
+                contPreset.value = String(val);
+            } else {
+                contPreset.value = '__custom__';
+            }
+            setContinuityMinutes(val);
+        });
+
+        contCustom?.addEventListener('input', () => {
+            // 友好提示当前数值
+            const val = clampCustom(+contCustom.value || uiState.continuityGapMinutes);
+            contHint.textContent = `自定义：${val} 分`;
+        });
+    }
+
+    function bindWeekControls() {
+        // 直接使用 document.getElementById 绑定元素（不再使用 $ 简写）
+        // 抽出的具名函数：统一保存偏移并触发重绘
+        function applyWeekOffset() {
+            localStorage.setItem(LS_PREFIX + 'weekOffsetDays', String(uiState.weekOffsetDays));
+            console.log('[week] offsetDays =', uiState.weekOffsetDays); // ✅ 调试
+            rerenderWeekBars();
+        }
+
+        // 全局 flag：表示有周控件按钮被按下（以及记录最后一次按下的信息）
+        function setWeekButtonFlag(id) {
+            try {
+                uiState.weekButtonPressed = true;
+                uiState.weekButtonLast = { id: id || null, ts: Date.now() };
+            } catch (e) {
+                // ignore in case window not writable
+            }
+        }
+
+        // 各按钮的具名处理器
+        function weekBack7Handler() { uiState.weekOffsetDays -= 7; setWeekButtonFlag('weekBack7'); applyWeekOffset(); }
+        function weekBack1Handler() { uiState.weekOffsetDays -= 1; setWeekButtonFlag('weekBack1'); applyWeekOffset(); }
+        function weekResetHandler() { uiState.weekOffsetDays = 0; setWeekButtonFlag('weekReset'); applyWeekOffset(); }
+        function weekFwd1Handler() { uiState.weekOffsetDays += 1; setWeekButtonFlag('weekFwd1'); applyWeekOffset(); }
+        function weekFwd7Handler() { uiState.weekOffsetDays += 7; setWeekButtonFlag('weekFwd7'); applyWeekOffset(); }
+
+        document.getElementById('weekBack7')?.addEventListener('click', weekBack7Handler);
+        document.getElementById('weekBack1')?.addEventListener('click', weekBack1Handler);
+        document.getElementById('weekReset')?.addEventListener('click', weekResetHandler);
+        document.getElementById('weekFwd1')?.addEventListener('click', weekFwd1Handler);
+        document.getElementById('weekFwd7')?.addEventListener('click', weekFwd7Handler);
+    }
+
+    // 初始化：绑定控件，拉取一次数据并每秒刷新一次
     bindControls();
+    bindWeekControls();
     requestStatsData();
-    // 每 1 秒刷新一次
     setInterval(requestStatsData, 1 * 1000);
 });
 
 window.addEventListener('message', (e) => {
     const data = e.data;
-    if (!data) {return;}
+    if (!data) { return; }
 
-    if (data.type !== 'time-stats-data') {return;}
+    if (data.type !== 'time-stats-data') { return; }
 
     // KPI
     document.getElementById('k_total').textContent = fmtMinutes(data.totalMillisAll);
@@ -205,26 +333,29 @@ window.addEventListener('message', (e) => {
 
     if (hasDataChanged(newHeatmap, dataCache.heatmap)) {
         console.log('Heatmap data changed, redrawing...');
-        // 周柱状图（需要在 HTML 里新增 <canvas id="weekBars">）
         const weekEl = document.getElementById('weekBars');
         if (weekEl) {
-            drawThisWeekBars(weekEl, newHeatmap);
+            drawThisWeekBars(weekEl, newHeatmap, uiState.weekOffsetDays); // 传偏移
         }
-
-        // 月热力图（沿用 server 传来的 daily heatmap）
         const monthEl = document.getElementById('heatmap');
         if (monthEl) {
             drawMonthlyHeatmap(monthEl, newHeatmap, new Date());
         }
-
         dataCache.heatmap = JSON.parse(JSON.stringify(newHeatmap));
+    } else {
+        if (uiState.weekButtonPressed) {
+            // 热力图没变，但用户可能点了偏移按钮
+            rerenderWeekBars();
+            uiState.weekButtonPressed = false;
+        }
     }
 });
 
 
+
 function drawLineChart(canvas, rows) {
     destroyChart('line');
-    if (!canvas) {return;}
+    if (!canvas) { return; }
     const ctx = canvas.getContext('2d');
 
     const points = buildLinePoints(rows, uiState.gapPolicy);
@@ -352,10 +483,10 @@ function drawTodayHeatmap(canvas, quarterHourly) {
 
     // 颜色映射
     let maxVal = 0;
-    for (let i = 0; i < 96; i++) {maxVal = Math.max(maxVal, quarterHourly[i] || 0);}
+    for (let i = 0; i < 96; i++) { maxVal = Math.max(maxVal, quarterHourly[i] || 0); }
     const base = { r: 102, g: 170, b: 255 };
     const colorFor = (v) => {
-        if (maxVal <= 0) {return `rgba(${base.r},${base.g},${base.b},0.15)`;}
+        if (maxVal <= 0) { return `rgba(${base.r},${base.g},${base.b},0.15)`; }
         const t = Math.min(1, v / maxVal);
         const a = 0.15 + 0.85 * Math.sqrt(t);
         return `rgba(${base.r},${base.g},${base.b},${a})`;
@@ -379,7 +510,7 @@ function drawTodayHeatmap(canvas, quarterHourly) {
         categoryPercentage: 1,
         barThickness: (ctx) => {
             const ca = ctx.chart.chartArea;
-            if (!ca) {return;}
+            if (!ca) { return; }
             const rowH = ca.height / yLabels.length;
             return Math.max(2, Math.floor(rowH)); // 每行留 2px 间隙
         },
@@ -469,14 +600,14 @@ function drawMonthlyHeatmap(canvas, heatmap, refDate = new Date()) {
             const v = heatmap[ts] || 0;
             const out = (ts < monthStart || ts > monthEnd); // 非当月的灰格
             matrix.push({ col: c, rowLabel: yLabels[d], ts, v, out });
-            if (!out && v > maxVal) {maxVal = v;}
+            if (!out && v > maxVal) { maxVal = v; }
         }
     }
 
     // 颜色映射
     const base = { r: 102, g: 170, b: 255 };
     const colorFor = (v, out) => {
-        if (maxVal <= 0) {return `rgba(${base.r},${base.g},${base.b},${out ? 0.08 : 0.15})`;}
+        if (maxVal <= 0) { return `rgba(${base.r},${base.g},${base.b},${out ? 0.08 : 0.15})`; }
         const t = Math.min(1, v / maxVal);
         const a = (out ? 0.08 : 0.15) + 0.85 * Math.sqrt(t);
         return `rgba(${base.r},${base.g},${base.b},${a})`;
@@ -500,7 +631,7 @@ function drawMonthlyHeatmap(canvas, heatmap, refDate = new Date()) {
         categoryPercentage: 1,
         barThickness: (ctx) => {
             const ca = ctx.chart.chartArea;
-            if (!ca) {return;}
+            if (!ca) { return; }
             const rowH = ca.height / 7;
             return Math.max(2, Math.floor(rowH));
         },
@@ -554,36 +685,145 @@ function drawMonthlyHeatmap(canvas, heatmap, refDate = new Date()) {
     });
 }
 
-function drawThisWeekBars(canvas, dailyMap) {
+function rerenderWeekBars() {
+    const weekEl = document.getElementById('weekBars');
+    if (weekEl && dataCache.heatmap) {
+        drawThisWeekBars(weekEl, dataCache.heatmap, uiState.weekOffsetDays);
+    }
+}
+
+// function drawThisWeekBars(canvas, dailyMap, offsetDays = 0) {
+//     destroyChart('weekBars');
+//     const ctx = canvas.getContext('2d');
+
+//     const dayMs = 24 * 3600 * 1000;
+//     const ZH_WEEK = ['日', '一', '二', '三', '四', '五', '六'];
+
+//     // —— 窗口“起点”= 本地零点 + 偏移（今天在最左侧）——
+//     const start = new Date();
+//     start.setHours(0, 0, 0, 0);
+//     const startTs = start.getTime() + offsetDays * dayMs;
+
+//     // —— 从左到右：今天(起点)、昨天、前天… 共 7 根柱 —— //
+//     // （也就是时间向右“倒序”，满足“今天在最左侧”）
+//     let maxVal = 0;
+//     const points = [];
+//     const labels = [];
+//     for (let i = 0; i < 7; i++) {
+//         const ts = startTs - i * dayMs;   // i=0 最左（今天/起点），i=6 最右（起点-6天）
+//         const d = new Date(ts);
+//         const v = dailyMap[ts] || 0;
+
+//         const mm = String(d.getMonth() + 1).padStart(2, '0');
+//         const dd = String(d.getDate()).padStart(2, '0');
+//         const label = `${mm}/${dd}`;
+
+//         labels.push(label);
+//         points.push({ x: label, y: v, ts, isStart: i === 0 }); // ✅ 高亮最左柱（今天/起点）
+//         if (v > maxVal) { maxVal = v; }
+//     }
+
+//     // 颜色映射（与热力图一致），起点稍微强调
+//     const base = { r: 102, g: 170, b: 255 };
+//     const colorFor = (v, emph) => {
+//         if (maxVal <= 0) { return `rgba(${base.r},${base.g},${base.b},0.18)`; }
+//         const t = Math.min(1, v / maxVal);
+//         const a = 0.18 + 0.82 * Math.sqrt(t);
+//         const a2 = Math.min(1, a + (emph ? 0.10 : 0));
+//         return `rgba(${base.r},${base.g},${base.b},${a2})`;
+//     };
+
+//     charts.weekBars = new Chart(ctx, {
+//         type: 'bar',
+//         data: {
+//             datasets: [{
+//                 label: '7 天窗口',
+//                 data: points,
+//                 parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+//                 backgroundColor: (c) => colorFor(c.raw?.y ?? 0, c.raw?.isStart),
+//                 borderColor: (c) => (c.raw?.isStart ? COLOR_FG() : 'transparent'),
+//                 borderWidth: (c) => (c.raw?.isStart ? 1 : 0),
+//                 borderSkipped: false,
+//                 barPercentage: 0.9,
+//                 categoryPercentage: 0.9
+//             }]
+//         },
+//         options: {
+//             responsive: true,
+//             maintainAspectRatio: false,
+//             scales: {
+//                 x: {
+//                     type: 'category',
+//                     labels,
+//                     ticks: { color: COLOR_FG(), maxRotation: 0, autoSkip: false },
+//                     grid: { display: false }
+//                 },
+//                 y: {
+//                     type: 'linear',
+//                     beginAtZero: true,
+//                     ticks: {
+//                         color: COLOR_FG(),
+//                         callback: (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v
+//                     },
+//                     grid: { color: COLOR_GRID() }
+//                 }
+//             },
+//             plugins: {
+//                 legend: { display: false },
+//                 tooltip: {
+//                     callbacks: {
+//                         title: (items) => {
+//                             const ts = items[0]?.raw?.ts;
+//                             if (!ts) { return ''; }
+//                             const d = new Date(ts);
+//                             const w = ZH_WEEK[d.getDay()];
+//                             return `${d.toLocaleDateString()}（周${w}）`;
+//                         },
+//                         label: (item) => `字符：${item.raw?.y ?? 0}`
+//                     }
+//                 }
+//             },
+//             animation: false
+//         }
+//     });
+// }
+
+function drawThisWeekBars(canvas, dailyMap, offsetDays = 0) {
     destroyChart('weekBars');
     const ctx = canvas.getContext('2d');
 
     const dayMs = 24 * 3600 * 1000;
-    const yLabels = ['一', '二', '三', '四', '五', '六', '日'];
+    const ZH_WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
-    // —— 计算本周（周一为 0）——
-    const now = new Date();
-    const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const weekdayMon0 = (new Date(today0).getDay() + 6) % 7;
-    const weekStart = today0 - weekdayMon0 * dayMs;
+    // 窗口结束日：本地零点 + 偏移（offsetDays=0 时，今天是右端）
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const endTs = end.getTime() + offsetDays * dayMs;
 
-    // 组装 7 天数据
     let maxVal = 0;
     const points = [];
-    for (let i = 0; i < 7; i++) {
-        const ts = weekStart + i * dayMs;
+    const labels = [];
+
+    // 从左到右：endTs-6d, ..., endTs（今天在最右侧）
+    for (let i = 0; i <= 6; i++) {
+        const ts = endTs - (6 - i) * dayMs; // i=0 -> -6d ... i=6 -> 0d(今天/窗口终点)
+        const d = new Date(ts);
         const v = dailyMap[ts] || 0;
-        points.push({ x: `周${yLabels[i]}`, y: v, ts, isToday: i === weekdayMon0 });
+
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const label = `${mm}/${dd}`;
+
+        labels.push(label);
+        points.push({ x: label, y: v, ts, isEnd: i === 6 }); // 右端高亮
         if (v > maxVal) {maxVal = v;}
     }
 
-    // 颜色映射（和你热力图同风格）
     const base = { r: 102, g: 170, b: 255 };
     const colorFor = (v, emph) => {
         if (maxVal <= 0) {return `rgba(${base.r},${base.g},${base.b},0.18)`;}
         const t = Math.min(1, v / maxVal);
         const a = 0.18 + 0.82 * Math.sqrt(t);
-        // 今天稍微强调一点透明度
         const a2 = Math.min(1, a + (emph ? 0.10 : 0));
         return `rgba(${base.r},${base.g},${base.b},${a2})`;
     };
@@ -592,15 +832,12 @@ function drawThisWeekBars(canvas, dailyMap) {
         type: 'bar',
         data: {
             datasets: [{
-                label: '本周',
+                label: '7 天窗口',
                 data: points,
                 parsing: { xAxisKey: 'x', yAxisKey: 'y' },
-                backgroundColor: (c) => {
-                    const raw = c.raw || {};
-                    return colorFor(raw.y ?? 0, raw.isToday);
-                },
-                borderColor: (c) => (c.raw?.isToday ? COLOR_FG() : 'transparent'),
-                borderWidth: (c) => (c.raw?.isToday ? 1 : 0),
+                backgroundColor: (c) => colorFor(c.raw?.y ?? 0, c.raw?.isEnd),
+                borderColor: (c) => (c.raw?.isEnd ? COLOR_FG() : 'transparent'),
+                borderWidth: (c) => (c.raw?.isEnd ? 1 : 0),
                 borderSkipped: false,
                 barPercentage: 0.9,
                 categoryPercentage: 0.9
@@ -612,8 +849,8 @@ function drawThisWeekBars(canvas, dailyMap) {
             scales: {
                 x: {
                     type: 'category',
-                    labels: points.map(p => p.x),
-                    ticks: { color: COLOR_FG() },
+                    labels,
+                    ticks: { color: COLOR_FG(), maxRotation: 0, autoSkip: false },
                     grid: { display: false }
                 },
                 y: {
@@ -632,7 +869,10 @@ function drawThisWeekBars(canvas, dailyMap) {
                     callbacks: {
                         title: (items) => {
                             const ts = items[0]?.raw?.ts;
-                            return ts ? new Date(ts).toLocaleDateString() : '';
+                            if (!ts) {return '';}
+                            const d = new Date(ts);
+                            const w = ZH_WEEK[d.getDay()];
+                            return `${d.toLocaleDateString()}（周${w}）`;
                         },
                         label: (item) => `字符：${item.raw?.y ?? 0}`
                     }

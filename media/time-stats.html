@@ -186,11 +186,186 @@
             grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
         }
 
+        /* 紧凑数字输入 */
+        #contCustom {
+            padding: 2px 6px;
+        }
+
         /* 再加一个兜底，极窄时强制单列 */
         @media (max-width: 380px) {
             .grid {
                 grid-template-columns: 1fr;
             }
+        }
+
+        /* ——— 统一使用 VS Code 提供的主题变量（--vscode-…）来给按钮/输入控件配色 ——— */
+
+        /* 行内控件区域（你的 #lineControls、#weekControls） */
+        #lineControls,
+        #weekControls {
+            gap: 8px;
+            align-items: center;
+        }
+
+        #lineControls label,
+        #weekControls label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* —— 按钮（主按钮） —— */
+        button,
+        [data-week-btn] {
+            appearance: none;
+            border: 1px solid var(--vscode-button-border, transparent);
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-radius: 8px;
+            padding: 4px 10px;
+            min-height: 28px;
+            font: inherit;
+            line-height: 1;
+            cursor: pointer;
+            transition: background .12s ease, border-color .12s ease, transform .04s ease;
+        }
+
+        button:hover,
+        [data-week-btn]:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+
+        button:active,
+        [data-week-btn]:active {
+            transform: translateY(0.5px);
+        }
+
+        button:focus-visible,
+        [data-week-btn]:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 2px;
+        }
+
+        button:disabled,
+        [data-week-btn]:disabled {
+            cursor: not-allowed;
+            opacity: .65;
+            color: var(--vscode-disabledForeground);
+        }
+
+        /* —— 次按钮（如需：给任一按钮加 .btn-secondary 即可） —— */
+        .btn-secondary {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border-color: var(--vscode-button-border, transparent);
+        }
+
+        .btn-secondary:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        /* —— 下拉框 —— */
+        select {
+            appearance: none;
+            border: 1px solid var(--vscode-dropdown-border, transparent);
+            background: var(--vscode-dropdown-background);
+            color: var(--vscode-dropdown-foreground);
+            border-radius: 8px;
+            padding: 4px 28px 4px 10px;
+            /* 右侧预留原生下拉箭头空间 */
+            min-height: 28px;
+            font: inherit;
+            line-height: 1;
+        }
+
+        select:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 2px;
+        }
+
+        /* —— 输入框（数字/文本） —— */
+        input[type="number"],
+        input[type="text"],
+        input[type="search"] {
+            appearance: none;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 8px;
+            padding: 4px 8px;
+            min-height: 28px;
+            font: inherit;
+            line-height: 1;
+        }
+
+        input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+        }
+
+        input:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 2px;
+        }
+
+        /* 你的自定义数字输入更紧凑一些 */
+        #contCustom {
+            width: 88px;
+            padding: 2px 8px;
+            /* 你原本有 padding，这里统一 */
+        }
+
+        /* —— 复选框 / 单选框 —— */
+        /* 使用 accent-color 让原生控件跟随主题主色；提供 radio/checkbox token 作为优先取值 */
+        input[type="checkbox"],
+        input[type="radio"] {
+            accent-color: var(--vscode-radio-activeForeground, var(--vscode-button-background));
+        }
+
+        input[type="radio"]:not(:checked) {
+            accent-color: var(--vscode-radio-inactiveForeground, var(--vscode-button-background));
+        }
+
+        input[type="checkbox"]:disabled,
+        input[type="radio"]:disabled {
+            filter: grayscale(40%);
+            opacity: .8;
+        }
+
+        label>input[type="checkbox"],
+        label>input[type="radio"] {
+            margin-right: 6px;
+        }
+
+        /* —— 小徽标（chips/tag）用 VS Code badge 样式 —— */
+        .tag {
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            border: 1px solid var(--vscode-editorWidget-border);
+            border-radius: 999px;
+            padding: 2px 10px;
+            line-height: 1.2;
+        }
+
+        /* —— 分隔线文本（已有 .sep），再小幅弱化 —— */
+        .sep {
+            color: var(--vscode-descriptionForeground, currentColor);
+            opacity: .55;
+        }
+
+        /* —— 微调：周控件按钮的布局 —— */
+        #weekControls [data-week-btn] {
+            min-width: 80px;
+            margin-inline: 2px;
+        }
+
+        /* —— 高对比/不同主题下边框的兜底 —— */
+        button,
+        select,
+        input[type="number"],
+        input[type="text"],
+        input[type="search"] {
+            box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+            /* 防止某些系统默认阴影 */
         }
     </style>
 </head>
@@ -229,16 +404,19 @@
                     缺口：
                     <label><input type="radio" name="gapPolicy" id="gapZero" checked> 零填充</label>
                     <label><input type="radio" name="gapPolicy" id="gapBreak"> 断线</label>
+                    <br>
                     <span class="sep">|</span>
                     连续窗口：
-                    <select id="contWindow">
+                    <select id="contPreset" title="预设（最大到 2 小时）">
+                        <option value="15">15 分钟</option>
                         <option value="30">30 分钟</option>
                         <option value="60">1 小时</option>
-                        <option value="120" selected>2 小时</option>
-                        <option value="240">4 小时</option>
-                        <option value="480">8 小时</option>
-                        <option value="1440">24 小时</option>
+                        <option value="120">2 小时</option> <!-- 最大预设 -->
+                        <option value="__custom__">自定义…</option>
                     </select>
+                    <input id="contCustom" type="number" min="15" max="1440" step="5" inputmode="numeric"
+                        style="width: 88px;" placeholder="分钟" title="自定义（15~1440 分钟）" />
+                    <span class="muted" id="contHint" style="margin-left:6px;"></span>
                 </div>
             </div>
 
@@ -259,9 +437,20 @@
     </div>
 
     <div class="card" style="margin-top:16px;">
+        <div class="row muted" id="weekControls" style="justify-content: space-between; align-items:center;">
+            <span>7 天滑动窗口（默认结束于今天，今天在最右侧）</span>
+            <div>
+                <button id="weekBack7" data-week-btn type="button">« 周 -1</button>
+                <button id="weekBack1" data-week-btn type="button">‹ 日 -1</button>
+                <button id="weekReset" data-week-btn type="button">重置到今天</button>
+                <button id="weekFwd1" data-week-btn type="button">日 +1 ›</button>
+                <button id="weekFwd7" data-week-btn type="button">周 +1 »</button>
+            </div>
+        </div>
         <div class="muted">本周统计</div>
         <div class="chart h180"><canvas id="weekBars"></canvas></div>
     </div>
+
 
     <div class="card" style="margin-top:16px;">
         <div class="muted">热力图（最近 一个月，每天码字量）</div>

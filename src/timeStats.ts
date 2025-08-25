@@ -46,6 +46,37 @@ let isIdle = false; // 新增：追踪空闲状态，空闲时不创建新桶
 let statusBarItem: vscode.StatusBarItem | undefined;
 // Webview面板状态管理
 let dashboardPanel: vscode.WebviewPanel | undefined;
+let suspendedByPreview = false; // 预览期间“暂挂”的标记
+let statusBarTicker: NodeJS.Timeout | undefined;
+
+// 放在文件顶部“运行时状态”附近
+function isDashboardActive(): boolean {
+    return !!dashboardPanel && dashboardPanel.active;
+}
+
+function startStatusBarTicker() {
+    if (statusBarTicker) {return;}
+    statusBarTicker = setInterval(() => {
+        // 只在会话进行且非 idle 时刷新，可避免无谓开销
+        if (currentSessionStart > 0 && !isIdle) {
+            updateStatusBar();
+        }
+    }, 1000);
+}
+
+function stopStatusBarTicker() {
+    if (!statusBarTicker) {return;}
+    clearInterval(statusBarTicker);
+    statusBarTicker = undefined;
+}
+
+function isAnyPreviewActive(): boolean {
+    try {
+        return !!(getEffectiveDocumentSync()); // 只要有效预览在报 uri 就算活跃
+    } catch {
+        return false;
+    }
+}
 
 // 调试开关读取
 function tsDebugEnabled(): boolean {
@@ -94,17 +125,17 @@ function getOrInitDocState(doc: vscode.TextDocument): RuntimeDocState {
         // 超大文件提示（避免重复弹出）
         try {
             const hugeCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-            const hugeTh = hugeCfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+            const hugeTh = hugeCfg.get<number>('hugeFile.thresholdBytes', 50 * 1024)!;
             const suppress = hugeCfg.get<boolean>('hugeFile.suppressWarning', false)!;
-            if (size > hugeTh && !suppress && !docStates.has('__hugewarn__'+fp)) {
-                docStates.set('__hugewarn__'+fp, { lastCount:0, lastVersion:0, lastFlushTs:0 });
+            if (size > hugeTh && !suppress && !docStates.has('__hugewarn__' + fp)) {
+                docStates.set('__hugewarn__' + fp, { lastCount: 0, lastVersion: 0, lastFlushTs: 0 });
                 vscode.window.showInformationMessage('该大文件已启用 TimeStats 近似统计，其他高成本高亮功能已被跳过。');
             }
-        } catch {/* ignore */}
+        } catch {/* ignore */ }
         // 首次仍做一次精确统计建立基线
-    const baseFull = computeZhEnCount(text);
-    st = { lastCount: baseFull.total, lastVersion: doc.version, lastFlushTs: now(), isLarge, pendingDelta: 0, approxChanges: 0, lastAccurateTs: now(), lastFullStats: baseFull.full };
-    tsDebug('initDocState', { file: fp, isLarge, size, base: baseFull.total });
+        const baseFull = computeZhEnCount(text);
+        st = { lastCount: baseFull.total, lastVersion: doc.version, lastFlushTs: now(), isLarge, pendingDelta: 0, approxChanges: 0, lastAccurateTs: now(), lastFullStats: baseFull.full };
+        tsDebug('initDocState', { file: fp, isLarge, size, base: baseFull.total });
         docStates.set(fp, st);
     }
     return st;
@@ -186,7 +217,7 @@ function getOrCreateFileStats(filePath: string): FileStats {
     console.log('TimeStats: getGlobalFileTracking result:', !!g);
 
     if (!g) {
-    console.log('TimeStats: No global file tracking, returning empty stats');
+        console.log('TimeStats: No global file tracking, returning empty stats');
         return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
     }
 
@@ -218,7 +249,7 @@ function getOrCreateFileStats(filePath: string): FileStats {
     console.log('TimeStats: Writing stats for UUID', uuid, ':', ws);
 
     if (ws) {
-    console.log('TimeStats: Found writing stats, returning populated stats');
+        console.log('TimeStats: Found writing stats, returning populated stats');
         return {
             totalMillis: ws.totalMillis,
             charsAdded: ws.charsAdded,
@@ -281,7 +312,7 @@ function bumpBucket(fsEntry: FileStats, timestamp: number, added: number, bucket
         // 创建新桶
         bucket = { start: bucketStart, end: bucketStart + bucketSizeMs, charsAdded: 0 };
         fsEntry.buckets.push(bucket);
-    console.log('TimeStats: Created new bucket at', new Date(bucketStart).toLocaleTimeString());
+        console.log('TimeStats: Created new bucket at', new Date(bucketStart).toLocaleTimeString());
     }
 
     bucket.charsAdded += added;
@@ -368,6 +399,7 @@ function startSession() {
     if (currentSessionStart === 0) {
         currentSessionStart = now();
     }
+    startStatusBarTicker();
 }
 function endSession() {
     if (currentSessionStart === 0 || !currentDocPath) {
@@ -383,6 +415,7 @@ function endSession() {
         persistFileStats(currentDocPath, fsEntry);
     }
     currentSessionStart = 0;
+    stopStatusBarTicker();
 }
 // 结束忽略聚合会话（若存在）并写入聚合时长
 function endIgnoredAggregateSession() {
@@ -405,8 +438,9 @@ function resetIdleTimer(idleThresholdMs: number) {
     // 重置空闲状态 - 用户有活动
     isIdle = false;
 
+if (currentSessionStart > 0) { startStatusBarTicker(); }
     idleTimer = setTimeout(() => {
-    console.log('TimeStats: User is now idle, stopping bucket creation');
+        console.log('TimeStats: User is now idle, stopping bucket creation');
         isIdle = true; // 设置为空闲状态，停止创建新桶
         endSession();
         updateStatusBar();
@@ -497,7 +531,7 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
         if (needAccurateByTime || needAccurateByChanges) {
             tsDebug('scheduleAccurate', { file: filePath, needAccurateByTime, needAccurateByChanges, approxChanges: st.approxChanges, sinceLastMs: t - (st.lastAccurateTs || 0) });
             const versionAtSchedule = doc.version;
-            setTimeout(()=>{
+            setTimeout(() => {
                 try {
                     const full = computeZhEnCount(doc.getText());
                     const adjust = full.total - st.lastCount;
@@ -514,7 +548,7 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
                     st.lastAccurateTs = now();
                     st.approxChanges = 0;
                     if (versionAtSchedule === doc.version) { updateStatusBar(); }
-                } catch {/* ignore */}
+                } catch {/* ignore */ }
             }, 0);
         }
     }
@@ -554,55 +588,74 @@ function scheduleFlush(doc: vscode.TextDocument) {
 
 // -------------------- 状态栏 --------------------
 function setStatusBarTextAndTooltip() {
-    if (!statusBarItem) {
-        return;
-    }
-    if (!currentDocPath) {
-        statusBarItem.hide();
-        return;
-    }
+    if (!statusBarItem) { return; }
+    if (!currentDocPath) { statusBarItem.hide(); return; }
+
     const { bucketSizeMs, largeApproximate } = getConfig();
     const st = docStates.get(currentDocPath);
-    // 使用缓存的 lastFullStats，避免同步重算；大文件近似模式下 total 可能含 pendingDelta
+
+    // —— 字数统计展示（保持你现有的逻辑） ——
     let fullStats: TextStats | undefined = st?.lastFullStats;
     let displayTotal = st?.lastCount || 0;
     let approxFlag = false;
     if (st?.isLarge && largeApproximate) {
-    if (st.pendingDelta && st.pendingDelta !== 0) { displayTotal = st.lastCount + st.pendingDelta; }
+        if (st.pendingDelta && st.pendingDelta !== 0) { displayTotal = st.lastCount + st.pendingDelta; }
         approxFlag = true;
     }
     if (!fullStats) {
         fullStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: displayTotal };
     }
 
+    // —— CPM & 累计用时计算 ——
     const fsEntry = getFileStats(currentDocPath);
+
+    // ✅ 把“进行中的会话时长”叠加到累计用时里（会话未结束时也正确增长）
+    let effectiveMillis = fsEntry.totalMillis;
+    if (currentSessionStart > 0 && !isIdle) {
+        // 面板激活时我们没有结束会话，这里同样要把这段时间算进去
+        effectiveMillis += (Date.now() - currentSessionStart);
+    }
+
     const cpmNow = calcCurrentCPM(fsEntry, bucketSizeMs);
     const cpmAvg = calcAverageCPM(fsEntry);
     const cpmPeak = calcPeakCPM(fsEntry, bucketSizeMs);
-    const minutes = Math.floor(fsEntry.totalMillis / 60000);
 
-    // 在空闲状态下显示不同的文本样式
+    // 分钟 + mm:ss
+    const minutes = Math.floor(effectiveMillis / 60000);
+    const seconds = Math.floor((effectiveMillis % 60000) / 1000);
+    const mmss = `${String(Math.floor(effectiveMillis / 60000)).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+    // —— 状态栏文字 —— 
     const idleIndicator = isIdle ? ' 💤' : '🖋️';
     const approxMark = approxFlag ? '≈' : '';
-    statusBarItem.text = `${cpmNow}/${cpmAvg}/${cpmPeak} CPM · ${minutes} min · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${displayTotal} ${idleIndicator}`;
+    // 仍然保留原有 “X min”，但它现在会随会话进行而增长；同时在后面附上 mm:ss 让首分钟更直观
+    statusBarItem.text = `${cpmNow}/${cpmAvg}/${cpmPeak} CPM · ${minutes} min (${mmss}) · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${displayTotal} ${idleIndicator}`;
+
+    // —— Tooltip —— 
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = true;
-    md.appendMarkdown([
-        `**当前速度**：${cpmNow} CPM`,
-        `**平均速度**：${cpmAvg} CPM`,
-        `**峰值速度**：${cpmPeak} CPM`,
-        `**累计用时**：${minutes} 分钟`,
-        `**中文字符**：${fullStats.cjkChars}${approxFlag ? ' (近似可能滞后)' : ''}`,
-        `**英文单词**：${fullStats.words}${approxFlag ? ' (近似可能滞后)' : ''}`,
-        `**码字总量**：${approxMark}${displayTotal}${approxFlag ? ' (估算/待校准)' : ''}`,
-        `**文件路径**：${currentDocPath}`,
-        `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
-        `**会话数**：${fsEntry.sessions.length}`,
-        `**状态**：${isIdle ? '离开' : '活跃'}`
-    ].join('\n\n'));
+    md.appendMarkdown(
+        [
+            `**当前速度**：${cpmNow} CPM`,
+            `**平均速度**：${cpmAvg} CPM`,
+            `**峰值速度**：${cpmPeak} CPM`,
+            `**累计用时**：${minutes} 分钟（${mmss}）`,
+            currentSessionStart > 0 && !isIdle
+                ? `**当前会话**：已持续 ${Math.floor((Date.now() - currentSessionStart) / 1000)} 秒`
+                : `**当前会话**：未进行或已暂停`,
+            `**中文字符**：${fullStats.cjkChars}${approxFlag ? ' (近似可能滞后)' : ''}`,
+            `**英文单词**：${fullStats.words}${approxFlag ? ' (近似可能滞后)' : ''}`,
+            `**码字总量**：${approxMark}${displayTotal}${approxFlag ? ' (估算/待校准)' : ''}`,
+            `**文件路径**：${currentDocPath}`,
+            `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
+            `**会话数**：${fsEntry.sessions.length}`,
+            `**状态**：${isIdle ? '离开' : '活跃'}`
+        ].join('\n\n')
+    );
     statusBarItem.tooltip = md;
     statusBarItem.show();
 }
+
 function updateStatusBar() {
     setStatusBarTextAndTooltip();
 }
@@ -678,70 +731,88 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
 
 function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     const { idleThresholdMs } = getConfig();
-    // 先把旧文档冲刷一下
-    if (currentDocPath) {
+
+    // 预览（任意 webview）抢焦点：activeTextEditor 会变成 undefined。
+    // 这不是“无活动编辑器”，不要结算会话。
+    if (!editor && isAnyPreviewActive()) {
+        suspendedByPreview = true; // 仅打标
+        updateStatusBar();
+        return;
+    }
+
+    const newPath = editor?.document?.uri.fsPath;
+    const sameDoc = !!(newPath && currentDocPath && newPath === currentDocPath);
+
+    // 仅在“真的切到别的文件/关闭编辑器”时，才冲刷并结束旧会话
+    if (!sameDoc && currentDocPath) {
         const oldDoc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
-        if (oldDoc) {
-            flushDocStats(oldDoc);
-        }
+        if (oldDoc) { flushDocStats(oldDoc); }
+        endSession();
     }
-    endSession();
 
-    if (editor) {
-        const langOk = getConfig().enabledLanguages.includes(editor.document.languageId);
-        if (!langOk) {
-            tsDebug('editorChange:skip-lang', { file: editor.document.uri.fsPath, lang: editor.document.languageId, enabledLanguages: getConfig().enabledLanguages });
-        }
+    // 没有任何编辑器（且也没有预览活跃）：清空状态即可
+    if (!editor) {
+        currentDocPath = undefined;
+        currentDocUuid = undefined;
+        updateStatusBar();
+        return;
     }
-    if (editor && getConfig().enabledLanguages.includes(editor.document.languageId)) {
-        // 如果文件被忽略且启用了 respectWcignore，则不进入统计
-        const ignored = isFileIgnoredForTimeStats(editor.document.uri.fsPath);
-        if (!ignored) {
-            // 切换到非忽略文件，结束聚合会话
-            endIgnoredAggregateSession();
-            currentDocPath = editor.document.uri.fsPath;
-        } else {
-            // 进入忽略文件：结束当前普通会话，启动聚合会话（如未启动）
-            currentDocPath = undefined;
-            if (ignoredAggregateSessionStart === 0) { ignoredAggregateSessionStart = now(); }
-        }
-        const g = getGlobalFileTracking?.();
-        if (g && currentDocPath) {
-            currentDocUuid = g.getFileUuid(currentDocPath);
-        } else {
-            currentDocUuid = undefined;
-        }
 
-        // 初始化基线计数
-    // 无论是否忽略都初始化去抖状态，以便统计 ignored 字数
+    // 非启用语言：不进入统计
+    const langOk = getConfig().enabledLanguages.includes(editor.document.languageId);
+    if (!langOk) {
+        currentDocPath = undefined;
+        currentDocUuid = undefined;
+        updateStatusBar();
+        return;
+    }
+
+    const ignored = isFileIgnoredForTimeStats(editor.document.uri.fsPath);
+
+    // 从预览回到“同一个文件”：接续会话，不结束/重开
+    if (sameDoc && suspendedByPreview) {
+        suspendedByPreview = false;
+        if (!ignored && checkExitIdle('editor-change')) {
+            resetIdleTimer(idleThresholdMs);
+        }
+        updateStatusBar();
+        return;
+    }
+
+    // 到这里说明：第一次进入文件 或者 真正切换到另一个文件
+    if (!ignored) {
+        endIgnoredAggregateSession();
+        currentDocPath = editor.document.uri.fsPath;
+    } else {
+        currentDocPath = undefined;
+        if (ignoredAggregateSessionStart === 0) { ignoredAggregateSessionStart = now(); }
+    }
+
+    const g = getGlobalFileTracking?.();
+    currentDocUuid = (g && currentDocPath) ? g.getFileUuid(currentDocPath) : undefined;
+
+    // 初始化基线计数（即使忽略也初始化，以便 ignored 统计）
     getOrInitDocState(editor.document);
 
     if (!ignored) { startSession(); }
 
-        // 根据配置决定是否退出空闲状态
+    // 根据配置决定是否退出空闲状态
     if (!ignored && checkExitIdle('editor-change')) {
-            resetIdleTimer(idleThresholdMs);
-        } else {
-            // 不退出空闲状态，但仍然启动定时器
-            if (idleTimer) {
-                clearTimeout(idleTimer);
-            }
-            idleTimer = setTimeout(() => {
-                console.log('TimeStats: User is now idle, stopping bucket creation');
-                isIdle = true;
+        resetIdleTimer(idleThresholdMs);
+    } else {
+        if (idleTimer) { clearTimeout(idleTimer); }
+        idleTimer = setTimeout(() => {
+            console.log('TimeStats: User is now idle, stopping bucket creation');
+            isIdle = true;
             endSession();
             endIgnoredAggregateSession();
-                    updateStatusBar();
-                }, idleThresholdMs);
-        }
-
-        updateStatusBar();
-    } else {
-        currentDocPath = undefined;
-        currentDocUuid = undefined;
-        updateStatusBar();
+            updateStatusBar();
+        }, idleThresholdMs);
     }
+
+    updateStatusBar();
 }
+
 
 function handleWindowStateChange(state: vscode.WindowState) {
     windowFocused = state.focused;
@@ -754,8 +825,8 @@ function handleWindowStateChange(state: vscode.WindowState) {
                 flushDocStats(doc); // 失焦时冲刷
             }
         }
-    endSession();
-    endIgnoredAggregateSession();
+        endSession();
+        endIgnoredAggregateSession();
         updateStatusBar();
     } else {
         console.log('TimeStats: Window gained focus');
@@ -792,7 +863,7 @@ function handleDocumentSave(doc: vscode.TextDocument) {
     if (g) {
         // 标记文件为已保存（不再是临时文件）
         g.markAsSaved(filePath);
-    console.log('TimeStats: Marked file as saved:', filePath);
+        console.log('TimeStats: Marked file as saved:', filePath);
     }
 }
 
@@ -901,14 +972,14 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
     // 消息通道
     const getStatsData = () => {
-    console.log('TimeStats: API called to get stats data');
+        console.log('TimeStats: API called to get stats data');
 
         // 准备数据：当前文件 + 跨文件（若可）
         const { bucketSizeMs } = getConfig();
-        
+
         // 当前文件的速度曲线数据
         let perFileLine: { t: number; cpm: number }[] = [];
-        
+
         if (currentDocPath) {
             const fileStats = getFileStats(currentDocPath);
             console.log('TimeStats: Current file stats:', {
@@ -928,7 +999,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
             console.log('TimeStats: No current document, using empty per-file line data');
         }
 
-    console.log('TimeStats: Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
+        console.log('TimeStats: Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
 
         // 跨文件汇总（尽量从全局拿；否则降级为当前文件）
         const globalFileTracking = getGlobalFileTracking?.();
@@ -944,7 +1015,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
         let allStats: Ws[] = [];
         let globalCapable = false;
 
-    console.log('TimeStats: Global file tracking available:', !!globalFileTracking);
+        console.log('TimeStats: Global file tracking available:', !!globalFileTracking);
 
         if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
             try {
@@ -1069,7 +1140,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
             bucketSizeMs
         };
 
-    console.log('TimeStats: Generated stats data:', {
+        console.log('TimeStats: Generated stats data:', {
             globalCapable,
             allStatsCount: allStats.length,
             perFileLineLength: perFileLine.length,
@@ -1085,7 +1156,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
     // 监听来自webview的API调用
     const messageDisposable = panel.webview.onDidReceiveMessage(
         message => {
-        console.log('TimeStats: Received message from webview:', message);
+            console.log('TimeStats: Received message from webview:', message);
 
             if (message.type === 'get-stats-data') {
                 console.log('TimeStats: API request for stats data');
@@ -1101,20 +1172,25 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
     // 关闭时清空引用
     panel.onDidDispose(() => {
         dashboardPanel = undefined;
-        try { setActivePreview(undefined); } catch {}
+        try { setActivePreview(undefined); } catch { }
     });
 
     // 当 dashboard 获得焦点时，把 effective document 指向当前 timeStats 的 currentDocPath（若有）
     panel.onDidChangeViewState(e => {
         try {
             if (e.webviewPanel.active) {
-                if (currentDocPath) { setActivePreview(currentDocPath); }
-                else { setActivePreview(undefined); }
+                if (currentDocPath) {
+                    // ✅ 改成 URI 字符串
+                    setActivePreview(vscode.Uri.file(currentDocPath).toString());
+                } else {
+                    setActivePreview(undefined);
+                }
             } else {
                 setActivePreview(undefined);
             }
         } catch { /* ignore */ }
     }, undefined, context.subscriptions);
+
 }
 
 // 修改 openDashboard 以复用 setupDashboardPanel，并缓存 panel 引用
@@ -1194,16 +1270,27 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
         const disp = onDidChangeEffectiveDocument(uri => {
             try {
                 if (!uri) {
-                    // preview 失去焦点，回退到 active editor
-                    handleActiveEditorChange(vscode.window.activeTextEditor);
-                } else {
-                    // preview 获得焦点：尝试找到已打开的文档并视为活动
-                    const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri);
-                    handleActiveEditorChange(doc ? ({ document: doc } as vscode.TextEditor) : undefined);
+                    // 只有当“没有任何预览活跃”时，才回退到 VS Code 的活动编辑器
+                    if (!isAnyPreviewActive()) {
+                        handleActiveEditorChange(vscode.window.activeTextEditor);
+                    }
+                    return;
                 }
-            } catch (e) { /* ignore */ }
+
+                const doc = vscode.workspace.textDocuments.find(d =>
+                    d.uri.toString() === uri || d.uri.fsPath === uri
+                );
+
+                if (doc) {
+                    handleActiveEditorChange({ document: doc } as vscode.TextEditor);
+                } else {
+                    // 找不到文档时不要清空当前状态；保持现状即可
+                    updateStatusBar();
+                }
+            } catch { /* ignore */ }
         });
         context.subscriptions.push(disp);
+
     } catch { /* ignore */ }
 
     // 注册反序列化器：支持 VS Code 重启后恢复面板
