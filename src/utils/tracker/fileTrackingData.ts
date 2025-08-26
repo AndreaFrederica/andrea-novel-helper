@@ -5,6 +5,9 @@ import { v4 as uuidv4 } from 'uuid';
 // 仅在需要判断编辑器是否打开数据库文件时才使用 vscode API
 // 避免循环依赖：此文件不被激活阶段直接 import 其它使用本模块的代码
 import * as vscode from 'vscode';
+import { getFileMetadataFromCache } from '../WordCount/asyncWordCounter.js';
+// 文件级数据库对象，供外部直接访问和读写
+export let fileTrackingDatabase: FileTrackingDatabase | undefined = undefined;
 
 /**
  * 文件追踪数据模型
@@ -65,8 +68,19 @@ export interface FileTrackingDatabase {
  * 文件追踪数据管理器
  */
 export class FileTrackingDataManager {
+    /**
+     * 直接写入或更新某个文件的元数据（外部可用，提升写入速度）
+     */
+    public setFileMetadata(filePath: string, meta: FileMetadata): void {
+        if (!meta || !meta.uuid) {return;}
+        this.database.files[meta.uuid] = meta;
+        this.database.pathToUuid[filePath] = meta.uuid;
+        this.markChanged();
+        this.markShardDirty(meta.uuid, 'setFileMetadata external update');
+        this.scheduleSave();
+    }
     private dbPath: string; // 旧单文件（仍用于迁移检测）
-    private database: FileTrackingDatabase; // 内存聚合（加载后）
+    public database: FileTrackingDatabase; // 内存聚合（加载后）
     private dbDir: string; // 新的分片目录 .anh-fsdb
     private indexPath: string; // 索引文件 .anh-fsdb/index.json
     private useSharded: boolean = true; // 始终启用分片
@@ -143,6 +157,8 @@ export class FileTrackingDataManager {
             this.trustCallerFilters = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('trustCallerFilters', false) === true;
         } catch { this.trustCallerFilters = false; }
         this.database = this.loadDatabase();
+    // 初始化时赋值到文件级变量，供外部直接访问
+    fileTrackingDatabase = this.database;
         // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
         if (!this.database) {
             this.database = { version: this.DB_VERSION, lastUpdated: Date.now(), files: {}, pathToUuid: {} };
@@ -949,11 +965,18 @@ export class FileTrackingDataManager {
 
     /** 异步枚举全部文件（惰性按需加载分片；不强制一次性加载全部） */
     public async getAllFilesAsync(opts?: { cacheLoaded?: boolean }): Promise<FileMetadata[]> {
-        const cacheLoaded = opts?.cacheLoaded ?? true;
-        const result: FileMetadata[] = [];
+        // 优先查内存数据库，没有则用 getFileMetadataFromCache 读并回写，加速下次访问
         const entries = Object.entries(this.database.pathToUuid);
-        for (const [, uuid] of entries) {
-            const meta = await this.getMetaAsync(uuid, cacheLoaded);
+        const result: FileMetadata[] = [];
+        for (const [filePath, uuid] of entries) {
+            let meta = this.database.files[uuid];
+            if (!meta) {
+                const cacheMeta = await getFileMetadataFromCache(filePath);
+                if (cacheMeta !== null) {
+                    this.database.files[uuid] = cacheMeta;
+                    meta = cacheMeta;
+                }
+            }
             if (meta) { result.push(meta); }
         }
         return result;
