@@ -15,7 +15,7 @@
 [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/andrea-novel-helper?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 [![Open VSX Downloads](https://img.shields.io/open-vsx/dt/andreafrederica/andrea-novel-helper?label=Open%20VSX%20Downloads)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 
-> 最新版本：**0.3.19 (2025-08-26)**  
+> 最新版本：**0.3.20 (2025-08-26)**  
 > 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节“近期版本速览”。  
 > 近期版添加了大量新功能，若从老版本升级，请阅读ChangeLog
 

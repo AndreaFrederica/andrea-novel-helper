@@ -538,8 +538,8 @@ export class FileTrackingDataManager {
         if (filePath === this.dbPath) {
             return this.getFileUuid(filePath) || '';
         }
-    // 完全忽略 .git 目录（除非信任调用者已完成过滤）
-    if (!this.trustCallerFilters && this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
+        // 完全忽略 .git 目录（除非信任调用者已完成过滤）
+        if (!this.trustCallerFilters && this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
 
         try {
             const stats = await fs.promises.stat(filePath);
@@ -919,6 +919,158 @@ export class FileTrackingDataManager {
                 sessions: file.writingStats!.sessions
             }));
     }
+
+    // ===== 异步分片读取与异步流水线 =====
+
+    /** 异步读取单个分片（不抛错，失败返回 undefined） */
+    private async readSingleShardAsync(uuid: string): Promise<FileMetadata | undefined> {
+        try {
+            const p = this.shardFilePath(uuid);
+            if (!fs.existsSync(p)) { return undefined; }
+            const raw = await fs.promises.readFile(p, 'utf8');
+            const meta = JSON.parse(raw) as FileMetadata;
+            return meta && meta.uuid ? meta : undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /** 异步获取某 uuid 的元数据；可选写入内存缓存以便后续同步 API 复用 */
+    private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
+        const mem = this.database.files[uuid];
+        if (mem) { return mem; }
+        const meta = await this.readSingleShardAsync(uuid);
+        if (cacheLoaded && meta) {
+            this.database.files[uuid] = meta;
+            if (meta.isDirectory) { this.indexDirFlag.add(uuid); }
+        }
+        return meta;
+    }
+
+    /** 异步枚举全部文件（惰性按需加载分片；不强制一次性加载全部） */
+    public async getAllFilesAsync(opts?: { cacheLoaded?: boolean }): Promise<FileMetadata[]> {
+        const cacheLoaded = opts?.cacheLoaded ?? true;
+        const result: FileMetadata[] = [];
+        const entries = Object.entries(this.database.pathToUuid);
+        for (const [, uuid] of entries) {
+            const meta = await this.getMetaAsync(uuid, cacheLoaded);
+            if (meta) { result.push(meta); }
+        }
+        return result;
+    }
+
+    /** 异步筛选（predicate 可为同步或异步） */
+    public async filterFilesAsync(
+        predicate: (file: FileMetadata) => boolean | Promise<boolean>,
+        opts?: { cacheLoaded?: boolean }
+    ): Promise<FileMetadata[]> {
+        const all = await this.getAllFilesAsync(opts);
+        const out: FileMetadata[] = [];
+        for (const f of all) {
+            if (await predicate(f)) { out.push(f); }
+        }
+        return out;
+    }
+
+    /** 异步统计（不强制全量预加载） */
+    public async getStatsAsync(): Promise<{
+        totalFiles: number;
+        totalSize: number;
+        filesByExtension: { [ext: string]: number };
+        lastUpdated: number;
+    }> {
+        const files = await this.getAllFilesAsync({ cacheLoaded: true });
+        const totalFiles = files.length;
+        const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
+        const filesByExtension: Record<string, number> = {};
+        for (const f of files) {
+            const ext = f.fileExtension || 'unknown';
+            filesByExtension[ext] = (filesByExtension[ext] || 0) + 1;
+        }
+        return {
+            totalFiles,
+            totalSize,
+            filesByExtension,
+            lastUpdated: this.database.lastUpdated,
+        };
+    }
+
+    /** 异步一次性拉取所有 writingStats（保留原有同步版不变） */
+    public async getAllWritingStatsAsync(): Promise<Array<{
+        filePath: string;
+        totalMillis: number;
+        charsAdded: number;
+        charsDeleted: number;
+        lastActiveTime: number;
+        sessionsCount: number;
+        averageCPM: number;
+        buckets?: { start: number; end: number; charsAdded: number }[];
+        sessions?: { start: number; end: number }[];
+    }>> {
+        const res: Array<{
+            filePath: string;
+            totalMillis: number;
+            charsAdded: number;
+            charsDeleted: number;
+            lastActiveTime: number;
+            sessionsCount: number;
+            averageCPM: number;
+            buckets?: { start: number; end: number; charsAdded: number }[];
+            sessions?: { start: number; end: number }[];
+        }> = [];
+
+        // 迭代 pathToUuid，按需异步读取分片；避免一次 ensureAllShardsLoaded()
+        const entries = Object.entries(this.database.pathToUuid);
+        for (const [filePath, uuid] of entries) {
+            const meta = this.database.files[uuid] ?? await this.getMetaAsync(uuid, true);
+            if (!meta || !meta.writingStats) { continue; }
+            const ws = meta.writingStats;
+            res.push({
+                filePath: meta.filePath || filePath,
+                totalMillis: ws.totalMillis || 0,
+                charsAdded: ws.charsAdded || 0,
+                charsDeleted: ws.charsDeleted || 0,
+                lastActiveTime: ws.lastActiveTime || 0,
+                sessionsCount: ws.sessionsCount || 0,
+                averageCPM: ws.averageCPM || 0,
+                buckets: ws.buckets,
+                sessions: ws.sessions,
+            });
+        }
+        return res;
+    }
+
+    /** 异步流式产出 writingStats（适合 UI 渐进展示或超大工程） */
+    public async *streamWritingStats(): AsyncGenerator<{
+        filePath: string;
+        totalMillis: number;
+        charsAdded: number;
+        charsDeleted: number;
+        lastActiveTime: number;
+        sessionsCount: number;
+        averageCPM: number;
+        buckets?: { start: number; end: number; charsAdded: number }[];
+        sessions?: { start: number; end: number }[];
+    }> {
+        const entries = Object.entries(this.database.pathToUuid);
+        for (const [filePath, uuid] of entries) {
+            const meta = this.database.files[uuid] ?? await this.getMetaAsync(uuid, true);
+            if (!meta || !meta.writingStats) { continue; }
+            const ws = meta.writingStats;
+            yield {
+                filePath: meta.filePath || filePath,
+                totalMillis: ws.totalMillis || 0,
+                charsAdded: ws.charsAdded || 0,
+                charsDeleted: ws.charsDeleted || 0,
+                lastActiveTime: ws.lastActiveTime || 0,
+                sessionsCount: ws.sessionsCount || 0,
+                averageCPM: ws.averageCPM || 0,
+                buckets: ws.buckets,
+                sessions: ws.sessions,
+            };
+        }
+    }
+
 
     /**
      * 清理不存在的文件

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.3.19",
+  "version": "0.3.20",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -750,6 +750,12 @@
       "type": "object",
       "title": "%config.title%",
       "properties": {
+        "andrea.typeset.statusBar.compact": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "markdownDescription": "版式状态栏显示为**简略模式**（仅显示“版式”）。关闭则显示详细信息（缩进、段距、去尾空格、括号补齐、跳出、切段等）。"
+        },
         "andrea.typeset.pairs": {
           "type": [
             "array",

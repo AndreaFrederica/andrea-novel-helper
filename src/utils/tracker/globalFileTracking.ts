@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import { FileTracker, FileChangeEvent, initializeFileTracker, disposeFileTracker, getFileTracker } from './fileTracker';
-import { FileTrackingDataManager, FileMetadata } from './fileTrackingData';
+import { FileChangeEvent, initializeFileTracker, disposeFileTracker, getFileTracker } from './fileTracker';
+import { FileMetadata } from './fileTrackingData';
 
 /**
  * 全局文件追踪管理器
@@ -340,5 +339,183 @@ export function getGlobalFileTracking(): {
         getAllWritingStats: () => dataManager.getAllWritingStats(),
         markAsTemporary: (filePath: string) => dataManager.markAsTemporary(filePath),
         markAsSaved: (filePath: string) => dataManager.markAsSaved(filePath)
+    };
+}
+
+
+// ====== 新增：统一的异步类型 ======
+export type WritingStatsView = {
+    filePath: string;
+    totalMillis: number;
+    charsAdded: number;
+    charsDeleted: number;
+    lastActiveTime: number;
+    sessionsCount: number;
+    averageCPM: number;
+    buckets?: { start: number; end: number; charsAdded: number }[];
+    sessions?: { start: number; end: number }[];
+};
+
+// ====== 新增：异步便捷函数 ======
+
+/** 异步：获取所有被追踪的文件路径列表 */
+export async function getTrackedFileListAsync(): Promise<string[]> {
+    const tracker = getFileTracker();
+    if (!tracker) {return [];}
+    const dm = tracker.getDataManager();
+
+    // 优先走异步分片枚举
+    const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
+    if (typeof getAllFilesAsync === 'function') {
+        const files = await getAllFilesAsync({ cacheLoaded: true });
+        return files.map(f => f.filePath);
+    }
+    // 回退同步
+    return dm.getAllFiles().map(f => f.filePath);
+}
+
+/** 异步：获取所有文件的元数据 */
+export async function getAllTrackedFilesAsync(): Promise<FileMetadata[]> {
+    const tracker = getFileTracker();
+    if (!tracker) {return [];}
+    const dm = tracker.getDataManager();
+
+    const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
+    if (typeof getAllFilesAsync === 'function') {
+        return await getAllFilesAsync({ cacheLoaded: true });
+    }
+    return dm.getAllFiles();
+}
+
+/** 异步：获取追踪统计信息 */
+export async function getTrackingStatsAsync(): Promise<{
+    totalFiles: number;
+    totalSize: number;
+    filesByExtension: { [ext: string]: number };
+    lastUpdated: number;
+} | null> {
+    const tracker = getFileTracker();
+    if (!tracker) {return null;}
+    const dm = tracker.getDataManager();
+
+    const getStatsAsync = (dm as any).getStatsAsync as () => Promise<{
+        totalFiles: number; totalSize: number; filesByExtension: { [ext: string]: number }; lastUpdated: number;
+    }>;
+    if (typeof getStatsAsync === 'function') {
+        return await getStatsAsync();
+    }
+    return dm.getStats();
+}
+
+/** 异步：一次性获取全部写作统计 */
+export async function getAllWritingStatsAsync(): Promise<WritingStatsView[]> {
+    const tracker = getFileTracker();
+    if (!tracker) {return [];}
+    const dm = tracker.getDataManager();
+
+    const getAllWritingStatsAsyncDM = (dm as any).getAllWritingStatsAsync as () => Promise<WritingStatsView[]>;
+    if (typeof getAllWritingStatsAsyncDM === 'function') {
+        return await getAllWritingStatsAsyncDM();
+    }
+    // 回退：同步
+    return dm.getAllWritingStats();
+}
+
+/** 异步生成器：流式产出写作统计（适合大仓库渐进展示） */
+export async function* streamAllWritingStats(): AsyncGenerator<WritingStatsView> {
+    const tracker = getFileTracker();
+    if (!tracker) {return;}
+    const dm = tracker.getDataManager();
+
+    const streamDM = (dm as any).streamWritingStats as () => AsyncGenerator<WritingStatsView>;
+    if (typeof streamDM === 'function') {
+        for await (const item of streamDM()) {
+            yield item;
+        }
+        return;
+    }
+    // 回退：同步数组 -> 逐条 yield
+    const all = dm.getAllWritingStats();
+    for (const item of all) {yield item;}
+}
+
+/** 异步：通过 UUID 获取元数据（非阻塞） */
+export async function getFileByUuidAsync(uuid: string): Promise<FileMetadata | undefined> {
+    const tracker = getFileTracker();
+    if (!tracker) {return undefined;}
+    const dm = tracker.getDataManager();
+
+    // 若 DataManager 没有公开异步单项读取，则用异步全量再筛选（保证不阻塞）
+    const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
+    if (typeof getAllFilesAsync === 'function') {
+        const files = await getAllFilesAsync({ cacheLoaded: true });
+        return files.find(f => f.uuid === uuid);
+    }
+    // 回退：同步（可能阻塞）
+    return dm.getFileByUuid(uuid);
+}
+
+/** 异步：通过路径获取元数据（非阻塞） */
+export async function getFileByPathAsync(filePath: string): Promise<FileMetadata | undefined> {
+    const tracker = getFileTracker();
+    if (!tracker) {return undefined;}
+    const dm = tracker.getDataManager();
+
+    const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
+    if (typeof getAllFilesAsync === 'function') {
+        const files = await getAllFilesAsync({ cacheLoaded: true });
+        return files.find(f => f.filePath === filePath);
+    }
+    // 回退：同步（内部可能同步读取分片）
+    return dm.getFileByPath(filePath);
+}
+
+/** 异步：通过 UUID 获取写作统计 */
+export async function getWritingStatsByUuidAsync(uuid: string): Promise<WritingStatsView | undefined> {
+    const meta = await getFileByUuidAsync(uuid);
+    if (!meta || !meta.writingStats) {return undefined;}
+    const ws = meta.writingStats;
+    return {
+        filePath: meta.filePath,
+        totalMillis: ws.totalMillis || 0,
+        charsAdded: ws.charsAdded || 0,
+        charsDeleted: ws.charsDeleted || 0,
+        lastActiveTime: ws.lastActiveTime || 0,
+        sessionsCount: ws.sessionsCount || 0,
+        averageCPM: ws.averageCPM || 0,
+        buckets: ws.buckets,
+        sessions: ws.sessions,
+    };
+}
+
+// ====== 新增：异步版“全局句柄”聚合 ======
+
+/**
+ * 异步获取全局文件追踪句柄（返回一组 **异步** 方法）
+ * 若追踪器未初始化，返回 null
+ */
+export async function getGlobalFileTrackingAsync(): Promise<{
+    getFileUuid: (filePath: string) => string | undefined; // 同步：纯映射查找即可
+    getFileMetadataAsync: (uuid: string) => Promise<FileMetadata | undefined>;
+    getFileByPathAsync: (filePath: string) => Promise<FileMetadata | undefined>;
+    getWritingStatsAsync: (uuid: string) => Promise<WritingStatsView | undefined>;
+    getAllWritingStatsAsync: () => Promise<WritingStatsView[]>;
+    streamWritingStats: () => AsyncGenerator<WritingStatsView>;
+    markAsTemporary: (filePath: string) => void; // 同步标记即可
+    markAsSaved: (filePath: string) => void;     // 同步标记即可
+} | null> {
+    const tracker = getFileTracker();
+    if (!tracker) {return null;}
+    const dm = tracker.getDataManager();
+
+    return {
+        getFileUuid: (filePath: string) => dm.getFileUuid(filePath),
+        getFileMetadataAsync: (uuid: string) => getFileByUuidAsync(uuid),
+        getFileByPathAsync: (filePath: string) => getFileByPathAsync(filePath),
+        getWritingStatsAsync: (uuid: string) => getWritingStatsByUuidAsync(uuid),
+        getAllWritingStatsAsync: () => getAllWritingStatsAsync(),
+        streamWritingStats: () => streamAllWritingStats(),
+        markAsTemporary: (filePath: string) => dm.markAsTemporary(filePath),
+        markAsSaved: (filePath: string) => dm.markAsSaved(filePath),
     };
 }

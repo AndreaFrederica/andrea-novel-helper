@@ -104,7 +104,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         items.push({ label: '自定义...', value: 'custom' as any });
 
         const pick = await vscode.window.showQuickPick(items as any[], { placeHolder: '选择编辑器字体大小 (editor.fontSize)' });
-    if (!pick) { return; }
+        if (!pick) { return; }
 
         let newSize: number | undefined;
         if (pick.value === 'custom') {
@@ -120,7 +120,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             newSize = pick.value as number;
         }
 
-    if (newSize === undefined) { return; }
+        if (newSize === undefined) { return; }
 
         // 写入全局（与字体家族管理一致，直接更新用户设置）
         await editorCfg.update('fontSize', newSize, vscode.ConfigurationTarget.Global);
@@ -199,6 +199,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
     // 主面板
     async function quickSettings() {
         const cfg = vscode.workspace.getConfiguration();
+        const compact = cfg.get<boolean>('andrea.typeset.statusBar.compact', false);
         const on = cfg.get<boolean>('andrea.typeset.indentFirstTwoSpaces', true);
         const blank = cfg.get<number>('andrea.typeset.blankLinesBetweenParas', 1) ?? 1;
         const trim = cfg.get<boolean>('andrea.typeset.trimTrailingSpaces', true);
@@ -208,6 +209,9 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
         const editorCfg = vscode.workspace.getConfiguration('editor');
         const wrap = editorCfg.get<string>('wordWrap', 'off'); // off | on | wordWrapColumn | bounded
+        const minimap = editorCfg.get<boolean>('minimap.enabled', true);
+        const wheelZoom = editorCfg.get<boolean>('mouseWheelZoom', false);
+
 
         const pick = await vscode.window.showQuickPick(
             [
@@ -226,6 +230,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
                 { label: '$(symbol-text) 管理：编辑器字体家族（图形化）', cmd: 'andrea.manageEditorFontFamily' },
                 { label: '$(zoom-in) 设置：编辑器字体大小', cmd: 'andrea.changeEditorFontSize' },
+
+                { label: `${minimap ? '$(check)' : '$(circle-slash)'} 切换：Minimap（小地图）`, cmd: 'andrea.toggleMinimap' },
+                { label: `${wheelZoom ? '$(check)' : '$(circle-slash)'} 切换：Ctrl+滚轮快速缩放字体`, cmd: 'andrea.toggleMouseWheelZoom' },
+
+                { label: `${compact ? '$(check)' : '$(circle-slash)'} 切换：状态栏显示（当前 ${compact ? '简略' : '详细'}）`, cmd: 'andrea.toggleStatusBarCompact' },
                 { label: '$(paintcan) 立即排版全文', cmd: 'andrea.formatDocument' },
 
                 { label: '$(keyboard) [仅需执行一次｜智能回车失效时使用] 一键注入：Enter → Andrea（覆盖 MAIO）', cmd: 'andrea.injectEnterKeybindings' },
@@ -238,6 +247,9 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
     // 命令注册
     context.subscriptions.push(
+        vscode.commands.registerCommand('andrea.toggleMinimap', () => toggle('editor.minimap.enabled')),
+        vscode.commands.registerCommand('andrea.toggleMouseWheelZoom', () => toggle('editor.mouseWheelZoom')),
+        vscode.commands.registerCommand('andrea.toggleStatusBarCompact', () => toggle('andrea.typeset.statusBar.compact')),
         vscode.commands.registerCommand('andrea.quickSettings', quickSettings),
 
         vscode.commands.registerCommand('andrea.injectEnterKeybindings', injectEnterKeybindings),
@@ -251,7 +263,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.commands.registerCommand('andrea.changeBlankLines', changeBlankLines),
         vscode.commands.registerCommand('andrea.changeIndentSize', changeIndentSize),
 
-    vscode.commands.registerCommand('andrea.changeEditorFontSize', changeEditorFontSize),
+        vscode.commands.registerCommand('andrea.changeEditorFontSize', changeEditorFontSize),
 
         vscode.commands.registerCommand('andrea.toggleAutoPairs', () => toggle('andrea.typeset.enableAutoPairs')),
         vscode.commands.registerCommand('andrea.toggleSmartEnter', () => toggle('andrea.typeset.enableSmartEnter')),

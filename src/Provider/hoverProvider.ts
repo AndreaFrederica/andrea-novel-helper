@@ -110,20 +110,45 @@ interface HoverInfo {
     range: vscode.Range;
     role: Role;
 }
+
+// 允许被扫描的文档 scheme
+const ALLOWED_SCHEMES = new Set(['file', 'untitled', 'andrea-outline']);
+
+// 统一取扩展名（优先 fileName，退回 uri.path）
+function getDocExtension(doc: vscode.TextDocument): string {
+    const s = (doc.fileName || doc.uri.path || '').toLowerCase();
+    const m = s.match(/\.([a-z0-9_\-]+)$/);
+    return m ? m[1] : '';
+}
+
+// 仅在允许的 scheme 且语言/扩展受支持时扫描
+function shouldScanDoc(doc: vscode.TextDocument): boolean {
+    if (!ALLOWED_SCHEMES.has(doc.uri.scheme)) return false;
+
+    const langs = getSupportedLanguages();
+    if (langs.includes(doc.languageId)) return true;
+
+    const exts = new Set(getSupportedExtensions().map(e => e.toLowerCase()));
+    const ext = getDocExtension(doc);
+    return exts.has(ext);
+}
+
+
 export const hoverRangesMap = new Map<string, HoverInfo[]>();
 
 /**
  * 扫描文档，生成 Hover 信息列表
  */
 function scanDocumentForHover(doc: vscode.TextDocument): HoverInfo[] {
+    if (!shouldScanDoc(doc)) return [];
     try {
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-        const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+        const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50 * 1024)!;
         if (isHugeFile(doc, hugeTh)) {
             console.warn('[HoverProvider] skip huge file hover AC scan', doc.uri.fsPath);
             return [];
         }
-    } catch {/* ignore */}
+    } catch {/* ignore */ }
     const text = doc.getText();
     const rawHits = ahoCorasickManager.search(text);
     type Candidate = { role: Role; start: number; end: number };
@@ -174,8 +199,14 @@ async function refreshAll() {
         const key = doc.uri.toString();
         currentKeys.add(key);
         // huge skip
+
+        // 只处理允许的 scheme + 受支持的语言/扩展
+        if (!shouldScanDoc(doc)) {
+            hoverRangesMap.set(key, []); // 清掉可能的旧状态
+            continue;
+        }
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-        const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+        const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50 * 1024)!;
         if (isHugeFile(doc, hugeTh)) { hoverRangesMap.set(key, []); continue; }
         const versionAtReq = doc.version;
         const t0 = Date.now();
@@ -183,7 +214,7 @@ async function refreshAll() {
             const matches = await getRoleMatches(doc);
             if (doc.version !== versionAtReq) { continue; }
             let infos = matches.flatMap(m => m.pats.map(p => {
-                const role = roles.find(r=> r.name === p || r.aliases?.includes(p) || r.fixes?.includes(p));
+                const role = roles.find(r => r.name === p || r.aliases?.includes(p) || r.fixes?.includes(p));
                 if (!role) return undefined;
                 const end = m.end + 1; const start = end - p.length;
                 return { range: new vscode.Range(doc.positionAt(start), doc.positionAt(end)), role };
@@ -194,13 +225,13 @@ async function refreshAll() {
                 infos = scanDocumentForHover(doc);
             }
             hoverRangesMap.set(key, infos);
-            console.log(`[HoverProvider]异步匹配 ${key} v${versionAtReq} 用时 ${Date.now()-t0}ms 命中 ${infos.length}`);
+            console.log(`[HoverProvider]异步匹配 ${key} v${versionAtReq} 用时 ${Date.now() - t0}ms 命中 ${infos.length}`);
         } catch (e) {
             console.warn('[HoverProvider]异步匹配失败 fallback', e);
             hoverRangesMap.set(key, scanDocumentForHover(doc));
         }
     }
-    clearRoleMatchCacheForClosedDocs(new Set(editors.map(e=> e.document.uri.fsPath)));
+    clearRoleMatchCacheForClosedDocs(new Set(editors.map(e => e.document.uri.fsPath)));
     for (const key of Array.from(hoverRangesMap.keys())) {
         if (!currentKeys.has(key)) { hoverRangesMap.delete(key); }
     }
@@ -262,21 +293,22 @@ export function activateHover(context: vscode.ExtensionContext) {
     // 监听各类事件触发增量刷新
     context.subscriptions.push(
         // 文档操作：会触发更新对应文档
-    vscode.workspace.onDidOpenTextDocument(()=>refreshAll()),
-    vscode.workspace.onDidChangeTextDocument(()=>refreshAll()),
-    vscode.workspace.onDidCloseTextDocument(()=>refreshAll()),
-    vscode.window.onDidChangeVisibleTextEditors(()=>refreshAll()),
-    onDidChangeRoles(()=>refreshAll())
+        vscode.workspace.onDidOpenTextDocument(() => refreshAll()),
+        vscode.workspace.onDidChangeTextDocument(() => refreshAll()),
+        vscode.workspace.onDidCloseTextDocument(() => refreshAll()),
+        vscode.window.onDidChangeVisibleTextEditors(() => refreshAll()),
+        onDidChangeRoles(() => refreshAll())
     );
 
     // 注册 Hover 提供器
     // 使用宽匹配 { scheme: 'file' }，然后在内部按配置语言/扩展再过滤，避免 json5 等语言 id 不匹配时丢失 Hover
     const hoverProv = vscode.languages.registerHoverProvider(
-        { scheme: 'file' },
+        [{ scheme: 'file' }, { scheme: 'andrea-outline' }, { scheme: 'untitled' }],
         {
             provideHover(doc, pos) {
+                if (!shouldScanDoc(doc)) return;
                 const supportedLangs = getSupportedLanguages();
-                const supportedExts = new Set(getSupportedExtensions().map(e=>e.toLowerCase()));
+                const supportedExts = new Set(getSupportedExtensions().map(e => e.toLowerCase()));
                 const fileNameLower = doc.fileName.toLowerCase();
                 const extMatch = fileNameLower.match(/\.([a-z0-9_\-]+)$/);
                 const ext = extMatch ? extMatch[1] : '';
@@ -290,7 +322,7 @@ export function activateHover(context: vscode.ExtensionContext) {
                 const r = hit.role;
                 const md = new vscode.MarkdownString('', true);
                 md.isTrusted = true;
-                
+
                 md.appendMarkdown(`**${r.name}**\n\n`);
                 if (r.description) {
                     // 如果描述包含 Markdown 格式，直接使用；否则作为普通文本
@@ -315,7 +347,7 @@ export function activateHover(context: vscode.ExtensionContext) {
                     const fixList = fixesArr.map((f: string) => `\`${f}\``).join('， ');
                     md.appendMarkdown(`**修复**: ${fixList}\n\n`);
                 }
-                
+
                 // 显示路径信息
                 if (r.packagePath || r.sourcePath) {
                     if (r.packagePath) {
@@ -326,7 +358,7 @@ export function activateHover(context: vscode.ExtensionContext) {
                         md.appendMarkdown(`**源文件**: ${fileName}\n\n`);
                     }
                 }
-                
+
                 // 显示扩展字段
                 const extensionFields = getExtensionFields(r);
                 for (const [fieldName, value] of extensionFields) {
@@ -339,7 +371,7 @@ export function activateHover(context: vscode.ExtensionContext) {
                         md.appendMarkdown(`**${displayName}**: ${formattedValue}\n\n`);
                     }
                 }
-                
+
                 const defaultColor = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor')!;
                 const c = r.color || typeColorMap[r.type] || defaultColor;
                 const svg = `<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"${c}\"/></svg>`;

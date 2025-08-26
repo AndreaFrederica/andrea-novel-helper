@@ -5,7 +5,8 @@ import {
     registerFileChangeCallback,
     unregisterFileChangeCallback,
     getGlobalFileTracking,
-    updateFileWritingStats
+    updateFileWritingStats,
+    getAllWritingStatsAsync
 } from './utils/tracker/globalFileTracking';
 import { analyzeText, TextStats } from './utils/utils';
 import { isHugeFile } from './utils/utils';
@@ -55,7 +56,7 @@ function isDashboardActive(): boolean {
 }
 
 function startStatusBarTicker() {
-    if (statusBarTicker) {return;}
+    if (statusBarTicker) { return; }
     statusBarTicker = setInterval(() => {
         // 只在会话进行且非 idle 时刷新，可避免无谓开销
         if (currentSessionStart > 0 && !isIdle) {
@@ -65,7 +66,7 @@ function startStatusBarTicker() {
 }
 
 function stopStatusBarTicker() {
-    if (!statusBarTicker) {return;}
+    if (!statusBarTicker) { return; }
     clearInterval(statusBarTicker);
     statusBarTicker = undefined;
 }
@@ -438,7 +439,7 @@ function resetIdleTimer(idleThresholdMs: number) {
     // 重置空闲状态 - 用户有活动
     isIdle = false;
 
-if (currentSessionStart > 0) { startStatusBarTicker(); }
+    if (currentSessionStart > 0) { startStatusBarTicker(); }
     idleTimer = setTimeout(() => {
         console.log('TimeStats: User is now idle, stopping bucket creation');
         isIdle = true; // 设置为空闲状态，停止创建新桶
@@ -744,10 +745,22 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     const sameDoc = !!(newPath && currentDocPath && newPath === currentDocPath);
 
     // 仅在“真的切到别的文件/关闭编辑器”时，才冲刷并结束旧会话
+    // if (!sameDoc && currentDocPath) {
+    //     const oldDoc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
+    //     if (oldDoc) { flushDocStats(oldDoc); }
+    //     endSession();
+    // }
+    // 仅在“真的切到别的文件/关闭编辑器”时，才冲刷并结束旧会话。
+    // 注意：从预览回到同文件的竞态里，可能暂时判断为 !sameDoc，此时若仍处于预览挂起态就不要结算。
     if (!sameDoc && currentDocPath) {
-        const oldDoc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
-        if (oldDoc) { flushDocStats(oldDoc); }
-        endSession();
+        if (suspendedByPreview || isAnyPreviewActive()) {
+            // 这是预览→编辑器切换过程中的竞态，先不动会话，稍后 sameDoc 分支会接手续会。
+            tsDebug('preview-return:skip-end-on-race', { currentDocPath, newPath });
+        } else {
+            const oldDoc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
+            if (oldDoc) { flushDocStats(oldDoc); }
+            endSession();
+        }
     }
 
     // 没有任何编辑器（且也没有预览活跃）：清空状态即可
@@ -770,7 +783,8 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     const ignored = isFileIgnoredForTimeStats(editor.document.uri.fsPath);
 
     // 从预览回到“同一个文件”：接续会话，不结束/重开
-    if (sameDoc && suspendedByPreview) {
+    // if (sameDoc && suspendedByPreview) {
+    if (sameDoc && suspendedByPreview && !isAnyPreviewActive()) {
         suspendedByPreview = false;
         if (!ignored && checkExitIdle('editor-change')) {
             resetIdleTimer(idleThresholdMs);
@@ -971,7 +985,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
     panel.webview.html = html;
 
     // 消息通道
-    const getStatsData = () => {
+    const getStatsData = async () => {
         console.log('TimeStats: API called to get stats data');
 
         // 准备数据：当前文件 + 跨文件（若可）
@@ -1017,13 +1031,29 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
         console.log('TimeStats: Global file tracking available:', !!globalFileTracking);
 
-        if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
-            try {
-                allStats = globalFileTracking.getAllWritingStats(); // 使用新的方法
+        // if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
+        //     try {
+        //         allStats = globalFileTracking.getAllWritingStats(); // 使用新的方法
+        //         globalCapable = true;
+        //         console.log('TimeStats: Successfully retrieved', allStats.length, 'file stats from global tracking');
+        //     } catch (error) {
+        //         console.log('TimeStats: Failed to get all writing stats:', error);
+        //     }
+        // }
+        // 优先走异步全局统计，避免阻塞 UI 线程
+        try {
+            const asyncStats = await getAllWritingStatsAsync();
+            if (Array.isArray(asyncStats)) {
+                allStats = asyncStats;
                 globalCapable = true;
-                console.log('TimeStats: Successfully retrieved', allStats.length, 'file stats from global tracking');
-            } catch (error) {
-                console.log('TimeStats: Failed to get all writing stats:', error);
+            }
+        } catch (error) {
+            // 异步接口不可用或失败时再尝试同步回退（兼容老版本）
+            if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
+                try {
+                    allStats = globalFileTracking.getAllWritingStats();
+                    globalCapable = true;
+                } catch {/* ignore */ }
             }
         }
 
@@ -1155,12 +1185,12 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
     // 监听来自webview的API调用
     const messageDisposable = panel.webview.onDidReceiveMessage(
-        message => {
+        async message => {
             console.log('TimeStats: Received message from webview:', message);
 
             if (message.type === 'get-stats-data') {
                 console.log('TimeStats: API request for stats data');
-                const data = getStatsData();
+                const data = await getStatsData();
                 // 总是返回数据，即使没有当前文档也显示全局统计
                 panel.webview.postMessage(data);
             }

@@ -69,12 +69,130 @@ export class PreviewManager {
     // 记录“刚刚是预览端拉我”的状态，用于 sendEditorTop 抑制回传
     private lastAppliedFromPreview = new Map<string, { ratio: number, ts: number }>();
 
+    // 记录每个文档上一次的 blocks 快照（做增量用）
+    private lastBlocks = new Map<string, Block[]>();
+    // （可选）记录预览端当前模式，来自 previewScroll；暂时不分支，供调试
+    private previewMode = new Map<string, 'scroll' | 'paged'>();
+
+    private makeHtmlFromBlocks(blocks: Block[]): string {
+        return blocks.map(b => `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`).join('\n');
+    }
+    private postWholeHtml(panel: vscode.WebviewPanel, doc: vscode.TextDocument, htmlBody: string) {
+        panel.webview.postMessage({ type: 'docRender', sameDoc: true, html: htmlBody });
+    }
+
+    // 计算每个 block 的 [start, end]（end 为“下一块起始行-1”，最后一块用一个很大的数）
+    private computeBlockRanges(blocks: Block[]) {
+        const ranges = blocks.map((b, i) => ({
+            start: b.srcLine,
+            end: (i + 1 < blocks.length) ? (blocks[i + 1].srcLine - 1) : Number.MAX_SAFE_INTEGER
+        }));
+        return ranges;
+    }
+
+    private applyIncrementalUpdate(
+        panel: vscode.WebviewPanel,
+        doc: vscode.TextDocument,
+        changes: { start: number; end: number; text: string }[]
+    ) {
+        const key = doc.uri.toString();
+        const oldBlocks = this.lastBlocks.get(key);
+        if (!oldBlocks || changes.length === 0) {
+            const { blocks: newBlocks } = this.renderToPlainText(doc);
+            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks));
+            this.lastBlocks.set(key, newBlocks);
+            return;
+        }
+
+        // 合并修改区间（包含插入换行的影响）
+        let fromLine = Number.POSITIVE_INFINITY;
+        let toLine = -1;
+        for (const c of changes) {
+            const inserted = c.text ? (c.text.split('\n').length - 1) : 0;
+            fromLine = Math.min(fromLine, c.start);
+            toLine = Math.max(toLine, c.end + inserted);
+        }
+        if (!isFinite(fromLine)) { return; }
+
+        // 新 blocks
+        const { blocks: newBlocks } = this.renderToPlainText(doc);
+
+        // 找到“受影响区间”在老/新块数组中的覆盖索引
+        const oldRanges = this.computeBlockRanges(oldBlocks);
+        const newRanges = this.computeBlockRanges(newBlocks);
+
+        const findCoverStart = (ranges: { start: number, end: number }[]) =>
+            Math.max(0, ranges.findIndex(r => r.end >= fromLine));
+        const findCoverEnd = (ranges: { start: number, end: number }[]) => {
+            let idx = -1;
+            for (let i = 0; i < ranges.length; i++) { if (ranges[i].start <= toLine) { idx = i; } else { break; } }
+            return Math.max(idx, 0);
+        };
+
+        const oldStartIdx = findCoverStart(oldRanges);
+        const oldEndIdx = findCoverEnd(oldRanges);
+        const newStartIdx = findCoverStart(newRanges);
+        const newEndIdx = findCoverEnd(newRanges);
+
+        // 取更稳的替换边界（两边并齐）
+        const patchFrom = Math.min(
+            fromLine,
+            oldRanges[oldStartIdx]?.start ?? fromLine,
+            newRanges[newStartIdx]?.start ?? fromLine
+        );
+        const patchTo = Math.max(
+            toLine,
+            oldRanges[oldEndIdx]?.end ?? toLine,
+            newRanges[newEndIdx]?.end ?? toLine
+        );
+
+        // 生成新片段 HTML
+        const slice = newBlocks.slice(newStartIdx, newEndIdx + 1);
+        const html = this.makeHtmlFromBlocks(slice);
+
+        // 若替换范围过大（例如全文件），直接回退整页渲染以免频繁多次 DOM 改动
+        const totalLines = doc.lineCount;
+        const span = patchTo - patchFrom + 1;
+        if (span > Math.max(2000, totalLines * 0.6)) {
+            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks));
+            this.lastBlocks.set(key, newBlocks);
+            return;
+        }
+
+        // 派发增量补丁（滚动 & 分页都走 docPatch；分页端会按“基于页”的策略处理）
+        try {
+            panel.webview.postMessage({
+                type: 'docPatch',
+                fromLine: Math.max(0, patchFrom),
+                toLine: Math.max(patchFrom, patchTo),
+                html
+            });
+            // 更新快照
+            this.lastBlocks.set(key, newBlocks);
+        } catch {
+            // 出错兜底：整页刷新一次
+            this.updatePanel(panel, doc);
+            this.lastBlocks.set(key, newBlocks);
+        }
+    }
+
+
+
     constructor(private readonly context: vscode.ExtensionContext) {
         this.context.subscriptions.push(
             vscode.workspace.onDidChangeTextDocument(ev => {
-                const panel = this.panels.get(ev.document.uri.toString());
-                if (panel) { this.debounce(() => this.updatePanel(panel!, ev.document), 80)(); }
+                const key = ev.document.uri.toString();
+                const panel = this.panels.get(key);
+                if (!panel) { return; }
+                // 把需要的信息提前拍扁（避免闭包里 VSCode 对象被延迟访问）
+                const changes = ev.contentChanges.map(c => ({
+                    start: c.range.start.line,
+                    end: c.range.end.line,
+                    text: c.text
+                }));
+                this.debounce(() => this.applyIncrementalUpdate(panel, ev.document, changes), 80)();
             }),
+
             vscode.window.onDidChangeTextEditorVisibleRanges(ev => {
                 if (!this.panels.has(ev.textEditor.document.uri.toString())) { return; }
                 this.throttle(() => this.sendEditorTop(ev.textEditor.document), 100)();
@@ -98,6 +216,7 @@ export class PreviewManager {
     /** 把一个已存在的 panel 绑定到指定 doc（统一监听与渲染） */
     private attachPanelToDoc(panel: vscode.WebviewPanel, doc: vscode.TextDocument) {
         const key = doc.uri.toString();
+
 
         // 反序列化后需要明确设置 webview 选项（尤其 localResourceRoots）
         // ✅ 只设置 WebviewOptions 允许的字段
@@ -139,8 +258,9 @@ export class PreviewManager {
 
         // 标题与内容
         panel.title = `Preview: ${path.basename(doc.fileName)}`;
-        const { htmlBody } = this.render(doc);
+        const { htmlBody, blocks } = this.render(doc);
         panel.webview.html = this.wrapHtml(panel, htmlBody);
+        this.lastBlocks.set(key, blocks);
 
         // 如果此刻就是激活的 webview，把有效文档上报出去
         try {
@@ -394,6 +514,11 @@ export class PreviewManager {
             this.sendFontFamilies(doc); // 异步列举并回发 { type:'fontFamilies', list:[...] }
             return;
         }
+        if (msg?.type === 'previewScroll' && typeof msg.ratio === 'number') {
+            this.previewMode.set(key, msg.mode === 'paged' ? 'paged' : 'scroll');
+            // …后面原有逻辑不变
+        }
+
 
         // Webview 在启动时可能会请求当前编辑器的 fontFamily，以便立即应用“跟随 VS Code”模式
         if (msg?.type === 'requestVscodeFontFamily') {
@@ -528,23 +653,25 @@ export class PreviewManager {
 
     private updatePanel(panel: vscode.WebviewPanel, doc: vscode.TextDocument) {
         panel.title = `Preview: ${path.basename(doc.fileName)}`;
-        const { htmlBody } = this.render(doc);
+        const { htmlBody, blocks } = this.render(doc);
         panel.webview.html = this.wrapHtml(panel, htmlBody);
+        this.lastBlocks.set(doc.uri.toString(), blocks);
     }
 
-    private render(doc: vscode.TextDocument): { htmlBody: string } {
+
+    private render(doc: vscode.TextDocument): { htmlBody: string, blocks: Block[] } {
         if (doc.languageId === 'markdown' || /\.md(i|own)?$/i.test(doc.fileName)) {
             const { blocks } = this.renderToPlainText(doc);
             const htmlBody = blocks.map(b => `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`).join('\n');
-            return { htmlBody };
+            return { htmlBody, blocks };
         } else {
             const text = doc.getText();
-            // For plaintext, preserve paragraph/blank-line blocks via txtToPlainText
             const { blocks } = txtToPlainText(text);
             const htmlBody = blocks.map(b => `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`).join('\n');
-            return { htmlBody };
+            return { htmlBody, blocks };
         }
     }
+
 
     private renderToPlainText(doc: vscode.TextDocument): { text: string; blocks: Block[] } {
         if (doc.languageId === 'markdown' || /\.md(i|own)?$/i.test(doc.fileName)) {

@@ -14,6 +14,7 @@
 		"ahocorasick",
 		"andreafrederica",
 		"autogrow",
+		"BEBOM",
 		"BLOCKLIST",
 		"Cand",
 		"chardet",
@@ -46,11 +47,13 @@
 		"intlify",
 		"jieba",
 		"jschardet",
+		"LEBOM",
 		"lerp",
 		"levelname",
 		"Maio",
 		"Menlo",
 		"Millis",
+		"mmss",
 		"ovsx",
 		"pagebar",
 		"paintcan",
@@ -104,5 +107,6 @@
 		"markdown": true,
 		"plaintext": true
 	},
-	"AndreaNovelHelper.workspaceDisabled": true
+	"AndreaNovelHelper.workspaceDisabled": true,
+	"editor.mouseWheelZoom": true
 }

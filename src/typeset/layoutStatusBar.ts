@@ -8,6 +8,7 @@ export function registerLayoutStatusBar(context: vscode.ExtensionContext) {
 
     const update = () => {
         const cfg = vscode.workspace.getConfiguration();
+        const compact = cfg.get<boolean>('andrea.typeset.statusBar.compact', false);
         const on = cfg.get<boolean>('andrea.typeset.indentFirstTwoSpaces', true);
         const blank = cfg.get<number>('andrea.typeset.blankLinesBetweenParas', 1) ?? 1;
         const trim = cfg.get<boolean>('andrea.typeset.trimTrailingSpaces', true);
@@ -23,7 +24,9 @@ export function registerLayoutStatusBar(context: vscode.ExtensionContext) {
             indentDesc = insertSpaces ? `${tabSize}` : 'Tab';
         }
 
-        item.text = `$(edit) 版式  缩进:${indentDesc}  首行:${on ? '开' : '关'}  段距:${blank}  去尾:${trim ? '✓' : '×'}  补齐:${ap ? '开' : '关'}  跳出:${sx ? '开' : '关'}  切段:${se ? '开' : '关'}`;
+        item.text = compact
+            ? `$(edit) 版式和快速设置`
+            : `$(edit) 版式  缩进:${indentDesc}  首行:${on ? '开' : '关'}  段距:${blank}  去尾:${trim ? '✓' : '×'}  补齐:${ap ? '开' : '关'}  跳出:${sx ? '开' : '关'}  切段:${se ? '开' : '关'}`;
         item.tooltip = '点击打开“小说版式：快速设置”';
 
         const visible = vscode.window.activeTextEditor && isSupportedDoc(vscode.window.activeTextEditor.document);
@@ -40,6 +43,7 @@ export function registerLayoutStatusBar(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (
                 e.affectsConfiguration('andrea.typeset') ||
+                e.affectsConfiguration('andrea.typeset.statusBar.compact') ||
                 e.affectsConfiguration('editor.insertSpaces') ||
                 e.affectsConfiguration('editor.tabSize') ||
                 e.affectsConfiguration('AndreaNovelHelper.supportedFileTypes') ||

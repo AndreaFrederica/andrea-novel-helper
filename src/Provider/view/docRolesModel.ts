@@ -1,16 +1,39 @@
 import * as vscode from 'vscode';
-import { ahoCorasickManager } from '../../utils/AhoCorasick/ahoCorasickManager';
-import { isHugeFile, getSupportedLanguages } from '../../utils/utils';
-import { getRoleMatches } from '../../context/roleAsyncShared';
+import { isHugeFile, getSupportedLanguages, getSupportedExtensions } from '../../utils/utils';
 import { getEffectiveDocumentSync } from '../../context/previewRedirect';
 import { getDocumentRoleOccurrences } from '../../context/documentRolesCache';
 import { onDidUpdateDecorations } from '../../events/updateDecorations';
 import { Role } from '../../extension';
 
+
 const UNGROUPED = '(未分组)';
 
 export interface RoleHierarchyTypeGroup { type: string; roles: Role[]; }
 export interface RoleHierarchyAffiliationGroup { affiliation: string; types: RoleHierarchyTypeGroup[]; }
+
+// 允许扫描的 scheme
+const ALLOWED_SCHEMES = new Set(['file', 'untitled', 'andrea-outline']);
+
+// 统一取扩展名（优先 fileName，退回 uri.path）
+function getDocExtension(doc: vscode.TextDocument): string {
+    const s = (doc.fileName || doc.uri.path || '').toLowerCase();
+    const m = s.match(/\.([a-z0-9_\-]+)$/);
+    return m ? m[1] : '';
+}
+
+// 与 Hover 一致：仅在允许的 scheme 且语言/扩展受支持时参与构建
+function isDocSupportedForRoles(doc: vscode.TextDocument): boolean {
+    if (!ALLOWED_SCHEMES.has(doc.uri.scheme)) {return false;}
+
+    const langs = getSupportedLanguages();
+    if (langs.includes(doc.languageId)) {return true;}
+
+    const exts = new Set(getSupportedExtensions().map(e => e.toLowerCase()));
+    const ext = getDocExtension(doc);
+    return exts.has(ext);
+}
+
+
 
 class DocumentRolesModel {
     private static _instance: DocumentRolesModel | undefined;
@@ -86,6 +109,7 @@ class DocumentRolesModel {
     private buildFromDocument(doc: vscode.TextDocument): RoleHierarchyAffiliationGroup[] {
         // 使用用户设置的 supportedFileTypes，而不是硬编码 markdown/plaintext
         const supported = getSupportedLanguages();
+        if (!isDocSupportedForRoles(doc)) {return [];}
         if (!supported.includes(doc.languageId)) {
             // 兜底：某些 JSON5 插件语言 id 可能不是 json5，但扩展名为 .json5，且用户已允许 json5
             const lower = doc.fileName.toLowerCase();

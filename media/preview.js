@@ -1,6 +1,8 @@
 // media/preview.js
 'use strict';
 
+//TODO 分页模式预览的动态刷新有问题
+
 /* ================== 调试配置 ================== */
 var DEBUG_TTS = true;           // 控制是否在 Webview 控制台输出日志
 var DEBUG_POST_TO_EXT = false;  // 如需把日志发回扩展侧，设为 true
@@ -891,9 +893,9 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             // 扩展端在反序列化后请求恢复滚动位置（任选一种策略）
             if (Number.isInteger(msg.topLine)) {
                 // 需要你已有的滚动函数；没有可自行实现
-                if (typeof scrollToLine === 'function') {scrollToLine(msg.topLine);}
+                if (typeof scrollToLine === 'function') { scrollToLine(msg.topLine); }
             } else if (typeof msg.ratio === 'number') {
-                if (typeof scrollToRatio === 'function') {scrollToRatio(msg.ratio);}
+                if (typeof scrollToRatio === 'function') { scrollToRatio(msg.ratio); }
             }
         }
         // [/PREVIEW_PERSIST:B2]
@@ -1158,6 +1160,34 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             return groups;
         }
 
+        // ✅ 从当前 pages 扁平化出最新 HTML，避免重建时“丢改动”
+        function captureFlatHTML() {
+            if (!active) { return ''; }
+            if (pages && pages.length) {
+                return pages.map(function (p) { return p.innerHTML; }).join('');
+            }
+            // 安全兜底：若 pages 还没建立，用容器现状
+            return container ? container.innerHTML : '';
+        }
+
+        // ✅ 取一个“可视锚点”的源代码行号，用于 rebuild 后定位原页
+        function currentAnchorLine() {
+            try {
+                if (window.__anhVisibleRange) {
+                    var vr = window.__anhVisibleRange();
+                    if (vr && Number.isInteger(vr.top) && Number.isInteger(vr.bottom)) {
+                        return Math.round((vr.top + vr.bottom) / 2);
+                    }
+                }
+                // 退化：用 index 的中点
+                if (typeof getVisibleLineRange === 'function') {
+                    var r = getVisibleLineRange();
+                    return Math.round(((r.top || 0) + (r.bottom || 0)) / 2);
+                }
+            } catch (_) { }
+            return null;
+        }
+
         function buildPages() {
             container.innerHTML = originalHTML;
             pages = [];
@@ -1219,7 +1249,28 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             active = false; pages = []; current = 0; originalHTML = '';
             if (typeof rebuildIndexNow === 'function') { rebuildIndexNow(); }
         }
-        function rebuild() { if (!active) { return; } buildPages(); applyPage(); }
+        function rebuild() {
+            if (!active) { return; }
+
+            // ✅ (1) 记录当前锚点行号
+            var anchor = currentAnchorLine();
+
+            // ✅ (2) 用当前页内容回填 originalHTML，避免丢失增量
+            try { originalHTML = captureFlatHTML(); } catch (_) { }
+
+            // 重新分组建页
+            buildPages();
+
+            // ✅ (3) 带着锚点恢复到对应页（找不到则保持 current）
+            if (anchor !== null && typeof pageOfLine === 'function') {
+                var pg = pageOfLine(anchor);
+                if (pg >= 0) { current = Math.min(Math.max(pg, 0), Math.max(0, pages.length - 1)); }
+            } else {
+                current = Math.min(current, Math.max(0, pages.length - 1));
+            }
+
+            applyPage();
+        }
         function goto(i) { if (!active) { return; } if (i < 0 || i >= pages.length) { return; } current = i; applyPage(); }
         function next() { goto(current + 1); }
         function prev() { goto(current - 1); }
@@ -1231,12 +1282,221 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             return -1;
         }
 
+        // === 新增：内部工具 ===
+        function maxPageHeight() {
+            var mh = cfg.pageHeight > 0 ? cfg.pageHeight : pagerAutoHeight();
+            return (mh < 120) ? pagerAutoHeight() : mh;
+        }
+        function renumberPages() {
+            for (var i = 0; i < pages.length; i++) {
+                pages[i].setAttribute('data-page', String(i));
+            }
+        }
+        function refreshPageStarts(from) {
+            from = Math.max(0, from | 0);
+            // 保险：全部重算（页面少，代价很小）
+            pageStarts = pages.map(function (p) {
+                var first = p.querySelector('[data-line]');
+                return first ? Number(first.getAttribute('data-line')) : Number.MAX_SAFE_INTEGER;
+            });
+            for (var i = 1; i < pageStarts.length; i++) {
+                if (!(pageStarts[i] > pageStarts[i - 1])) {
+                    pageStarts[i] = pageStarts[i - 1] + 1;
+                }
+            }
+        }
+
+        /**
+         * 用新 HTML 覆盖第 i 页的内容。
+         * options.allowSplit=true 时，如果该页为最后一页且超高，会把溢出拆分成新页追加。
+         * 返回值：
+         *   { ok:true, split:false }              —— 正常替换
+         *   { ok:false, reason:'overflow' }       —— 超出页高（非末页），建议全量 rebuild
+         *   { ok:true, split:true, added:n }      —— 末页拆分并追加了 n 个新页
+         */
+        function updatePageHTML(i, html, options) {
+            options = options || {};
+            if (!active) { return { ok: false, reason: 'inactive' }; }
+            if (i < 0 || i >= pages.length) { return { ok: false, reason: 'range' }; }
+
+            var wrap = pages[i];
+            var wasCurrent = (i === current);
+            var maxH = maxPageHeight();
+
+            // 覆盖页面内容
+            var tpl = document.createElement('template');
+            tpl.innerHTML = html || '';
+            // 只引入有用块（防御）：[data-line] 或 <pre>
+            var frag = document.createDocumentFragment();
+            var kids = tpl.content.childNodes;
+            for (var k = 0; k < kids.length; k++) {
+                var node = kids[k];
+                // 允许任何元素，但建议是预览结构；如需更严，可筛选 hasAttribute('data-line') || tagName==='PRE'
+                frag.appendChild(node.cloneNode(true));
+            }
+            // 先清空再塞入
+            wrap.innerHTML = '';
+            wrap.appendChild(frag);
+
+            // 高度检查
+            if (wrap.offsetHeight <= maxH + 0.5) {
+                refreshPageStarts(i);
+                if (typeof rebuildIndexNow === 'function') { rebuildIndexNow(); }
+                if (wasCurrent) { applyPage(); } // 保持当前页展示
+                return { ok: true, split: false };
+            }
+
+            // 超出页高
+            var isLast = (i === pages.length - 1);
+            if (!isLast || !options.allowSplit) {
+                return { ok: false, reason: 'overflow' };
+            }
+
+            // —— 末页允许拆分：把末尾节点往后搬，直到该页 <= maxH —— //
+            var added = 0;
+            var cur = wrap;
+            while (cur.offsetHeight > maxH + 0.5) {
+                var newWrap = document.createElement('div');
+                newWrap.className = 'anh-page';
+                newWrap.style.display = 'none';
+                // 从当前页尾部往后搬节点，保证顺序
+                var moved = [];
+                var guard = 0;
+                while (cur.lastChild && cur.offsetHeight > maxH + 0.5) {
+                    moved.unshift(cur.lastChild);
+                    cur.removeChild(cur.lastChild);
+                    if (++guard > 5000) { break; } // 防御极端
+                }
+                // 若没有搬动（单个节点比一页还高），放弃增量，交给全量重排
+                if (!moved.length) {
+                    return { ok: false, reason: 'single-node-too-tall' };
+                }
+                moved.forEach(function (n) { newWrap.appendChild(n); });
+
+                // 插入到 DOM 与数组中
+                if (cur.nextSibling) { container.insertBefore(newWrap, cur.nextSibling); }
+                else { container.appendChild(newWrap); }
+                pages.splice(i + 1, 0, newWrap);
+                added++;
+
+                // 如果新页本身也超高，继续在同一页上切
+                if (newWrap.offsetHeight > maxH + 0.5) {
+                    cur = newWrap;  // 继续切分新页
+                    i = pages.indexOf(cur);
+                    continue;
+                } else {
+                    // 切下一页（如果原末页仍然超高还会再循环）
+                    cur = wrap;
+                }
+            }
+
+            // 更新元信息
+            renumberPages();
+            refreshPageStarts(i);
+            if (typeof rebuildIndexNow === 'function') { rebuildIndexNow(); }
+
+            // 仍让当前页可见（如果原来就在末页）
+            if (wasCurrent) { applyPage(); }
+
+            return { ok: true, split: true, added: added };
+        }
+
+
         window.addEventListener('resize', throttle(function () { if (active) { rebuild(); } }, 250));
-        return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement, pageOfLine };
+        return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement, pageOfLine, updatePageHTML };
+
     })();
 
     // 将 DomPager 暴露到全局，供其他独立作用域（如 initScrollSync）访问
     try { window.DomPager = DomPager; } catch (_) { }
+
+    /* ======= 分页模式：按页增量渲染入口 ======= */
+    (function enablePagedIncrementalUpdate() {
+        // 协议：
+        //   { type:'docRenderPage', pageIndex:Number, html:String }
+        // 行为：
+        //   - 如果不是最后一页：只替换该页；若超高 -> DomPager.rebuild()
+        //   - 如果是最后一页：替换 + 溢出拆分为新页；单节点超页 -> DomPager.rebuild()
+        function isPaged() {
+            return document.body.classList.contains('reader-paged');
+        }
+
+        // ✅ 用本函数拼出“该页的新完整 HTML = 左侧保留 + 补丁 + 右侧保留”
+        function buildPatchedPageHTML(pageIndex, fromLine, toLine, patchHTML) {
+            var pageEl = document.querySelector('.anh-page[data-page="' + pageIndex + '"]');
+            if (!pageEl) { return null; }
+            var nodes = Array.from(pageEl.querySelectorAll('[data-line]'));
+            var left = nodes.filter(function (n) { return (+n.getAttribute('data-line')) < fromLine; });
+            var right = nodes.filter(function (n) { return (+n.getAttribute('data-line')) > toLine; });
+
+            var tpl = document.createElement('template');
+            tpl.innerHTML = String(patchHTML || '');
+            var fragBlocks = Array.from(tpl.content.querySelectorAll('[data-line],pre'));
+
+            var box = document.createElement('div');
+            left.forEach(function (n) { box.appendChild(n.cloneNode(true)); });
+            fragBlocks.forEach(function (n) { box.appendChild(n.cloneNode(true)); });
+            right.forEach(function (n) { box.appendChild(n.cloneNode(true)); });
+
+            return box.innerHTML;
+        }
+
+        function bumpUi() {
+            // ⛔️ 别再触发 resize 了，会导致 DomPager.rebuild()
+            // window.dispatchEvent(new Event('resize'));
+            try { updatePaging(); } catch (_) { }
+        }
+
+        //   function bumpUi() {
+        //       // 触发一次 UI 进度条刷新（你的 updatePaging 绑定在 resize/scroll 上）
+        //       try { window.dispatchEvent(new Event('resize')); } catch (_) { }
+        //   }
+
+        window.addEventListener('message', function (ev) {
+            var msg = ev && ev.data;
+            if (!msg) { return; }
+            if (!isPaged() || !window.DomPager || !DomPager.isActive || !DomPager.isActive()) { return; }
+
+            // ① 分页模式增量补丁：docPatch（注意：不要被 docRenderPage 的判断拦住）
+            if (msg.type === 'docPatch'
+                && typeof msg.fromLine === 'number'
+                && typeof msg.toLine === 'number'
+                && typeof msg.html === 'string') {
+
+                var p1 = DomPager.pageOfLine(msg.fromLine | 0);
+                var p2 = DomPager.pageOfLine(msg.toLine | 0);
+
+                if (p1 < 0 || p2 < 0) { DomPager.rebuild(); bumpUi(); return; }
+
+                // 仅处理补丁完全落在同一页的高频场景；跨页直接全量
+                if (p1 !== p2) { DomPager.rebuild(); bumpUi(); return; }
+
+                var pageIdx = p1;
+                var newPageHTML = buildPatchedPageHTML(pageIdx, msg.fromLine | 0, msg.toLine | 0, msg.html);
+                if (newPageHTML === null) { DomPager.rebuild(); bumpUi(); return; }
+
+                var isLast = (pageIdx === DomPager.totalPages() - 1);
+                var rPatch = DomPager.updatePageHTML(pageIdx, newPageHTML, { allowSplit: !!isLast });
+                if (!rPatch.ok) { DomPager.rebuild(); }
+                bumpUi();
+                return;
+            }
+
+            // ② 单页重绘：docRenderPage
+            if (msg.type === 'docRenderPage') {
+                var idx = (msg.pageIndex | 0);
+                var html = String(msg.html || '');
+                var last = (idx === DomPager.totalPages() - 1);
+
+                var r = DomPager.updatePageHTML(idx, html, { allowSplit: !!last });
+                if (!r.ok) { DomPager.rebuild(); }
+                bumpUi();
+                return;
+            }
+        });
+
+    })();
+
 
     // 在 DomPager 定义完成后、TTS联动代码附近追加（但不在 updatePaging 里）
     (function wireDomPagerOutboundSync() {
@@ -1616,21 +1876,36 @@ function showConfirm(msg) {
             var ratio = (typeof msg.ratio === 'number') ? Math.min(1, Math.max(0, msg.ratio)) : 0;
             lastEditorRatio = ratio;
 
-            if (isPaged()) {
-                if (window.DomPager && window.DomPager.isActive && window.DomPager.isActive()) {
-                    var total = Math.max(1, window.DomPager.totalPages());
-                    var target = Math.min(total - 1, Math.max(0, Math.round(ratio * (total - 1))));
-                    withLock(350, function () {
-                        window.DomPager.goto(target);
-                        try {
-                            var info = document.getElementById('rp-info');
-                            var bar = document.getElementById('rp-progress');
-                            if (info) { info.textContent = (window.DomPager.currentPage() + 1) + ' / ' + total; }
-                            if (bar) { bar.style.width = (total > 0 ? ((window.DomPager.currentPage() + 1) / total * 100) : 0) + '%'; }
-                        } catch (_) { }
-                    });
+            if (isPaged() && window.DomPager && window.DomPager.isActive && window.DomPager.isActive()) {
+                var total = Math.max(1, window.DomPager.totalPages());
+                var targetIdx = null;
+
+                // 优先用 ratio；没有就用 topLine/totalLines 推出 ratio；都没有则忽略
+                if (typeof msg.ratio === 'number') {
+                    var r = Math.min(1, Math.max(0, msg.ratio));
+                    targetIdx = Math.min(total - 1, Math.max(0, Math.round(r * (total - 1))));
+                    lastEditorRatio = r;
+                } else if (Number.isInteger(msg.topLine) && Number.isInteger(msg.totalLines) && msg.totalLines > 1) {
+                    var r2 = Math.min(1, Math.max(0, msg.topLine / (msg.totalLines - 1)));
+                    targetIdx = Math.min(total - 1, Math.max(0, Math.round(r2 * (total - 1))));
+                    lastEditorRatio = r2;
+                } else {
+                    // 关键信息缺失：不要默认 0（否则会跳第一页）
+                    return;
                 }
-            } else {
+
+                withLock(350, function () {
+                    window.DomPager.goto(targetIdx);
+                    try {
+                        var info = document.getElementById('rp-info');
+                        var bar = document.getElementById('rp-progress');
+                        if (info) { info.textContent = (window.DomPager.currentPage() + 1) + ' / ' + total; }
+                        if (bar) { bar.style.width = (total > 0 ? ((window.DomPager.currentPage() + 1) / total * 100) : 0) + '%'; }
+                    } catch (_) { }
+                });
+                return;
+            }
+            else {
                 // 滚动模式：优先使用来自编辑器的 topLine 来定位；否则退回比例
                 if (typeof msg.editorScrollHeight === 'number' && msg.editorScrollHeight > 0) {
                     adjustSpacerToTotalHeight(msg.editorScrollHeight);
@@ -1669,4 +1944,238 @@ function showConfirm(msg) {
 
     // —— 暴露给外部（可选） —— 
     window.__anhSync = { adjustSpacerToTotalHeight: adjustSpacerToTotalHeight };
+})();
+
+
+/* ================== 增量 DOM 更新（仅滚动模式） ================== */
+(function enableIncrementalDomForScrollMode() {
+    var CONTAINER_ID = 'reader-content';
+    var container = null;
+
+    function getContainer() {
+        return container || (container = document.getElementById(CONTAINER_ID));
+    }
+    function isPagedMode() { return document.body.classList.contains('reader-paged'); }
+
+    // 可视区锚点（用中线行号 + 元素顶部偏移保持视口）
+    function captureAnchor() {
+        var vr = (window.__anhVisibleRange && window.__anhVisibleRange()) || getVisibleLineRange();
+        var anchorLine = Math.round(((vr.top || 0) + (vr.bottom || 0)) / 2);
+        var el = findNodeAtOrBefore(anchorLine);
+        var top = el ? el.getBoundingClientRect().top : 0;
+        return { line: anchorLine, top: top };
+    }
+    function restoreAnchor(anchor) {
+        if (!anchor) { return; }
+        var el = findNodeAtOrBefore(anchor.line);
+        if (!el) { return; }
+        var newTop = el.getBoundingClientRect().top;
+        var dy = newTop - anchor.top;
+        if (dy) { window.scrollBy({ top: dy, behavior: 'auto' }); }
+    }
+    function findNodeAtOrBefore(line) {
+        var root = getContainer();
+        if (!root) { return null; }
+        var nodes = root.querySelectorAll('[data-line]');
+        var best = null, bestVal = -Infinity;
+        for (var i = 0; i < nodes.length; i++) {
+            var l = +(nodes[i].getAttribute('data-line') || 0);
+            if (l <= line && l > bestVal) { bestVal = l; best = nodes[i]; }
+        }
+        return best || nodes[0] || null;
+    }
+
+    // 解析整块 HTML 到离屏 fragment
+    function parseHTML(html) {
+        var t = document.createElement('template');
+        t.innerHTML = html || '';
+        return t.content;
+    }
+
+    // 收集行号序列
+    function collectLines(root) {
+        var arr = [], nodes = root.querySelectorAll('[data-line]');
+        for (var i = 0; i < nodes.length; i++) { arr.push(+nodes[i].getAttribute('data-line')); }
+        return { nodes: nodes, lines: arr };
+    }
+
+    // —— 整块 HTML 的“前后缀”粗粒度 diff，替换中间变更区间 —— //
+    function applyIncrementalHTML(newHTML) {
+        if (isPagedMode()) { hardSwap(newHTML); return; } // 仅滚动模式
+
+        var root = getContainer();
+        if (!root) { return; }
+
+        var anchor = captureAnchor();
+
+        var newFrag = parseHTML(newHTML);
+        var oldInfo = collectLines(root);
+        var newInfo = collectLines(newFrag);
+
+        if (!oldInfo.lines.length || !newInfo.lines.length) { hardSwap(newHTML, anchor); return; }
+
+        // 前缀
+        var p = 0;
+        while (p < oldInfo.lines.length && p < newInfo.lines.length && oldInfo.lines[p] === newInfo.lines[p]) { p++; }
+
+        // 后缀
+        var s = 0;
+        while (s < (oldInfo.lines.length - p) && s < (newInfo.lines.length - p) &&
+            oldInfo.lines[oldInfo.lines.length - 1 - s] === newInfo.lines[newInfo.lines.length - 1 - s]) { s++; }
+
+        // 安全阈值：前后缀都太短或重叠不稳时直接全量替换
+        var minKeep = 3; // 至少保留 3 个 data-line 作为稳定锚
+        if ((p < minKeep && s < minKeep) || (p + s >= Math.min(oldInfo.lines.length, newInfo.lines.length))) {
+            hardSwap(newHTML, anchor);
+            return;
+        }
+
+        // 计算需替换的中段
+        var oldStart = p;
+        var oldEndEx = oldInfo.lines.length - s;
+        var newStart = p;
+        var newEndEx = newInfo.lines.length - s;
+
+        // 构造中段新片段
+        var midFrag = document.createDocumentFragment();
+        for (var i = newStart; i < newEndEx; i++) {
+            midFrag.appendChild(newInfo.nodes[i].cloneNode(true));
+        }
+
+        // 找到“后缀首节点”，用于插入位置
+        var beforeNode = (oldEndEx < oldInfo.nodes.length) ? oldInfo.nodes[oldEndEx] : null;
+
+        // 删除旧中段
+        for (var j = oldStart; j < oldEndEx; j++) {
+            var el = oldInfo.nodes[j];
+            if (el && el.parentNode) { el.parentNode.removeChild(el); }
+        }
+
+        // 插入新中段
+        if (beforeNode && beforeNode.parentNode) { beforeNode.parentNode.insertBefore(midFrag, beforeNode); }
+        else { root.appendChild(midFrag); }
+
+        // 重建索引并还原视口
+        rebuildIndexNow();
+        restoreAnchor(anchor);
+    }
+
+    // —— 基于行号的 Hunks（扩展侧直接发补丁） —— //
+    // hunk: { start: <含>, end: <不含>, html: "<...>" }  都用 data-line 行号
+    function applyHunks(hunks) {
+        if (isPagedMode()) { return; } // 仅滚动模式
+        var root = getContainer();
+        if (!root || !Array.isArray(hunks) || !hunks.length) { return; }
+
+        // 锚点
+        var anchor = captureAnchor();
+
+        // 为避免相互干扰，按 start 逆序应用
+        hunks.sort(function (a, b) { return b.start - a.start; });
+
+        hunks.forEach(function (h) {
+            var start = +h.start | 0;
+            var endEx = +h.end | 0;
+            if (!(endEx > start)) { return; }
+
+            // 找到 [start, endEx) 区间内的节点
+            var nodes = root.querySelectorAll('[data-line]');
+            var toRemove = [];
+            for (var i = 0; i < nodes.length; i++) {
+                var ln = +(nodes[i].getAttribute('data-line') || 0);
+                if (ln >= start && ln < endEx) { toRemove.push(nodes[i]); }
+            }
+
+            // 插入位置：endEx 的第一个节点（如果存在），否则追加
+            var before = null;
+            for (var j = 0; j < nodes.length; j++) {
+                var ln2 = +(nodes[j].getAttribute('data-line') || 0);
+                if (ln2 >= endEx) { before = nodes[j]; break; }
+            }
+
+            // 删除
+            for (var k = 0; k < toRemove.length; k++) {
+                if (toRemove[k].parentNode) { toRemove[k].parentNode.removeChild(toRemove[k]); }
+            }
+
+            // 插入新片段
+            if (h.html && typeof h.html === 'string') {
+                var frag = parseHTML(h.html);
+                // 只插入其中的 [data-line] 片段（防御）
+                var inject = document.createDocumentFragment();
+                var nn = frag.querySelectorAll('[data-line]');
+                if (nn.length) {
+                    for (var z = 0; z < nn.length; z++) { inject.appendChild(nn[z].cloneNode(true)); }
+                    if (before && before.parentNode) { before.parentNode.insertBefore(inject, before); }
+                    else { root.appendChild(inject); }
+                }
+            }
+        });
+
+        rebuildIndexNow();
+        restoreAnchor(anchor);
+    }
+
+    // —— 全量替换（兜底），保持滚动比例或锚点 —— //
+    function hardSwap(html, anchor) {
+        var root = getContainer();
+        if (!root) { return; }
+        var ratio = Math.min(1, Math.max(0,
+            (document.documentElement.scrollHeight > window.innerHeight)
+                ? (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight))
+                : 0));
+
+        root.innerHTML = html || '';
+        rebuildIndexNow();
+
+        if (anchor) {
+            restoreAnchor(anchor);
+        } else {
+            var max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+            window.scrollTo({ top: ratio * max, behavior: 'auto' });
+        }
+    }
+
+    // —— 合帧调度，合并连续更新 —— //
+    var _pending = null, _scheduled = false;
+    function scheduleWholeHtml(html) {
+        _pending = { type: 'whole', html: html };
+        if (_scheduled) { return; }
+        _scheduled = true;
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            var task = _pending; _pending = null; _scheduled = false;
+            if (!task) { return; }
+            applyIncrementalHTML(task.html);
+        }));
+    }
+    function scheduleHunks(hunks) {
+        _pending = { type: 'hunks', hunks: hunks };
+        if (_scheduled) { return; }
+        _scheduled = true;
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            var task = _pending; _pending = null; _scheduled = false;
+            if (!task) { return; }
+            applyHunks(task.hunks);
+        }));
+    }
+
+    // —— 消息接入 —— //
+    window.addEventListener('message', function (ev) {
+        var msg = ev && ev.data;
+        if (!msg) { return; }
+
+        // 扩展端若能给出行补丁，优先用它（零闪烁）
+        if (msg.type === 'docPatch' && Array.isArray(msg.hunks)) {
+            if (!isPagedMode()) { scheduleHunks(msg.hunks); }
+            return;
+        }
+
+        // 扩展端只给整块 HTML（同文件）：sameDoc=true
+        if (msg.type === 'docRender' && msg.sameDoc && typeof msg.html === 'string') {
+            if (!isPagedMode()) { scheduleWholeHtml(msg.html); }
+            return;
+        }
+
+        // 其他情况忽略（或在这里兼容你已有协议）
+    });
 })();

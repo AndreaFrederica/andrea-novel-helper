@@ -29,7 +29,6 @@ function getPerDocHashes(docUri: string): Map<string, string> {
 }
 
 
-
 // —— Diagnostics 集合 —— 
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper SensitiveWords');
 // [ANCHOR C-1] 记录已应用过装饰的 editor 实例，避免“新实例但哈希相同”的漏刷
@@ -221,7 +220,7 @@ export async function updateDecorations() {
                 }
                 // 添加调试信息：显示找到的匹配
                 const startPos = endIdx - pat.length + 1;
-                    console.log(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx + 1}) -> 角色 "${role.name}"`);
+                    // console.log(`[Decorations] 找到匹配: "${pat}" (位置 ${startPos}-${endIdx + 1}) -> 角色 "${role.name}"`);
                 candidates.push({
                     role,
                     text: pat,
