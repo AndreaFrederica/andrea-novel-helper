@@ -76,15 +76,19 @@ export async function getFileMetadataFromCache(filePath: string): Promise<FileMe
     catch { needRecount = true; }
 
     if (!needRecount && meta) {
-      // 未变更：优先用内存命中，未命中则用 pcache worker 读分片
+      // 未变更：内存命中即可返回；否则从分片读一遍，但要校验 mtime/size
       if (meta) { return meta; }
       const fromShard = await persistentCacheClientObject.getMeta(filePath);
-      return fromShard ?? null;
+      if (fromShard) {
+        const st = await fs.promises.stat(filePath).catch(() => null);
+        if (st && fromShard.mtime === st.mtimeMs && (fromShard.size === undefined || fromShard.size === st.size)) {
+          return fromShard;
+        }
+      }
+      return null; // 没校验到一致就让上层重算
     }
 
-    // 走 worker 读分片（可能是 Git 认为需要重算，或其他原因）
-    meta = await persistentCacheClientObject.getMeta(filePath);
-    if (meta) { return meta; }
+    // 需要重算：不要返回旧分片，直接让上层触发重算
     return null;
 
   }
@@ -460,31 +464,24 @@ class AsyncWordCounter {
       if (this.gitGuard) {
         let needRecount = true;
         const uri = vscode.Uri.file(filePath);
-        const guard = this.gitGuard;
-
-        try { needRecount = await guard.shouldCountByGitOnly(uri); }
+        try { needRecount = await this.gitGuard.shouldCountByGitOnly(uri); }
         catch { needRecount = true; }
 
+        // ── Git 说“未变更”：只有在 mtime/size 也匹配时才信缓存
         if (!needRecount && meta?.wordCountStats) {
-          // 未变更：优先内存缓存，其次 pcache 分片；都没有再兜底重算
-          if (!meta || !meta.wordCountStats) {
-            meta = await (persistentCacheClientObject?.getMeta(filePath) ?? Promise.resolve(null));
-          }
-          if (meta?.wordCountStats) {
+          const st = await fs.promises.stat(filePath).catch(() => null);
+          if (st && meta.mtime === st.mtimeMs && (meta.size === undefined || meta.size === st.size)) {
             return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash };
           }
-          // 持久化也缺失，极端情况兜底
+          // 文件系统不同步 → 强制重算
           return this.recountViaWorkerOrFallback(filePath);
         }
 
-
-        // Git 判定需要重算或缓存无数据，走 worker（重新读分片）
-        meta = persistentCacheClientObject ? await persistentCacheClientObject.getMeta(filePath) : null;
-        if (meta?.wordCountStats) {
-          return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash };
-        }
-        console.log('[AsyncWordCounter] git-need recount or cache miss:', filePath);
-        return this.recountViaWorkerOrFallback(filePath);
+        // ── Git 说“需要重算”或 cache 不足：一定要派 worker，禁止复用 pcache meta
+        const res = await this.recountViaWorkerOrFallback(filePath);
+        // 用运行时覆盖把 size/hash 合回到 pcache 的内存视图，避免“刚算完又读到旧分片”
+        persistentCacheClientObject?.injectRuntimeOverlay(filePath, { size: res.size, contentHash: res.hash });
+        return res;
       }
 
 

@@ -421,12 +421,17 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const fresh = await countAndAnalyzeOffThread(filePath);
             if (fresh.stats.total !== baseline.total) {
                 wcDebug('verification:mismatch', filePath, 'cached', baseline.total, 'fresh', fresh.stats.total);
-                // 更新内存缓存（使 UI 立即正确）
                 this.statsCache.set(filePath, { stats: fresh.stats, mtime });
-                // 失效父目录缓存促使重算聚合
-                this.invalidateCache(filePath);
-                // 可选：立即刷新视图
-                this.refresh();
+
+                // 只失效“父目录聚合”，不要删掉文件本身的缓存
+                const parent = path.dirname(filePath);
+                this.markDirDirty(parent);
+                this.enqueueDirRecompute(parent);
+
+                // 点名刷新父目录（若拿不到就刷新整棵树）
+                const parentNode = this.itemsById.get(parent);
+                this._onDidChange.fire((parentNode as any) || undefined);
+
                 // 更新持久化（确保后续启动正确）
                 const ft = getFileTracker();
                 if (ft) {

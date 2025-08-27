@@ -13,6 +13,19 @@ export let fileTrackingDatabase: FileTrackingDatabase | undefined = undefined;
  * 文件追踪数据模型
  */
 
+
+type WritingStatsRow = {
+    filePath: string;
+    totalMillis: number;
+    charsAdded: number;
+    charsDeleted: number;
+    lastActiveTime: number;
+    sessionsCount: number;
+    averageCPM: number;
+    buckets?: { start: number; end: number; charsAdded: number }[];
+    sessions?: { start: number; end: number }[];
+};
+
 // 文件元数据接口
 export interface FileMetadata {
     uuid: string;
@@ -1054,30 +1067,47 @@ export class FileTrackingDataManager {
         };
     }
 
+    //TODO 没有做快路径快速处理
     /** 并发一次性拉取所有 writingStats（优先内存，其次 pcache/worker，最后才回退分片） */
-    public async getAllWritingStatsAsync(): Promise<Array<{
-        filePath: string;
-        totalMillis: number;
-        charsAdded: number;
-        charsDeleted: number;
-        lastActiveTime: number;
-        sessionsCount: number;
-        averageCPM: number;
-        buckets?: { start: number; end: number; charsAdded: number }[];
-        sessions?: { start: number; end: number }[];
-    }>> {
+    // 允许传入 onPartial 回调与节流间隔（避免 UI 被刷爆）
+    public async getAllWritingStatsAsync(opts?: {
+        onPartial?: (chunk: WritingStatsRow[]) => void;   // 每次产出一批就回调
+        flushIntervalMs?: number;                         // 批量回调节流，默认 80ms
+    }): Promise<WritingStatsRow[]> {
         const entries = Object.entries(this.database.pathToUuid);
         if (entries.length === 0) { return []; }
 
         const CONCURRENCY = 24; // 本地 SSD 可设 24~32；网络盘建议 8~16
+        const onPartial = opts?.onPartial;
+        const flushIntervalMs = opts?.flushIntervalMs ?? 80;
 
-        // 快路径：内存已有 meta 且含写作统计
-        const fast: Array<{
-            filePath: string; totalMillis: number; charsAdded: number; charsDeleted: number;
-            lastActiveTime: number; sessionsCount: number; averageCPM: number;
-            buckets?: { start: number; end: number; charsAdded: number }[];
-            sessions?: { start: number; end: number }[];
-        }> = [];
+        // —— 小工具：把待发送的结果做一个节流批量回调，避免过于频繁 ——
+        const pending: WritingStatsRow[] = [];
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const flush = (immediate = false) => {
+            if (!onPartial || pending.length === 0) { return; }
+            if (immediate) {
+                const out = pending.splice(0);
+                onPartial(out);
+                return;
+            }
+            if (!timer) {
+                timer = setTimeout(() => {
+                    timer = undefined;
+                    const out = pending.splice(0);
+                    if (out.length) { onPartial(out); }
+                }, flushIntervalMs);
+            }
+        };
+        const pushEmit = (rows: WritingStatsRow[] | WritingStatsRow | undefined) => {
+            if (!rows) { return; }
+            if (Array.isArray(rows)) { pending.push(...rows); }
+            else { pending.push(rows); }
+            flush(false);
+        };
+
+        // —— 快路径：内存已有 meta 且含写作统计 ——
+        const fast: WritingStatsRow[] = [];
         const toLoad: Array<[string, string]> = []; // [filePath, uuid]
 
         for (const [filePath, uuid] of entries) {
@@ -1103,41 +1133,56 @@ export class FileTrackingDataManager {
             }
         }
 
-        // 慢路径：优先用 pcache/worker（getFileMetadataFromCache），最后才回退到分片 getMetaAsync
-        const slow = await this.mapWithConcurrency<[string, string], {
-            filePath: string; totalMillis: number; charsAdded: number; charsDeleted: number;
-            lastActiveTime: number; sessionsCount: number; averageCPM: number;
-            buckets?: { start: number; end: number; charsAdded: number }[];
-            sessions?: { start: number; end: number }[];
-        }>(toLoad, CONCURRENCY, async ([filePath, uuid]) => {
-            // 1) 先尝试 pcache（内部会用 worker + gitGuard 校验）
-            let meta = await getFileMetadataFromCache(filePath).catch(() => null);
+        // 立刻把快路径的结果“抛出去”，调用方可先渲染
+        if (fast.length) {
+            pushEmit(fast);
+            // 立刻刷新一次，确保第一批不被节流延迟
+            flush(true);
+        }
 
-            // 2) 若 pcache 返回空（例如没有 index 或 miss），再回退到分片读取（一次）
-            if (!meta) {
-                const m = await this.getMetaAsync(uuid, true).catch(() => undefined);
-                meta = m ?? null;
-                // 有了磁盘结果就顺带写回内存，避免下次再读
-                if (meta) { this.database.files[uuid] = meta; }
+        // —— 慢路径：优先 pcache/worker（getFileMetadataFromCache），再回退分片 getMetaAsync ——
+        // 在 mapper 内部就“边算边 emit”，最终仍收集全量数组以作为返回值
+        const slow = await this.mapWithConcurrency<[string, string], WritingStatsRow | undefined>(
+            toLoad,
+            CONCURRENCY,
+            async ([filePath, uuid]) => {
+                // 1) 先尝试 pcache（内部会用 worker + gitGuard 校验）
+                let meta = await getFileMetadataFromCache(filePath).catch(() => null);
+
+                // 2) 若 pcache miss，再回退到分片读取（一次）
+                if (!meta) {
+                    const m = await this.getMetaAsync(uuid, true).catch(() => undefined);
+                    meta = m ?? null;
+                    // 有了磁盘结果就顺带写回内存，避免下次再读
+                    if (meta) { this.database.files[uuid] = meta; }
+                }
+
+                const ws = meta?.writingStats;
+                if (!ws) { return undefined; }
+
+                const row: WritingStatsRow = {
+                    filePath: meta!.filePath || filePath,
+                    totalMillis: ws.totalMillis ?? 0,
+                    charsAdded: ws.charsAdded ?? 0,
+                    charsDeleted: ws.charsDeleted ?? 0,
+                    lastActiveTime: ws.lastActiveTime ?? 0,
+                    sessionsCount: ws.sessionsCount ?? 0,
+                    averageCPM: ws.averageCPM ?? 0,
+                    buckets: ws.buckets,
+                    sessions: ws.sessions,
+                };
+
+                // 一旦产出就触发部分结果回调（带节流）
+                pushEmit(row);
+                return row;
             }
+        );
 
-            const ws = meta?.writingStats;
-            if (!ws) { return undefined; }
+        // 把最后一批也冲出去
+        flush(true);
 
-            return {
-                filePath: (meta!.filePath || filePath),
-                totalMillis: ws.totalMillis ?? 0,
-                charsAdded: ws.charsAdded ?? 0,
-                charsDeleted: ws.charsDeleted ?? 0,
-                lastActiveTime: ws.lastActiveTime ?? 0,
-                sessionsCount: ws.sessionsCount ?? 0,
-                averageCPM: ws.averageCPM ?? 0,
-                buckets: ws.buckets,
-                sessions: ws.sessions,
-            };
-        });
-
-        return fast.concat(slow);
+        // 依然返回全量（老代码调用无感知）
+        return fast.concat(slow.filter(Boolean) as WritingStatsRow[]);
     }
 
 

@@ -407,19 +407,47 @@ export async function getTrackingStatsAsync(): Promise<{
     return dm.getStats();
 }
 
-/** 异步：一次性获取全部写作统计 */
+/** 异步：一次性获取全部写作统计（这里只取快路径的第一批） */
 export async function getAllWritingStatsAsync(): Promise<WritingStatsView[]> {
     const tracker = getFileTracker();
     if (!tracker) {return [];}
-    const dm = tracker.getDataManager();
+    const dm: any = tracker.getDataManager();
 
-    const getAllWritingStatsAsyncDM = (dm as any).getAllWritingStatsAsync as () => Promise<WritingStatsView[]>;
-    if (typeof getAllWritingStatsAsyncDM === 'function') {
-        return await getAllWritingStatsAsyncDM();
+    const fn = dm?.getAllWritingStatsAsync;
+    if (typeof fn === 'function') {
+        // 只等第一次 onPartial（就是快路径 fast 批次），随后立刻 resolve
+        return await new Promise<WritingStatsView[]>((resolve) => {
+            let resolved = false;
+
+            // 启动 DataManager 的并发流程，但我们不等待最终 Promise
+            // 只在第一次 onPartial 时返回
+            try {
+                fn.call(dm, {
+                    onPartial: (chunk: WritingStatsView[]) => {
+                        if (!resolved) {
+                            resolved = true;
+                            resolve(chunk ?? []);
+                        }
+                    },
+                    flushIntervalMs: 0, // 让第一次回调更及时；你实现里会 flush(true) 立即触发
+                }).catch(() => { /* 忽略慢路径的错误，反正我们不等它 */ });
+            } catch {
+                // 若签名不匹配或抛错，直接返回空
+                if (!resolved) {resolve([]);}
+            }
+
+            // 兜底：若没有快路径（fast 为空），下一轮事件循环返回空
+            //（即只要没立即触发 onPartial，就视为无快路径）
+            setTimeout(() => {
+                if (!resolved) {resolve([]);}
+            }, 0);
+        });
     }
-    // 回退：同步
-    return dm.getAllWritingStats();
+
+    // 老版本 DataManager：没有异步方法时走同步快路径（仅内存）
+    return typeof dm.getAllWritingStats === 'function' ? dm.getAllWritingStats() : [];
 }
+
 
 /** 异步生成器：流式产出写作统计（适合大仓库渐进展示） */
 export async function* streamAllWritingStats(): AsyncGenerator<WritingStatsView> {
