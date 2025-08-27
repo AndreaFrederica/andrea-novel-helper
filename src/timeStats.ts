@@ -42,7 +42,7 @@ let currentSessionStart = 0;
 let ignoredAggregateSessionStart = 0; // 忽略文件聚合会话开始
 let idleTimer: NodeJS.Timeout | undefined;
 let windowFocused = true;
-let isIdle = false; // 新增：追踪空闲状态，空闲时不创建新桶
+let isIdle = true; // 冷启动默认空闲：不开会话、不建桶
 // 始终只保留一个
 let statusBarItem: vscode.StatusBarItem | undefined;
 // Webview面板状态管理

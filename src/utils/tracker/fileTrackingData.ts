@@ -87,11 +87,23 @@ export class FileTrackingDataManager {
     public setFileMetadata(filePath: string, meta: FileMetadata): void {
         if (!meta || !meta.uuid) { return; }
         this.database.files[meta.uuid] = meta;
-        this.database.pathToUuid[filePath] = meta.uuid;
+        const key = this.toRelKey(filePath);
+        this.database.pathToUuid[key] = meta.uuid;
         this.markChanged();
         this.markShardDirty(meta.uuid, 'setFileMetadata external update');
         this.scheduleSave();
     }
+
+    // 标志：是否检测到需要路径迁移（index / 分片）
+    private needsIndexPathMigration = false;
+    private needsShardPathMigration = false;
+
+    /** 外部可查询是否存在遗留绝对路径，决定是否弹窗/触发迁移任务 */
+    public needsPathMigration(): boolean {
+        return this.needsIndexPathMigration || this.needsShardPathMigration;
+    }
+
+
     private dbPath: string; // 旧单文件（仍用于迁移检测）
     public database: FileTrackingDatabase; // 内存聚合（加载后）
     private dbDir: string; // 新的分片目录 .anh-fsdb
@@ -149,6 +161,114 @@ export class FileTrackingDataManager {
      * @param reason 触发原因 (用于调试定位不必要的写入)
      */
 
+    public async rewriteAllShardsToRelative(): Promise<void> {
+        for (const uuid of Object.keys(this.database.files)) {
+            this.markShardDirty(uuid, 'rewrite to relative path');
+        }
+        this.saveSharded(true);  // 强制重写分片
+        this.writeIndex();       // 顺带重写索引
+    }
+
+
+    /** 统一化：相对键（workspace 内用 POSIX 分隔符；Win 下小写） */
+    private toRelKey(p: string): string {
+        const root = path.resolve(this.workspaceRoot);
+        const abs = path.resolve(p);
+        let rel = path.relative(root, abs);
+        // 不在工作区内：保留绝对路径（极端情况）；否则转 POSIX
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+            const canon = abs.replace(/\\/g, '/');
+            return process.platform === 'win32' ? canon.toLowerCase() : canon;
+        }
+        rel = rel.split(path.sep).join('/');
+        return process.platform === 'win32' ? rel.toLowerCase() : rel;
+    }
+
+    /** 由相对键还原为绝对路径（若键本身是绝对的则原样返回） */
+    private toAbsPath(key: string): string {
+        if (path.isAbsolute(key) || /^[a-z]:\//i.test(key)) {
+            // 绝对键：把 POSIX 转回本地分隔符即可
+            const local = key.replace(/\//g, path.sep);
+            return process.platform === 'win32' ? local : local;
+        }
+        // 相对键：从 workspaceRoot 拼绝对路径
+        const joined = path.join(this.workspaceRoot, key);
+        return joined;
+    }
+
+    /** 统一大小写/分隔符用于 Map 键比较（传入键或路径均可） */
+    private normKeyLike(k: string): string {
+        const s = k.replace(/\\/g, '/');
+        return process.platform === 'win32' ? s.toLowerCase() : s;
+    }
+
+    /** 一次性迁移：把 pathToUuid 的绝对键改为工作区相对键；冲突去重；刷新 meta.filePath */
+    private migrateKeysToRelativeAndDedup(): void {
+        const oldMap = this.database.pathToUuid || {};
+        const newMap: Record<string, string> = {};
+        const removedUuids: string[] = [];
+
+        const pickCanonical = (u1: string, u2: string) => {
+            const m1 = this.database.files[u1];
+            const m2 = this.database.files[u2];
+            const p1 = m1?.filePath ? this.toAbsPath(this.toRelKey(m1.filePath)) : undefined;
+            const p2 = m2?.filePath ? this.toAbsPath(this.toRelKey(m2.filePath)) : undefined;
+            const e1 = p1 ? fs.existsSync(p1) : false;
+            const e2 = p2 ? fs.existsSync(p2) : false;
+            if (e1 !== e2) { return e1 ? u1 : u2; }
+            const t1 = m1?.updatedAt ?? 0;
+            const t2 = m2?.updatedAt ?? 0;
+            return t1 >= t2 ? u1 : u2;
+        };
+
+        for (const [oldKeyRaw, uuid] of Object.entries(oldMap)) {
+            const relKey = this.toRelKey(oldKeyRaw);
+            // 刷新 meta.filePath 为当前工作区绝对路径（便于 stat）
+            const meta = this.database.files[uuid];
+            if (meta) {
+                meta.filePath = this.toAbsPath(relKey);
+            }
+
+            if (!newMap[relKey]) {
+                newMap[relKey] = uuid;
+            } else if (newMap[relKey] !== uuid) {
+                // 同一相对键冲突：择优保留一个，删除另一个
+                const keep = pickCanonical(newMap[relKey], uuid);
+                const drop = keep === newMap[relKey] ? uuid : newMap[relKey];
+                newMap[relKey] = keep;
+                if (this.database.files[drop]) {
+                    delete this.database.files[drop];
+                    removedUuids.push(drop);
+                }
+            }
+        }
+
+        // 过滤掉“不在工作区内且不可相对化”的旧绝对键（被 toRelKey 处理为绝对路径的）
+        for (const [k, u] of Object.entries(newMap)) {
+            // 仍然是绝对键说明不在工作区；如果文件也不存在，清掉
+            if (path.isAbsolute(k)) {
+                const abs = this.toAbsPath(k);
+                if (!fs.existsSync(abs)) {
+                    delete newMap[k];
+                    if (this.database.files[u]) {
+                        delete this.database.files[u];
+                        removedUuids.push(u);
+                    }
+                }
+            }
+        }
+
+        if (removedUuids.length) {
+            removedUuids.forEach(u => this.removedShardUuids.add(u));
+        }
+        this.database.pathToUuid = newMap;
+        this.markChanged();
+        this.scheduleSave();
+        console.log(`[FileTracking] 迁移为相对键完成 keys=${Object.keys(newMap).length} removed=${removedUuids.length}`);
+    }
+
+
+
 
     // 放到 class 里
     private async mapWithConcurrency<I, O>(
@@ -199,7 +319,7 @@ export class FileTrackingDataManager {
         try {
             this.trustCallerFilters = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('trustCallerFilters', false) === true;
         } catch { this.trustCallerFilters = false; }
-        this.database = this.loadDatabase();
+        this.database = this.loadDatabase(); //todo
         // 初始化时赋值到文件级变量，供外部直接访问
         fileTrackingDatabase = this.database;
         // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
@@ -211,6 +331,7 @@ export class FileTrackingDataManager {
             if (!this.database.version) { (this.database as any).version = this.DB_VERSION; }
             if (!this.database.lastUpdated) { (this.database as any).lastUpdated = Date.now(); }
         }
+        this.migrateKeysToRelativeAndDedup();
         this.ensureDirectoryExists();
         // 计算初始数据哈希
         this.lastSavedHash = this.calculateDatabaseHash();
@@ -242,20 +363,22 @@ export class FileTrackingDataManager {
     private purgeGitEntries(): void {
         if (!this.database || !this.database.pathToUuid) { return; }
         const toRemove: string[] = [];
-        for (const filePath of Object.keys(this.database.pathToUuid || {})) {
-            if (this.isInGitDir(filePath)) { toRemove.push(filePath); }
+        for (const key of Object.keys(this.database.pathToUuid || {})) {
+            const abs = this.toAbsPath(key);                    // ← 转成绝对路径
+            if (this.isInGitDir(abs)) { toRemove.push(key); }   // ← 用绝对路径判定
         }
         if (toRemove.length) {
-            for (const fp of toRemove) {
-                const uuid = this.database.pathToUuid[fp];
+            for (const key of toRemove) {
+                const uuid = this.database.pathToUuid[key];
                 if (uuid) { delete this.database.files[uuid]; }
-                delete this.database.pathToUuid[fp];
+                delete this.database.pathToUuid[key];             // ← 按相对键删除
             }
             this.markChanged();
             this.scheduleSave();
             console.log(`[FileTracking] 清理 .git 遗留条目 count=${toRemove.length}`);
         }
     }
+
 
     /**
      * 计算数据库内容的哈希值（用于检测实质性变化）
@@ -459,30 +582,23 @@ export class FileTrackingDataManager {
         const tokens: string[] = [];
         const dirPathNormalized = path.resolve(dirPath);
 
-        // 完全基于已追踪的数据库条目计算目录哈希，不读取文件系统
-        for (const [filePath, uuid] of Object.entries(this.database.pathToUuid)) {
-            const filePathNormalized = path.resolve(filePath);
-
-            // 检查文件是否在此目录下（直接子项或深层子项）
+        for (const [key, uuid] of Object.entries(this.database.pathToUuid)) {
+            const filePathNormalized = path.resolve(this.toAbsPath(key)); // ← 关键
             if (filePathNormalized.startsWith(dirPathNormalized + path.sep) || filePathNormalized === dirPathNormalized) {
                 const meta = this.database.files[uuid];
-                if (meta && meta.hash) {  // 只使用有哈希数据的条目
-                    // 计算相对路径
-                    const relativePath = path.relative(dirPathNormalized, filePathNormalized);
+                if (meta && meta.hash) {
+                    const relativePath = path.relative(dirPathNormalized, filePathNormalized)
+                        .split(path.sep).join('/');      // ← 稳定化分隔符
                     const prefix = meta.isDirectory ? 'D' : 'F';
-                    // 直接使用数据库中已保存的哈希，不重新计算
                     tokens.push(`${prefix}:${relativePath}:${meta.hash}`);
                 }
             }
         }
-
-        if (tokens.length === 0) {
-            return '';
-        }
-
+        if (tokens.length === 0) { return ''; }
         tokens.sort();
         return crypto.createHash('sha256').update(tokens.join('|')).digest('hex');
     }
+
 
     /** 更新目录及其祖先目录的聚合哈希 */
     private markAncestorsDirty(startPath: string): void {
@@ -573,8 +689,10 @@ export class FileTrackingDataManager {
      * 获取文件的 UUID
      */
     public getFileUuid(filePath: string): string | undefined {
-        return this.database.pathToUuid[filePath];
+        const key = this.toRelKey(filePath);
+        return this.database.pathToUuid[key];
     }
+
 
     /**
      * 通过 UUID 获取文件元数据
@@ -586,25 +704,35 @@ export class FileTrackingDataManager {
 
     /**
      * 通过路径获取文件元数据
+     * （用工作区相对键查询；需要时惰性加载分片）
      */
     public getFileByPath(filePath: string): FileMetadata | undefined {
-        const uuid = this.getFileUuid(filePath);
+        const key = this.toRelKey(filePath);               // ← 相对键（POSIX，Win 下小写）
+        const uuid = this.database.pathToUuid[key];
         if (!uuid) { return undefined; }
-        return this.getFileByUuid(uuid);
+        if (this.lazyLoadShards && !this.database.files[uuid]) {
+            this.ensureShardLoaded(uuid);
+        }
+        return this.database.files[uuid];
     }
 
     /**
      * 异步添加或更新文件
+     * （pathToUuid 使用相对键；meta.filePath 仍保存为绝对路径）
      */
     public async addOrUpdateFile(filePath: string): Promise<string> {
         this.stats.addOrUpdateCalls++;
+
         // 避免追踪数据库文件自身
         if (filePath === this.dbPath) {
             return this.getFileUuid(filePath) || '';
         }
         // 完全忽略 .git 目录（除非信任调用者已完成过滤）
-        if (!this.trustCallerFilters && this.isInGitDir(filePath)) { return this.getFileUuid(filePath) || ''; }
+        if (!this.trustCallerFilters && this.isInGitDir(filePath)) {
+            return this.getFileUuid(filePath) || '';
+        }
 
+        const key = this.toRelKey(filePath);               // ← 相对键
         try {
             const stats = await fs.promises.stat(filePath);
             const isDirectory = stats.isDirectory();
@@ -612,22 +740,22 @@ export class FileTrackingDataManager {
             const hash = isDirectory ? '' : await this.calculateFileHash(filePath);
 
             // 检查是否已存在
-            let uuid = this.getFileUuid(filePath);
+            let uuid = this.database.pathToUuid[key];
             let existingFile = uuid ? this.database.files[uuid] : undefined;
+
             // 惰性：如果已有 uuid 但尚未加载分片，先加载以便正确比较（避免误判为变化）
             if (uuid && !existingFile && this.lazyLoadShards) {
                 this.ensureShardLoaded(uuid);
                 existingFile = this.database.files[uuid];
             }
 
-            // 如果文件已存在且哈希未变化，不需要任何更新
+            // 如果文件已存在且哈希/size/mtime 未变化，不需要任何更新
             if (!isDirectory && existingFile && uuid) {
-                // 进一步比较 size / mtime，降低无意义写入
                 if (existingFile.hash === hash && existingFile.size === stats.size && existingFile.mtime === stats.mtimeMs) {
                     this.stats.skipUnchangedFile++;
                     return uuid; // 完全未变
                 }
-                // 内容相同但 size/mtime 变化（极少见），或内容变化：只更新必要字段
+                // 内容相同但 size/mtime 变化，或内容变化：只更新必要字段
                 const nowLite = Date.now();
                 let changed = false;
                 if (existingFile.hash !== hash) { existingFile.hash = hash; changed = true; }
@@ -664,7 +792,7 @@ export class FileTrackingDataManager {
             const now = Date.now();
             const metadata: FileMetadata = {
                 uuid,
-                filePath,
+                filePath: this.toAbsPath(key),              // ← 绝对路径（与相对键解耦）
                 fileName,
                 fileExtension,
                 size: stats.size,
@@ -673,20 +801,21 @@ export class FileTrackingDataManager {
                 isDirectory,
                 maxHeading,
                 headingLevel,
-                writingStats: existingFile?.writingStats, // 保留现有的写作统计
+                writingStats: existingFile?.writingStats,   // 保留现有的写作统计
                 createdAt: existingFile?.createdAt || now,
                 lastTrackedAt: now,
                 updatedAt: now
             };
 
-            // 更新数据库
+            // 更新数据库（用相对键写映射）
             this.database.files[uuid] = metadata;
-            this.database.pathToUuid[filePath] = uuid;
+            this.database.pathToUuid[key] = uuid;
 
             this.markChanged();
             this.markShardDirty(uuid, existingFile ? 'recreate metadata (missing shard loaded later)' : 'new file tracked');
             this.scheduleSave();
-            // 如果是文件，更新其父目录聚合哈希
+
+            // 更新父目录聚合哈希
             if (!isDirectory) {
                 this.stats.addFile++;
                 this.markAncestorsDirty(filePath);
@@ -704,85 +833,103 @@ export class FileTrackingDataManager {
         }
     }
 
+
     /**
      * 移除文件
      */
     public removeFile(filePath: string): void {
-        const uuid = this.getFileUuid(filePath);
+        const key = this.toRelKey(filePath);
+        const uuid = this.database.pathToUuid[key];
         if (uuid) {
             delete this.database.files[uuid];
-            delete this.database.pathToUuid[filePath];
+            delete this.database.pathToUuid[key];
             this.removedShardUuids.add(uuid);
             this.markChanged();
             this.scheduleSave();
-            // 更新父目录哈希
             this.markAncestorsDirty(filePath);
             this.stats.removeFile++;
         }
     }
 
+
     /**
      * 重命名文件
      */
     public renameFile(oldPath: string, newPath: string): void {
-        const uuid = this.getFileUuid(oldPath);
+        const oldKey = this.toRelKey(oldPath);
+        const newKey = this.toRelKey(newPath);
+        const uuid = this.database.pathToUuid[oldKey];
         if (uuid) {
             const metadata = this.database.files[uuid];
             if (metadata) {
-                metadata.filePath = newPath;
+                metadata.filePath = this.toAbsPath(newKey);
                 metadata.fileName = path.basename(newPath);
                 metadata.fileExtension = path.extname(newPath).toLowerCase();
                 metadata.updatedAt = Date.now();
-
-                // 更新路径映射
-                delete this.database.pathToUuid[oldPath];
-                this.database.pathToUuid[newPath] = uuid;
-
-                this.markChanged();
-                this.markShardDirty(uuid, 'rename file path/metadata changed');
-                this.scheduleSave();
-                this.markAncestorsDirty(newPath);
-                this.stats.renameFile++;
             }
+            delete this.database.pathToUuid[oldKey];
+            this.database.pathToUuid[newKey] = uuid;
+            this.markChanged();
+            this.markShardDirty(uuid, 'rename file path/metadata changed');
+            this.scheduleSave();
+            this.markAncestorsDirty(newPath);
+            this.stats.renameFile++;
         }
     }
 
+
     /**
-     * 目录重命名：批量迁移子文件路径映射及元数据
+     * 目录重命名：批量迁移子文件（含子目录）路径映射及元数据
+     * - 使用工作区相对键进行前缀匹配与改写
+     * - 仅迁移“子项”，不改动目录自身条目
+     * - 同步刷新每个子项的 meta.filePath / fileName / fileExtension
      */
     public renameDirectoryChildren(oldDir: string, newDir: string): void {
-        const oldPrefix = path.resolve(oldDir) + path.sep;
-        const newPrefix = path.resolve(newDir) + path.sep;
+        // 相对键前缀（统一大小写/分隔符）
+        const oldRelPrefix = this.normKeyLike(this.toRelKey(oldDir)) + '/';
+        const newRelPrefix = this.normKeyLike(this.toRelKey(newDir)) + '/';
+
         const entries = Object.entries(this.database.pathToUuid);
         let changed = false;
-        for (const [p, uuid] of entries) {
-            const abs = path.resolve(p);
-            if (abs.startsWith(oldPrefix)) {
-                const rel = abs.substring(oldPrefix.length);
-                const newAbs = path.join(newPrefix, rel);
-                // 更新 pathToUuid 映射
-                delete this.database.pathToUuid[p];
-                this.database.pathToUuid[newAbs] = uuid;
-                // 更新元数据
-                const meta = this.database.files[uuid];
-                if (meta) {
-                    meta.filePath = newAbs;
-                    meta.fileName = path.basename(newAbs);
-                    meta.fileExtension = path.extname(newAbs).toLowerCase();
-                    meta.updatedAt = Date.now();
-                    meta.lastTrackedAt = Date.now();
-                    this.markShardDirty(uuid, 'rename directory children path update');
-                }
-                changed = true;
+
+        for (const [key, uuid] of entries) {
+            const kNorm = this.normKeyLike(key);
+
+            // 仅处理“子项”：以 oldRelPrefix 开头，且不是目录本身
+            if (!kNorm.startsWith(oldRelPrefix)) { continue; }
+
+            const tail = kNorm.substring(oldRelPrefix.length);
+            const newKey = newRelPrefix + tail;
+
+            // 更新 pathToUuid 映射（删旧写新）
+            delete this.database.pathToUuid[key];
+            this.database.pathToUuid[newKey] = uuid;
+
+            // 更新元数据的绝对路径及派生字段
+            const meta = this.database.files[uuid];
+            if (meta) {
+                const newAbs = this.toAbsPath(newKey);
+                meta.filePath = newAbs;
+                meta.fileName = path.basename(newAbs);
+                meta.fileExtension = path.extname(newAbs).toLowerCase();
+                meta.updatedAt = Date.now();
+                meta.lastTrackedAt = Date.now();
+                this.markShardDirty(uuid, 'rename directory children path update');
             }
+
+            changed = true;
         }
+
         if (changed) {
             this.markChanged();
             this.scheduleSave();
+            // 两侧目录的聚合哈希都可能变化：旧目录失去子项，新目录获得子项
+            this.markAncestorsDirty(oldDir);
             this.markAncestorsDirty(newDir);
             this.stats.renameDirChildren++;
         }
     }
+
 
     /**
      * 更新文件的写作统计（供 timeStats 使用）
@@ -992,6 +1139,9 @@ export class FileTrackingDataManager {
         try {
             const raw = await fs.promises.readFile(p, 'utf8'); // 不要先 existsSync
             const meta = JSON.parse(raw) as FileMetadata;
+            if (meta && meta.filePath) {
+                meta.filePath = this.toAbsPath(meta.filePath);
+            }
             return meta && meta.uuid ? meta : undefined;
         } catch (e: any) {
             // ENOENT/JSON 错误等都直接返回 undefined，避免抛错卡住批处理
@@ -1014,13 +1164,13 @@ export class FileTrackingDataManager {
 
     /** 异步枚举全部文件（惰性按需加载分片；不强制一次性加载全部） */
     public async getAllFilesAsync(opts?: { cacheLoaded?: boolean }): Promise<FileMetadata[]> {
-        // 优先查内存数据库，没有则用 getFileMetadataFromCache 读并回写，加速下次访问
         const entries = Object.entries(this.database.pathToUuid);
         const result: FileMetadata[] = [];
-        for (const [filePath, uuid] of entries) {
+        for (const [key, uuid] of entries) {
             let meta = this.database.files[uuid];
             if (!meta) {
-                const cacheMeta = await getFileMetadataFromCache(filePath);
+                const abs = this.toAbsPath(key);                                  // ←
+                const cacheMeta = await getFileMetadataFromCache(abs).catch(() => null);
                 if (cacheMeta !== null) {
                     this.database.files[uuid] = cacheMeta;
                     meta = cacheMeta;
@@ -1030,6 +1180,7 @@ export class FileTrackingDataManager {
         }
         return result;
     }
+
 
     /** 异步筛选（predicate 可为同步或异步） */
     public async filterFilesAsync(
@@ -1074,7 +1225,7 @@ export class FileTrackingDataManager {
         onPartial?: (chunk: WritingStatsRow[]) => void;   // 每次产出一批就回调
         flushIntervalMs?: number;                         // 批量回调节流，默认 80ms
     }): Promise<WritingStatsRow[]> {
-        const entries = Object.entries(this.database.pathToUuid);
+        const entries = Object.entries(this.database.pathToUuid); // key 为“相对键”
         if (entries.length === 0) { return []; }
 
         const CONCURRENCY = 24; // 本地 SSD 可设 24~32；网络盘建议 8~16
@@ -1108,9 +1259,9 @@ export class FileTrackingDataManager {
 
         // —— 快路径：内存已有 meta 且含写作统计 ——
         const fast: WritingStatsRow[] = [];
-        const toLoad: Array<[string, string]> = []; // [filePath, uuid]
+        const toLoad: Array<[string, string]> = []; // [key(相对键), uuid]
 
-        for (const [filePath, uuid] of entries) {
+        for (const [key, uuid] of entries) {
             const mem = this.database.files[uuid];
             // 目录一般不会有写作统计；索引里标记为目录的也跳过
             if (mem?.isDirectory || this.indexDirFlag.has(uuid)) { continue; }
@@ -1118,7 +1269,7 @@ export class FileTrackingDataManager {
             if (mem?.writingStats) {
                 const ws = mem.writingStats;
                 fast.push({
-                    filePath: mem.filePath || filePath,
+                    filePath: mem.filePath || this.toAbsPath(key), // ← 关键：回退为绝对路径
                     totalMillis: ws.totalMillis ?? 0,
                     charsAdded: ws.charsAdded ?? 0,
                     charsDeleted: ws.charsDeleted ?? 0,
@@ -1129,7 +1280,7 @@ export class FileTrackingDataManager {
                     sessions: ws.sessions,
                 });
             } else {
-                toLoad.push([filePath, uuid]);
+                toLoad.push([key, uuid]); // 仍需加载
             }
         }
 
@@ -1145,9 +1296,13 @@ export class FileTrackingDataManager {
         const slow = await this.mapWithConcurrency<[string, string], WritingStatsRow | undefined>(
             toLoad,
             CONCURRENCY,
-            async ([filePath, uuid]) => {
-                // 1) 先尝试 pcache（内部会用 worker + gitGuard 校验）
-                let meta = await getFileMetadataFromCache(filePath).catch(() => null);
+            async ([key, uuid]) => {
+                const abs = this.toAbsPath(key); // ← 相对键转绝对路径
+
+                // // 1) 先尝试 pcache（内部会用 worker + gitGuard 校验）
+                // let meta = await getFileMetadataFromCache(abs).catch(() => null);
+                //TODO 暂时回退到数据库自己读写
+                let meta = undefined;
 
                 // 2) 若 pcache miss，再回退到分片读取（一次）
                 if (!meta) {
@@ -1161,7 +1316,7 @@ export class FileTrackingDataManager {
                 if (!ws) { return undefined; }
 
                 const row: WritingStatsRow = {
-                    filePath: meta!.filePath || filePath,
+                    filePath: meta!.filePath || abs, // ← 优先 meta.filePath，回退绝对路径
                     totalMillis: ws.totalMillis ?? 0,
                     charsAdded: ws.charsAdded ?? 0,
                     charsDeleted: ws.charsDeleted ?? 0,
@@ -1186,6 +1341,7 @@ export class FileTrackingDataManager {
     }
 
 
+
     /** 异步流式产出 writingStats（适合 UI 渐进展示或超大工程） */
     public async *streamWritingStats(): AsyncGenerator<{
         filePath: string;
@@ -1199,12 +1355,12 @@ export class FileTrackingDataManager {
         sessions?: { start: number; end: number }[];
     }> {
         const entries = Object.entries(this.database.pathToUuid);
-        for (const [filePath, uuid] of entries) {
+        for (const [key, uuid] of entries) {
             const meta = this.database.files[uuid] ?? await this.getMetaAsync(uuid, true);
             if (!meta || !meta.writingStats) { continue; }
             const ws = meta.writingStats;
             yield {
-                filePath: meta.filePath || filePath,
+                filePath: meta.filePath || this.toAbsPath(key),   // ← 用绝对路径回退
                 totalMillis: ws.totalMillis || 0,
                 charsAdded: ws.charsAdded || 0,
                 charsDeleted: ws.charsDeleted || 0,
@@ -1283,10 +1439,13 @@ export class FileTrackingDataManager {
         try {
             const p = this.shardFilePath(meta.uuid);
             const { writingStats, wordCountStats, ...base } = meta;
-            const payload = { ...base, writingStats, wordCountStats };
+            // 分片落盘一律使用“相对键”（工作区内，POSIX；Win 下小写）
+            const relKey = this.toRelKey(meta.filePath);
+            const payload = { ...base, filePath: relKey, writingStats, wordCountStats };
             fs.writeFileSync(p, JSON.stringify(payload));
         } catch (e) { console.warn('写入分片失败', e); }
     }
+
     private loadShardedFiles(): void {
         if (!fs.existsSync(this.dbDir)) { return; }
         try {
@@ -1302,8 +1461,15 @@ export class FileTrackingDataManager {
                             try {
                                 const meta = JSON.parse(fs.readFileSync(full, 'utf8')) as FileMetadata;
                                 if (meta && meta.uuid) {
+                                    // 只要分片里存了绝对路径，就记为需要“分片路径迁移”
+                                    if (meta.filePath && (path.isAbsolute(meta.filePath) || /^[a-z]:[\\/]/i.test(meta.filePath))) {
+                                        this.needsShardPathMigration = true;
+                                    }
+                                    // 分片里可能是相对键；读入内存先还原为绝对路径
+                                    if (meta.filePath) { meta.filePath = this.toAbsPath(meta.filePath); }
                                     this.database.files[meta.uuid] = meta;
-                                    this.database.pathToUuid[meta.filePath] = meta.uuid;
+                                    const key = this.toRelKey(meta.filePath);       // ← 关键
+                                    this.database.pathToUuid[key] = meta.uuid;
                                 }
                             } catch { /* ignore */ }
                         }
@@ -1319,26 +1485,55 @@ export class FileTrackingDataManager {
             const raw = fs.readFileSync(this.indexPath, 'utf8');
             const idx = JSON.parse(raw);
             const entries = idx.entries || idx.files || [];
+            let cleaned = false;
+
             for (const ent of entries) {
                 if (typeof ent === 'string') { continue; } // 老格式忽略
                 const u = ent.u; const p = ent.p; const d = ent.d;
                 if (!u || !p) { continue; }
-                this.database.pathToUuid[p] = u;
+
+                // 统一：index里的 p 可能是绝对路径，也可能是历史相对键
+                const abs = this.toAbsPath(p);           // p -> 绝对
+                const rel = this.toRelKey(abs);          // 绝对 -> 归一化相对键（POSIX，Win下小写）
+
+                // 只要 p 与规范化后的 rel 不一致，就说明 index 中存在遗留绝对路径或未规范化路径
+                if (p !== rel) {
+                    this.needsIndexPathMigration = true;
+                    cleaned = true;
+                }
+
+                // 内存映射中始终用“相对键”
+                this.database.pathToUuid[rel] = u;
+
+                // 目录项：尽量预载其分片（用于后续目录哈希聚合等）
                 if (d) {
-                    // 目录需要即时可用（哈希聚合、后续子文件添加）
                     const meta = this.readSingleShard(u);
                     if (meta) { this.database.files[u] = meta; }
                     this.indexDirFlag.add(u);
                 }
             }
-            console.log(`[FileTracking] 惰性索引加载 paths=${Object.keys(this.database.pathToUuid).length} preloadDirs=${this.indexDirFlag.size}`);
-        } catch (e) { console.warn('惰性加载 index 失败', e); }
+
+            // 如果有清理，标记变化并调度一次保存（会重写 index 为纯相对键）
+            if (cleaned) {
+                this.markChanged();
+                this.scheduleSave();
+            }
+
+            console.log(`[FileTracking] 惰性索引加载 paths=${Object.keys(this.database.pathToUuid).length} cleaned=${cleaned} needMigIdx=${this.needsIndexPathMigration}`);
+        } catch (e) {
+            console.warn('惰性加载 index 失败', e);
+        }
     }
+
     private readSingleShard(uuid: string): FileMetadata | undefined {
         try {
             const p = this.shardFilePath(uuid);
             if (!fs.existsSync(p)) { return undefined; }
-            return JSON.parse(fs.readFileSync(p, 'utf8')) as FileMetadata;
+            let meta = JSON.parse(fs.readFileSync(p, 'utf8')) as FileMetadata;
+            if (meta && meta.filePath) {
+                meta.filePath = this.toAbsPath(meta.filePath); // 相对 -> 绝对（供内存使用）
+            }
+            return meta;
         } catch { return undefined; }
     }
     private ensureShardLoaded(uuid: string): void {
@@ -1400,15 +1595,21 @@ export class FileTrackingDataManager {
         const uuid = uuidv4();
         const fileName = path.basename(filePath);
         const fileExtension = path.extname(filePath).toLowerCase();
-        const meta: FileMetadata = { uuid, filePath, fileName, fileExtension, size: 0, mtime: 0, hash: '', isDirectory: false, isTemporary: true, createdAt: now, lastTrackedAt: now, updatedAt: now };
+        const meta: FileMetadata = {
+            uuid, filePath, fileName, fileExtension,
+            size: 0, mtime: 0, hash: '', isDirectory: false,
+            isTemporary: true, createdAt: now, lastTrackedAt: now, updatedAt: now
+        };
         this.database.files[uuid] = meta;
-        this.database.pathToUuid[filePath] = uuid;
+        const key = this.toRelKey(filePath);
+        this.database.pathToUuid[key] = uuid;
         this.markChanged();
         this.markShardDirty(uuid, 'create temporary file');
         this.scheduleSave();
         this.stats.temporaryCreate++;
         return uuid;
     }
+
     public markAsTemporary(filePath: string) { this.markFileTemporary(filePath); }
     public markAsSaved(filePath: string) { this.markFileSaved(filePath); }
     public handleFileDeleted(filePath: string): boolean { const uuid = this.getFileUuid(filePath); if (!uuid) { return false; } this.removeFile(filePath); return true; }

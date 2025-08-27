@@ -230,31 +230,159 @@ const vscodeApi = (
 // 避免回环：当应用来自扩展的列表时，不把它再次发送回去
 let applyingRemote = false;
 
-// 监听扩展消息，处理 roleCards
-window.addEventListener('message', (event: MessageEvent) => {
-  const msg = event.data;
-  if (!msg || typeof msg.type !== 'string') return;
-  if (msg.type === 'roleCards' && Array.isArray(msg.list)) {
-    applyingRemote = true;
-    roles.value = (msg.list as RoleWithId[]).map((r) => ({ ...r }));
-    void nextTick(() => {
-      applyingRemote = false;
-    });
+// ===== 稳定签名与静音窗口：只在“确有变更且不属于回声”时才更新 =====
+
+// 稳定序列化（键排序，避免顺序噪声）
+function stableStringify(x: unknown): string {
+  if (x === null || typeof x !== 'object') return JSON.stringify(x);
+  if (Array.isArray(x)) return '[' + x.map(stableStringify).join(',') + ']';
+  const o = x as Record<string, unknown>;
+  const keys = Object.keys(o).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + stableStringify(o[k])).join(',') + '}';
+}
+// 只取业务字段（忽略 id）
+function normalizeRoleForSig(r: RoleWithId) {
+  return { base: r.base ?? {}, extended: r.extended ?? {}, custom: r.custom ?? {} };
+}
+function listSignature(list: RoleWithId[]): string {
+  const sorted = [...list].sort((a, b) => (a.base?.name || '').localeCompare(b.base?.name || ''));
+  return stableStringify(sorted.map(normalizeRoleForSig));
+}
+function roleSig(r: RoleWithId): string {
+  return stableStringify(normalizeRoleForSig(r));
+}
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  return stableStringify(a) === stableStringify(b);
+}
+
+// 保存时记录的签名（用来识别“回声”）
+let lastSentSig = '';
+// 保存后的静音窗口（毫秒时间戳）。窗口内收到的“回声”不触发更新
+let saveEchoMuteUntil = 0;
+
+// 仅在确有变更时，对对象做最小化写入；返回是否发生变更
+function assignLike(dst: Record<string, any>, src: Record<string, any>): boolean {
+  let changed = false;
+
+  // 写/改
+  for (const k of Object.keys(src)) {
+    const v = src[k];
+    // 深等判断避免无意义写入
+    if (!deepEqual((dst as any)[k], v)) {
+      (dst as any)[k] = Array.isArray(v) ? v.slice() : v && typeof v === 'object' ? { ...v } : v;
+      changed = true;
+    }
   }
-});
 
+  // 删
+  for (const k of Object.keys(dst)) {
+    if (!(k in src)) {
+      delete (dst as any)[k];
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function mergeRoleIntoExisting(exist: RoleWithId, incoming: RoleWithId): boolean {
+  let any = false;
+  if (!deepEqual(exist.base ?? {}, incoming.base ?? {})) {
+    exist.base ??= {} as any;
+    any = assignLike(exist.base as any, (incoming.base ?? {}) as any) || any;
+  }
+  if (!deepEqual(exist.extended ?? {}, incoming.extended ?? {})) {
+    exist.extended ??= {};
+    any = assignLike(exist.extended as any, (incoming.extended ?? {}) as any) || any;
+  }
+  if (!deepEqual(exist.custom ?? {}, incoming.custom ?? {})) {
+    exist.custom ??= {};
+    any = assignLike(exist.custom as any, (incoming.custom ?? {}) as any) || any;
+  }
+  return any;
+}
+
+// —— 就地合并（逐卡片签名比对：相同对象完全不动；仅处理真实变更） ——
+function applyIncomingRolesInPlace(incoming: RoleWithId[]) {
+  const byName = new Map<string, RoleWithId>();
+  for (const r of incoming) byName.set(r.base?.name || '', r);
+
+  const next: RoleWithId[] = [];
+  for (const r of incoming) {
+    const name = r.base?.name || '';
+    const existIdx = roles.value.findIndex((x) => (x.base?.name || '') === name);
+
+    if (existIdx >= 0) {
+      const exist = roles.value[existIdx]!;
+      if (roleSig(exist) !== roleSig(r)) {
+        mergeRoleIntoExisting(exist, r); // 仅对差异做写入
+      }
+      next.push(exist); // 保持对象引用，不打断输入
+    } else {
+      next.push({ ...r }); // 新卡片
+    }
+  }
+  // 删除 incoming 中已不存在的卡
+  const namesIncoming = new Set([...byName.keys()]);
+  for (const old of roles.value) {
+    const name = old.base?.name || '';
+    if (!namesIncoming.has(name)) {
+      // 不加入 next 即删除
+    }
+  }
+  // 以 splice 替换数组（DOM 只移动，不重建）
+  roles.value.splice(0, roles.value.length, ...next);
+}
+
+// —— 唯一的 message 监听器（带签名校验 + 静音窗口） ——
 window.addEventListener('message', (event: MessageEvent) => {
   const msg = event.data;
   if (!msg || typeof msg.type !== 'string') return;
 
   if (msg.type === 'roleCards' && Array.isArray(msg.list)) {
-    applyingRemote = true;
-    roles.value = (msg.list as RoleWithId[]).map((r) => ({ ...r }));
-    void nextTick(() => {
-      applyingRemote = false;
-      rolesReady.value = true; // 视为 webview 已就绪
-      flushPendingDefs(); // 处理积压的 def
-    });
+    const incoming = (msg.list as RoleWithId[]).map((r) => ({ ...r }));
+    const recvSig = listSignature(incoming);
+    const curSig = listSignature(roles.value);
+    const now = Date.now();
+
+    // 1) 完全一致 → 忽略
+    if (recvSig === curSig) {
+      rolesReady.value = true;
+      flushPendingDefs();
+      return;
+    }
+
+    // 2) 回声且在静音窗口内 → 忽略
+    if (recvSig === lastSentSig && now < saveEchoMuteUntil) {
+      rolesReady.value = true;
+      flushPendingDefs();
+      return;
+    }
+
+    // 3) 应用更新（若仍在静音窗口内，则延后到窗口结束）
+    const apply = () => {
+      applyingRemote = true;
+      applyIncomingRolesInPlace(incoming);
+      void nextTick(() => {
+        applyingRemote = false;
+        rolesReady.value = true;
+        flushPendingDefs();
+      });
+    };
+
+    if (now < saveEchoMuteUntil) {
+      window.setTimeout(
+        () => {
+          // 静音结束再比一次，防止期间本地又有变更
+          const latestSig = listSignature(roles.value);
+          if (latestSig !== recvSig) apply();
+        },
+        Math.max(0, saveEchoMuteUntil - now + 10),
+      );
+    } else {
+      apply();
+    }
     return;
   }
 
@@ -268,66 +396,12 @@ window.addEventListener('message', (event: MessageEvent) => {
   }
 });
 
-function findRoleIdByName(name: string): string | null {
-  const target = (name ?? '').trim();
-  if (!target) return null;
-
-  // 1) 严格匹配（区分大小写）
-  const r = roles.value.find((r) => r.base?.name?.trim?.() === target);
-  if (r) return r.id;
-
-  //   // 2) 不区分大小写
-  //   const tLower = target.toLowerCase();
-  //   r = roles.value.find(r => (r.base)?.name && String((r.base)?.name).trim().toLowerCase() === tLower);
-  //   if (r) return r.id;
-
-  //   // 3) （可选）按别名匹配 —— 若你的 base 里含 aliases
-  //   const hasAliases = (x: any) => Array.isArray(x?.aliases) && x.aliases.length > 0;
-  //   r = roles.value.find(r => {
-  //     const b = (r.base as any);
-  //     return hasAliases(b) && b.aliases.some((al: any) => String(al).trim().toLowerCase() === tLower);
-  //   });
-  if (r === undefined) {
-    return null;
-  }
-  return r;
-}
-
-const _flashTimers = new Map<string, number>();
-function flashRoleCard(id: string) {
-  const el = roleRefs.get(id);
-  if (!el) return;
-  el.classList.add('flash-target');
-  const old = _flashTimers.get(id);
-  if (old) window.clearTimeout(old);
-  const t = window.setTimeout(() => el.classList.remove('flash-target'), 1500);
-  _flashTimers.set(id, t);
-}
-
-function focusRoleByName(name: string) {
-  const id = findRoleIdByName(name);
-  if (!id) {
-    $q.notify({ type: 'warning', message: `未找到角色：${name}` });
-    return;
-  }
-  drawerOpen.value = true; // 打开左侧列表
-  mainOpened[id] = true; // 确保右侧该卡片展开
-  scrollToRole(id); // 滚过去
-  void nextTick(() => flashRoleCard(id)); // 闪烁高亮
-}
-
-function flushPendingDefs() {
-  if (!rolesReady.value || pendingDefs.value.length === 0) return;
-  // 去重后顺序处理
-  const uniq = Array.from(new Set(pendingDefs.value));
-  pendingDefs.value = [];
-  for (const nm of uniq) focusRoleByName(nm);
-}
-
 function notifySave() {
   if (applyingRemote) return;
   try {
-    const plain = JSON.parse(JSON.stringify(roles.value)); // 深度去 Proxy & 去除不可序列化内容
+    const plain = JSON.parse(JSON.stringify(roles.value)); // 去 Proxy
+    lastSentSig = listSignature(plain);
+    saveEchoMuteUntil = Date.now() + 1200; // 1.2s 静音窗口（可按需 800~2000）
     vscodeApi?.postMessage?.({ type: 'saveRoleCards', list: plain });
   } catch (e) {
     console.warn('Failed to post saveRoleCards', e);
@@ -387,7 +461,7 @@ function scrollToRole(id: string) {
       const contRect = container.getBoundingClientRect();
       const offset = elRect.top - contRect.top + container.scrollTop;
       container.scrollTo({ top: offset, behavior: 'smooth' });
-    } else if (el.scrollIntoView) {
+    } else if ((el as any).scrollIntoView) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
@@ -464,7 +538,7 @@ function stringifyShort(v: unknown): string {
   else if (v == null) s = '';
   else if (typeof v === 'object') s = '[object]';
   else s = String(v as number | boolean | symbol | bigint);
-  return s.length > 36 ? s.slice(0, 33) + '…' : s;
+  return s.length > 36 ? s.slice(33) + '…' : s; // 保持简短
 }
 
 function genId() {
@@ -481,6 +555,44 @@ function removeRole(id: string) {
     opened.value = s;
     roleRefs.delete(id);
   }
+}
+
+// —— def 聚焦：以 name 匹配，返回 id ——
+function findRoleIdByName(name: string): string | null {
+  const target = (name ?? '').trim();
+  if (!target) return null;
+  const r = roles.value.find((x) => x.base?.name?.trim?.() === target);
+  return r ? r.id : null;
+}
+
+const _flashTimers = new Map<string, number>();
+function flashRoleCard(id: string) {
+  const el = roleRefs.get(id);
+  if (!el) return;
+  el.classList.add('flash-target');
+  const old = _flashTimers.get(id);
+  if (old) window.clearTimeout(old);
+  const t = window.setTimeout(() => el.classList.remove('flash-target'), 1500);
+  _flashTimers.set(id, t);
+}
+
+function focusRoleByName(name: string) {
+  const id = findRoleIdByName(name);
+  if (!id) {
+    $q.notify({ type: 'warning', message: `未找到角色：${name}` });
+    return;
+  }
+  drawerOpen.value = true; // 打开左侧列表
+  mainOpened[id] = true; // 确保右侧该卡片展开
+  scrollToRole(id); // 滚过去
+  void nextTick(() => flashRoleCard(id)); // 闪烁高亮
+}
+
+function flushPendingDefs() {
+  if (!rolesReady.value || pendingDefs.value.length === 0) return;
+  const uniq = Array.from(new Set(pendingDefs.value));
+  pendingDefs.value = [];
+  for (const nm of uniq) focusRoleByName(nm);
 }
 </script>
 

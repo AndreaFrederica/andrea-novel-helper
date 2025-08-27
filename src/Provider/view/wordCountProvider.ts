@@ -373,7 +373,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         this.recountRegisteredFiles.push(filePath);
                     }
                 });
-            } catch {}
+            } catch { }
         });
         this.refresh();
         // 复用首次扫描：对每个根目录触发一次 getChildren -> calculateStatsAsync
@@ -420,7 +420,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                                 this.recountRegisteredFiles.push(key);
                             }
                         }
-                    } catch {}
+                    } catch { }
                     this.statsCache.delete(key);
                 }
             }
@@ -449,6 +449,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         // 6) 刷新视图（一次立即 + 一次让出事件循环后）
         this.refresh();
         setTimeout(() => { this.refresh(); }, 0);
+        // 用防抖：把多次目录重算合并成一次 UI 刷新
+        // this.refreshDebounced();
+
     }
 
 
@@ -896,7 +899,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const ext = path.extname(d.name).slice(1).toLowerCase();
                 const special = isSpecialVisibleFile(d.name);
                 if (special || exts.includes(ext)) {
-                    tasks.push(this.getOrCalculateFileStats(full).then(() => { }));
+                    // tasks.push(this.getOrCalculateFileStats(full).then(() => { }));
+                    if (!this.inFlightFileStats.has(full)) {
+                        this.scheduleFileStat(full); // 统一走去重通道
+                    }
                 }
             }
         }
@@ -956,25 +962,38 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
             // 2. 检查持久化缓存（从文件追踪数据库）
             const fileTracker = getFileTracker();
-            // if (!isForced && fileTracker) {
-            //     const dataManager = fileTracker.getDataManager();
-            //     const fileMetadata = dataManager.getFileByPath(filePath);
+            if (!isForced && fileTracker) {
+                const dataManager = fileTracker.getDataManager();
+                const fileMetadata = dataManager.getFileByPath(filePath);
 
-            //     if (fileMetadata && fileMetadata.wordCountStats) {
-            //         const st = await fs.promises.stat(filePath);
-            //         if (st && fileMetadata.mtime === st.mtimeMs && (fileMetadata.size === undefined || fileMetadata.size === st.size)) {
-            //             wcDebug('cache-hit:persistent:file', filePath, 'mtime', st.mtimeMs, 'size', st.size);
-            //             const stats = fileMetadata.wordCountStats;
-            //             this.statsCache.set(filePath, { stats, mtime: st.mtimeMs, size: st.size });
-            //             this.markDirDirty(path.dirname(filePath));
-            //             this.enqueueDirRecompute(path.dirname(filePath));
-            //             return stats;
-            //         } else {
-            //             wcDebug('cache-stale:persistent:file', filePath, 'cachedM', fileMetadata.mtime, 'curM', st?.mtimeMs, 'cachedS', fileMetadata.size, 'curS', st?.size);
-            //         }
-            //     }
-
-            // }
+                if (fileMetadata && fileMetadata.wordCountStats) {
+                    const st = await fs.promises.stat(filePath);
+                    if (st && fileMetadata.mtime === st.mtimeMs && (fileMetadata.size === undefined || fileMetadata.size === st.size)) {
+                        // 新增：命中缓存后校验 GitGuard
+                        let gitOk = true;
+                        if (this.gitGuard) {
+                            try {
+                                gitOk = await this.gitGuard.shouldCountByGitOnly(vscode.Uri.file(filePath));
+                            } catch (e) {
+                                wcDebug('gitGuard:check:error', filePath, e);
+                                gitOk = true; // 校验异常时默认允许
+                            }
+                        }
+                        if (gitOk) {
+                            wcDebug('cache-hit:persistent:file', filePath, 'mtime', st.mtimeMs, 'size', st.size, 'gitOk', gitOk);
+                            const stats = fileMetadata.wordCountStats;
+                            this.statsCache.set(filePath, { stats, mtime: st.mtimeMs, size: st.size });
+                            this.markDirDirty(path.dirname(filePath));
+                            this.enqueueDirRecompute(path.dirname(filePath));
+                            return stats;
+                        } else {
+                            wcDebug('cache-gitguard:fail', filePath);
+                        }
+                    } else {
+                        wcDebug('cache-stale:persistent:file', filePath, 'cachedM', fileMetadata.mtime, 'curM', st?.mtimeMs, 'cachedS', fileMetadata.size, 'curS', st?.size);
+                    }
+                }
+            }
 
             // 3. 交给 asyncWordCounter
             const result: any = await countAndAnalyzeOffThread(filePath);
@@ -985,12 +1004,21 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             // 5. 更新内存缓存（优先采用 worker 的 mtime/size）
             const finalMtime = mtimeFromWorker ?? mtime;
             const finalSize = sizeFromWorker ?? size;
+            const prev = this.statsCache.get(filePath);
+            const changed =
+                !prev ||
+                prev.mtime !== finalMtime ||
+                prev.size !== finalSize ||
+                prev.stats.total !== stats.total;
+
             this.statsCache.set(filePath, { stats, mtime: finalMtime, size: finalSize });
 
+            // 只有真的变了，才让父目录失效并重算
+            if (changed) {
+                this.markDirDirty(path.dirname(filePath));
+                this.enqueueDirRecompute(path.dirname(filePath));
+            }
 
-            // 失效上层目录聚合缓存
-            this.markDirDirty(path.dirname(filePath));
-            this.enqueueDirRecompute(path.dirname(filePath));
 
             // 6. 持久化到文件追踪数据库（只写统计；mtime 按你的 DataManager 设计自处理）
             if (fileTracker) {

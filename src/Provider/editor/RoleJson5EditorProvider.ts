@@ -436,6 +436,10 @@ export interface RoleJson5EditorOptions {
 
 export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider {
 
+    // 文档刷新静音窗口：在我们自己写入后的短时间内，忽略 doc-change → updateWebview
+    private readonly refreshMuteUntil = new Map<string, number>();
+
+
     public static register(context: vscode.ExtensionContext, opts: RoleJson5EditorOptions): vscode.Disposable {
         const provider = new RoleJson5EditorProvider(context, opts);
 
@@ -567,6 +571,14 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
         }
 
         const delay = (mode === 'afterDelay') ? this.getAutoSaveDelay(document) : 200; // 其它模式轻节流
+
+        // —— 新增：预先开启静音窗口 ——
+        // 给 doc-change 留个缓冲，避免我们写入引起的回灌打断 webview
+        {
+            const key = document.uri.toString();
+            const muteMs = Math.max(400, Math.min(2000, delay + 200)); // 保守范围 400~2000ms
+            this.refreshMuteUntil.set(key, Date.now() + muteMs);
+        }
         const old = this.saveTimers.get(key);
         if (old) clearTimeout(old);
 
@@ -624,12 +636,22 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
         const changeSub = vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.toString() !== document.uri.toString()) return;
             const key = e.document.uri.toString();
+
+            // 我们自己触发的一次回推，直接跳过
             if (this.skipOneEchoFor.delete(key)) {
-                // 跳过我们自己触发的那次回推
                 return;
             }
+
+            // —— 新增：静音窗口 —— //
+            const muteUntil = this.refreshMuteUntil.get(key) ?? 0;
+            if (Date.now() < muteUntil) {
+                // 在静音窗口内，忽略这次刷新，避免打断 webview 正在编辑的表单
+                return;
+            }
+
             scheduleUpdate();
         });
+
 
         // 保存前：autosave=off 时把 pendingText 写入 TextDocument，再让 VS Code 落盘
         const willSaveSub = vscode.workspace.onWillSaveTextDocument(e => {
@@ -650,7 +672,13 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
 
             const t = this.saveTimers.get(key);
             if (t) { clearTimeout(t); this.saveTimers.delete(key); }
+            // 写入前后各给一点静音时间，避免刚保存就被回灌打断
+            {
+                const key = e.document.uri.toString();
+                this.refreshMuteUntil.set(key, Date.now() + 800);
+            }
         });
+
 
         // 保存后：清理 pending
         const didSaveSub = vscode.workspace.onDidSaveTextDocument(d => {
@@ -736,8 +764,12 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
         edit.replace(document.uri, fullRange, text);
         await vscode.workspace.applyEdit(edit);
 
-        // 兜底：极端情况下若没有触发 change 事件，避免标记卡死
-        setTimeout(() => this.skipOneEchoFor.delete(key), 0);
+        // 写入后，再给一个显式静音窗口，双保险防抖
+        this.refreshMuteUntil.set(key, Date.now() + 800);
+
+        // 兜底：极端情况下若没有触发 change 事件，避免标记卡死（保守一些，别 0ms）
+        setTimeout(() => this.skipOneEchoFor.delete(key), 1000);
+
     }
 }
 

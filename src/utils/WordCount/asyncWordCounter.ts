@@ -49,16 +49,40 @@ type PCMeta = (FileMetadata & {
 function shouldBypassGitGuard(filePath: string): boolean {
   const parts = path.resolve(filePath).split(path.sep).map(s => s.toLowerCase());
   // 任何 .git 目录下的文件
-  if (parts.includes('.git')) {return true;}
+  if (parts.includes('.git')) { return true; }
   // novel-helper/.anh-fsdb 目录下的文件
   for (let i = 0; i < parts.length - 1; i++) {
-    if (parts[i] === 'novel-helper' && parts[i + 1] === '.anh-fsdb') {return true;}
+    if (parts[i] === 'novel-helper' && parts[i + 1] === '.anh-fsdb') { return true; }
   }
   return false;
 }
 
+// === INSERT after: function shouldBypassGitGuard(...) { ... } ===
+/** 归一化大小写（Win 下不区分大小写） */
+function normCase(p: string) {
+  return process.platform === 'win32' ? p.toLowerCase() : p;
+}
+
+/** 更稳的“是否位于当前工作区”判断（大小写与分隔符安全） */
+function isUnderWorkspace(absPath: string): boolean {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if (!folders.length) { return false; }
+  const target = normCase(path.resolve(absPath));
+  return folders.some(f => {
+    const root = normCase(path.resolve(f.uri.fsPath));
+    return target === root || target.startsWith(root + path.sep);
+  });
+}
+
 
 export async function getFileMetadataFromCache(filePath: string): Promise<FileMetadata | null> {
+  // 新增：判断文件是否在当前工作区
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  // 新：
+  const abs = path.resolve(filePath);
+  if (!isUnderWorkspace(abs)) { return null; }
+  filePath = abs;
+
   if (!persistentCacheClientObject) { return null; }
   let meta: PCMeta = null;
   try { meta = persistentCacheClientObject.getMetaFromCache(filePath); } catch { meta = null; }
@@ -79,7 +103,7 @@ export async function getFileMetadataFromCache(filePath: string): Promise<FileMe
   //   }
   //   return null;
   // }
-  if ((asyncWordCounter as any).gitGuard) {
+  if ((asyncWordCounter as any).gitGuard && !shouldBypassGitGuard(filePath)) {
     let needRecount = true;
     const uri = vscode.Uri.file(filePath);
     const guard = (asyncWordCounter as any).gitGuard as GitGuard;
@@ -217,6 +241,16 @@ class PersistentCacheClient {
     return this.NORMALIZE_CASE ? abs.toLowerCase() : abs;
   }
 
+  private absFromIndexKey(p: string): string {
+    const localish = p.replace(/\//g, path.sep);
+    // 绝对路径（含 Windows 盘符或 UNC）直接用
+    if (path.isAbsolute(localish) || /^[a-z]:[\\/]/i.test(localish) || localish.startsWith('\\\\')) {
+      return path.resolve(localish);
+    }
+    // 相对键：从 WORKSPACE_ROOT 拼绝对路径
+    return path.resolve(path.join(this.WORKSPACE_ROOT, localish));
+  }
+
   private shardPathOfUuid(uuid: string): string {
     const prefix = uuid.slice(0, 2);
     return path.join(this.DB_DIR, prefix, `${uuid}.json`);
@@ -230,7 +264,7 @@ class PersistentCacheClient {
       this.WORKSPACE_ROOT = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
       this.DB_DIR = path.join(this.WORKSPACE_ROOT, 'novel-helper', '.anh-fsdb');
       this.INDEX_PATH = path.join(this.DB_DIR, 'index.json');
-      this.NORMALIZE_CASE = true; // Windows 建议小写规范化
+      this.NORMALIZE_CASE = process.platform === 'win32';
     }
 
     if (!this.indexLoadOnce) {
@@ -252,7 +286,9 @@ class PersistentCacheClient {
           if (!ent || typeof ent !== 'object') { continue; }
           const u = (ent as any).u; const p = (ent as any).p;
           if (typeof u === 'string' && typeof p === 'string') {
-            this.pathToUuid.set(this.normFs(p), u);
+            // 新：
+            const abs = this.absFromIndexKey(p);
+            this.pathToUuid.set(this.normFs(abs), u);
           }
         }
       }
@@ -279,6 +315,11 @@ class PersistentCacheClient {
     if (!this.loadedUuidSet.has(uuid)) {
       this.loadedUuidSet.add(uuid);
     }
+    // 分片落盘是相对键：入内存时转绝对路径（跨平台安全）
+    if (j && typeof j.filePath === 'string') {
+      j.filePath = this.absFromIndexKey(j.filePath);
+    }
+
     return j;
   }
 
@@ -286,7 +327,15 @@ class PersistentCacheClient {
   public getMetaFromCache(filePath: string): PCMeta {
     const norm = this.normFs(filePath);
     const cacheKey = 'meta:' + norm;
-    const base = this.metaCache.get(cacheKey) ?? null;
+    let base = this.metaCache.get(cacheKey) ?? null;
+    // 老缓存可能是相对键：读取时转绝对，保持对外一致
+    if (base && typeof (base as FileMetadata).filePath === 'string') {
+      const fp = (base as FileMetadata).filePath;
+      if (!path.isAbsolute(fp) && !/^[a-z]:[\\/]/i.test(fp)) {
+        (base as FileMetadata).filePath = this.absFromIndexKey(fp);
+      }
+    }
+
     const ovr = this.runtimeOverlay.get(norm);
     return base && ovr ? ({ ...(base as FileMetadata), ...ovr } as PCMeta) : base;
   }
@@ -448,6 +497,15 @@ class AsyncWordCounter {
 
   /** 优化：先读缓存，再做 Git 判断是否可用缓存，否则才派发统计 worker */
   async countFile(filePath: string): Promise<RichCountResult> {
+    // 新增：判断文件是否在当前工作区
+    // 新：
+    // 新：
+    const abs = path.resolve(filePath);
+    if (!isUnderWorkspace(abs)) {
+      return { stats: { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 } };
+    }
+    filePath = abs;
+
     // 并发去重
     if (this.inflightByPath.has(filePath)) { return this.inflightByPath.get(filePath)!; }
 
@@ -456,24 +514,24 @@ class AsyncWordCounter {
       let meta: PCMeta = null;
       try { meta = persistentCacheClientObject ? persistentCacheClientObject.getMetaFromCache(filePath) : null; } catch { meta = null; }
 
-      // 首次读取到 meta，暴力注入数据库（写入 files[uuid]，同步 pathToUuid）
-      if (meta && fileTrackingDatabase && meta.uuid) {
-        try {
-          // 仅当 meta.uuid 存在时才写入
-          let uuid = fileTrackingDatabase.pathToUuid[filePath];
-          if (!uuid) {
-            uuid = meta.uuid;
-            fileTrackingDatabase.pathToUuid[filePath] = uuid;
-          }
-          fileTrackingDatabase.files[uuid] = meta;
-          fileTrackingDatabase.lastUpdated = Date.now();
-        } catch { /* ignore */ }
-        // 兜底调用 setFileMetadata
-        console.error('数据文件损坏 无法注入数据库');
-      }
+      // // 首次读取到 meta，暴力注入数据库（写入 files[uuid]，同步 pathToUuid）
+      // if (meta && fileTrackingDatabase && meta.uuid) {
+      //   try {
+      //     // 仅当 meta.uuid 存在时才写入
+      //     let uuid = fileTrackingDatabase.pathToUuid[filePath];
+      //     if (!uuid) {
+      //       uuid = meta.uuid;
+      //       fileTrackingDatabase.pathToUuid[filePath] = uuid;
+      //     }
+      //     fileTrackingDatabase.files[uuid] = meta;
+      //     fileTrackingDatabase.lastUpdated = Date.now();
+      //   } catch { /* ignore */ }
+      //   // 兜底调用 setFileMetadata
+      //   console.error('数据文件损坏 无法注入数据库');
+      // }
 
       // 有 GitGuard 时，判断是否允许直接用缓存
-      if (this.gitGuard) {
+      if (this.gitGuard && !shouldBypassGitGuard(filePath)) {
         let needRecount = true;
         const uri = vscode.Uri.file(filePath);
         try { needRecount = await this.gitGuard.shouldCountByGitOnly(uri); }
