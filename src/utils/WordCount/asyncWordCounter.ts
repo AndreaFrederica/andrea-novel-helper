@@ -12,7 +12,19 @@ import { countAndAnalyze } from '../utils';
 import { TextStats } from './wordCountCore';
 import { GitGuard } from '../Git/gitGuard';
 import path from 'path';
-interface Pending { resolve: (s: TextStats) => void; reject: (e: any) => void; }
+interface Pending { resolve: (v: RichCountResult) => void; reject: (e: any) => void; }
+
+
+
+// 计数返回的“富结果”类型
+type RichCountResult = {
+  stats: TextStats;
+  mtime?: number;
+  size?: number;
+  hash?: string; // sha256（未变更时直接复用 FileMetadata.hash；重算时由 worker 回传）
+};
+
+
 
 let theContext: vscode.ExtensionContext | undefined;
 
@@ -26,7 +38,13 @@ interface WorkerInfo {
 
 
 import { FileMetadata } from '../tracker/fileTrackingData';
-type PCMeta = FileMetadata | null;
+type PCMeta = (FileMetadata & {
+  /** 运行时覆盖层：内容哈希（来自统计 worker） */
+  contentHash?: string;
+  /** 运行时覆盖层：文件大小（来自 stat 或 worker） */
+  size?: number;
+}) | null;
+
 
 export async function getFileMetadataFromCache(filePath: string): Promise<FileMetadata | null> {
   if (!persistentCacheClientObject) { return null; }
@@ -35,20 +53,42 @@ export async function getFileMetadataFromCache(filePath: string): Promise<FileMe
 
   const asyncWordCounter = getAsyncWordCounter();
   // 有 GitGuard 时，判断是否允许直接用缓存
+  // if ((asyncWordCounter as any).gitGuard) {
+  //   let needRecount = true;
+  //   try { needRecount = await (asyncWordCounter as any).gitGuard.shouldCountByGitOnly(vscode.Uri.file(filePath)); }
+  //   catch { needRecount = true; }
+  //   if (!needRecount && meta) {
+  //     return meta;
+  //   }
+  //   // Git 判定需要重算或缓存无数据，走 worker（重新读分片）
+  //   meta = await persistentCacheClientObject.getMeta(filePath);
+  //   if (meta) {
+  //     return meta;
+  //   }
+  //   return null;
+  // }
   if ((asyncWordCounter as any).gitGuard) {
     let needRecount = true;
-    try { needRecount = await (asyncWordCounter as any).gitGuard.shouldCountByGitOnly(vscode.Uri.file(filePath)); }
+    const uri = vscode.Uri.file(filePath);
+    const guard = (asyncWordCounter as any).gitGuard as GitGuard;
+
+    try { needRecount = await guard.shouldCountByGitOnly(uri); }
     catch { needRecount = true; }
+
     if (!needRecount && meta) {
-      return meta;
+      // 未变更：优先用内存命中，未命中则用 pcache worker 读分片
+      if (meta) { return meta; }
+      const fromShard = await persistentCacheClientObject.getMeta(filePath);
+      return fromShard ?? null;
     }
-    // Git 判定需要重算或缓存无数据，走 worker（重新读分片）
+
+    // 走 worker 读分片（可能是 Git 认为需要重算，或其他原因）
     meta = await persistentCacheClientObject.getMeta(filePath);
-    if (meta) {
-      return meta;
-    }
+    if (meta) { return meta; }
     return null;
+
   }
+
 
   // 没有 GitGuard，继续用 mtime 校验
   if (meta?.mtime !== undefined) {
@@ -91,10 +131,26 @@ class PersistentCacheClient {
   public allCacheLoaded: boolean = false; // 新增：所有分片加载完毕后设为 true
 
   constructor(private ctx: vscode.ExtensionContext) { }
+  private runtimeOverlay = new Map<string, { contentHash?: string; size?: number }>();
+
+  public injectRuntimeOverlay(filePath: string, overlay: { contentHash?: string; size?: number }) {
+    const norm = this.normFs(filePath);
+    const prev = this.runtimeOverlay.get(norm) || {};
+    const merged = { ...prev, ...overlay };
+    this.runtimeOverlay.set(norm, merged);
+
+    // 若已有缓存项，合并覆盖层，更新到 metaCache
+    const cacheKey = 'meta:' + norm;
+    const base = this.metaCache.get(cacheKey);
+    if (base) {
+      this.metaCache.set(cacheKey, { ...(base as FileMetadata), ...merged } as PCMeta);
+    }
+  }
+
 
   // ———— Worker 基础通信 ————
   private waitForReady(): Promise<void> {
-    if (this.ready) {return Promise.resolve();}
+    if (this.ready) { return Promise.resolve(); }
     return new Promise((resolve) => {
       const tick = () => (this.ready ? resolve() : setTimeout(tick, 10));
       tick();
@@ -102,7 +158,7 @@ class PersistentCacheClient {
   }
 
   private async ensureWorker(): Promise<void> {
-    if (this.worker) {return;}
+    if (this.worker) { return; }
     const wpath = vscode.Uri.joinPath(this.ctx.extensionUri, 'out', 'workers', 'persistentCache.worker.js');
     const w = new Worker(wpath.fsPath);
     this.worker = w;
@@ -110,14 +166,14 @@ class PersistentCacheClient {
     w.on('message', (m: any) => {
       if (m?.type === 'ready') { this.ready = true; return; }
       const id = m?.id;
-      if (!id || !this.pending.has(id)) {return;}
+      if (!id || !this.pending.has(id)) { return; }
       const { resolve, reject } = this.pending.get(id)!;
       this.pending.delete(id);
 
-      if (m.type === 'readJsonResult') {resolve(m.result ?? null);}
-      else if (m.type === 'statResult') {resolve(m.stat ?? null);}
-      else if (m.type === 'error') {reject(new Error(String(m.error || 'pcache worker error')));}
-      else {resolve(m);}
+      if (m.type === 'readJsonResult') { resolve(m.result ?? null); }
+      else if (m.type === 'statResult') { resolve(m.stat ?? null); }
+      else if (m.type === 'error') { reject(new Error(String(m.error || 'pcache worker error'))); }
+      else { resolve(m); }
     });
 
     w.on('error', () => { this.ready = false; });
@@ -127,7 +183,7 @@ class PersistentCacheClient {
   }
 
   private callRaw(type: string, payload: any): Promise<any> {
-    if (!this.worker) {throw new Error('pcache worker not inited');}
+    if (!this.worker) { throw new Error('pcache worker not inited'); }
     const id = this.seq++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
@@ -177,7 +233,7 @@ class PersistentCacheClient {
       const entries = idx?.entries || idx?.files || [];
       if (Array.isArray(entries)) {
         for (const ent of entries) {
-          if (!ent || typeof ent !== 'object') {continue;}
+          if (!ent || typeof ent !== 'object') { continue; }
           const u = (ent as any).u; const p = (ent as any).p;
           if (typeof u === 'string' && typeof p === 'string') {
             this.pathToUuid.set(this.normFs(p), u);
@@ -202,7 +258,7 @@ class PersistentCacheClient {
     // 没有缓存，读分片
     const p = this.shardPathOfUuid(uuid);
     const j = await this.readJsonViaWorker(p).catch(() => null);
-    if (!j) {return null;}
+    if (!j) { return null; }
     // 记录已读分片 uuid，去重
     if (!this.loadedUuidSet.has(uuid)) {
       this.loadedUuidSet.add(uuid);
@@ -214,8 +270,11 @@ class PersistentCacheClient {
   public getMetaFromCache(filePath: string): PCMeta {
     const norm = this.normFs(filePath);
     const cacheKey = 'meta:' + norm;
-    return this.metaCache.get(cacheKey) ?? null;
+    const base = this.metaCache.get(cacheKey) ?? null;
+    const ovr = this.runtimeOverlay.get(norm);
+    return base && ovr ? ({ ...(base as FileMetadata), ...ovr } as PCMeta) : base;
   }
+
   // 判断是否已读完全部缓存
   public isAllCacheLoaded(): boolean {
     return this.loadedUuidSet.size >= this.totalCacheCount && this.totalCacheCount > 0;
@@ -229,8 +288,8 @@ class PersistentCacheClient {
     const norm = this.normFs(filePath);
     const cacheKey = 'meta:' + norm;
 
-    if (this.metaCache.has(cacheKey)) {return this.metaCache.get(cacheKey)!;}
-    if (this.inflight.has(norm)) {return this.inflight.get(norm)!;}
+    if (this.metaCache.has(cacheKey)) { return this.metaCache.get(cacheKey)!; }
+    if (this.inflight.has(norm)) { return this.inflight.get(norm)!; }
 
     const work = (async () => {
       const uuid = this.pathToUuid.get(norm);
@@ -273,7 +332,7 @@ class AsyncWordCounter {
 
   // 新增：pcache + gitGuard + 并发去重
   private gitGuard?: GitGuard;
-  private inflightByPath = new Map<string, Promise<TextStats>>();
+  private inflightByPath = new Map<string, Promise<RichCountResult>>();
 
   /** 外部注入 context（activate 时调用） */
   setContext(ctx: vscode.ExtensionContext) {
@@ -282,6 +341,7 @@ class AsyncWordCounter {
   }
   /** 外部注入 GitGuard */
   setGitGuard(guard: GitGuard) { this.gitGuard = guard; }
+
 
   private ensurePool() {
     if (this.workers.length) { return; }
@@ -342,8 +402,18 @@ class AsyncWordCounter {
       if (!p) { return; }
       this.pending.delete(msg.id);
       if (msg.error) { p.reject(new Error(msg.error)); }
-      else { p.resolve(msg.stats as TextStats); }
+      else {
+        // 兼容两种 worker 负载：
+        // 1) 旧: { stats }
+        // 2) 新: { stats, mtime, size, hash }
+        const r: RichCountResult =
+          (msg && typeof msg === 'object' && 'stats' in msg)
+            ? { stats: msg.stats as TextStats, mtime: msg.mtime, size: msg.size, hash: msg.hash }
+            : { stats: msg as TextStats };
+        p.resolve(r);
+      }
     }
+
   }
 
   private pickWorker(): WorkerInfo | null {
@@ -361,7 +431,7 @@ class AsyncWordCounter {
   }
 
   /** 优化：先读缓存，再做 Git 判断是否可用缓存，否则才派发统计 worker */
-  async countFile(filePath: string): Promise<TextStats> {
+  async countFile(filePath: string): Promise<RichCountResult> {
     // 并发去重
     if (this.inflightByPath.has(filePath)) { return this.inflightByPath.get(filePath)!; }
 
@@ -389,27 +459,40 @@ class AsyncWordCounter {
       // 有 GitGuard 时，判断是否允许直接用缓存
       if (this.gitGuard) {
         let needRecount = true;
-        try { needRecount = await this.gitGuard.shouldCountByGitOnly(vscode.Uri.file(filePath)); }
+        const uri = vscode.Uri.file(filePath);
+        const guard = this.gitGuard;
+
+        try { needRecount = await guard.shouldCountByGitOnly(uri); }
         catch { needRecount = true; }
+
         if (!needRecount && meta?.wordCountStats) {
-          // Git 未变更，直接用缓存
-          return meta.wordCountStats;
+          // 未变更：优先内存缓存，其次 pcache 分片；都没有再兜底重算
+          if (!meta || !meta.wordCountStats) {
+            meta = await (persistentCacheClientObject?.getMeta(filePath) ?? Promise.resolve(null));
+          }
+          if (meta?.wordCountStats) {
+            return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash };
+          }
+          // 持久化也缺失，极端情况兜底
+          return this.recountViaWorkerOrFallback(filePath);
         }
+
+
         // Git 判定需要重算或缓存无数据，走 worker（重新读分片）
         meta = persistentCacheClientObject ? await persistentCacheClientObject.getMeta(filePath) : null;
         if (meta?.wordCountStats) {
-          return meta.wordCountStats;
+          return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash };
         }
-        // 兜底 worker
         console.log('[AsyncWordCounter] git-need recount or cache miss:', filePath);
         return this.recountViaWorkerOrFallback(filePath);
       }
+
 
       // 没有 GitGuard，继续用 mtime 校验
       if (meta?.mtime !== undefined && meta.wordCountStats) {
         try {
           const st = await fs.promises.stat(filePath);
-          if (st && st.mtimeMs === meta.mtime) { return meta.wordCountStats; }
+          if (st && st.mtimeMs === meta.mtime) { return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash }; }
           // mtime 不一致，视为缓存失效
           console.log('[AsyncWordCounter] pcache stale (mtime mismatch):', filePath, { diskMtime: st?.mtimeMs, cacheMtime: meta.mtime });
         } catch { /* ignore */ }
@@ -418,7 +501,7 @@ class AsyncWordCounter {
       // 没有缓存或判定需要重算，走 worker
       meta = persistentCacheClientObject ? await persistentCacheClientObject.getMeta(filePath) : null;
       if (meta?.wordCountStats) {
-        return meta.wordCountStats;
+        return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash };
       }
       console.log('[AsyncWordCounter] pcache miss or need recount:', filePath, meta ? { mtime: meta?.mtime } : null);
       return this.recountViaWorkerOrFallback(filePath);
@@ -429,15 +512,25 @@ class AsyncWordCounter {
   }
 
   /** 小工具：派发到统计 worker；失败回退到主线程 countAndAnalyze */
-  private recountViaWorkerOrFallback(filePath: string): Promise<TextStats> {
+  private recountViaWorkerOrFallback(filePath: string): Promise<RichCountResult> {
     this.ensurePool();
-    if (!this.workers.length) { return countAndAnalyze(filePath); }
+    if (!this.workers.length) {
+      // 主线程兜底：只算 stats，避免再读文件算 hash（会阻塞主线程）
+      return (async () => {
+        const stats = await countAndAnalyze(filePath);
+        const st = await fs.promises.stat(filePath).catch(() => null);
+        return { stats, mtime: st?.mtimeMs, size: st?.size } as RichCountResult;
+      })();
+    }
     const id = ++this.id;
-    return new Promise<TextStats>((resolve, reject) => {
+    return new Promise<RichCountResult>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.dispatchExisting(id, filePath);
     }).catch(async (e) => {
-      try { return await countAndAnalyze(filePath); } catch { throw e; }
+      // 同上兜底
+      const stats = await countAndAnalyze(filePath);
+      const st = await fs.promises.stat(filePath).catch(() => null);
+      return { stats, mtime: st?.mtimeMs, size: st?.size } as RichCountResult;
     });
   }
 
@@ -456,9 +549,13 @@ export function getAsyncWordCounter(): AsyncWordCounter {
   if (!singleton) { singleton = new AsyncWordCounter(); }
   return singleton;
 }
-export async function countAndAnalyzeOffThread(filePath: string) {
+
+export async function countAndAnalyzeOffThread(filePath: string): Promise<RichCountResult> {
   return getAsyncWordCounter().countFile(filePath);
 }
+
+
+
 
 // —— 外部注入 —— //
 export function setWordCounterContext(context: vscode.ExtensionContext) {

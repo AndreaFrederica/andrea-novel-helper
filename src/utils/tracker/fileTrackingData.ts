@@ -72,7 +72,7 @@ export class FileTrackingDataManager {
      * 直接写入或更新某个文件的元数据（外部可用，提升写入速度）
      */
     public setFileMetadata(filePath: string, meta: FileMetadata): void {
-        if (!meta || !meta.uuid) {return;}
+        if (!meta || !meta.uuid) { return; }
         this.database.files[meta.uuid] = meta;
         this.database.pathToUuid[filePath] = meta.uuid;
         this.markChanged();
@@ -135,6 +135,36 @@ export class FileTrackingDataManager {
      * @param uuid 分片 UUID
      * @param reason 触发原因 (用于调试定位不必要的写入)
      */
+
+
+    // 放到 class 里
+    private async mapWithConcurrency<I, O>(
+        items: I[],
+        limit: number,
+        worker: (item: I, index: number) => Promise<O | undefined>
+    ): Promise<O[]> {
+        const out: O[] = [];
+        let i = 0;
+        let inFlight = 0;
+        return new Promise((resolve, reject) => {
+            const pump = () => {
+                if (i >= items.length && inFlight === 0) { return resolve(out); }
+                while (inFlight < limit && i < items.length) {
+                    const idx = i++;
+                    const item = items[idx];
+                    inFlight++;
+                    worker(item, idx)
+                        .then((r) => { if (r !== undefined) { out.push(r); } })
+                        .catch(reject)
+                        .finally(() => { inFlight--; setImmediate(pump); });
+                }
+            };
+            pump();
+        });
+    }
+
+
+
     private markShardDirty(uuid?: string, reason?: string) {
         if (!uuid) { return; }
         if (!this.dirtyShardUuids.has(uuid)) {
@@ -157,8 +187,8 @@ export class FileTrackingDataManager {
             this.trustCallerFilters = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('trustCallerFilters', false) === true;
         } catch { this.trustCallerFilters = false; }
         this.database = this.loadDatabase();
-    // 初始化时赋值到文件级变量，供外部直接访问
-    fileTrackingDatabase = this.database;
+        // 初始化时赋值到文件级变量，供外部直接访问
+        fileTrackingDatabase = this.database;
         // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
         if (!this.database) {
             this.database = { version: this.DB_VERSION, lastUpdated: Date.now(), files: {}, pathToUuid: {} };
@@ -181,6 +211,11 @@ export class FileTrackingDataManager {
         } else {
             this.loadShardedFiles();
         }
+        this.getAllWritingStatsAsync = this.getAllWritingStatsAsync.bind(this);
+        this.streamWritingStats = this.streamWritingStats.bind(this);
+        this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
+        this.filterFilesAsync = this.filterFilesAsync.bind(this);
+        this.getStatsAsync = this.getStatsAsync.bind(this);
     }
 
     /** 判断路径是否位于 .git 目录 */
@@ -940,16 +975,17 @@ export class FileTrackingDataManager {
 
     /** 异步读取单个分片（不抛错，失败返回 undefined） */
     private async readSingleShardAsync(uuid: string): Promise<FileMetadata | undefined> {
+        const p = this.shardFilePath(uuid);
         try {
-            const p = this.shardFilePath(uuid);
-            if (!fs.existsSync(p)) { return undefined; }
-            const raw = await fs.promises.readFile(p, 'utf8');
+            const raw = await fs.promises.readFile(p, 'utf8'); // 不要先 existsSync
             const meta = JSON.parse(raw) as FileMetadata;
             return meta && meta.uuid ? meta : undefined;
-        } catch {
+        } catch (e: any) {
+            // ENOENT/JSON 错误等都直接返回 undefined，避免抛错卡住批处理
             return undefined;
         }
     }
+
 
     /** 异步获取某 uuid 的元数据；可选写入内存缓存以便后续同步 API 复用 */
     private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
@@ -1018,7 +1054,7 @@ export class FileTrackingDataManager {
         };
     }
 
-    /** 异步一次性拉取所有 writingStats（保留原有同步版不变） */
+    /** 并发一次性拉取所有 writingStats（优先内存，其次 pcache/worker，最后才回退分片） */
     public async getAllWritingStatsAsync(): Promise<Array<{
         filePath: string;
         totalMillis: number;
@@ -1030,38 +1066,80 @@ export class FileTrackingDataManager {
         buckets?: { start: number; end: number; charsAdded: number }[];
         sessions?: { start: number; end: number }[];
     }>> {
-        const res: Array<{
-            filePath: string;
-            totalMillis: number;
-            charsAdded: number;
-            charsDeleted: number;
-            lastActiveTime: number;
-            sessionsCount: number;
-            averageCPM: number;
+        const entries = Object.entries(this.database.pathToUuid);
+        if (entries.length === 0) { return []; }
+
+        const CONCURRENCY = 24; // 本地 SSD 可设 24~32；网络盘建议 8~16
+
+        // 快路径：内存已有 meta 且含写作统计
+        const fast: Array<{
+            filePath: string; totalMillis: number; charsAdded: number; charsDeleted: number;
+            lastActiveTime: number; sessionsCount: number; averageCPM: number;
             buckets?: { start: number; end: number; charsAdded: number }[];
             sessions?: { start: number; end: number }[];
         }> = [];
+        const toLoad: Array<[string, string]> = []; // [filePath, uuid]
 
-        // 迭代 pathToUuid，按需异步读取分片；避免一次 ensureAllShardsLoaded()
-        const entries = Object.entries(this.database.pathToUuid);
         for (const [filePath, uuid] of entries) {
-            const meta = this.database.files[uuid] ?? await this.getMetaAsync(uuid, true);
-            if (!meta || !meta.writingStats) { continue; }
-            const ws = meta.writingStats;
-            res.push({
-                filePath: meta.filePath || filePath,
-                totalMillis: ws.totalMillis || 0,
-                charsAdded: ws.charsAdded || 0,
-                charsDeleted: ws.charsDeleted || 0,
-                lastActiveTime: ws.lastActiveTime || 0,
-                sessionsCount: ws.sessionsCount || 0,
-                averageCPM: ws.averageCPM || 0,
+            const mem = this.database.files[uuid];
+            // 目录一般不会有写作统计；索引里标记为目录的也跳过
+            if (mem?.isDirectory || this.indexDirFlag.has(uuid)) { continue; }
+
+            if (mem?.writingStats) {
+                const ws = mem.writingStats;
+                fast.push({
+                    filePath: mem.filePath || filePath,
+                    totalMillis: ws.totalMillis ?? 0,
+                    charsAdded: ws.charsAdded ?? 0,
+                    charsDeleted: ws.charsDeleted ?? 0,
+                    lastActiveTime: ws.lastActiveTime ?? 0,
+                    sessionsCount: ws.sessionsCount ?? 0,
+                    averageCPM: ws.averageCPM ?? 0,
+                    buckets: ws.buckets,
+                    sessions: ws.sessions,
+                });
+            } else {
+                toLoad.push([filePath, uuid]);
+            }
+        }
+
+        // 慢路径：优先用 pcache/worker（getFileMetadataFromCache），最后才回退到分片 getMetaAsync
+        const slow = await this.mapWithConcurrency<[string, string], {
+            filePath: string; totalMillis: number; charsAdded: number; charsDeleted: number;
+            lastActiveTime: number; sessionsCount: number; averageCPM: number;
+            buckets?: { start: number; end: number; charsAdded: number }[];
+            sessions?: { start: number; end: number }[];
+        }>(toLoad, CONCURRENCY, async ([filePath, uuid]) => {
+            // 1) 先尝试 pcache（内部会用 worker + gitGuard 校验）
+            let meta = await getFileMetadataFromCache(filePath).catch(() => null);
+
+            // 2) 若 pcache 返回空（例如没有 index 或 miss），再回退到分片读取（一次）
+            if (!meta) {
+                const m = await this.getMetaAsync(uuid, true).catch(() => undefined);
+                meta = m ?? null;
+                // 有了磁盘结果就顺带写回内存，避免下次再读
+                if (meta) { this.database.files[uuid] = meta; }
+            }
+
+            const ws = meta?.writingStats;
+            if (!ws) { return undefined; }
+
+            return {
+                filePath: (meta!.filePath || filePath),
+                totalMillis: ws.totalMillis ?? 0,
+                charsAdded: ws.charsAdded ?? 0,
+                charsDeleted: ws.charsDeleted ?? 0,
+                lastActiveTime: ws.lastActiveTime ?? 0,
+                sessionsCount: ws.sessionsCount ?? 0,
+                averageCPM: ws.averageCPM ?? 0,
                 buckets: ws.buckets,
                 sessions: ws.sessions,
-            });
-        }
-        return res;
+            };
+        });
+
+        return fast.concat(slow);
     }
+
 
     /** 异步流式产出 writingStats（适合 UI 渐进展示或超大工程） */
     public async *streamWritingStats(): AsyncGenerator<{
