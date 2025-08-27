@@ -45,6 +45,18 @@ type PCMeta = (FileMetadata & {
   size?: number;
 }) | null;
 
+/** 这些路径要绕过 GitGuard（只用 mtime/size 判定） */
+function shouldBypassGitGuard(filePath: string): boolean {
+  const parts = path.resolve(filePath).split(path.sep).map(s => s.toLowerCase());
+  // 任何 .git 目录下的文件
+  if (parts.includes('.git')) {return true;}
+  // novel-helper/.anh-fsdb 目录下的文件
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (parts[i] === 'novel-helper' && parts[i + 1] === '.anh-fsdb') {return true;}
+  }
+  return false;
+}
+
 
 export async function getFileMetadataFromCache(filePath: string): Promise<FileMetadata | null> {
   if (!persistentCacheClientObject) { return null; }

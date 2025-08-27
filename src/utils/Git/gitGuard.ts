@@ -59,6 +59,13 @@ export class GitGuard {
         };
     }
 
+    private _log(msg: string) {
+        // VS Code 扩展主机控制台可见：帮助 > 切换开发人员工具
+        console.log(`[GitGuard] ${msg}`);
+    }
+
+
+
     /** 必须在 activate 时调用一次 */
     async init(context: vscode.ExtensionContext, opts?: GitGuardOptions) {
         this.options = { ...this.options, ...(opts ?? {}) };
@@ -69,6 +76,7 @@ export class GitGuard {
 
         try {
             if (!gitExt.isActive) {
+                this._log(`activating GitGuard`);
                 await gitExt.activate();
             }
             // 只取 v1 API
@@ -84,10 +92,12 @@ export class GitGuard {
     async shouldCount(doc: vscode.TextDocument | vscode.Uri, content?: string): Promise<boolean> {
         const uri = this.toUri(doc);
         const langId = this.getLangId(doc);
+        this._log(`ISshouldCount?: ${uri.fsPath}`);
 
-        if (this.options.allowedLanguageIds.length > 0) {
-            if (!langId || !this.options.allowedLanguageIds.includes(langId)) return false;
+        if (this.options.allowedLanguageIds.length > 0 && langId) {
+            if (!this.options.allowedLanguageIds.includes(langId)) return false;
         }
+
 
         if (this.options.ignore(uri)) return false;
 
@@ -113,6 +123,15 @@ export class GitGuard {
         }
 
         return true;
+    }
+
+    private toRepoRelPath(repo: Repository, uri: vscode.Uri): string {
+        const abs = path.normalize(uri.fsPath);
+        const root = path.normalize(repo.rootUri.fsPath);
+        let rel = path.relative(root, abs);
+        // VS Code Git API 需要 POSIX 分隔符
+        rel = rel.split(path.sep).join('/');
+        return rel;
     }
 
     /** 手动标记“已统计”，用于非 shouldCount 流程 */
@@ -152,21 +171,31 @@ export class GitGuard {
     private async isModifiedByGit(uri: vscode.Uri): Promise<boolean> {
         const repo = this.getRepo(uri);
         if (!repo) {
-            // 没有 Git API 或不在仓库中：保守为 true，避免漏统计
+            // 没有 Git API 或文件不在任何 repo：保守为 true
+            this._log(`no repo → treat as modified: ${uri.fsPath}`);
             return true;
         }
 
-        // WORKTREE：仅看变更列表（最快）
+        const rel = this.toRepoRelPath(repo, uri);
+
+        // WORKTREE：仅看变更列表
         if (this.options.baseline === 'WORKTREE') {
+            const inList = this.inChangeList(repo, uri);
+            this._log(`WORKTREE ${inList ? 'MODIFIED' : 'clean'}: ${rel}`);
             return this.inChangeList(repo, uri);
         }
 
-        // INDEX：优先用 diffIndexWith（如果存在），否则退回 change list
+        // INDEX：优先 diffIndexWith（若存在）
         if (this.options.baseline === 'INDEX') {
             if (typeof repo.diffIndexWith === 'function') {
                 try {
-                    const diff = await repo.diffIndexWith(uri.fsPath);
-                    return typeof diff === 'string' && diff.trim().length > 0;
+                    const diff = await repo.diffIndexWith(rel);
+                    // ⬇️ 注意：空字符串也要回退
+                    if (typeof diff === 'string' && diff.trim().length > 0) {
+                        this._log(`INDEX MODIFIED by diff: ${rel}`);
+                        return true;
+                    }
+                    return this.inChangeList(repo, uri);
                 } catch {
                     return this.inChangeList(repo, uri);
                 }
@@ -175,14 +204,19 @@ export class GitGuard {
             }
         }
 
-        // HEAD（默认）：优先精确 diffWithHEAD，失败则退回 change list
+        // HEAD（默认）：优先 diffWithHEAD，空字符串亦回退
         try {
-            const diff = await repo.diffWithHEAD(uri.fsPath);
-            return typeof diff === 'string' && diff.trim().length > 0;
+            const diff = await repo.diffWithHEAD(rel);
+            if (typeof diff === 'string' && diff.trim().length > 0) {
+                this._log(`HEAD MODIFIED by diff: ${rel}`);
+                return true;
+            }
+            return this.inChangeList(repo, uri);
         } catch {
             return this.inChangeList(repo, uri);
         }
     }
+
 
     private inChangeList(repo: Repository, uri: vscode.Uri): boolean {
         const eq = (a: vscode.Uri, b: vscode.Uri) =>
@@ -229,9 +263,10 @@ export class GitGuard {
     public async shouldCountByGitOnly(doc: vscode.TextDocument | vscode.Uri): Promise<boolean> {
         const uri = this.toUri(doc);
         const langId = this.getLangId(doc);
-        if (this.options.allowedLanguageIds.length > 0) {
-            if (!langId || !this.options.allowedLanguageIds.includes(langId)) return false;
+        if (this.options.allowedLanguageIds.length > 0 && langId) {
+            if (!this.options.allowedLanguageIds.includes(langId)) return false;
         }
+
         if (this.options.ignore(uri)) return false;
         return this.isModifiedByGit(uri);
     }
