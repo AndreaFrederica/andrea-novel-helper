@@ -9,6 +9,7 @@ export function registerLayoutStatusBar(context: vscode.ExtensionContext) {
     const update = () => {
         const cfg = vscode.workspace.getConfiguration();
         const compact = cfg.get<boolean>('andrea.typeset.statusBar.compact', false);
+        const alwaysShow = cfg.get<boolean>('andrea.typeset.statusBar.alwaysShow', true);
         const on = cfg.get<boolean>('andrea.typeset.indentFirstTwoSpaces', true);
         const blank = cfg.get<number>('andrea.typeset.blankLinesBetweenParas', 1) ?? 1;
         const trim = cfg.get<boolean>('andrea.typeset.trimTrailingSpaces', true);
@@ -29,8 +30,12 @@ export function registerLayoutStatusBar(context: vscode.ExtensionContext) {
             : `$(edit) 版式  缩进:${indentDesc}  首行:${on ? '开' : '关'}  段距:${blank}  去尾:${trim ? '✓' : '×'}  补齐:${ap ? '开' : '关'}  跳出:${sx ? '开' : '关'}  切段:${se ? '开' : '关'}`;
         item.tooltip = '点击打开“小说版式：快速设置”';
 
-        const visible = vscode.window.activeTextEditor && isSupportedDoc(vscode.window.activeTextEditor.document);
-        if (visible) { item.show(); } else { item.hide(); }
+        if (alwaysShow) {
+            item.show();
+        } else {
+            const visible = vscode.window.activeTextEditor && isSupportedDoc(vscode.window.activeTextEditor.document);
+            if (visible) { item.show(); } else { item.hide(); }
+        }
     };
 
     const refresh = () => update();
