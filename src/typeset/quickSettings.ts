@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { readUserKeybindings, writeUserKeybindings, upsertRule, removeRule } from '../keybindings/keybindingsIO';
+import { WcignoreManager, WcignoreRule } from '../utils/wcignoreManager';
 
 export function registerQuickSettings(context: vscode.ExtensionContext, onRefreshStatus: () => void) {
     const toggle = async (key: string) => {
@@ -195,6 +196,188 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         }
     }
 
+    // 管理 .wcignore 常用忽略规则（首屏：预制+自定义；顶部按钮：更多/添加/打开；更多页可返回首屏；支持增删自定义）
+    async function manageWcignore() {
+        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!ws) {
+            vscode.window.showErrorMessage('未检测到工作区，无法管理 .wcignore');
+            return;
+        }
+
+        const mgr = new WcignoreManager(ws);
+        const currentRules = mgr.parseCurrentRules();
+        const { primary, secondary } = mgr.classifyBuiltins(currentRules);
+        let customs = currentRules.filter(r => r.category === 'custom' && r.enabled);
+
+        // 保存初始状态用于判断是否改变
+        const initialPrimary = primary.map(r => ({ pattern: r.pattern, enabled: r.enabled }));
+        const initialSecondary = secondary.map(r => ({ pattern: r.pattern, enabled: r.enabled }));
+        const initialCustoms = customs.map(c => c.pattern);
+
+        type Item = vscode.QuickPickItem & { pattern?: string; tag?: 'primary' | 'secondary' | 'custom' };
+        const qp = vscode.window.createQuickPick<Item>();
+        qp.canSelectMany = true;
+        qp.title = '写作资源忽略 (.wcignore)';
+
+        const BTN_MORE: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('list-flat'), tooltip: '展开更多规则（不常用/低频）' };
+        const BTN_ADD: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('add'), tooltip: '添加自定义规则' };
+        const BTN_OPEN: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('go-to-file'), tooltip: '打开 .wcignore' };
+        const BTN_BACK: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('arrow-left'), tooltip: '返回首屏' };
+
+        let page: 'main' | 'more' = 'main';
+
+        const buildMain = () => {
+            const items: Item[] = [];
+            for (const r of primary) {
+                items.push({ label: r.pattern, description: r.description, pattern: r.pattern, tag: 'primary' });
+            }
+            if (customs.length > 0) {
+                items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
+                for (const c of customs) {
+                    items.push({ label: c.pattern, description: '自定义', pattern: c.pattern, tag: 'custom' });
+                }
+            }
+            qp.items = items;
+            qp.selectedItems = items.filter(i =>
+                (i.tag === 'primary' && primary.find(p => p.pattern === i.pattern)?.enabled) ||
+                (i.tag === 'custom') // 自定义默认选中（存在即启用）
+            );
+            qp.buttons = [BTN_MORE, BTN_ADD, BTN_OPEN];
+            qp.title = '写作资源忽略 (.wcignore)：常用规则与自定义';
+        };
+
+        const buildMore = () => {
+            const items: Item[] = [];
+            for (const r of secondary) {
+                items.push({ label: r.pattern, description: r.description, pattern: r.pattern, tag: 'secondary' });
+            }
+            qp.items = items;
+            qp.selectedItems = items.filter(i => secondary.find(s => s.pattern === i.pattern)?.enabled);
+            qp.buttons = [BTN_BACK, BTN_ADD, BTN_OPEN];
+            qp.title = '写作资源忽略 (.wcignore)：更多规则（不常用/低频）';
+        };
+
+        // 根据当前页面刷新
+        const refresh = () => {
+            if (page === 'main') {
+                buildMain();
+            } else {
+                buildMore();
+            }
+        };
+
+        // 选择变化时，更新当前页对应规则 enabled
+        qp.onDidChangeSelection(sel => {
+            const selected = new Set(sel.map(s => s.pattern).filter(Boolean) as string[]);
+            if (page === 'main') {
+                for (const r of primary) {
+                    r.enabled = selected.has(r.pattern);
+                }
+                // 自定义：未选中的视为移除（不保存）
+                customs = customs.filter(c => selected.has(c.pattern));
+            } else {
+                for (const r of secondary) {
+                    r.enabled = selected.has(r.pattern);
+                }
+            }
+        });
+
+        // 顶部按钮处理
+        qp.onDidTriggerButton(async (btn) => {
+            if (btn === BTN_OPEN) {
+                qp.hide();
+                await vscode.commands.executeCommand('andrea.openWcignore');
+                return;
+            }
+            if (btn === BTN_ADD) {
+                const input = await vscode.window.showInputBox({ prompt: '输入要新增的忽略模式（与 .gitignore 语法一致）', ignoreFocusOut: true });
+                if (input && input.trim()) {
+                    const pattern = input.trim();
+                    if (mgr.isDuplicate(pattern, [...primary, ...secondary, ...customs])) {
+                        vscode.window.showInformationMessage('该规则已存在且启用');
+                    } else {
+                        customs.push({ pattern, description: '自定义规则', category: 'custom', enabled: true });
+                        // 回到主屏并刷新，确保新自定义显示在预制下方
+                        page = 'main';
+                        refresh();
+                    }
+                }
+                return;
+            }
+            if (btn === BTN_MORE) {
+                page = 'more';
+                refresh();
+                return;
+            }
+            if (btn === BTN_BACK) {
+                page = 'main';
+                refresh();
+                return;
+            }
+        });
+
+        const closeAndApply = async () => {
+            qp.hide();
+
+            // 判断是否有改动
+            const changedPrimary = primary.some(r => initialPrimary.find(i => i.pattern === r.pattern)?.enabled !== r.enabled);
+            const changedSecondary = secondary.some(r => initialSecondary.find(i => i.pattern === r.pattern)?.enabled !== r.enabled);
+            const changedCustoms = (() => {
+                const now = new Set(customs.map(c => c.pattern));
+                if (now.size !== initialCustoms.length) {
+                    return true;
+                }
+                return initialCustoms.some(p => !now.has(p));
+            })();
+            const changed = changedPrimary || changedSecondary || changedCustoms;
+
+            if (!changed) {
+                const openOnly = await vscode.window.showInformationMessage('未更改任何规则。是否打开 .wcignore 查看？', '打开', '取消');
+                if (openOnly === '打开') {
+                    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(mgr.getWcignorePath()));
+                    await vscode.window.showTextDocument(doc, { preview: false });
+                }
+                return;
+            }
+
+            // 汇总写入
+            const nextAll = [...primary, ...secondary, ...customs];
+            mgr.ensureExists();
+            try {
+                mgr.batchUpdateRules(nextAll);
+                vscode.window.showInformationMessage('.wcignore 已更新（将自动刷新字数树）');
+            } catch (e: any) {
+                vscode.window.showErrorMessage(`更新 .wcignore 失败：${String(e?.message || e)}`);
+            }
+
+            const open = await vscode.window.showInformationMessage('是否打开 .wcignore 查看？', '打开', '取消');
+            if (open === '打开') {
+                const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(mgr.getWcignorePath()));
+                await vscode.window.showTextDocument(doc, { preview: false });
+            }
+        };
+
+        qp.onDidAccept(closeAndApply);
+        qp.onDidHide(() => qp.dispose());
+        refresh();
+        qp.show();
+    }
+
+    // 快速打开 .wcignore（不存在则创建默认模板）
+    async function openWcignore() {
+        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!ws) {
+            vscode.window.showErrorMessage('未检测到工作区，无法打开 .wcignore');
+            return;
+        }
+        const mgr = new WcignoreManager(ws);
+        if (!mgr.exists()) {
+            try { mgr.createDefault(); } catch { /* ignore */ }
+        }
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(mgr.getWcignorePath()));
+        await vscode.window.showTextDocument(doc, { preview: false });
+    }
+
 
     // 主面板
     async function quickSettings() {
@@ -229,6 +412,8 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: '$(settings) 设置：缩进宽度（editor.insertSpaces / tabSize）', cmd: 'andrea.changeIndentSize' },
 
                 { label: '$(symbol-text) 管理：编辑器字体家族（图形化）', cmd: 'andrea.manageEditorFontFamily' },
+                { label: '$(filter) 管理：写作资源忽略 (.wcignore)', cmd: 'andrea.manageWcignore' },
+                { label: '$(go-to-file) 打开 .wcignore', cmd: 'andrea.openWcignore' },
                 { label: '$(zoom-in) 设置：编辑器字体大小', cmd: 'andrea.changeEditorFontSize' },
 
                 { label: `${minimap ? '$(check)' : '$(circle-slash)'} 切换：Minimap（小地图）`, cmd: 'andrea.toggleMinimap' },
@@ -251,6 +436,8 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.commands.registerCommand('andrea.toggleMouseWheelZoom', () => toggle('editor.mouseWheelZoom')),
         vscode.commands.registerCommand('andrea.toggleStatusBarCompact', () => toggle('andrea.typeset.statusBar.compact')),
         vscode.commands.registerCommand('andrea.quickSettings', quickSettings),
+    vscode.commands.registerCommand('andrea.manageWcignore', manageWcignore),
+    vscode.commands.registerCommand('andrea.openWcignore', openWcignore),
 
         vscode.commands.registerCommand('andrea.injectEnterKeybindings', injectEnterKeybindings),
 

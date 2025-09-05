@@ -16,11 +16,37 @@
                 {
                     "name": "comment.line.number-sign.wcignore",
                     "match": "^\\s*#.*$"
+                },
+                {
+                    "name": "comment.line.number-sign.inline.wcignore",
+                    "match": "(?<!\\\\)#.*$"
                 }
             ]
         },
         "pattern": {
             "patterns": [
+                {
+                    "name": "string.quoted.double.wcignore",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.wcignore",
+                            "match": "\\\\."
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.wcignore",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.wcignore",
+                            "match": "\\\\."
+                        }
+                    ]
+                },
                 {
                     "name": "keyword.operator.glob.wcignore",
                     "match": "[*?\\[\\]]"
@@ -39,7 +65,7 @@
                 },
                 {
                     "name": "string.unquoted.wcignore",
-                    "match": "^[^#\\s].*"
+                    "match": "^(?:\\s*!?)?(?:\\\\#|[^#\"'\\r\\n])+"
                 }
             ]
         }

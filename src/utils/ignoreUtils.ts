@@ -4,6 +4,7 @@ import { CombinedIgnoreParser } from './Parser/gitignoreParser';
 export interface IgnoreConfig {
     workspaceRoot: string;
     respectWcignore: boolean;
+    respectGitignore?: boolean; // 是否遵循 .gitignore（默认 true）
     includePatterns?: string[];
     excludePatterns?: string[];
     ignoreParser?: CombinedIgnoreParser | null;
@@ -50,15 +51,16 @@ export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
     }
     // 检查忽略规则
     if (config.ignoreParser) {
-        if (config.respectWcignore) {
-            if (config.ignoreParser.shouldIgnore(filePath)) {
-                return true;
-            }
-        } else {
-            if (config.ignoreParser.shouldIgnoreByGit(filePath)) {
-                return true;
-            }
+        const respectGit = config.respectGitignore !== false; // 默认 true
+        const respectWc = !!config.respectWcignore;
+        if (respectGit && respectWc) {
+            if (config.ignoreParser.shouldIgnore(filePath)) { return true; } // 同时应用两者
+        } else if (respectGit && !respectWc) {
+            if (config.ignoreParser.shouldIgnoreByGit(filePath)) { return true; } // 仅 git
+        } else if (!respectGit && respectWc) {
+            if (config.ignoreParser.shouldIgnoreByWordCount(filePath)) { return true; } // 仅 wcignore
         }
+        // 两者都不尊重：跳过忽略解析
     }
     // 检查包含模式
     if (config.includePatterns && config.includePatterns.length > 0) {

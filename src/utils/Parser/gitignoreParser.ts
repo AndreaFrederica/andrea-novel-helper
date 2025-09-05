@@ -1,16 +1,18 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import ignore, { Ignore } from 'ignore';
 
 /**
  * GitIgnore 解析器，用于检查文件/目录是否应该被忽略
  */
 export class GitIgnoreParser {
-    private patterns: string[] = [];
     protected workspaceRoot: string;
+    protected ig: Ignore;
 
     constructor(workspaceRoot: string) {
-        this.workspaceRoot = workspaceRoot;
-        this.loadGitIgnore();
+    this.workspaceRoot = workspaceRoot;
+    this.ig = ignore();
+    this.loadGitIgnore();
     }
 
     /**
@@ -28,11 +30,25 @@ export class GitIgnoreParser {
         try {
             if (fs.existsSync(filePath)) {
                 const content = fs.readFileSync(filePath, 'utf8');
-                this.patterns = content
-                    .split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line && !line.startsWith('#'))
-                    .map(line => this.normalizePattern(line));
+                // 对于 .gitignore：直接交给 ignore 库处理完整内容（不支持行内注释，符合 Git 标准）
+                // 对于 .wcignore：先解析每一行以支持行内注释，然后传递清理后的内容
+                if (filePath.endsWith('.wcignore')) {
+                    const lines = content.split(/\r?\n/);
+                    const cleanedLines: string[] = [];
+                    for (const line of lines) {
+                        const parsed = this.parseLineToPattern(line);
+                        if (parsed !== null) {
+                            cleanedLines.push(parsed);
+                        } else if (line.trim() === '' || line.trim().startsWith('#')) {
+                            // 保留空行和整行注释
+                            cleanedLines.push(line);
+                        }
+                    }
+                    this.ig.add(cleanedLines.join('\n'));
+                } else {
+                    // .gitignore 和其他文件：直接使用原始内容
+                    this.ig.add(content);
+                }
             }
         } catch (error) {
             console.warn(`Failed to load ignore file ${filePath}:`, error);
@@ -40,76 +56,97 @@ export class GitIgnoreParser {
     }
 
     /**
-     * 标准化 gitignore 模式
+     * 解析一行忽略规则（仅用于 .wcignore，支持行内注释、转义和引号）：
+     * - 支持以 # 开头的整行注释（允许前导空白）
+     * - 支持行内注释：遇到未转义的 # 视为注释起始，后续内容忽略
+     * - 支持双引号和单引号路径
+     * - 允许使用 \\# 表示字面量 #，以及 \\ 空格表示字面量空格
+     * - 返回去除注释并去除首尾空白后的模式；空行返回 null
      */
-    private normalizePattern(pattern: string): string {
-        // 移除开头的 ./
-        if (pattern.startsWith('./')) {
-            pattern = pattern.slice(2);
-        }
+    private parseLineToPattern(rawLine: string): string | null {
+        if (rawLine === null || rawLine === undefined) { return null; }
+        // 去除结尾的 \r
+        let line = rawLine.replace(/\r$/, '');
+        // 忽略前导空白后的整行注释
+        if (line.replace(/^\s+/, '').startsWith('#')) { return null; }
+
+        let out = '';
+        let escaping = false;
+        let inQuotes: '"' | "'" | null = null;
         
-        // 如果以 / 开头，表示从根目录开始匹配
-        if (pattern.startsWith('/')) {
-            pattern = pattern.slice(1);
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            
+            if (escaping) {
+                out += ch;
+                escaping = false;
+                continue;
+            }
+            
+            if (ch === '\\') {
+                escaping = true;
+                continue;
+            }
+            
+            // 处理引号
+            if (!inQuotes && (ch === '"' || ch === "'")) {
+                inQuotes = ch;
+                continue; // 不包含引号本身
+            }
+            
+            if (inQuotes && ch === inQuotes) {
+                inQuotes = null;
+                continue; // 不包含引号本身
+            }
+            
+            // 只有在非引号内才处理注释
+            if (!inQuotes && ch === '#') {
+                break; // 行内注释开始
+            }
+            
+            out += ch;
         }
-        
+
+        const pattern = out.trim();
+        if (!pattern) { return null; }
         return pattern;
     }
+
+    /**
+     * 标准化 gitignore 模式
+     */
+    private normalizePattern(pattern: string): string { return pattern; }
 
     /**
      * 检查文件或目录是否应该被忽略
      */
     public shouldIgnore(filePath: string): boolean {
-        const relativePath = path.relative(this.workspaceRoot, filePath);
-        const normalizedPath = relativePath.split(path.sep).join('/');
-        for (const pattern of this.patterns) {
-            if (this.matchPattern(normalizedPath, pattern)) {
-                // debug: 仅在配置开启时记录
-                if (process.env.ANH_WC_DEBUG === '1') {
-                    console.log('[Ignore][match]', pattern, '->', normalizedPath);
-                }
-                return true;
-            }
+        const relativePath = path.relative(this.workspaceRoot, filePath).split(path.sep).join('/');
+        
+        // 首先检查原始路径
+        let ignored = this.ig.ignores(relativePath);
+        
+        // 如果原始路径未被忽略，且路径不以 / 结尾，则尝试添加 / 再检查
+        // 这是因为目录规则（如 .vscode/）可能需要路径以 / 结尾才能匹配
+        if (!ignored && !relativePath.endsWith('/')) {
+            ignored = this.ig.ignores(relativePath + '/');
         }
-        return false;
+        
+        if (ignored && process.env.ANH_WC_DEBUG === '1') {
+            console.log('[Ignore][match]', relativePath);
+        }
+        return ignored;
     }
 
     /**
      * 检查路径是否匹配 gitignore 模式
      */
-    private matchPattern(filePath: string, pattern: string): boolean {
-        // 处理目录模式（以 / 结尾）
-        if (pattern.endsWith('/')) {
-            const dirPattern = pattern.slice(0, -1);
-            return this.matchGlob(filePath, dirPattern) || 
-                   filePath.split('/').some(segment => this.matchGlob(segment, dirPattern));
-        }
-        
-        // 处理通配符模式
-        if (pattern.includes('*') || pattern.includes('?')) {
-            return this.matchGlob(filePath, pattern) ||
-                   filePath.split('/').some(segment => this.matchGlob(segment, pattern));
-        }
-        
-        // 精确匹配或路径包含匹配
-        return filePath === pattern || 
-               filePath.startsWith(pattern + '/') ||
-               filePath.split('/').includes(pattern);
-    }
+    private matchPattern(_filePath: string, _pattern: string): boolean { return false; }
 
     /**
      * 简单的通配符匹配实现
      */
-    private matchGlob(text: string, pattern: string): boolean {
-        // 转换通配符为正则表达式
-        const regexPattern = pattern
-            .replace(/\./g, '\\.')
-            .replace(/\*/g, '.*')
-            .replace(/\?/g, '.');
-        
-        const regex = new RegExp(`^${regexPattern}$`);
-        return regex.test(text);
-    }
+    private matchGlob(_text: string, _pattern: string): boolean { return false; }
 }
 
 /**
@@ -117,9 +154,10 @@ export class GitIgnoreParser {
  */
 export class WordCountIgnoreParser extends GitIgnoreParser {
     constructor(workspaceRoot: string) {
-        super(workspaceRoot);
-        // 重新加载，使用 .wcignore 文件
-        this.loadWordCountIgnore();
+    super(workspaceRoot);
+    // 仅使用 .wcignore：重置并加载
+    this.ig = ignore();
+    this.loadWordCountIgnore();
     }
 
     /**

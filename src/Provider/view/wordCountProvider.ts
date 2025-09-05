@@ -21,10 +21,11 @@ function isSpecialVisibleFile(name: string): boolean {
 }
 
 // 统一忽略判断工具
-function shouldIgnoreWordCountFile(fullPath: string, ignoreParser: CombinedIgnoreParser | null, config: { workspaceRoot: string, respectWcignore: boolean, includePatterns?: string[], excludePatterns?: string[] }) {
+function shouldIgnoreWordCountFile(fullPath: string, ignoreParser: CombinedIgnoreParser | null, config: { workspaceRoot: string, respectWcignore: boolean, respectGitignore?: boolean, includePatterns?: string[], excludePatterns?: string[] }) {
     return isFileIgnored(fullPath, {
         workspaceRoot: config.workspaceRoot,
         respectWcignore: config.respectWcignore,
+        respectGitignore: config.respectGitignore,
         includePatterns: config.includePatterns,
         excludePatterns: config.excludePatterns,
         ignoreParser
@@ -559,7 +560,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             // 忽略规则（统一工具）
             if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
                 workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
-                respectWcignore: true // 按原逻辑，treeview一般都需要 wcignore
+                respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+                respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true)
             })) { wcDebug('skip:ignored', full); continue; }
 
             if (d.isDirectory()) {
@@ -788,7 +790,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     const full = path.join(folder, d.name);
                     if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
                         workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
-                        respectWcignore: true
+                        respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+                        respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true)
                     })) continue;
                     if (d.isDirectory()) subDirs.push(d); else files.push(d);
                 }
@@ -881,7 +884,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             // 检查是否应该被忽略（统一工具）
             if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
                 workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
-                respectWcignore: true
+                respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+                respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true)
             })) { continue; }
 
             if (d.isDirectory()) {
@@ -1134,7 +1138,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
                 if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
                     workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
-                    respectWcignore: true
+                    respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+                    respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true)
                 })) continue;
 
                 if (d.isDirectory()) {

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.3.23",
+  "version": "0.3.24",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -70,6 +70,17 @@
           ".wcignore"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "gitignore",
+        "aliases": [
+          "Git Ignore",
+          "gitignore"
+        ],
+        "filenames": [
+          ".gitignore"
+        ],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
@@ -77,6 +88,11 @@
         "language": "wcignore",
         "scopeName": "source.wcignore",
         "path": "./syntaxes/wcignore.tmLanguage.json"
+      },
+      {
+        "language": "gitignore",
+        "scopeName": "source.gitignore.andrea",
+        "path": "./syntaxes/gitignore.tmLanguage.json"
       }
     ],
     "viewsContainers": {
@@ -1079,6 +1095,16 @@
           "default": false,
           "description": "%config.wordCount.debug.description%"
         },
+        "AndreaNovelHelper.wordCount.respectGitignore": {
+          "type": "boolean",
+          "default": true,
+          "description": "写作资源管理器是否遵循 .gitignore（默认开启）。关闭后仅依据 .wcignore（若下项开启）或完全不依据忽略文件。"
+        },
+        "AndreaNovelHelper.wordCount.respectWcignore": {
+          "type": "boolean",
+          "default": true,
+          "description": "写作资源管理器是否遵循 .wcignore（默认开启）。关闭后将不从 .wcignore 读取忽略规则。"
+        },
         "AndreaNovelHelper.wordCount.maxWorkers": {
           "type": "number",
           "default": 0,
@@ -1180,6 +1206,7 @@
     "chartjs-adapter-date-fns": "^3.0.0",
     "font-list": "^1.5.1",
     "iconv-lite": "^0.6.3",
+    "ignore": "^7.0.5",
     "jschardet": "^3.1.4",
     "json5": "^2.2.3",
     "jsonc-parser": "^3.3.1",

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Git Ignore (Andrea)",
+  "scopeName": "source.gitignore.andrea",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#pattern" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        { "name": "comment.line.number-sign.gitignore", "match": "^\\s*#.*$" }
+      ]
+    },
+    "pattern": {
+      "patterns": [
+        { "name": "keyword.operator.glob.gitignore", "match": "[*?\\[\\]]" },
+        { "name": "constant.character.escape.gitignore", "match": "\\\\." },
+        { "name": "keyword.operator.negation.gitignore", "match": "^!" },
+        { "name": "keyword.operator.directory.gitignore", "match": "/$" },
+        { "name": "string.unquoted.gitignore", "match": "^(?:\\s*!?)?[^#\\r\\n]+" }
+      ]
+    }
+  }
+}
