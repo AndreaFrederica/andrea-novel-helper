@@ -56,6 +56,7 @@ export interface FileMetadata {
         averageCPM: number;
         buckets?: { start: number; end: number; charsAdded: number }[];
         sessions?: { start: number; end: number }[];
+        achievedMilestones?: number[]; // 已达成的里程碑目标
     };
     // 字数统计缓存（供 WordCountProvider 使用）
     wordCountStats?: {
@@ -943,6 +944,7 @@ export class FileTrackingDataManager {
         averageCPM?: number;
         buckets?: { start: number; end: number; charsAdded: number }[];
         sessions?: { start: number; end: number }[];
+        achievedMilestones?: number[]; // 已达成的里程碑目标
     }): void {
         const uuid = this.getFileUuid(filePath);
         if (uuid) {
@@ -955,7 +957,8 @@ export class FileTrackingDataManager {
                         charsDeleted: 0,
                         lastActiveTime: 0,
                         sessionsCount: 0,
-                        averageCPM: 0
+                        averageCPM: 0,
+                        achievedMilestones: []
                     };
                 }
                 const prev = metadata.writingStats;
@@ -969,17 +972,19 @@ export class FileTrackingDataManager {
                 if (stats.averageCPM !== undefined) { next.averageCPM = stats.averageCPM; }
                 if (stats.buckets !== undefined) { next.buckets = stats.buckets; }
                 if (stats.sessions !== undefined) { next.sessions = stats.sessions; }
+                if (stats.achievedMilestones !== undefined) { next.achievedMilestones = stats.achievedMilestones; }
 
                 const simpleChanged = prev.totalMillis !== next.totalMillis || prev.charsAdded !== next.charsAdded || prev.charsDeleted !== next.charsDeleted || prev.sessionsCount !== next.sessionsCount || prev.averageCPM !== next.averageCPM;
                 const bucketsChanged = JSON.stringify(prev.buckets || []) !== JSON.stringify(next.buckets || []);
                 const sessionsChanged = JSON.stringify(prev.sessions || []) !== JSON.stringify(next.sessions || []);
-                const lastActiveChangedOnly = !simpleChanged && !bucketsChanged && !sessionsChanged && prev.lastActiveTime !== next.lastActiveTime;
+                const milestonesChanged = JSON.stringify(prev.achievedMilestones || []) !== JSON.stringify(next.achievedMilestones || []);
+                const lastActiveChangedOnly = !simpleChanged && !bucketsChanged && !sessionsChanged && !milestonesChanged && prev.lastActiveTime !== next.lastActiveTime;
 
                 // 仅 lastActiveTime 变化（纯阅读/聚焦）不写入，避免产生无意义脏分片
                 if (lastActiveChangedOnly) {
                     return; // 不更新写库
                 }
-                if (simpleChanged || bucketsChanged || sessionsChanged) {
+                if (simpleChanged || bucketsChanged || sessionsChanged || milestonesChanged) {
                     const reasonParts: string[] = [];
                     if (prev.totalMillis !== next.totalMillis) { reasonParts.push('totalMillis'); }
                     if (prev.charsAdded !== next.charsAdded) { reasonParts.push('charsAdded'); }
@@ -988,6 +993,7 @@ export class FileTrackingDataManager {
                     if (prev.averageCPM !== next.averageCPM) { reasonParts.push('averageCPM'); }
                     if (bucketsChanged) { reasonParts.push('buckets'); }
                     if (sessionsChanged) { reasonParts.push('sessions'); }
+                    if (milestonesChanged) { reasonParts.push('achievedMilestones'); }
                     console.log(`[FileTracking] writingStats diff -> ${reasonParts.join(',') || 'unknown'} file=${filePath}`);
                     Object.assign(prev, next);
                     metadata.updatedAt = Date.now();

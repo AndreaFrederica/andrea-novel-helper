@@ -15,7 +15,7 @@
 [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/andrea-novel-helper?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 [![Open VSX Downloads](https://img.shields.io/open-vsx/dt/andreafrederica/andrea-novel-helper?label=Open%20VSX%20Downloads)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 
-> 最新版本：**0.3.24 (2025-09-06)**  
+> 最新版本：**0.3.25 (2025-09-07)**  
 > 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节“近期版本速览”。  
 > 近期版添加了大量新功能，若从老版本升级，请阅读ChangeLog
 
@@ -25,6 +25,13 @@
 - [QQ群【小说助手用户反馈和交流】](https://qm.qq.com/q/SG5A3XLoSQ)
 
 ## 🔔 近期版本速览
+
+### 0.3.25（2025-09-07）
+### ✨ 新增
+- 写作资源管理器现在支持显示参考资料（如图片、PDF等不计入字数统计的文件）
+- 支持基于自定义分类的角色显示，可以按类型或归属进行更灵活的分组
+### 🐛 修复
+- 略微优化了Decorations性能，减少大文件打开时的阻塞
 
 ### 0.3.12（2025-08-25）
 ### 🐛 修复
@@ -83,13 +90,14 @@
 5. 智能补全与着色：主名称 + 别名 / 词汇 / 敏感词 / 正则匹配全部支持补全、跳转、Hover、着色。
 6. 角色层级树视图：按【从属 → 类型 → 角色】分层，词汇/敏感词/正则表达式三类统一置底“特殊分类”分组；展开状态持久化。
 7. “当前文章角色” 双视图：侧边栏 & Explorer 各一份实时显示当前文档出现过的角色/词汇/敏感词/正则命中，复用缓存免重复扫描。
-8. 写作资源视图（Word Count Explorer）：可替代原生 Explorer，聚焦写作文件字数、排序、索引管理与拖拽组织。
+8. 写作资源视图（Word Count Explorer）：可替代原生 Explorer，聚焦写作文件字数、排序、索引管理与拖拽组织，现在支持显示参考资料。
 9. 性能优化：懒加载大纲、分片文件追踪数据库、读写降噪、共享缓存 + 异步刷新（含文档角色缓存模型）。
 10. 写作时间 & 统计仪表板：分钟级/会话级统计、CPM（字符每分钟）峰值、活跃度趋势。
 11. 一键导出txt/纯文本内容
 12. 写作预览工具
 13. 写作版式设置，格式化工具
 14. 角色卡编辑器（可视化）
+15. 支持基于自定义分类的角色显示，可以按类型或归属进行更灵活的分组
 
 ---
 ## ⚡ 0.0.23 匹配性能
@@ -414,6 +422,7 @@ TXT 快速格式（示例 `vocabulary.txt`）：
 * 手动排序：稀疏索引 (默认步长 10) + 自动重排 + 前导零格式化。
 * 自定义显示：raw / wan / k / qian。
 * 上下插入文件/文件夹、批量生成索引、清除索引、跨目录拖动移动。
+* 现在支持显示参考资料（如图片、PDF等不计入字数统计的文件），方便在写作资源管理器中查看和管理相关参考资料。
 
 相关配置前缀：`AndreaNovelHelper.wordCount.*`
 
@@ -585,13 +594,13 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - **Hover 提示**：详情面板展示角色简介、类型、从属标签和颜色预览
 - **转到定义**：在文档中按 F12 或 Ctrl/Cmd+Click 跳到角色库文件内的定义行
 - **快速创建**：选中文本右键，填写属性后自动追加 JSON5 格式角色条目
-- **自动/手动刷新**：`character-gallery.json5` 保存时即时刷新，或在命令面板执行 “Refresh Role Library”
+- **自动/手动刷新**：`character-gallery.json5` 保存时即时刷新，或在命令面板执行 "Refresh Role Library"
 - **字数统计 / 写作资源视图**：可替代原生 Explorer 的写作专用视图：
   - 目录/文件字数聚合 + 忽略规则 (`.gitignore` / `.wcignore`)
   - 手动/自动排序模式（稀疏索引，支持步长与补零宽度配置）
   - 同目录拖拽重排 / 跨目录拖拽物理移动 / 复制剪切粘贴
   - 可选在标签前显示序号 + 自定义显示格式 (raw / wan / k / qian)
-  - 批量生成 / 清除索引命令，适合长篇章节管理
+  - 支持显示参考资料（如图片、PDF等不计入字数统计的文件）
   - **性能提升**：内部加入结果缓存与异步增量刷新，避免全量同步扫描造成卡顿
 - **敏感词识别**：自动检测并高亮敏感词，支持自定义敏感词列表
 - **词汇库**：提供词汇库支持，可以定义词汇并高亮显示
@@ -601,122 +610,4 @@ andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
 - **写作时间追踪（实验性）**：新增写作时间追踪功能，提供实时的写作速度统计（CPM）
 - **正则表达式着色**：支持使用正则表达式为文本着色，提供更灵活的样式应用（比如说着色各种标点符号框起来的字符）
 - **写作统计仪表板（实验性）**：新增写作统计仪表板，今日和历史的写作时间、平均速度和峰值速度统计,活跃度统计
-
----
-
-### 0.0.20 性能与文件追踪改进
-> 降低无意义磁盘写入与启动时间的针对性优化：
-- **分片文件追踪数据库**：单文件追踪改为 `.anh-fsdb` 分片 + `index.json`，仅脏分片增量写入。
-- **惰性索引加载**：启动仅加载索引（路径+目录标记），按需访问分片。
-- **大纲惰性模式** (`AndreaNovelHelper.outline.lazyMode`)：未打开大纲视图不生成/刷新大纲文件。
-- **写作统计只读会话抑制** (`AndreaNovelHelper.timeStats.persistReadOnlySessions=false`)：纯浏览不落盘，避免“打开即产生脏分片”。
-- **脏分片原因日志**：输出 markShardDirty 具体原因（新增/内容变更/重命名/统计更新等）。
-- **Legacy 快照开关** (`AndreaNovelHelper.fileTracker.writeLegacySnapshot`)：可选继续写出旧版聚合快照用于外部工具/调试。
-
----
-
-## 要求 / Requirements
-
-- Visual Studio Code **1.50.0** 或更高版本
-- Node.js 环境（用于本地开发编译）
-- 扩展依赖 `json5`（已在 `package.json` 中声明，无需手动安装）
-
----
-
-## 扩展设置 / Extension Settings
-
-此扩展在 `contributes.configuration` 中添加了以下设置：
-
-| 设置键                                 | 默认值                     | 描述                                      |
-| -------------------------------------- | -------------------------- | ----------------------------------------- |
-| `AndreaNovelHelper.rolesFile`          | `roles.json`               | 相对于工作区根目录的角色库 JSON5 文件路径 |
-| `AndreaNovelHelper.minChars`           | `1`                        | 触发补全前最少输入的字符数                |
-| `AndreaNovelHelper.defaultColor`       | `#CCCCCC`                  | 未指定自定义颜色时的默认文字颜色          |
-| `AndreaNovelHelper.supportedFileTypes` | `["markdown","plaintext"]` | 指定在什么格式的文件启用                  |
-| `AndreaNovelHelper.outline.lazyMode` | `true` | 大纲惰性模式：未打开大纲编辑器不生成/刷新大纲文件 |
-| `AndreaNovelHelper.fileTracker.writeLegacySnapshot` | `false` | 是否写出旧版聚合快照 `file-tracking.json` |
-| `AndreaNovelHelper.timeStats.persistReadOnlySessions` | `false` | 是否持久化纯阅读会话（无字符增删仍写入） |
-
----
-
-## 已知问题 / Known Issues
-
-- 如果角色库非常庞大，首次扫描和着色可能略有延迟
-- JSON5 格式不支持复杂嵌套，目前只解析顶层数组
-- 无自动检测重复名称或别名，需要手动维护库的一致性
-- JS 提供的分词器可能不够准确，某些词如“睡觉”可能被错误识别为角色名，后期考虑更换后端来解决，如使用 `jieba` 等中文分词库。
-- 大纲窗体在Code刚启动的时候不能正常显示，需要手动刷新一次。
-
----
-
-## 发布说明 / Release Notes
-
-### 0.0.1
-
-- 初始版本：实现基础的 JSON5 角色库加载、分词补全和着色功能
-- 添加别名支持，补全与着色同时涵盖主名称与所有别名
-- 优化补全结果排序：前缀匹配优先
-- 引入 HoverProvider，鼠标悬停显示简介、类型、从属与颜色预览
-- 实现 Go To Definition（Ctrl/Cmd+Click / F12）跳转至角色定义
-- 新增右键命令 “Create Role from Selection”，支持交互式创建新角色
-- 增加文件系统监视器，角色库文件保存时自动刷新补全与着色
-- 使用 `Intl.Segmenter` 实现中文分词，支持多种语言
-
-### 0.0.2
-
-- 支持部分 i18n，添加中文语言包
-- 增加角色类型支持，提供默认颜色映射
-
-### 0.0.4
-
-- 修复了不能动态提供建议的问题
-
-### 0.0.5
-
-- 增加 CSpell 字典生成，支持角色名拼写检查
-
-### 0.0.6
-
-- 重构装饰更新逻辑，独立 `updateDecorations` 函数
-- 优化工具函数，添加区间重叠检查和正则转义功能
-- 现在能避免 hoverRanges 区间重复的问题
-- 修复了角色信息窗口不能显示颜色的 bug
-
-### 0.0.8
-
-- 新增实验性字数统计功能，提供对工作区内所有支持文件的字数统计
-
-### 0.0.9
-- 修复了非资源管理器面板打开文件强制重定向到资源管理器的问题
-- 新增敏感词和词汇功能，更新相关配置和命令
-- 更改了 `rolesFile` 的默认路径为 `novel-helper/character-gallery.json5`，以便更好地适应项目结构
-
-### 以后的版本见ChangeLog
-
-
----
-
-## 遵循扩展指南 / Following extension guidelines
-
-在开发过程中，我们参考了 VS Code 官方的最佳实践，确保扩展的激活时机、性能和可用性符合规范。
-
-- [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
----
-
-## 使用 Markdown 撰写文档 / Working with Markdown
-
-在 VS Code 中编写本 README 时，你可以：
-
-- 窗口拆分：`Ctrl+\`（Windows/Linux），`Cmd+\`（macOS）
-- 切换预览：`Shift+Ctrl+V`（Windows/Linux），`Shift+Cmd+V`（macOS）
-- 快捷片段：输入 `#` 然后 `Ctrl+Space` 查看可用 Markdown 片段
-
----
-
-## 更多信息 / For more information
-
-- [Visual Studio Code's Markdown Support](https://code.visualstudio.com/docs/languages/markdown)
-- [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+- **支持基于自定义分类的角色显示**：可以按类型或归属进行更灵活的分组

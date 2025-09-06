@@ -257,6 +257,7 @@ export function updateFileWritingStats(filePath: string, stats: {
     averageCPM?: number;
     buckets?: { start: number; end: number; charsAdded: number }[];
     sessions?: { start: number; end: number }[];
+    achievedMilestones?: number[]; // 已达成的里程碑目标
 }): void {
     const tracker = getFileTracker();
     if (tracker) {

@@ -256,6 +256,7 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                         { label: '$(paintcan) 保存更改', description: serializeFontFamily(working) || '（空）' },
                         { label: '$(discard) 还原默认', description: '清空 fontFamily，使用 VS Code 默认' },
                         { label: '$(list-unordered) 当前清单（只读）', description: working.length ? working.join('  ·  ') : '（空）' },
+                        { label: '$(home) 返回快速设置', description: '回到快速设置主面板' },
                         { label: '$(close) 关闭' }
                     ],
                     { placeHolder: '管理：编辑器字体家族（font-family）', ignoreFocusOut: true }
@@ -271,6 +272,9 @@ export function registerFontManager(context: vscode.ExtensionContext, onRefreshS
                     case '$(paintcan) 保存更改': await save(); break;
                     case '$(discard) 还原默认': await reset(); break;
                     case '$(list-unordered) 当前清单（只读）': break;
+                    case '$(home) 返回快速设置': 
+                        await vscode.commands.executeCommand('andrea.quickSettings');
+                        return;
                     case '$(close) 关闭': return;
                 }
             }

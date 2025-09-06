@@ -16,6 +16,7 @@
     "command.andrea.smartEnter.title": "智能回车：智能切段",
     "command.andrea.formatDocument.title": "快速排版全文（Markdown/纯文本）",
     "command.andrea.quickSettings.title": "小说版式：快速设置",
+    "command.andrea.configureMilestones.title": "配置：字数里程碑提醒",
     "command.andrea.toggleIndentFirst.title": "切换：段首缩进",
     "command.andrea.toggleTrimTrailing.title": "切换：去尾空格",
     "command.andrea.changeBlankLines.title": "设置：段间空行数",
@@ -160,9 +161,15 @@
     "config.timeStats.largeFile.accurateEveryChanges.description": "TimeStats: 大文件近似模式下累计多少次文本变更后触发一次精确校准。",
     "config.timeStats.largeFile.accurateEveryMs.description": "TimeStats: 大文件近似模式下与上次精确校准的最小时间间隔 (毫秒)。",
     "config.timeStats.debug.description": "TimeStats: 输出详细调试日志 (可能影响性能)。",
+    "config.timeStats.milestone.enabled.description": "启用字数里程碑提醒功能。当文档首次达到设定字数时弹窗提醒。",
+    "config.timeStats.milestone.targets.description": "字数里程碑目标列表。当文档首次达到列表中的字数时会弹窗庆祝。",
+    "config.timeStats.milestone.notificationType.description": "里程碑提醒的弹窗类型。",
+    "config.timeStats.milestone.notificationType.information": "右下角信息提示（不阻塞）",
+    "config.timeStats.milestone.notificationType.modal": "模态对话框（阻塞，需要用户确认）",
     "config.wordCount.largeFileThreshold.description": "大文件快速估算字数阈值 (字节)。超过该大小先显示估算字数，后台再进行精确统计。",
     "config.wordCount.largeFileAvgBytesPerChar.description": "大文件估算阶段使用的平均字节/字符比值 (字节 ÷ 字符)。例如 1.6 代表 1.6 字节≈1 个字符。",
     "config.wordCount.maxWorkers.description": "并行统计 worker 数量。0=自动 (cpu/2 上限受 maxWorkersUpperLimit 限制)。",
     "config.wordCount.maxWorkersUpperLimit.description": "worker 自动模式与手动设置的最大允许上限。防止意外拉满 CPU。",
-    "config.debug.completionLog.description": "补全: 输出前缀/匹配数调试日志 (可能影响性能)。"
+    "config.debug.completionLog.description": "补全: 输出前缀/匹配数调试日志 (可能影响性能)。",
+    "config.decorations.cacheSize.description": "装饰缓存大小：保留最近关闭的文档装饰数量，提升重新打开时的性能。设为0禁用缓存。"
 }

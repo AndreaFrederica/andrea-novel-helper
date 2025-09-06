@@ -3,6 +3,10 @@ import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
 import { buildRoleMarkdown } from '../hoverProvider';
 
+// 与 docRolesModel 对齐的分组结构
+interface RoleHierarchyTypeGroup { type: string; roles: Role[]; }
+interface RoleHierarchyAffiliationGroup { affiliation: string; types: RoleHierarchyTypeGroup[]; }
+
 // Tree Item Types
 // level 0: affiliation
 // level 1: type
@@ -11,7 +15,7 @@ import { buildRoleMarkdown } from '../hoverProvider';
 type NodeKind = 'affiliation' | 'type' | 'role' | 'specialRoot' | 'specialType' | 'specialAffiliation';
 
 interface BaseNode { kind: NodeKind; key: string; parent?: BaseNode; uid?: string; }
-interface AffiliationNode extends BaseNode { kind: 'affiliation'; children?: TypeNode[]; }
+interface AffiliationNode extends BaseNode { kind: 'affiliation'; children?: (TypeNode | RoleNode)[]; }
 interface TypeNode extends BaseNode { kind: 'type'; affiliation: string; children?: RoleNode[]; }
 interface RoleNode extends BaseNode { kind: 'role'; role: Role; affiliation: string; roleType: string; }
 interface SpecialRootNode extends BaseNode { kind: 'specialRoot'; children: SpecialTypeNode[]; count: number; }
@@ -37,6 +41,7 @@ export class RoleTreeItem extends vscode.TreeItem {
             this.description = `${node.children?.length || 0}`;
             this.contextValue = 'roleSpecialAffiliation';
         } else if (node.kind === 'role') {
+            // 若来自扁平分组，roleType 可能被填为真实类型
             this.description = node.roleType;
             this.tooltip = buildRoleMarkdown(node.role);
             this.command = {
@@ -52,7 +57,14 @@ export class RoleTreeItem extends vscode.TreeItem {
             this.description = `${node.children?.length || 0}`;
             this.contextValue = 'roleTypeNode';
         } else if (node.kind === 'affiliation') {
-            this.description = `${node.children?.reduce((acc, t) => acc + (t.children?.length || 0), 0) || 0}`;
+            // children 可能同时包含类型与角色
+            const count = (node.children || []).reduce((acc, ch: any) => {
+                if (!ch) { return acc; }
+                if (ch.kind === 'type') { return acc + (ch.children?.length || 0); }
+                if (ch.kind === 'role') { return acc + 1; }
+                return acc;
+            }, 0);
+            this.description = `${count}`;
             this.contextValue = 'roleAffiliationNode';
         }
     }
@@ -116,72 +128,153 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
     }
 
     private buildHierarchy(): AnyNode[] {
-        const affMap = new Map<string, Map<string, Role[]>>();
-        for (const r of roles) {
-            const aff = r.affiliation?.trim() || UNGROUPED;
-            const type = r.type || 'unknown';
-            if (!affMap.has(aff)) {
-                affMap.set(aff, new Map());
-            }
-            const typeMap = affMap.get(aff)!;
-            if (!typeMap.has(type)) {
-                typeMap.set(type, []);
-            }
-            typeMap.get(type)!.push(r);
-        }
-        const affiliationNodes: AffiliationNode[] = [];
-        const SPECIAL_TYPES = new Set(['敏感词','词汇','正则表达式']);
-        let specialCount = 0;
-        // Build affiliation nodes excluding special types
-        for (const [aff, typeMap] of affMap) {
-            const typeNodes: TypeNode[] = [];
-            for (const [type, roleArr] of typeMap) {
-                if (SPECIAL_TYPES.has(type)) {
-                    specialCount += roleArr.length;
-                    continue; // skip adding here
+    // 读取显示配置（支持与当前文章角色设置同步）
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const sync = cfg.get<boolean>('allRoles.syncWithDocRoles', true);
+    const base = sync ? 'docRoles' : 'allRoles';
+    const groupBy = cfg.get<string>(`${base}.groupBy`, 'affiliation');
+    const respectAffiliation = cfg.get<boolean>(`${base}.respectAffiliation`, true);
+    const respectType = cfg.get<boolean>(`${base}.respectType`, true);
+    const primaryGroup = cfg.get<string>(`${base}.primaryGroup`, 'affiliation');
+    const useCustomGroups = cfg.get<boolean>(`${base}.useCustomGroups`, false);
+    const customGroups = cfg.get<any[]>(`${base}.customGroups`, []);
+
+        // 将全局 roles 视为“可见集合”
+        const seen = new Set<Role>(roles);
+
+        // 分组构建（与 docRolesModel.hierarchyFromSeen 对齐）
+        const buildCustomGroups = (set: Set<Role>, groups: any[]): RoleHierarchyAffiliationGroup[] => {
+            const grouped = new Map<string, Role[]>();
+            const other: Role[] = [];
+            for (const g of groups) { if (g?.name) { grouped.set(g.name, []); } }
+            for (const r of set) {
+                let matched = false;
+                for (const g of groups) {
+                    if (!g?.name || !Array.isArray(g.patterns)) { continue; }
+                    const field = g.matchType === 'type' ? (r.type || '') : (r.affiliation || '');
+                    if (g.patterns.some((p: string) => field.includes(p))) {
+                        grouped.get(g.name)!.push(r); matched = true; break;
+                    }
                 }
-                roleArr.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
-                const roleNodes: RoleNode[] = roleArr.map(r => ({ kind: 'role', key: r.name, role: r, affiliation: aff, roleType: type }));
-                typeNodes.push({ kind: 'type', key: type, affiliation: aff, children: roleNodes });
+                if (!matched) { other.push(r); }
             }
-            if (typeNodes.length) {
-                typeNodes.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
-                affiliationNodes.push({ kind: 'affiliation', key: aff, children: typeNodes });
+            if (other.length) { grouped.set('其他', other); }
+            const out: RoleHierarchyAffiliationGroup[] = [];
+            for (const [name, arr] of grouped) {
+                if (!arr.length) { continue; }
+                const typeMap = new Map<string, Role[]>();
+                for (const r of arr) { const t = r.type || 'unknown'; if (!typeMap.has(t)) { typeMap.set(t, []); } typeMap.get(t)!.push(r); }
+                const tgs: RoleHierarchyTypeGroup[] = [];
+                for (const [t, rs] of typeMap) { rs.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'})); tgs.push({ type: t, roles: rs }); }
+                tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                out.push({ affiliation: name, types: tgs });
             }
+            out.sort((a,b)=>{
+                if (a.affiliation === '其他') { return 1; }
+                if (b.affiliation === '其他') { return -1; }
+                const ai = groups.findIndex(g=>g.name===a.affiliation);
+                const bi = groups.findIndex(g=>g.name===b.affiliation);
+                return ai - bi;
+            });
+            return out;
+        };
+
+        let groupsOut: RoleHierarchyAffiliationGroup[] = [];
+        if (groupBy === 'none') {
+            const list = Array.from(seen).sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
+            groupsOut = [{ affiliation: '全部角色', types: [{ type: '__FLAT__', roles: list }] }];
+        } else if (useCustomGroups && customGroups.length > 0) {
+            groupsOut = buildCustomGroups(seen, customGroups);
+        } else {
+            const map = new Map<string, Map<string, Role[]>>();
+            for (const r of seen) {
+                let firstKey = '';
+                let secondKey = '';
+                if (groupBy === 'type') {
+                    firstKey = r.type || 'unknown';
+                    secondKey = respectAffiliation ? (r.affiliation?.trim() || UNGROUPED) : '';
+                } else {
+                    if (respectAffiliation) {
+                        if (primaryGroup === 'type') {
+                            firstKey = r.type || 'unknown';
+                            secondKey = respectType ? (r.affiliation?.trim() || UNGROUPED) : '';
+                        } else {
+                            firstKey = r.affiliation?.trim() || UNGROUPED;
+                            secondKey = respectType ? (r.type || 'unknown') : '';
+                        }
+                    } else {
+                        if (respectType) { firstKey = r.type || 'unknown'; secondKey = ''; }
+                        else { firstKey = '所有角色'; secondKey = ''; }
+                    }
+                }
+                if (!map.has(firstKey)) { map.set(firstKey, new Map()); }
+                const tm = map.get(firstKey)!; if (!tm.has(secondKey)) { tm.set(secondKey, []); }
+                tm.get(secondKey)!.push(r);
+            }
+            const res: RoleHierarchyAffiliationGroup[] = [];
+            for (const [fk, tm] of map) {
+                const tgs: RoleHierarchyTypeGroup[] = [];
+                for (const [sk, arr] of tm) {
+                    arr.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                    tgs.push({ type: sk === '' ? '__FLAT__' : sk, roles: arr.slice() });
+                }
+                tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                res.push({ affiliation: fk, types: tgs });
+            }
+            res.sort((a,b)=>a.affiliation.localeCompare(b.affiliation,'zh-Hans',{numeric:true,sensitivity:'base'}));
+            groupsOut = res;
+        }
+
+        // 将分组结构渲染为树节点
+        const SPECIAL_TYPES = new Set(['敏感词','词汇','正则表达式']);
+        const affiliationNodes: AffiliationNode[] = [];
+        const specialTypeMap = new Map<string, Map<string, Role[]>>();
+        let specialCount = 0;
+        for (const g of groupsOut) {
+            const children: (TypeNode | RoleNode)[] = [];
+            for (const tg of g.types) {
+                if (tg.type === '__FLAT__') {
+                    // 扁平：角色直接挂到归属节点下；描述显示真实类型
+                    const rNodes: RoleNode[] = tg.roles.map(r=>({ kind:'role', key:r.name, role:r, affiliation:g.affiliation, roleType: r.type || 'unknown' }));
+                    children.push(...rNodes);
+                    continue;
+                }
+                // 自定义分组时不抽取特殊类型到根；仅标准模式抽取
+                if (!useCustomGroups && SPECIAL_TYPES.has(tg.type)) {
+                    if (!specialTypeMap.has(tg.type)) { specialTypeMap.set(tg.type, new Map()); }
+                    const affMap = specialTypeMap.get(tg.type)!;
+                    if (!affMap.has(g.affiliation)) { affMap.set(g.affiliation, []); }
+                    affMap.get(g.affiliation)!.push(...tg.roles);
+                    specialCount += tg.roles.length;
+                    continue;
+                }
+                const roleNodes: RoleNode[] = tg.roles.map(r=>({ kind:'role', key:r.name, role:r, affiliation:g.affiliation, roleType: tg.type }));
+                children.push({ kind:'type', key: tg.type, affiliation: g.affiliation, children: roleNodes });
+            }
+            if (children.length) { affiliationNodes.push({ kind:'affiliation', key: g.affiliation, children }); }
         }
         affiliationNodes.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
 
-        // Build special root (types only)
-        const specialTypeMap = new Map<string, Role[]>();
-        for (const r of roles) {
-            if (SPECIAL_TYPES.has(r.type)) {
-                if (!specialTypeMap.has(r.type)) { specialTypeMap.set(r.type, []); }
-                specialTypeMap.get(r.type)!.push(r);
+        // 构建特殊根
+        let roots: AnyNode[] = affiliationNodes;
+        if (!useCustomGroups) {
+            const specialTypeNodes: SpecialTypeNode[] = [];
+            for (const [type, affMap] of specialTypeMap) {
+                const affChildren: SpecialAffiliationNode[] = [];
+                for (const [aff, arr] of affMap) {
+                    arr.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                    const roleNodes: RoleNode[] = arr.map(r=>({ kind:'role', key:r.name, role:r, affiliation: aff, roleType: type }));
+                    affChildren.push({ kind:'specialAffiliation', key: aff, affiliation: aff, children: roleNodes, roleType: type });
+                }
+                affChildren.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                specialTypeNodes.push({ kind:'specialType', key: type, roleType: type, children: affChildren });
             }
+            specialTypeNodes.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
+            const specialRoot: SpecialRootNode | undefined = specialTypeNodes.length ? { kind:'specialRoot', key:'__SPECIAL__', children: specialTypeNodes, count: specialCount } : undefined;
+            if (specialRoot) { roots = [...affiliationNodes, specialRoot]; }
         }
-        const specialTypeNodes: SpecialTypeNode[] = [];
-        for (const [type, arr] of specialTypeMap) {
-            // group by affiliation inside each special type
-            const map = new Map<string, Role[]>();
-            for (const r of arr) {
-                const aff = r.affiliation?.trim() || UNGROUPED;
-                if (!map.has(aff)) { map.set(aff, []); }
-                map.get(aff)!.push(r);
-            }
-            const affChildren: SpecialAffiliationNode[] = [];
-            for (const [aff, rArr] of map) {
-                rArr.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
-                const roleNodes: RoleNode[] = rArr.map(r=>({ kind:'role', key:r.name, role:r, affiliation: aff, roleType: type }));
-                affChildren.push({ kind:'specialAffiliation', key: aff, affiliation: aff, children: roleNodes, roleType: type });
-            }
-            affChildren.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
-            specialTypeNodes.push({ kind:'specialType', key:type, roleType:type, children: affChildren });
-        }
-        specialTypeNodes.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
-        const specialRoot: SpecialRootNode | undefined = specialTypeNodes.length ? { kind:'specialRoot', key:'__SPECIAL__', children: specialTypeNodes, count: specialCount } : undefined;
-        const roots: AnyNode[] = specialRoot ? [...affiliationNodes, specialRoot] : affiliationNodes;
 
-        // Assign stable unique ids (uid) to every node. Base id derives from structural info; duplicates get ::N suffix.
+        // 稳定 uid 分配
         const idCounts = new Map<string, number>();
         const baseId = (node: AnyNode): string => {
             switch(node.kind) {
@@ -203,18 +296,10 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
         const walk = (node: AnyNode) => {
             const b = baseId(node);
             const prev = idCounts.get(b) || 0;
-            if (prev === 0) {
-                node.uid = b; // first occurrence keeps base id
-            } else {
-                node.uid = `${b}::${prev+1}`; // disambiguate duplicates deterministically
-            }
+            node.uid = prev === 0 ? b : `${b}::${prev+1}`;
             idCounts.set(b, prev + 1);
-            // recurse
             if ((node as any).children) {
-                for (const c of (node as any).children as AnyNode[]) {
-                    c.parent = node;
-                    walk(c);
-                }
+                for (const c of (node as any).children as AnyNode[]) { c.parent = node; walk(c); }
             }
         };
         for (const rNode of roots) { walk(rNode); }
@@ -236,12 +321,34 @@ export function registerRoleTreeView(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.openRoleSource', async (role: Role) => {
         if (!role.sourcePath) { return; }
         try {
+            const srcPath = role.sourcePath;
+            if (srcPath && srcPath.toLowerCase().endsWith('.json5')) {
+                const andreaCfg = vscode.workspace.getConfiguration('andrea');
+                const openWithRoleManager = andreaCfg.get<boolean>('roleJson5.openWithRoleManager', false);
+                if (openWithRoleManager) {
+                    try {
+                        await vscode.commands.executeCommand('andrea.roleJson5Editor.def', { name: role.name, path: srcPath });
+                        return;
+                    } catch (e) {
+                        console.warn('[RoleTreeView] andrea.roleJson5Editor.def failed', e);
+                    }
+                }
+            }
+
             const doc = await vscode.workspace.openTextDocument(role.sourcePath);
             const editor = await vscode.window.showTextDocument(doc, { preview: true });
-            // naive definition search
-            const text = doc.getText();
-            let idx = text.indexOf(role.name);
-            if (idx < 0) { idx = text.search(new RegExp(role.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))); }
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const hugeTh = cfg.get<number>('hugeFile.thresholdBytes', 50*1024)!;
+            let txt = '';
+            if (doc.getText().length * 1.8 > hugeTh) {
+                console.warn('[RoleTreeView] skip huge file full search', doc.uri.fsPath);
+                const slice = doc.getText().slice(0, 8*1024);
+                txt = slice;
+            } else {
+                txt = doc.getText();
+            }
+            let idx = txt.indexOf(role.name);
+            if (idx < 0) { idx = txt.search(new RegExp(role.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))); }
             if (idx >=0) {
                 const pos = doc.positionAt(idx);
                 editor.selection = new vscode.Selection(pos, pos);
@@ -251,6 +358,10 @@ export function registerRoleTreeView(context: vscode.ExtensionContext) {
     }));
     // 订阅角色变化事件（静态导入）
     context.subscriptions.push(onDidChangeRoles(()=> provider.refresh()));
+    // 订阅显示配置变化
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e=>{
+        if (e.affectsConfiguration('AndreaNovelHelper.docRoles') || e.affectsConfiguration('AndreaNovelHelper.allRoles')) { provider.refresh(); }
+    }));
     // initial expand restore after short delay (tree populated)
     setTimeout(()=>{
     const ids = Array.from(expanded);

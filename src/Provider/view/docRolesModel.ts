@@ -60,6 +60,14 @@ class DocumentRolesModel {
         });
         // 仍监听主动切换（避免尚未触发装饰的第一次进入）
         vscode.window.onDidChangeActiveTextEditor(() => this.scheduleRebuild());
+        
+        // 监听角色显示配置变化
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('AndreaNovelHelper.docRoles')) {
+                const changed = this.rebuild(true);
+                if (changed) { this._onDidChange.fire(); }
+            }
+        });
     }
 
     private scheduleRebuild() {
@@ -136,27 +144,178 @@ class DocumentRolesModel {
     }
 
     private hierarchyFromSeen(seen: Set<Role>): RoleHierarchyAffiliationGroup[] {
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const groupBy = cfg.get<string>('docRoles.groupBy', 'affiliation');
+        const respectAffiliation = cfg.get<boolean>('docRoles.respectAffiliation', true);
+        const respectType = cfg.get<boolean>('docRoles.respectType', true);
+        const primaryGroup = cfg.get<string>('docRoles.primaryGroup', 'affiliation');
+        const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
+        const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
+
+        if (groupBy === 'none') {
+            // 不分组：所有角色平铺显示
+            const roles = Array.from(seen);
+            roles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+            return [{
+                affiliation: '全部角色',
+                types: [{ type: '', roles }]
+            }];
+        }
+
+        // 如果启用自定义分组
+        if (useCustomGroups && customGroups.length > 0) {
+            return this.buildCustomGroups(seen, customGroups, respectAffiliation);
+        }
+
         const affMap = new Map<string, Map<string, Role[]>>();
+        
         for (const r of seen) {
-            const aff = r.affiliation?.trim() || UNGROUPED;
-            const type = r.type || 'unknown';
-            if (!affMap.has(aff)) { affMap.set(aff, new Map()); }
-            const tm = affMap.get(aff)!;
-            if (!tm.has(type)) { tm.set(type, []); }
-            tm.get(type)!.push(r);
-        }
-        const affGroups: RoleHierarchyAffiliationGroup[] = [];
-        for (const [aff, tMap] of affMap) {
-            const typeGroups: RoleHierarchyTypeGroup[] = [];
-            for (const [type, arr] of tMap) {
-                arr.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
-                typeGroups.push({ type, roles: arr.slice() });
+            let firstKey: string = '';
+            let secondKey: string = '';
+            
+            if (groupBy === 'type') {
+                // 按类型分组
+                firstKey = r.type || 'unknown';
+                secondKey = respectAffiliation ? (r.affiliation?.trim() || UNGROUPED) : '';
+            } else if (groupBy === 'affiliation') {
+                // 按归属分组（默认）
+                if (respectAffiliation) {
+                    // 遵循归属时，使用 primaryGroup 决定第一级分组
+                    if (primaryGroup === 'type') {
+                        firstKey = r.type || 'unknown';
+                        secondKey = respectType ? (r.affiliation?.trim() || UNGROUPED) : '';
+                    } else {
+                        firstKey = r.affiliation?.trim() || UNGROUPED;
+                        secondKey = respectType ? (r.type || 'unknown') : '';
+                    }
+                } else {
+                    // 不遵循归属时，根据 respectType 决定分组方式
+                    if (respectType) {
+                        firstKey = r.type || 'unknown';
+                        secondKey = ''; // 不进行二级分组
+                    } else {
+                        // 既不遵循归属也不遵循类型，所有角色平铺
+                        firstKey = '所有角色';
+                        secondKey = '';
+                    }
+                }
+            } else {
+                // groupBy === 'none' 的情况已经在前面处理了，这里是兜底
+                firstKey = 'unknown';
+                secondKey = '';
             }
-            typeGroups.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
-            affGroups.push({ affiliation: aff, types: typeGroups });
+            
+            if (!affMap.has(firstKey)) { affMap.set(firstKey, new Map()); }
+            const tm = affMap.get(firstKey)!;
+            if (!tm.has(secondKey)) { tm.set(secondKey, []); }
+            tm.get(secondKey)!.push(r);
         }
-    affGroups.sort((a,b)=>a.affiliation.localeCompare(b.affiliation,'zh-Hans',{numeric:true,sensitivity:'base'}));
-    return affGroups;
+
+        const affGroups: RoleHierarchyAffiliationGroup[] = [];
+        for (const [firstKey, tMap] of affMap) {
+            const typeGroups: RoleHierarchyTypeGroup[] = [];
+            for (const [secondKey, arr] of tMap) {
+                arr.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+                // 只有当 secondKey 不为空时才创建类型分组
+                // 如果为空，说明不需要二级分组，我们将在后面特殊处理
+                if (secondKey !== '') {
+                    typeGroups.push({ type: secondKey, roles: arr.slice() });
+                } else {
+                    // 对于不需要二级分组的情况，我们创建一个特殊的类型组
+                    // 使用一个特殊标记来表示这是一个"扁平"分组
+                    typeGroups.push({ type: '__FLAT__', roles: arr.slice() });
+                }
+            }
+            typeGroups.sort((a, b) => a.type.localeCompare(b.type, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+            affGroups.push({ affiliation: firstKey, types: typeGroups });
+        }
+        
+        affGroups.sort((a, b) => a.affiliation.localeCompare(b.affiliation, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+        return affGroups;
+    }
+
+    private buildCustomGroups(seen: Set<Role>, customGroups: any[], respectAffiliation: boolean): RoleHierarchyAffiliationGroup[] {
+        const grouped = new Map<string, Role[]>();
+        const ungrouped: Role[] = [];
+
+        // 初始化自定义分组
+        for (const group of customGroups) {
+            if (group.name) {
+                grouped.set(group.name, []);
+            }
+        }
+
+        // 对每个角色进行分组匹配
+        for (const role of seen) {
+            let matched = false;
+            
+            for (const group of customGroups) {
+                if (!group.name || !group.patterns || !Array.isArray(group.patterns)) {
+                    continue;
+                }
+                
+                const matchField = group.matchType === 'type' ? (role.type || '') : (role.affiliation || '');
+                
+                // 检查是否匹配任何模式
+                const isMatch = group.patterns.some((pattern: string) => 
+                    matchField.includes(pattern)
+                );
+                
+                if (isMatch) {
+                    grouped.get(group.name)!.push(role);
+                    matched = true;
+                    break; // 只匹配第一个符合条件的分组
+                }
+            }
+            
+            if (!matched) {
+                ungrouped.push(role);
+            }
+        }
+
+        // 如果有未分组的角色，添加到"其他"分组
+        if (ungrouped.length > 0) {
+            grouped.set('其他', ungrouped);
+        }
+
+        // 构建结果
+        const result: RoleHierarchyAffiliationGroup[] = [];
+        
+        for (const [groupName, roles] of grouped) {
+            if (roles.length === 0) { continue; }
+            
+            // 按类型进行二级分组
+            const typeMap = new Map<string, Role[]>();
+            for (const role of roles) {
+                const typeKey = role.type || 'unknown';
+                if (!typeMap.has(typeKey)) {
+                    typeMap.set(typeKey, []);
+                }
+                typeMap.get(typeKey)!.push(role);
+            }
+            
+            const typeGroups: RoleHierarchyTypeGroup[] = [];
+            for (const [type, typeRoles] of typeMap) {
+                typeRoles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+                typeGroups.push({ type, roles: typeRoles });
+            }
+            
+            typeGroups.sort((a, b) => a.type.localeCompare(b.type, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+            result.push({ affiliation: groupName, types: typeGroups });
+        }
+        
+        // 按自定义分组顺序排序，"其他"放在最后
+        result.sort((a, b) => {
+            if (a.affiliation === '其他') { return 1; }
+            if (b.affiliation === '其他') { return -1; }
+            
+            const aIndex = customGroups.findIndex(g => g.name === a.affiliation);
+            const bIndex = customGroups.findIndex(g => g.name === b.affiliation);
+            
+            return aIndex - bIndex;
+        });
+        
+        return result;
     }
 }
 

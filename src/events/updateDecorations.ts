@@ -22,10 +22,99 @@ import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../
 // —— 每文档每角色的 ranges 哈希：docUri -> (roleName -> hash) —— 
 const appliedHashes = new Map<string, Map<string, string>>();
 
+// —— 装饰缓存机制：按常用度缓存不可见文档的装饰数据 ——
+type SimpleRange = [number, number, number, number]; // [sLine, sChar, eLine, eChar]
+interface CacheEntry {
+    lastSeen: number;
+    openCount: number; // 打开次数，用于常用度排序
+    hashes: Map<string, string>;
+    rangesByRoleName?: Map<string, SimpleRange[]>; // 角色名 -> 范围快照
+}
+const decorationCache = new Map<string, CacheEntry>();
+const documentOpenCounts = new Map<string, number>(); // 文档打开次数统计
+const currentRangesByDoc = new Map<string, Map<string, vscode.Range[]>>(); // 文档当前应用的范围
+const restoreCooldown = new Map<string, number>(); // 文档恢复冷却时间，用于避免反复恢复导致死循环
+
+function getCacheSize(): number {
+    return vscode.workspace.getConfiguration('AndreaNovelHelper.decorations').get<number>('cacheSize', 5);
+}
+
 function getPerDocHashes(docUri: string): Map<string, string> {
     let m = appliedHashes.get(docUri);
-    if (!m) { m = new Map(); appliedHashes.set(docUri, m); }
+    if (!m) { 
+        // 尝试从缓存恢复哈希
+        const cached = decorationCache.get(docUri);
+        if (cached) {
+            m = new Map(cached.hashes);
+            appliedHashes.set(docUri, m);
+            // 更新打开次数
+            cached.openCount++;
+            cached.lastSeen = Date.now();
+            documentOpenCounts.set(docUri, cached.openCount);
+            decorationCache.delete(docUri); // 从缓存移回活跃状态
+            console.log('[Decorations] 从缓存恢复哈希状态:', docUri, '打开次数:', cached.openCount);
+        } else {
+            m = new Map(); 
+            appliedHashes.set(docUri, m);
+            // 记录新文档打开
+            const openCount = (documentOpenCounts.get(docUri) || 0) + 1;
+            documentOpenCounts.set(docUri, openCount);
+        }
+    }
     return m;
+}
+
+/**
+ * 从缓存快速恢复：立即应用缓存中的装饰范围，并恢复哈希。
+ * 返回是否命中并成功恢复。
+ */
+function tryRestoreFromCache(editor: vscode.TextEditor, docUri: string): boolean {
+    const entry = decorationCache.get(docUri);
+    if (!entry || !entry.rangesByRoleName) return false;
+
+    const doc = editor.document;
+    // 反序列化范围并进行边界钳制
+    const applyRanges = new Map<string, vscode.Range[]>();
+    for (const [roleName, arr] of entry.rangesByRoleName) {
+        const ranges: vscode.Range[] = [];
+        for (const [sl, sc, el, ec] of arr) {
+            const sLine = Math.max(0, Math.min(sl, Math.max(0, doc.lineCount - 1)));
+            const eLine = Math.max(0, Math.min(el, Math.max(0, doc.lineCount - 1)));
+            let sChar = sc, eChar = ec;
+            try {
+                const sText = doc.lineAt(sLine).text; const eText = doc.lineAt(eLine).text;
+                sChar = Math.max(0, Math.min(sc, Math.max(0, sText.length)));
+                eChar = Math.max(0, Math.min(ec, Math.max(0, eText.length)));
+            } catch { /* ignore */ }
+            ranges.push(new vscode.Range(new vscode.Position(sLine, sChar), new vscode.Position(eLine, eChar)));
+        }
+        applyRanges.set(roleName, ranges);
+    }
+
+    // 应用到编辑器：先设置缓存里有的角色，再清理其它角色
+    const present = new Set<string>(applyRanges.keys());
+    for (const [roleName, { deco }] of decorationMeta) {
+        const ranges = applyRanges.get(roleName) || [];
+        editor.setDecorations(deco, ranges);
+    }
+    for (const [roleName] of decorationMeta) {
+        if (!present.has(roleName)) {
+            const meta = decorationMeta.get(roleName)!;
+            editor.setDecorations(meta.deco, []);
+        }
+    }
+
+    // 恢复哈希
+    appliedHashes.set(docUri, new Map(entry.hashes));
+
+    // 更新统计并从缓存移除，设置恢复冷却，避免立即再次恢复
+    entry.openCount++; entry.lastSeen = Date.now();
+    documentOpenCounts.set(docUri, entry.openCount);
+    decorationCache.delete(docUri);
+    restoreCooldown.set(docUri, Date.now() + 200); // 200ms 内不再尝试缓存恢复
+
+    console.log('[Decorations] 命中缓存，已提前应用装饰（延迟AC验证）:', docUri);
+    return true;
 }
 
 
@@ -153,6 +242,17 @@ export async function updateDecorations() {
 
         // 重置 hoverRanges
         setHoverRanges([]);
+
+        // 命中缓存则先应用装饰，再延迟一次完整验证
+        const docKeyEarly = doc.uri.toString();
+        const cooldownUntil = restoreCooldown.get(docKeyEarly) || 0;
+        if (Date.now() >= cooldownUntil && tryRestoreFromCache(editor, docKeyEarly)) {
+            setTimeout(() => {
+                // 冷却后触发一次标准更新，确保与文件内容一致
+                updateDecorations();
+            }, 150);
+            continue;
+        }
 
         // 预先仅在需要时获取全文（延迟到 regex 或 fallback 使用）
         let fullText: string | undefined;
@@ -362,13 +462,18 @@ export async function updateDecorations() {
         //     }
         // }
         // 生成 role → ranges （并做最小化 setDecorations：如果范围未变则跳过）
-        const roleToRanges = new Map<Role, vscode.Range[]>();
+    const roleToRanges = new Map<Role, vscode.Range[]>();
         for (const c of selected) {
             const range = new vscode.Range(doc.positionAt(c.start), doc.positionAt(c.end));
             hoverRanges.push({ range, role: c.role });
             if (!roleToRanges.has(c.role)) roleToRanges.set(c.role, []);
             roleToRanges.get(c.role)!.push(range);
         }
+
+    // 记录本次范围快照（用于进入缓存时一并保存以便快速恢复）
+    const snapshot = new Map<string, vscode.Range[]>();
+    for (const [role, ranges] of roleToRanges) snapshot.set(role.name, ranges);
+    currentRangesByDoc.set(doc.uri.toString(), snapshot);
 
         // —— 按“文档×角色”做哈希比对，避免跨编辑器串扰 —— //
         const docKey = doc.uri.toString();               // 也可用 toString(true)
@@ -493,10 +598,53 @@ export async function updateDecorations() {
             prevDiagnostics.set(key, diagnostics.map(d => d));
         }
 
-        // —— 清理不再可见的文档缓存，防内存增长/串扰 —— 
+        // —— 清理不再可见的文档缓存，改为智能缓存而不是直接删除 —— 
         const visibleKeys = new Set(vscode.window.visibleTextEditors.map(e => e.document.uri.toString()));
+        const maxCache = getCacheSize();
+        
         for (const key of Array.from(appliedHashes.keys())) {
-            if (!visibleKeys.has(key)) appliedHashes.delete(key);
+            if (!visibleKeys.has(key)) {
+                const hashes = appliedHashes.get(key);
+                if (hashes && hashes.size > 0 && maxCache > 0) {
+                    // 移入缓存而不是删除（包含范围快照）
+                    const openCount = documentOpenCounts.get(key) || 1;
+                    const rangesSnap = currentRangesByDoc.get(key);
+                    let rangesByRoleName: Map<string, SimpleRange[]> | undefined;
+                    if (rangesSnap) {
+                        rangesByRoleName = new Map<string, SimpleRange[]>();
+                        for (const [roleName, ranges] of rangesSnap) {
+                            rangesByRoleName.set(roleName, ranges.map(r => [r.start.line, r.start.character, r.end.line, r.end.character]));
+                        }
+                    }
+                    decorationCache.set(key, {
+                        lastSeen: Date.now(),
+                        openCount: openCount,
+                        hashes: new Map(hashes),
+                        rangesByRoleName
+                    });
+                    console.log('[Decorations] 缓存文档装饰哈希+范围:', key, '角色数:', hashes.size, '打开次数:', openCount);
+                }
+                appliedHashes.delete(key);
+                currentRangesByDoc.delete(key);
+            }
+        }
+        
+        // 清理过期缓存，按常用度（打开次数）排序，保持缓存大小限制
+        if (decorationCache.size > maxCache && maxCache > 0) {
+            const entries = Array.from(decorationCache.entries())
+                .sort((a, b) => {
+                    // 优先按打开次数排序，次数相同则按最近使用时间排序
+                    if (a[1].openCount !== b[1].openCount) {
+                        return a[1].openCount - b[1].openCount; // 少用的优先删除
+                    }
+                    return a[1].lastSeen - b[1].lastSeen; // 老的优先删除
+                });
+            
+            const toDelete = entries.slice(0, decorationCache.size - maxCache);
+            for (const [key] of toDelete) {
+                decorationCache.delete(key);
+                console.log('[Decorations] 清理过期缓存:', key);
+            }
         }
 
         // 触发“该文档装饰完成”事件

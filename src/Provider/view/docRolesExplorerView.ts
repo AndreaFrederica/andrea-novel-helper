@@ -6,7 +6,10 @@ import { getDocumentRolesModel } from './docRolesModel';
 // 复用与侧边栏 docRolesView 相同的分组逻辑，但单独一个 provider 绑定到资源管理器面板
 type NodeKind = 'affiliation' | 'type' | 'role' | 'specialRoot' | 'specialType' | 'specialAffiliation';
 interface Base { kind: NodeKind; key: string; }
-interface AffiliationNode extends Base { kind: 'affiliation'; children: TypeNode[]; }
+interface AffiliationNode extends Base { 
+	kind: 'affiliation'; 
+	children: (TypeNode | RoleNode)[]; // 支持直接包含角色或类型节点
+}
 interface TypeNode extends Base { kind: 'type'; affiliation: string; children: RoleNode[]; }
 interface RoleNode extends Base { kind: 'role'; role: Role; affiliation: string; roleType: string; }
 interface SpecialRootNode extends Base { kind: 'specialRoot'; children: SpecialTypeNode[]; count: number; }
@@ -63,13 +66,71 @@ class DocRolesExplorerProvider implements vscode.TreeDataProvider<AnyNode> {
     private build(): AnyNode[] {
         const model = getDocumentRolesModel();
         const groups = model.getHierarchy();
+        
+        // 检查是否启用了自定义分组
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
+        
+        if (useCustomGroups) {
+            // 使用自定义分组时，直接使用 model 返回的分组结构
+            const affiliationNodes: AffiliationNode[] = [];
+            for (const g of groups) {
+                const children: (TypeNode | RoleNode)[] = [];
+                
+                for (const tg of g.types) {
+                    if (tg.type === '__FLAT__') {
+                        // 对于扁平标记，直接将角色添加到归属节点下
+                        const roleNodes: RoleNode[] = tg.roles.map(r=>({ 
+                            kind:'role', 
+                            key:r.name, 
+                            role:r, 
+                            affiliation:g.affiliation, 
+                            roleType: tg.type 
+                        }));
+                        children.push(...roleNodes);
+                    } else {
+                        // 正常的类型分组
+                        const roleNodes: RoleNode[] = tg.roles.map(r=>({ 
+                            kind:'role', 
+                            key:r.name, 
+                            role:r, 
+                            affiliation:g.affiliation, 
+                            roleType: tg.type 
+                        }));
+                        
+                        children.push({ 
+                            kind:'type', 
+                            key: tg.type, 
+                            affiliation: g.affiliation, 
+                            children: roleNodes 
+                        });
+                    }
+                }
+                
+                if (children.length) { 
+                    affiliationNodes.push({ 
+                        kind:'affiliation', 
+                        key: g.affiliation, 
+                        children: children 
+                    }); 
+                }
+            }
+            return affiliationNodes;
+        }
+        
+        // 使用标准分组时，保持原有的特殊类型处理逻辑
         const SPECIAL_TYPES = new Set(['敏感词','词汇','正则表达式']);
         const affiliationNodes: AffiliationNode[] = [];
         const specialTypeMap = new Map<string, Map<string, Role[]>>();
         let specialCount = 0;
         for (const g of groups) {
-            const typeNodes: TypeNode[] = [];
+            const children: (TypeNode | RoleNode)[] = [];
             for (const tg of g.types) {
+                if (tg.type === '__FLAT__') {
+                    const roleNodes: RoleNode[] = tg.roles.map(r=>({ kind:'role', key:r.name, role:r, affiliation:g.affiliation, roleType: tg.type }));
+                    children.push(...roleNodes);
+                    continue;
+                }
                 if (SPECIAL_TYPES.has(tg.type)) {
                     if (!specialTypeMap.has(tg.type)) { specialTypeMap.set(tg.type, new Map()); }
                     const affMap = specialTypeMap.get(tg.type)!;
@@ -79,9 +140,9 @@ class DocRolesExplorerProvider implements vscode.TreeDataProvider<AnyNode> {
                     continue;
                 }
                 const roleNodes: RoleNode[] = tg.roles.map(r=>({ kind:'role', key:r.name, role:r, affiliation:g.affiliation, roleType: tg.type }));
-                typeNodes.push({ kind:'type', key: tg.type, affiliation: g.affiliation, children: roleNodes });
+                children.push({ kind:'type', key: tg.type, affiliation: g.affiliation, children: roleNodes });
             }
-            if (typeNodes.length) { affiliationNodes.push({ kind:'affiliation', key: g.affiliation, children: typeNodes }); }
+            if (children.length) { affiliationNodes.push({ kind:'affiliation', key: g.affiliation, children }); }
         }
         const specialTypeNodes: SpecialTypeNode[] = [];
         for (const [type, affMap] of specialTypeMap) {

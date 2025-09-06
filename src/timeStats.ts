@@ -34,6 +34,7 @@ interface FileStats {
     lastSeen: number;
     buckets: Bucket[];
     sessions: Session[];
+    achievedMilestones?: number[]; // 已达成的里程碑目标
 }
 
 // -------------------- 运行时状态 --------------------
@@ -114,6 +115,8 @@ interface RuntimeDocState {
     lastFullStats?: TextStats;    // 最近一次精确统计的完整 TextStats（小文件或大文件校准时更新）
     pendingFlushCore?: boolean;   // 是否已有异步 flushCore 排队
     pendingBaseline?: boolean;    // 是否需要异步建立基线（用于大文件初始化）
+    // —— 里程碑跟踪字段 ——
+    achievedMilestones?: Set<number>; // 已达成的里程碑目标
 }
 const docStates = new Map<string, RuntimeDocState>();
 
@@ -239,6 +242,96 @@ function isFileIgnoredForTimeStats(filePath: string): boolean {
     return false;
 }
 
+// -------------------- 里程碑功能 --------------------
+function checkAndCelebrateMilestones(filePath: string, oldCount: number, newCount: number, st: RuntimeDocState) {
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+    const enabled = cfg.get<boolean>('milestone.enabled', true);
+    if (!enabled) { return; }
+
+    const targets = cfg.get<number[]>('milestone.targets', [1000, 2000, 5000, 10000, 20000, 50000, 100000]);
+    if (!targets || targets.length === 0) { return; }
+    
+    // 获取持久化的文件统计，包含已达成的里程碑
+    const fileStats = getFileStats(filePath);
+    const persistedMilestones = new Set(fileStats.achievedMilestones || []);
+    
+    // 初始化运行时里程碑集合（与持久化数据同步）
+    if (!st.achievedMilestones) {
+        st.achievedMilestones = new Set(persistedMilestones);
+        tsDebug('milestone:loaded-from-persist', { filePath, milestones: Array.from(persistedMilestones) });
+    }
+    
+    // 检查新达成的里程碑 - 只有当字数增加且首次达到时才触发
+    const newMilestones: number[] = [];
+    if (newCount > oldCount) { // 确保是字数增加的情况
+        for (const target of targets) {
+            // 条件：旧字数小于目标，新字数大于等于目标，且从未达成过（包括持久化数据）
+            if (oldCount < target && newCount >= target && !st.achievedMilestones.has(target)) {
+                st.achievedMilestones.add(target);
+                newMilestones.push(target);
+                tsDebug('milestone:newly-achieved', { filePath, target, oldCount, newCount });
+            }
+        }
+    }
+    
+    // 如果有新达成的里程碑，更新持久化数据
+    if (newMilestones.length > 0) {
+        // 更新FileStats中的里程碑数据
+        fileStats.achievedMilestones = Array.from(st.achievedMilestones);
+        persistFileStats(filePath, fileStats);
+        
+        // 庆祝新达成的里程碑
+        celebrateMilestones(filePath, newMilestones, newCount);
+        
+        tsDebug('milestone:persisted', { filePath, allMilestones: Array.from(st.achievedMilestones) });
+    }
+}
+
+function celebrateMilestones(filePath: string, milestones: number[], currentCount: number) {
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+    const notificationType = cfg.get<string>('milestone.notificationType', 'information');
+    const fileName = path.basename(filePath);
+    
+    let message: string;
+    let actionButton: string;
+    
+    if (milestones.length === 1) {
+        const target = milestones[0];
+        message = `🎉 恭喜！${fileName}已达到 ${target.toLocaleString()} 字！当前字数：${currentCount.toLocaleString()}`;
+        actionButton = '继续加油！';
+    } else {
+        // 同时达成多个里程碑
+        const targets = milestones.sort((a, b) => a - b).map(n => n.toLocaleString()).join('、');
+        message = `🎉🎉 太棒了！${fileName}一举突破 ${targets} 字大关！当前字数：${currentCount.toLocaleString()}`;
+        actionButton = '再接再厉！';
+    }
+    
+    if (notificationType === 'modal') {
+        // 模态对话框 - 阻塞用户操作
+        vscode.window.showInformationMessage(
+            message,
+            { modal: true },
+            actionButton,
+            '查看详情'
+        ).then((selection) => {
+            if (selection === '查看详情') {
+                // 可以在这里添加打开写作统计面板的逻辑
+                vscode.commands.executeCommand('AndreaNovelHelper.openTimeStats');
+            }
+        });
+    } else {
+        // 默认：右下角信息提示 - 不阻塞用户操作
+        vscode.window.showInformationMessage(message, actionButton, '查看详情').then((selection) => {
+            if (selection === '查看详情') {
+                // 可以在这里添加打开写作统计面板的逻辑
+                vscode.commands.executeCommand('AndreaNovelHelper.openTimeStats');
+            }
+        });
+    }
+    
+    tsDebug('milestone:celebrated', { file: fileName, milestones, currentCount, notificationType });
+}
+
 // -------------------- 基础工具 --------------------
 function ensureDirectoryExists(file: string) {
     const dir = path.dirname(file);
@@ -324,7 +417,7 @@ function getOrCreateFileStats(filePath: string): FileStats {
 
     if (!g) {
         console.log('TimeStats: No global file tracking, returning empty stats');
-        return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
+        return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
     }
 
     let uuid = g.getFileUuid(filePath);
@@ -347,7 +440,7 @@ function getOrCreateFileStats(filePath: string): FileStats {
 
         if (!uuid) {
             console.log('TimeStats: Still no UUID, returning empty stats');
-            return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
+            return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
         }
     }
 
@@ -364,11 +457,12 @@ function getOrCreateFileStats(filePath: string): FileStats {
             lastSeen: ws.lastActiveTime,
             buckets: ws.buckets ?? [],     // 如果你的全局结构暂无 buckets，可保留为空
             sessions: ws.sessions ?? [],   // 同上
+            achievedMilestones: ws.achievedMilestones ?? [], // 加载已达成的里程碑
         };
     }
 
     console.log('TimeStats: No writing stats found, returning empty stats');
-    return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [] };
+    return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
 }
 
 // 仅当前文件读取
@@ -395,8 +489,9 @@ function persistFileStats(filePath: string, stats: FileStats) {
         sessionsCount: stats.sessions.length,
         averageCPM,
         buckets: stats.buckets,
-        sessions: stats.sessions
-    });
+        sessions: stats.sessions,
+        achievedMilestones: stats.achievedMilestones // 持久化已达成的里程碑
+    } as any);
 }
 
 // 桶聚合 - 空闲时不创建新桶，只更新现有桶
@@ -633,9 +728,14 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
             computeZhEnCountAsync(filePath).then(full => {
                 const currentSt = docStates.get(filePath);
                 if (currentSt && currentSt.lastFlushTs <= t) {
+                    const oldCount = currentSt.lastCount;
                     currentSt.lastFullStats = full.full;
                     currentSt.lastCount = full.total;
                     tsDebug('flushCore:async-update', { filePath, total: full.total });
+                    
+                    // 检查里程碑（大文件异步检查）
+                    checkAndCelebrateMilestones(filePath, oldCount, full.total, currentSt);
+                    
                     // 异步更新完成后刷新状态栏
                     updateStatusBar();
                 }
@@ -649,6 +749,9 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
             delta = totalNow - st.lastCount;
             if (delta === 0) { st.lastFlushTs = t; tsDebug('flushCore:skip-no-change', filePath); return; }
             st.lastFullStats = full.full;
+            
+            // 检查里程碑（小文件立即检查）
+            checkAndCelebrateMilestones(filePath, st.lastCount, totalNow, st);
         }
     }
     tsDebug('flushCore:delta', { file: filePath, delta, totalNow, isLarge: st.isLarge });

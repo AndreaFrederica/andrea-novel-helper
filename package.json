@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.3.24",
+  "version": "0.3.25",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -58,7 +58,7 @@
         "editor.wordBasedSuggestions": "allDocuments",
         "editor.quickSuggestionsDelay": 0
       }
-    },
+  },
     "languages": [
       {
         "id": "wcignore",
@@ -141,6 +141,10 @@
         "title": "%command.andrea.quickSettings.title%"
       },
       {
+        "command": "andrea.configureMilestones",
+        "title": "%command.andrea.configureMilestones.title%"
+      },
+      {
         "command": "andrea.toggleIndentFirst",
         "title": "%command.andrea.toggleIndentFirst.title%"
       },
@@ -195,6 +199,14 @@
       {
         "command": "AndreaNovelHelper.refreshRoles",
         "title": "%command.refreshRoles.title%"
+      },
+      {
+        "command": "andrea.configureAllRoles",
+        "title": "配置：全部角色显示"
+      },
+      {
+        "command": "andrea.configureDocRoles",
+        "title": "配置：当前文章角色显示"
       },
       {
         "command": "AndreaNovelHelper.addSensitiveWord",
@@ -516,6 +528,18 @@
           "group": "navigation"
         }
       ],
+      "view/title": [
+        {
+          "command": "andrea.configureDocRoles",
+          "when": "view == docRolesView || view == docRolesExplorerView",
+          "group": "navigation@100"
+        },
+        {
+          "command": "andrea.configureAllRoles",
+          "when": "view == roleHierarchyView",
+          "group": "navigation@100"
+        }
+      ],
       "view/item/context": [
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
@@ -766,6 +790,137 @@
       "type": "object",
       "title": "%config.title%",
       "properties": {
+        "AndreaNovelHelper.allRoles.syncWithDocRoles": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "全部角色是否与\"当前文章角色\"显示设置保持同步。开启则复用 AndreaNovelHelper.docRoles.* 配置；关闭则使用下方 allRoles.* 专属配置。"
+        },
+        "AndreaNovelHelper.allRoles.groupBy": {
+          "type": "string",
+          "enum": ["affiliation", "type", "none"],
+          "default": "affiliation",
+          "markdownDescription": "全部角色的分组依据：affiliation / type / none"
+        },
+        "AndreaNovelHelper.allRoles.respectAffiliation": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否遵循角色归属字段"
+        },
+        "AndreaNovelHelper.allRoles.respectType": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否遵循角色类型字段"
+        },
+        "AndreaNovelHelper.allRoles.primaryGroup": {
+          "type": "string",
+          "enum": ["affiliation", "type"],
+          "default": "affiliation",
+          "markdownDescription": "第一级别分组（归属优先/类型优先）"
+        },
+        "AndreaNovelHelper.allRoles.customGroups": {
+          "type": "array",
+          "default": [
+            { "name": "词汇敏感词", "matchType": "type", "patterns": ["词汇", "敏感词", "正则表达式"] },
+            { "name": "主要角色", "matchType": "type", "patterns": ["主角", "重要", "主要"] },
+            { "name": "配角", "matchType": "type", "patterns": ["配角", "次要", "其他"] }
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "matchType": { "type": "string", "enum": ["affiliation", "type"] },
+              "patterns": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["name", "matchType", "patterns"]
+          },
+          "markdownDescription": "全部角色的自定义分组规则"
+        },
+        "AndreaNovelHelper.allRoles.useCustomGroups": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否启用全部角色的自定义分组规则"
+        },
+        "AndreaNovelHelper.wordCount.referenceVisibleExtensions": {
+          "type": "array",
+          "default": [
+            "png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "tiff", "ico",
+            "pdf",
+            "doc", "docx",
+            "xls", "xlsx", "csv", "ods",
+            "ppt", "pptx",
+            "odt"
+          ],
+          "items": { "type": "string" },
+          "markdownDescription": "在字数统计树中显示为参考资料但不计入统计的文件扩展名列表。默认包含常见图片、PDF、Word/Excel/PowerPoint 等。"
+        },
+        "AndreaNovelHelper.docRoles.groupBy": {
+          "type": "string",
+          "enum": ["affiliation", "type", "none"],
+          "default": "affiliation",
+          "markdownDescription": "当前文章角色的分组依据：**affiliation** (归属)、**type** (类型) 或 **none** (不分组)"
+        },
+        "AndreaNovelHelper.docRoles.respectAffiliation": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否遵循角色的归属字段进行分组显示"
+        },
+        "AndreaNovelHelper.docRoles.respectType": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否遵循角色的类型字段进行分组显示"
+        },
+        "AndreaNovelHelper.docRoles.primaryGroup": {
+          "type": "string",
+          "enum": ["affiliation", "type"],
+          "default": "affiliation",
+          "markdownDescription": "第一级别分组依据：**affiliation** (归属) 或 **type** (类型)"
+        },
+        "AndreaNovelHelper.docRoles.customGroups": {
+          "type": "array",
+          "default": [
+            {
+              "name": "词汇敏感词",
+              "matchType": "type",
+              "patterns": ["词汇", "敏感词", "正则表达式"]
+            },
+            {
+              "name": "主要角色",
+              "matchType": "type",
+              "patterns": ["主角", "重要", "主要"]
+            },
+            {
+              "name": "配角",
+              "matchType": "type", 
+              "patterns": ["配角", "次要", "其他"]
+            }
+          ],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "分组显示名称"
+              },
+              "matchType": {
+                "type": "string",
+                "enum": ["affiliation", "type"],
+                "description": "匹配字段类型"
+              },
+              "patterns": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "匹配模式列表（支持部分匹配）"
+              }
+            },
+            "required": ["name", "matchType", "patterns"]
+          },
+          "markdownDescription": "自定义角色分组规则列表，用于创建第一级别的自定义分组"
+        },
+        "AndreaNovelHelper.docRoles.useCustomGroups": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否启用自定义分组规则（优先级高于 groupBy 设置）"
+        },
         "andrea.typeset.statusBar.compact": {
           "type": "boolean",
           "default": false,
@@ -998,6 +1153,30 @@
           "default": false,
           "description": "%config.timeStats.debug.description%"
         },
+        "AndreaNovelHelper.timeStats.milestone.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.timeStats.milestone.enabled.description%"
+        },
+        "AndreaNovelHelper.timeStats.milestone.targets": {
+          "type": "array",
+          "default": [1000, 2000, 5000, 10000, 20000, 50000, 100000],
+          "items": {
+            "type": "number",
+            "minimum": 1
+          },
+          "description": "%config.timeStats.milestone.targets.description%"
+        },
+        "AndreaNovelHelper.timeStats.milestone.notificationType": {
+          "type": "string",
+          "default": "information",
+          "enum": ["information", "modal"],
+          "enumDescriptions": [
+            "%config.timeStats.milestone.notificationType.information%",
+            "%config.timeStats.milestone.notificationType.modal%"
+          ],
+          "description": "%config.timeStats.milestone.notificationType.description%"
+        },
         "AndreaNovelHelper.wordCount.largeFileThreshold": {
           "type": "number",
           "default": 51200,
@@ -1123,6 +1302,13 @@
           "type": "boolean",
           "default": false,
           "description": "%config.debug.completionLog.description%"
+        },
+        "AndreaNovelHelper.decorations.cacheSize": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "maximum": 20,
+          "description": "%config.decorations.cacheSize.description%"
         }
       }
     },
@@ -1157,7 +1343,7 @@
           "icon": "images/checklist_dark.svg"
         }
       ]
-    },
+  },
     "keybindings": [
       {
         "key": "enter",

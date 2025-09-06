@@ -162,7 +162,7 @@ watch(realTree, () => { if (!synchronizing) rebuildRenderTree() }, { deep: true,
 function onTreeChanged(nextTree: TreeEntity[]) {
   synchronizing = true
   realTree.value = stripActions(cloneNodes(nextTree))  // 去掉动作节点，持久化真实结构
-  nextTick(() => { synchronizing = false; rebuildRenderTree(); emit('change', realTree.value) })
+  void nextTick(() => { synchronizing = false; rebuildRenderTree(); emit('change', realTree.value) })
 }
 
 /** —— he-tree 钩子：只能 inside 到 folder；action 节点完全不可作为放置目标 —— */

@@ -15,11 +15,20 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         const cfg = vscode.workspace.getConfiguration();
         const cur = cfg.get<number>('andrea.typeset.blankLinesBetweenParas', 1) ?? 1;
         const choices = ['0', '1', '2', '3', '4', '5', '6'];
+        const items = choices.map(v => ({ label: v + (v === String(cur) ? '  (当前)' : ''), value: Number(v) }));
+        items.push({ label: '$(arrow-left) 返回主设置', value: -1 });
+        
         const pick = await vscode.window.showQuickPick(
-            choices.map(v => ({ label: v + (v === String(cur) ? '  (当前)' : ''), value: Number(v) })),
+            items,
             { placeHolder: '选择段落之间的空行数' }
         );
         if (!pick) { return; }
+        
+        if (pick.value === -1) {
+            await quickSettings();
+            return;
+        }
+        
         await cfg.update('andrea.typeset.blankLinesBetweenParas', pick.value, vscode.ConfigurationTarget.Workspace);
         onRefreshStatus();
     }
@@ -31,9 +40,15 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             { label: '使用空格：4', insertSpaces: true, tabSize: 4 },
             { label: '使用空格：8', insertSpaces: true, tabSize: 8 },
             { label: '使用制表符（Tab）', insertSpaces: false, tabSize: 4 },
+            { label: '$(arrow-left) 返回主设置', insertSpaces: null as any, tabSize: null as any },
         ];
         const pick = await vscode.window.showQuickPick(items, { placeHolder: '选择缩进宽度（写入 editor.insertSpaces / tabSize）' });
         if (!pick) { return; }
+
+        if (pick.insertSpaces === null) {
+            await quickSettings();
+            return;
+        }
 
         const editorCfg = vscode.workspace.getConfiguration('editor');
         // 1) 关闭“从内容中检测缩进”
@@ -86,10 +101,16 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             { label: `${cur === 'on' ? '$(check) ' : ''}on   —— 按窗口宽度换行`, value: 'on' },
             { label: `${cur === 'wordWrapColumn' ? '$(check) ' : ''}wordWrapColumn —— 在 wordWrapColumn 换行`, value: 'wordWrapColumn' },
             { label: `${cur === 'bounded' ? '$(check) ' : ''}bounded —— 在窗口和 column 之间换行`, value: 'bounded' },
+            { label: '$(arrow-left) 返回主设置', value: 'back' },
         ];
 
         const pick = await vscode.window.showQuickPick(items, { placeHolder: '选择自动换行模式 (editor.wordWrap)' });
         if (!pick) { return; }
+
+        if (pick.value === 'back') {
+            await quickSettings();
+            return;
+        }
 
         await cfg.update('wordWrap', pick.value, vscode.ConfigurationTarget.Workspace);
         onRefreshStatus();
@@ -103,9 +124,15 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         const presets = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32];
         const items = presets.map(n => ({ label: `${n}${n === cur ? '  (当前)' : ''}`, value: n }));
         items.push({ label: '自定义...', value: 'custom' as any });
+        items.push({ label: '$(arrow-left) 返回主设置', value: 'back' as any });
 
         const pick = await vscode.window.showQuickPick(items as any[], { placeHolder: '选择编辑器字体大小 (editor.fontSize)' });
         if (!pick) { return; }
+
+        if (pick.value === 'back') {
+            await quickSettings();
+            return;
+        }
 
         let newSize: number | undefined;
         if (pick.value === 'custom') {
@@ -223,6 +250,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         const BTN_ADD: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('add'), tooltip: '添加自定义规则' };
         const BTN_OPEN: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('go-to-file'), tooltip: '打开 .wcignore' };
         const BTN_BACK: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('arrow-left'), tooltip: '返回首屏' };
+        const BTN_BACK_TO_SETTINGS: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('home'), tooltip: '返回快速设置' };
 
         let page: 'main' | 'more' = 'main';
 
@@ -242,7 +270,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 (i.tag === 'primary' && primary.find(p => p.pattern === i.pattern)?.enabled) ||
                 (i.tag === 'custom') // 自定义默认选中（存在即启用）
             );
-            qp.buttons = [BTN_MORE, BTN_ADD, BTN_OPEN];
+            qp.buttons = [BTN_MORE, BTN_ADD, BTN_OPEN, BTN_BACK_TO_SETTINGS];
             qp.title = '写作资源忽略 (.wcignore)：常用规则与自定义';
         };
 
@@ -253,7 +281,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             }
             qp.items = items;
             qp.selectedItems = items.filter(i => secondary.find(s => s.pattern === i.pattern)?.enabled);
-            qp.buttons = [BTN_BACK, BTN_ADD, BTN_OPEN];
+            qp.buttons = [BTN_BACK, BTN_ADD, BTN_OPEN, BTN_BACK_TO_SETTINGS];
             qp.title = '写作资源忽略 (.wcignore)：更多规则（不常用/低频）';
         };
 
@@ -287,6 +315,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             if (btn === BTN_OPEN) {
                 qp.hide();
                 await vscode.commands.executeCommand('andrea.openWcignore');
+                return;
+            }
+            if (btn === BTN_BACK_TO_SETTINGS) {
+                qp.hide();
+                await quickSettings();
                 return;
             }
             if (btn === BTN_ADD) {
@@ -378,6 +411,490 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         await vscode.window.showTextDocument(doc, { preview: false });
     }
 
+    // 配置当前文章角色显示
+    async function configureDocRoles() {
+        while (true) {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const groupBy = cfg.get<string>('docRoles.groupBy', 'affiliation');
+            const respectAffiliation = cfg.get<boolean>('docRoles.respectAffiliation', true);
+            const respectType = cfg.get<boolean>('docRoles.respectType', true);
+            const primaryGroup = cfg.get<string>('docRoles.primaryGroup', 'affiliation');
+            const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
+
+            const choices = [
+                {
+                    label: '$(symbol-class) 分组依据',
+                    description: groupBy === 'affiliation' ? '当前：按归属分组' : 
+                               groupBy === 'type' ? '当前：按类型分组' : '当前：不分组',
+                    action: 'groupBy'
+                },
+                {
+                    label: `${respectAffiliation ? '$(check)' : '$(circle-slash)'} 遵循归属`,
+                    description: respectAffiliation ? '当前已启用，会根据角色归属字段分组' : '当前已禁用，忽略归属字段',
+                    action: 'respectAffiliation'
+                },
+                {
+                    label: `${respectType ? '$(check)' : '$(circle-slash)'} 遵循类型`,
+                    description: respectType ? '当前已启用，会根据角色类型字段分组' : '当前已禁用，忽略类型字段',
+                    action: 'respectType'
+                },
+                {
+                    label: '$(list-tree) 第一级别分组',
+                    description: primaryGroup === 'affiliation' ? '当前：归属优先' : '当前：类型优先',
+                    action: 'primaryGroup'
+                },
+                {
+                    label: `${useCustomGroups ? '$(check)' : '$(circle-slash)'} 自定义分组`,
+                    description: useCustomGroups ? '当前：使用自定义分组规则' : '当前：使用标准分组',
+                    action: 'useCustomGroups'
+                },
+                {
+                    label: '$(edit) 管理自定义分组规则',
+                    description: '添加、编辑或删除自定义分组规则',
+                    action: 'manageCustomGroups'
+                },
+                {
+                    label: '$(arrow-left) 返回主设置',
+                    description: '返回快速设置主面板',
+                    action: 'back'
+                }
+            ];
+
+            const pick = await vscode.window.showQuickPick(choices, {
+                placeHolder: '配置当前文章角色显示效果'
+            });
+
+            if (!pick) { return; }
+
+            try {
+                switch (pick.action) {
+                    case 'groupBy': {
+                        const groupByChoices = [
+                            { label: '$(symbol-namespace) 按归属分组', value: 'affiliation', description: '根据角色的归属字段进行分组' },
+                            { label: '$(symbol-class) 按类型分组', value: 'type', description: '根据角色的类型字段进行分组' },
+                            { label: '$(list-flat) 不分组', value: 'none', description: '所有角色平铺显示，不进行分组' },
+                            { label: '$(arrow-left) 返回', value: 'back' }
+                        ];
+                        const currentChoice = groupByChoices.find(c => c.value === groupBy);
+                        if (currentChoice) {
+                            currentChoice.label = `$(check) ${currentChoice.label.substring(currentChoice.label.indexOf(' ') + 1)}`;
+                        }
+                        
+                        const groupByPick = await vscode.window.showQuickPick(groupByChoices, {
+                            placeHolder: '选择角色分组依据'
+                        });
+                        
+                        if (groupByPick?.value && groupByPick.value !== 'back') {
+                            await cfg.update('docRoles.groupBy', groupByPick.value, vscode.ConfigurationTarget.Workspace);
+                            vscode.window.showInformationMessage(`角色分组已设置为：${groupByPick.description}`);
+                            // 刷新角色视图
+                            vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        }
+                        break;
+                    }
+                    case 'respectAffiliation': {
+                        await cfg.update('docRoles.respectAffiliation', !respectAffiliation, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`归属遵循已${!respectAffiliation ? '启用' : '禁用'}`);
+                        // 刷新角色视图
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'respectType': {
+                        await cfg.update('docRoles.respectType', !respectType, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`类型遵循已${!respectType ? '启用' : '禁用'}`);
+                        // 刷新角色视图
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'primaryGroup': {
+                        const primaryChoices = [
+                            { label: '$(symbol-namespace) 归属优先', value: 'affiliation', description: '第一级分组使用归属，第二级使用类型' },
+                            { label: '$(symbol-class) 类型优先', value: 'type', description: '第一级分组使用类型，第二级使用归属' },
+                            { label: '$(arrow-left) 返回', value: 'back' }
+                        ];
+                        const currentChoice = primaryChoices.find(c => c.value === primaryGroup);
+                        if (currentChoice) {
+                            currentChoice.label = `$(check) ${currentChoice.label.substring(currentChoice.label.indexOf(' ') + 1)}`;
+                        }
+                        
+                        const primaryPick = await vscode.window.showQuickPick(primaryChoices, {
+                            placeHolder: '选择第一级别分组依据'
+                        });
+                        
+                        if (primaryPick?.value && primaryPick.value !== 'back') {
+                            await cfg.update('docRoles.primaryGroup', primaryPick.value, vscode.ConfigurationTarget.Workspace);
+                            vscode.window.showInformationMessage(`第一级分组已设置为：${primaryPick.description}`);
+                            // 刷新角色视图
+                            vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        }
+                        break;
+                    }
+                    case 'useCustomGroups': {
+                        await cfg.update('docRoles.useCustomGroups', !useCustomGroups, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`自定义分组已${!useCustomGroups ? '启用' : '禁用'}`);
+                        // 刷新角色视图
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'manageCustomGroups': {
+                        await manageCustomGroups();
+                        break;
+                    }
+                    case 'back':
+                        await quickSettings();
+                        return;
+                }
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`配置角色显示失败：${error?.message || error}`);
+            }
+        }
+    }
+
+    // 配置全部角色显示（roleHierarchyView）
+    async function configureAllRoles() {
+        while (true) {
+            const root = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const sync = root.get<boolean>('allRoles.syncWithDocRoles', true);
+            const base = sync ? 'docRoles' : 'allRoles';
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const groupBy = cfg.get<string>(`${base}.groupBy`, 'affiliation');
+            const respectAffiliation = cfg.get<boolean>(`${base}.respectAffiliation`, true);
+            const respectType = cfg.get<boolean>(`${base}.respectType`, true);
+            const primaryGroup = cfg.get<string>(`${base}.primaryGroup`, 'affiliation');
+            const useCustomGroups = cfg.get<boolean>(`${base}.useCustomGroups`, false);
+
+            const choices = [
+                {
+                    label: `${sync ? '$(check)' : '$(circle-slash)'} 同步“当前文章角色”的显示设置`,
+                    description: sync ? '开启：读取 docRoles.*' : '关闭：使用 allRoles.* 独立配置',
+                    action: 'toggleSync'
+                },
+                { label: '$(symbol-class) 分组依据', description: groupBy === 'affiliation' ? '当前：按归属分组' : groupBy === 'type' ? '当前：按类型分组' : '当前：不分组', action: 'groupBy' },
+                { label: `${respectAffiliation ? '$(check)' : '$(circle-slash)'} 遵循归属`, description: respectAffiliation ? '已启用' : '已禁用', action: 'respectAffiliation' },
+                { label: `${respectType ? '$(check)' : '$(circle-slash)'} 遵循类型`, description: respectType ? '已启用' : '已禁用', action: 'respectType' },
+                { label: '$(list-tree) 第一级别分组', description: primaryGroup === 'affiliation' ? '当前：归属优先' : '当前：类型优先', action: 'primaryGroup' },
+                { label: `${useCustomGroups ? '$(check)' : '$(circle-slash)'} 自定义分组`, description: useCustomGroups ? '使用自定义规则' : '使用标准分组', action: 'useCustomGroups' },
+                { label: '$(edit) 管理自定义分组规则', description: '添加、编辑或删除规则（针对 allRoles.* 或 docRoles.*，取决于同步开关）', action: 'manageCustomGroups' },
+                { label: '$(arrow-left) 返回主设置', action: 'back' }
+            ];
+
+            const pick = await vscode.window.showQuickPick(choices, { placeHolder: '配置全部角色（roleHierarchyView）显示' });
+            if (!pick) { return; }
+            try {
+                if (pick.action === 'toggleSync') {
+                    await root.update('allRoles.syncWithDocRoles', !sync, vscode.ConfigurationTarget.Workspace);
+                    vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                    continue; // 重新读取配置
+                }
+                // 若同步开启，则直接跳转到当前文章角色配置，以保持单一事实来源
+                if (sync) {
+                    await configureDocRoles();
+                    return;
+                }
+
+                switch (pick.action) {
+                    case 'groupBy': {
+                        const items = [
+                            { label: '$(symbol-namespace) 按归属分组', value: 'affiliation' },
+                            { label: '$(symbol-class) 按类型分组', value: 'type' },
+                            { label: '$(list-flat) 不分组', value: 'none' },
+                            { label: '$(arrow-left) 返回', value: 'back' }
+                        ];
+                        const sel = await vscode.window.showQuickPick(items, { placeHolder: '选择分组依据' });
+                        if (sel?.value && sel.value !== 'back') {
+                            await cfg.update('allRoles.groupBy', sel.value, vscode.ConfigurationTarget.Workspace);
+                            vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        }
+                        break;
+                    }
+                    case 'respectAffiliation': {
+                        await cfg.update('allRoles.respectAffiliation', !respectAffiliation, vscode.ConfigurationTarget.Workspace);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'respectType': {
+                        await cfg.update('allRoles.respectType', !respectType, vscode.ConfigurationTarget.Workspace);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'primaryGroup': {
+                        const items = [
+                            { label: '$(symbol-namespace) 归属优先', value: 'affiliation' },
+                            { label: '$(symbol-class) 类型优先', value: 'type' },
+                            { label: '$(arrow-left) 返回', value: 'back' }
+                        ];
+                        const sel = await vscode.window.showQuickPick(items, { placeHolder: '选择第一级别分组' });
+                        if (sel?.value && sel.value !== 'back') {
+                            await cfg.update('allRoles.primaryGroup', sel.value, vscode.ConfigurationTarget.Workspace);
+                            vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        }
+                        break;
+                    }
+                    case 'useCustomGroups': {
+                        await cfg.update('allRoles.useCustomGroups', !useCustomGroups, vscode.ConfigurationTarget.Workspace);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'manageCustomGroups': {
+                        // 复用相同的编辑器，但作用到 allRoles.customGroups
+                        const prev = cfg.get<any[]>('allRoles.customGroups', []);
+                        await cfg.update('docRoles.customGroups', prev, vscode.ConfigurationTarget.Workspace);
+                        await manageCustomGroups();
+                        const next = cfg.get<any[]>('docRoles.customGroups', []);
+                        await cfg.update('allRoles.customGroups', next, vscode.ConfigurationTarget.Workspace);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'back':
+                        await quickSettings();
+                        return;
+                }
+            } catch (e:any) {
+                vscode.window.showErrorMessage(`配置全部角色失败：${e?.message || e}`);
+            }
+        }
+    }
+
+    // 管理自定义分组规则
+    async function manageCustomGroups() {
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        
+        while (true) {
+            const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
+            
+            interface GroupChoice extends vscode.QuickPickItem {
+                action: string;
+                index?: number;
+            }
+            
+            const choices: GroupChoice[] = [
+                ...customGroups.map((group, index) => ({
+                    label: `$(organization) ${group.name}`,
+                    description: `${group.matchType} 匹配: ${group.patterns?.join(', ') || '无'}`,
+                    action: 'edit',
+                    index
+                })),
+                {
+                    label: '$(add) 添加新的分组规则',
+                    description: '创建一个新的自定义分组',
+                    action: 'add'
+                },
+                {
+                    label: '$(trash) 重置为默认规则',
+                    description: '恢复到默认的自定义分组配置',
+                    action: 'reset'
+                },
+                {
+                    label: '$(arrow-left) 返回角色配置',
+                    description: '返回角色显示配置',
+                    action: 'back'
+                }
+            ];
+
+            const pick = await vscode.window.showQuickPick(choices, {
+                placeHolder: '管理自定义分组规则'
+            });
+
+            if (!pick) { return; }
+
+            try {
+                switch (pick.action) {
+                    case 'add': {
+                        await addCustomGroup();
+                        break;
+                    }
+                    case 'edit': {
+                        if (typeof pick.index === 'number') {
+                            await editCustomGroup(pick.index);
+                        }
+                        break;
+                    }
+                    case 'reset': {
+                        const confirm = await vscode.window.showWarningMessage(
+                            '确定要重置自定义分组规则吗？这将删除所有当前的自定义规则并恢复默认配置。',
+                            { modal: true },
+                            '确定重置'
+                        );
+                        if (confirm) {
+                            const defaultGroups = [
+                                {
+                                    name: "词汇敏感词",
+                                    matchType: "type",
+                                    patterns: ["词汇", "敏感词", "正则表达式"]
+                                },
+                                {
+                                    name: "主要角色",
+                                    matchType: "affiliation",
+                                    patterns: ["主角", "重要", "主要"]
+                                },
+                                {
+                                    name: "配角",
+                                    matchType: "affiliation", 
+                                    patterns: ["配角", "次要", "其他"]
+                                }
+                            ];
+                            await cfg.update('docRoles.customGroups', defaultGroups, vscode.ConfigurationTarget.Workspace);
+                            vscode.window.showInformationMessage('自定义分组规则已重置为默认配置');
+                            vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        }
+                        break;
+                    }
+                    case 'back':
+                        return;
+                }
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`管理自定义分组失败：${error?.message || error}`);
+            }
+        }
+    }
+
+    // 添加自定义分组
+    async function addCustomGroup() {
+        const name = await vscode.window.showInputBox({
+            prompt: '请输入分组名称',
+            placeHolder: '例如：主要角色、反派角色等'
+        });
+        if (!name) { return; }
+
+        const matchType = await vscode.window.showQuickPick([
+            { label: '$(symbol-namespace) 归属字段', value: 'affiliation' },
+            { label: '$(symbol-class) 类型字段', value: 'type' }
+        ], {
+            placeHolder: '选择匹配字段类型'
+        });
+        if (!matchType) { return; }
+
+        const patternsInput = await vscode.window.showInputBox({
+            prompt: '请输入匹配模式（用逗号分隔多个模式）',
+            placeHolder: '例如：主角,重要 或 人类,动物'
+        });
+        if (!patternsInput) { return; }
+
+        const patterns = patternsInput.split(',').map(p => p.trim()).filter(p => p);
+        
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
+        
+        customGroups.push({
+            name,
+            matchType: matchType.value,
+            patterns
+        });
+
+        await cfg.update('docRoles.customGroups', customGroups, vscode.ConfigurationTarget.Workspace);
+        vscode.window.showInformationMessage(`自定义分组 "${name}" 已添加`);
+        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+    }
+
+    // 编辑自定义分组
+    async function editCustomGroup(index: number) {
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
+        
+        if (index < 0 || index >= customGroups.length) { return; }
+        
+        const group = customGroups[index];
+        
+        const choices = [
+            {
+                label: `$(edit) 修改名称: ${group.name}`,
+                action: 'name'
+            },
+            {
+                label: `$(symbol-field) 修改匹配类型: ${group.matchType === 'affiliation' ? '归属' : '类型'}`,
+                action: 'matchType'
+            },
+            {
+                label: `$(list-ordered) 修改匹配模式: ${group.patterns?.join(', ') || '无'}`,
+                action: 'patterns'
+            },
+            {
+                label: '$(trash) 删除此分组',
+                action: 'delete'
+            },
+            {
+                label: '$(arrow-left) 返回',
+                action: 'back'
+            }
+        ];
+
+        const pick = await vscode.window.showQuickPick(choices, {
+            placeHolder: `编辑分组: ${group.name}`
+        });
+
+        if (!pick) { return; }
+
+        try {
+            switch (pick.action) {
+                case 'name': {
+                    const newName = await vscode.window.showInputBox({
+                        prompt: '请输入新的分组名称',
+                        value: group.name
+                    });
+                    if (newName && newName !== group.name) {
+                        customGroups[index].name = newName;
+                        await cfg.update('docRoles.customGroups', customGroups, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`分组名称已更新为 "${newName}"`);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                    }
+                    break;
+                }
+                case 'matchType': {
+                    const newMatchType = await vscode.window.showQuickPick([
+                        { label: '$(symbol-namespace) 归属字段', value: 'affiliation' },
+                        { label: '$(symbol-class) 类型字段', value: 'type' }
+                    ], {
+                        placeHolder: '选择新的匹配字段类型'
+                    });
+                    if (newMatchType && newMatchType.value !== group.matchType) {
+                        customGroups[index].matchType = newMatchType.value;
+                        await cfg.update('docRoles.customGroups', customGroups, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`匹配类型已更新为 "${newMatchType.label}"`);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                    }
+                    break;
+                }
+                case 'patterns': {
+                    const currentPatterns = group.patterns?.join(', ') || '';
+                    const newPatternsInput = await vscode.window.showInputBox({
+                        prompt: '请输入新的匹配模式（用逗号分隔）',
+                        value: currentPatterns
+                    });
+                    if (newPatternsInput !== undefined) {
+                        const newPatterns = newPatternsInput.split(',').map(p => p.trim()).filter(p => p);
+                        customGroups[index].patterns = newPatterns;
+                        await cfg.update('docRoles.customGroups', customGroups, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage('匹配模式已更新');
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                    }
+                    break;
+                }
+                case 'delete': {
+                    const confirm = await vscode.window.showWarningMessage(
+                        `确定要删除分组 "${group.name}" 吗？`,
+                        { modal: true },
+                        '确定删除'
+                    );
+                    if (confirm) {
+                        customGroups.splice(index, 1);
+                        await cfg.update('docRoles.customGroups', customGroups, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`分组 "${group.name}" 已删除`);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        return; // 删除后返回分组列表
+                    }
+                    break;
+                }
+                case 'back':
+                    return;
+            }
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`编辑分组失败：${error?.message || error}`);
+        }
+        
+        // 递归调用以继续编辑
+        await editCustomGroup(index);
+    }
+
 
     // 主面板
     async function quickSettings() {
@@ -412,10 +929,13 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: '$(settings) 设置：缩进宽度（editor.insertSpaces / tabSize）', cmd: 'andrea.changeIndentSize' },
 
                 { label: '$(symbol-text) 管理：编辑器字体家族（图形化）', cmd: 'andrea.manageEditorFontFamily' },
+
+                { label: '$(zoom-in) 设置：编辑器字体大小', cmd: 'andrea.changeEditorFontSize' },
                 { label: '$(filter) 管理：写作资源忽略 (.wcignore)', cmd: 'andrea.manageWcignore' },
                 { label: '$(go-to-file) 打开 .wcignore', cmd: 'andrea.openWcignore' },
-                { label: '$(zoom-in) 设置：编辑器字体大小', cmd: 'andrea.changeEditorFontSize' },
-
+                { label: '$(milestone) 配置：字数里程碑提醒', cmd: 'andrea.configureMilestones' },
+                { label: '$(organization) 配置：当前文章角色显示', cmd: 'andrea.configureDocRoles' },
+                { label: '$(organization) 配置：全部角色显示', cmd: 'andrea.configureAllRoles' },
                 { label: `${minimap ? '$(check)' : '$(circle-slash)'} 切换：Minimap（小地图）`, cmd: 'andrea.toggleMinimap' },
                 { label: `${wheelZoom ? '$(check)' : '$(circle-slash)'} 切换：Ctrl+滚轮快速缩放字体`, cmd: 'andrea.toggleMouseWheelZoom' },
 
@@ -424,10 +944,111 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
                 { label: '$(keyboard) [仅需执行一次｜智能回车失效时使用] 一键注入：Enter → Andrea（覆盖 MAIO）', cmd: 'andrea.injectEnterKeybindings' },
             ],
-            { placeHolder: '小说版式：快速设置', canPickMany: false }
+            { placeHolder: '小说版式和快速设置', canPickMany: false }
         );
 
         if (pick?.cmd) { await vscode.commands.executeCommand(pick.cmd); }
+    }
+
+    // 配置字数里程碑
+    async function configureMilestones() {
+        while (true) {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+            const enabled = cfg.get<boolean>('milestone.enabled', true);
+            const targets = cfg.get<number[]>('milestone.targets', [1000, 5000, 10000, 20000, 50000, 100000]);
+            const notificationType = cfg.get<string>('milestone.notificationType', 'information');
+
+            const choices = [
+                { 
+                    label: `${enabled ? '$(check)' : '$(circle-slash)'} 启用字数里程碑提醒`, 
+                    description: enabled ? '当前已启用' : '当前已禁用',
+                    action: 'toggle' 
+                },
+                { 
+                    label: '$(edit) 编辑里程碑目标', 
+                    description: `当前目标：${targets.join(', ')} 字`,
+                    action: 'edit' 
+                },
+                { 
+                    label: '$(bell) 配置提醒类型', 
+                    description: notificationType === 'modal' ? '当前：模态对话框（阻塞）' : '当前：右下角提示（非阻塞）',
+                    action: 'notification' 
+                },
+                { 
+                    label: '$(arrow-left) 返回主设置', 
+                    description: '返回快速设置主面板',
+                    action: 'back' 
+                }
+            ];
+
+            const pick = await vscode.window.showQuickPick(choices, { 
+                placeHolder: '配置字数里程碑提醒功能'
+            });
+
+            if (!pick || pick.action === 'back') { 
+                if (pick?.action === 'back') {
+                    await quickSettings(); // 返回主设置面板
+                }
+                return; 
+            }
+
+            if (pick.action === 'toggle') {
+                await cfg.update('milestone.enabled', !enabled, vscode.ConfigurationTarget.Workspace);
+                vscode.window.showInformationMessage(`字数里程碑提醒已${!enabled ? '启用' : '禁用'}`);
+                onRefreshStatus();
+                // 继续循环，保持在当前面板
+            } else if (pick.action === 'edit') {
+                const input = await vscode.window.showInputBox({
+                    prompt: '输入里程碑目标字数，用逗号分隔',
+                    value: targets.join(', '),
+                    placeHolder: '例如：1000, 5000, 10000, 50000, 100000'
+                });
+
+                if (input !== undefined) {
+                    try {
+                        const newTargets = input.split(',')
+                            .map(s => parseInt(s.trim()))
+                            .filter(n => !isNaN(n) && n > 0)
+                            .sort((a, b) => a - b);
+                        
+                        if (newTargets.length > 0) {
+                            await cfg.update('milestone.targets', newTargets, vscode.ConfigurationTarget.Workspace);
+                            vscode.window.showInformationMessage(`里程碑目标已更新：${newTargets.join(', ')} 字`);
+                        } else {
+                            vscode.window.showErrorMessage('请输入有效的数字');
+                        }
+                    } catch (error) {
+                        vscode.window.showErrorMessage('格式不正确，请使用逗号分隔的数字');
+                    }
+                }
+                onRefreshStatus();
+                // 继续循环，保持在当前面板
+            } else if (pick.action === 'notification') {
+                const typeChoices = [
+                    { 
+                        label: '$(info) 右下角提示', 
+                        description: '非阻塞，不影响写作流程',
+                        value: 'information' 
+                    },
+                    { 
+                        label: '$(comment-discussion) 模态对话框', 
+                        description: '阻塞操作，需要用户确认',
+                        value: 'modal' 
+                    }
+                ];
+
+                const typePick = await vscode.window.showQuickPick(typeChoices, { 
+                    placeHolder: '选择里程碑提醒的弹窗类型'
+                });
+
+                if (typePick) {
+                    await cfg.update('milestone.notificationType', typePick.value, vscode.ConfigurationTarget.Workspace);
+                    vscode.window.showInformationMessage(`提醒类型已更新为：${typePick.label}`);
+                }
+                onRefreshStatus();
+                // 继续循环，保持在当前面板
+            }
+        }
     }
 
     // 命令注册
@@ -436,8 +1057,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.commands.registerCommand('andrea.toggleMouseWheelZoom', () => toggle('editor.mouseWheelZoom')),
         vscode.commands.registerCommand('andrea.toggleStatusBarCompact', () => toggle('andrea.typeset.statusBar.compact')),
         vscode.commands.registerCommand('andrea.quickSettings', quickSettings),
+    vscode.commands.registerCommand('andrea.configureMilestones', configureMilestones),
     vscode.commands.registerCommand('andrea.manageWcignore', manageWcignore),
     vscode.commands.registerCommand('andrea.openWcignore', openWcignore),
+    vscode.commands.registerCommand('andrea.configureDocRoles', configureDocRoles),
+    vscode.commands.registerCommand('andrea.configureAllRoles', configureAllRoles),
 
         vscode.commands.registerCommand('andrea.injectEnterKeybindings', injectEnterKeybindings),
 
