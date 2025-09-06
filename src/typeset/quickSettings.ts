@@ -423,6 +423,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             const wrapColumn = cfg.get<number>('roles.details.wrapColumn', 20) || 20;
             const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
             const useRoleSvgIfPresent = cfg.get<boolean>('docRoles.display.useRoleSvgIfPresent', false);
+            const colorizeRoleName = cfg.get<boolean>('docRoles.display.colorizeRoleName', false);
 
             const choices = [
                 {
@@ -465,6 +466,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                     label: `${useRoleSvgIfPresent ? '$(check)' : '$(circle-slash)'} 使用角色自带 svg 作为图标`,
                     description: useRoleSvgIfPresent ? '开启：若角色对象含 svg 字段则优先使用' : '关闭：继续使用默认/文件图标',
                     action: 'toggleUseRoleSvg'
+                },
+                {
+                    label: `${colorizeRoleName ? '$(check)' : '$(circle-slash)'} 用角色颜色标记名称`,
+                    description: colorizeRoleName ? '开启：名称前显示角色颜色方块' : '关闭：不显示颜色方块',
+                    action: 'toggleColorizeName'
                 },
                 {
                     label: '$(edit) 管理自定义分组规则',
@@ -586,6 +592,12 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                         vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
                         break;
                     }
+                    case 'toggleColorizeName': {
+                        await cfg.update('docRoles.display.colorizeRoleName', !colorizeRoleName, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`当前文章角色：名称颜色标记已${!colorizeRoleName ? '启用' : '禁用'}`);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
                     case 'manageCustomGroups': {
                         await manageCustomGroups();
                         break;
@@ -614,6 +626,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             const useCustomGroups = cfg.get<boolean>(`${base}.useCustomGroups`, false);
             const wrapColumn = cfg.get<number>('roles.details.wrapColumn', 20) || 20;
             const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+            const colorizeRoleName = cfg.get<boolean>(`${base}.display.colorizeRoleName`, false);
 
             const choices = [
                 {
@@ -628,6 +641,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: `${useCustomGroups ? '$(check)' : '$(circle-slash)'} 自定义分组`, description: useCustomGroups ? '使用自定义规则' : '使用标准分组', action: 'useCustomGroups' },
                 { label: '$(word-wrap) 详情折行列数', description: `当前：${wrapColumn} 列（5-200）`, action: 'wrapColumn' },
                 { label: `${enableRoleExpansion ? '$(check)' : '$(circle-slash)'} 允许角色展开详情`, description: enableRoleExpansion ? '开启：角色节点可展开查看属性' : '关闭：角色节点不可展开', action: 'toggleRoleExpansion' },
+                { label: `${colorizeRoleName ? '$(check)' : '$(circle-slash)'} 用角色颜色标记名称`, description: colorizeRoleName ? '开启：名称前显示角色颜色方块' : '关闭：不显示颜色方块', action: 'toggleColorizeName' },
                 { label: '$(edit) 管理自定义分组规则', description: '添加、编辑或删除规则（针对 allRoles.* 或 docRoles.*，取决于同步开关）', action: 'manageCustomGroups' },
                 { label: '$(arrow-left) 返回主设置', action: 'back' }
             ];
@@ -711,6 +725,12 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                     case 'toggleRoleExpansion': {
                         await cfg.update('roles.details.enableRoleExpansion', !enableRoleExpansion, vscode.ConfigurationTarget.Workspace);
                         vscode.window.showInformationMessage(`角色展开已${!enableRoleExpansion ? '启用' : '禁用'}`);
+                        break;
+                    }
+                    case 'toggleColorizeName': {
+                        if (sync) { await configureDocRoles(); return; }
+                        await cfg.update('allRoles.display.colorizeRoleName', !colorizeRoleName, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`全部角色：名称颜色标记已${!colorizeRoleName ? '启用' : '禁用'}`);
                         break;
                     }
                     case 'manageCustomGroups': {

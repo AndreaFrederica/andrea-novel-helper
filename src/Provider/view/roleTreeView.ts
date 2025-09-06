@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { labelForRoleKey } from '../../utils/i18n';
+import { iconForRoleKey } from '../../utils/roleKeyIcons';
 import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
 import { buildRoleMarkdown } from '../hoverProvider';
@@ -66,11 +67,28 @@ export class RoleTreeItem extends vscode.TreeItem {
                     } catch {}
                 }
             } catch {}
+            // 名称着色（以彩色图标标记，不改变文本颜色）
+            try {
+                const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const root = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const sync = root.get<boolean>('allRoles.syncWithDocRoles', true);
+                const colorize = cfg.get<boolean>(`${sync ? 'docRoles' : 'allRoles'}.display.colorizeRoleName`, false);
+                if (colorize && !this.iconPath) {
+                    const r: any = node.role as any;
+                    const colorValue = (r.color || r.colour || r['颜色'] || '').toString().trim();
+                    if (colorValue) {
+                        const safe = colorValue.replace(/"/g, '%22');
+                        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><rect rx="3" ry="3" width="14" height="14" fill="${safe}" stroke="#00000040" stroke-width="0.5"/></svg>`;
+                        const uri = vscode.Uri.parse('data:image/svg+xml;utf8,' + encodeURIComponent(svg));
+                        this.iconPath = { light: uri, dark: uri };
+                    }
+                }
+            } catch {}
             if (node.role.sourcePath) {
                 this.resourceUri = vscode.Uri.file(node.role.sourcePath);
                 // VS Code 对“可展开”的 TreeItem 会倾向使用“文件夹”图标，即使有 resourceUri。
                 // 为了在允许展开时也保留接近原始文件类型的图标，这里按扩展名设置一个内置的文件类图标。
-                if (this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                if (!this.iconPath && this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
                     const p = node.role.sourcePath.toLowerCase();
                     if (p.endsWith('.json') || p.endsWith('.json5')) {
                         this.iconPath = new vscode.ThemeIcon('file-code');
@@ -86,6 +104,7 @@ export class RoleTreeItem extends vscode.TreeItem {
             const dn = node as DetailNode;
             this.tooltip = dn.full && dn.full.length > (dn.value?.length || 0) ? dn.full : dn.full;
             this.description = undefined;
+            this.iconPath = iconForRoleKey(`role.key.${dn.key}`);
             this.contextValue = 'roleDetail';
         } else if (node.kind === 'detailLine') {
             this.label = node.value;

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { buildRoleMarkdown } from '../hoverProvider';
 import { labelForRoleKey } from '../../utils/i18n';
+import { iconForRoleKey } from '../../utils/roleKeyIcons';
 import { Role } from '../../extension';
 import { getDocumentRolesModel } from './docRolesModel';
 
@@ -34,7 +35,8 @@ class DocRoleTreeItem extends vscode.TreeItem {
 			// 如果配置允许并且角色提供了 svg 字段，则优先使用该 svg 作为图标
 			try {
 				const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-				const useSvg = cfg.get<boolean>('roles.display.useRoleSvgIfPresent', false);
+				// docRoles 视图读取 docRoles 范畴的设置
+				const useSvg = cfg.get<boolean>('docRoles.display.useRoleSvgIfPresent', false);
 				const svgField = (node.role as any).svg;
 				if (useSvg && svgField && typeof svgField === 'string') {
 					try {
@@ -43,10 +45,25 @@ class DocRoleTreeItem extends vscode.TreeItem {
 					} catch {}
 				}
 			} catch {}
+			// 名称着色（以彩色图标标记，不改变文本颜色）
+			try {
+				const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+				const colorize = cfg.get<boolean>('docRoles.display.colorizeRoleName', false);
+				if (colorize && !this.iconPath) {
+					const r: any = node.role as any;
+					const colorValue = (r.color || r.colour || r['颜色'] || '').toString().trim();
+					if (colorValue) {
+						const safe = colorValue.replace(/"/g, '%22');
+						const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"><rect rx="3" ry="3" width="14" height="14" fill="${safe}" stroke="#00000040" stroke-width="0.5"/></svg>`;
+						const uri = vscode.Uri.parse('data:image/svg+xml;utf8,' + encodeURIComponent(svg));
+						this.iconPath = { light: uri, dark: uri };
+					}
+				}
+			} catch {}
 			if (node.role.sourcePath) {
 				this.resourceUri = vscode.Uri.file(node.role.sourcePath);
-				// 保持可展开时的文件图标（避免变成文件夹图标）
-				if (this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+				// 仅当尚未设置自定义图标（如 svg）时，才回退为文件类图标，避免覆盖 svg
+				if (!this.iconPath && this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
 					const p = node.role.sourcePath.toLowerCase();
 					if (p.endsWith('.json') || p.endsWith('.json5')) {
 						this.iconPath = new vscode.ThemeIcon('file-code');
@@ -58,28 +75,14 @@ class DocRoleTreeItem extends vscode.TreeItem {
 				}
 			}
 		} else if (node.kind === 'detail') {
-			// 只显示 key；对于颜色字段，在右侧显示带颜色的描述（并显示小色块）
+			// 只显示 key；值在展开后的 detailLine 显示
 			const dn = node as DetailNode;
 			this.tooltip = dn.full && dn.full.length > (dn.value?.length || 0) ? dn.full : dn.full;
-			// 默认保留原有行为：不显示描述（值在展开后显示完整行）
+			// 在 key 行应用内置图标映射
+			this.iconPath = iconForRoleKey(`role.key.${dn.key}`);
 			this.description = undefined;
-			try {
-				const keyLower = (dn.key || '').toString().toLowerCase();
-				if (keyLower === 'color' || keyLower === 'colour' || keyLower === '颜色') {
-					const colorValue = (dn.value || '').toString().trim();
-					if (colorValue) {
-						// 在右侧展示颜色值
-						this.description = colorValue;
-						// 生成一个小的 SVG 色块作为图标（data URI），兼容 light/dark
-						const safeColor = colorValue.replace(/"/g, '%22');
-						const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><rect rx="2" ry="2" width="12" height="12" fill="${safeColor}" stroke="#00000020" stroke-width="0.5"/></svg>`;
-						const uri = vscode.Uri.parse('data:image/svg+xml;utf8,' + encodeURIComponent(svg));
-						this.iconPath = { light: uri, dark: uri };
-					}
-				}
-			} catch (e) {
-				// ignore any errors when rendering color icon
-			}
+			// detail 键图标（ThemeIcon），从映射表获取
+			try { this.iconPath = iconForRoleKey(dn.key); } catch {}
 		} else if (node.kind === 'detailLine') {
 			this.label = node.value;
 			// 若父字段是颜色并且设置允许，则在 value（即 detailLine）上显示色块图标

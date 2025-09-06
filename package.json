@@ -959,6 +959,16 @@
           "default": false,
           "markdownDescription": "在当前文章角色视图中，如果角色对象包含 svg 字段，是否优先使用该 svg 作为角色图标（默认: false）。"
         },
+        "AndreaNovelHelper.docRoles.display.colorizeRoleName": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "用角色颜色在名称旁显示色块标记（仅影响名称前的图标，不改变文本颜色）。"
+        },
+        "AndreaNovelHelper.allRoles.display.colorizeRoleName": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "用角色颜色在名称旁显示色块标记（全部角色视图；当未与 docRoles 同步时生效）。"
+        },
         "andrea.typeset.statusBar.compact": {
           "type": "boolean",
           "default": false,
