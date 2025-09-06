@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { activate as activateRoles, deactivate as deactivateRoles } from './activate';
+import { initI18n } from './utils/i18n';
 
 // 角色定义接口
 export interface Role {
@@ -37,6 +38,8 @@ export const segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
 
 
 export function activate(context: vscode.ExtensionContext) {
+	// 初始化 i18n，优先使用vscode.l10n，fallback到手动加载
+	initI18n(context.extensionPath);
 	activateRoles(context);
 }
 

@@ -149,8 +149,8 @@ class DocumentRolesModel {
         const respectAffiliation = cfg.get<boolean>('docRoles.respectAffiliation', true);
         const respectType = cfg.get<boolean>('docRoles.respectType', true);
         const primaryGroup = cfg.get<string>('docRoles.primaryGroup', 'affiliation');
-        const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
-        const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
+    const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
+    const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
 
         if (groupBy === 'none') {
             // 不分组：所有角色平铺显示
@@ -164,7 +164,7 @@ class DocumentRolesModel {
 
         // 如果启用自定义分组
         if (useCustomGroups && customGroups.length > 0) {
-            return this.buildCustomGroups(seen, customGroups, respectAffiliation);
+            return this.buildCustomGroups(seen, customGroups, respectAffiliation, respectType);
         }
 
         const affMap = new Map<string, Map<string, Role[]>>();
@@ -234,7 +234,12 @@ class DocumentRolesModel {
         return affGroups;
     }
 
-    private buildCustomGroups(seen: Set<Role>, customGroups: any[], respectAffiliation: boolean): RoleHierarchyAffiliationGroup[] {
+    private buildCustomGroups(
+        seen: Set<Role>,
+        customGroups: any[],
+        respectAffiliation: boolean,
+        respectType: boolean
+    ): RoleHierarchyAffiliationGroup[] {
         const grouped = new Map<string, Role[]>();
         const ungrouped: Role[] = [];
 
@@ -253,8 +258,11 @@ class DocumentRolesModel {
                 if (!group.name || !group.patterns || !Array.isArray(group.patterns)) {
                     continue;
                 }
-                
-                const matchField = group.matchType === 'type' ? (role.type || '') : (role.affiliation || '');
+                // 自定义分组的匹配应使用真实字段，不受忽略开关影响；
+                // 忽略开关只影响后续显示层级是否按类型/归属再分组。
+                const matchField = group.matchType === 'type'
+                    ? (role.type || '')
+                    : (role.affiliation || '');
                 
                 // 检查是否匹配任何模式
                 const isMatch = group.patterns.some((pattern: string) => 
@@ -278,16 +286,39 @@ class DocumentRolesModel {
             grouped.set('其他', ungrouped);
         }
 
+        // 若忽略归属，且存在按归属匹配的自定义分组，则在顶层扁平化：
+        // 合并所有自定义分组为一个“全部角色”，仅按类型（或扁平）作为二级显示。
+        const hasAffBased = customGroups.some(g => g?.matchType === 'affiliation');
+        if (respectType !== undefined && respectAffiliation === false && hasAffBased) {
+            const merged: Role[] = [];
+            for (const arr of grouped.values()) { merged.push(...arr); }
+            if (ungrouped.length) { merged.push(...ungrouped); }
+            if (merged.length === 0) { return []; }
+            const typeMap = new Map<string, Role[]>();
+            for (const r of merged) {
+                const t = respectType ? (r.type || 'unknown') : '__FLAT__';
+                if (!typeMap.has(t)) { typeMap.set(t, []); }
+                typeMap.get(t)!.push(r);
+            }
+            const tgs: RoleHierarchyTypeGroup[] = [];
+            for (const [t, rs] of typeMap) {
+                rs.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                tgs.push({ type: t, roles: rs });
+            }
+            tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+            return [{ affiliation: '全部角色', types: tgs }];
+        }
+
         // 构建结果
         const result: RoleHierarchyAffiliationGroup[] = [];
         
         for (const [groupName, roles] of grouped) {
             if (roles.length === 0) { continue; }
             
-            // 按类型进行二级分组
+            // 二级分组：若忽略类型，则扁平化（使用 __FLAT__ 标记）
             const typeMap = new Map<string, Role[]>();
             for (const role of roles) {
-                const typeKey = role.type || 'unknown';
+                const typeKey = respectType ? (role.type || 'unknown') : '__FLAT__';
                 if (!typeMap.has(typeKey)) {
                     typeMap.set(typeKey, []);
                 }

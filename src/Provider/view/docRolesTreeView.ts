@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { buildRoleMarkdown } from '../hoverProvider';
+import { labelForRoleKey } from '../../utils/i18n';
 import { Role } from '../../extension';
 import { getDocumentRolesModel } from './docRolesModel';
 
-type NodeKind = 'affiliation' | 'type' | 'role' | 'specialRoot' | 'specialType' | 'specialAffiliation';
+type NodeKind = 'affiliation' | 'type' | 'role' | 'detail' | 'detailLine' | 'specialRoot' | 'specialType' | 'specialAffiliation';
 interface Base { kind: NodeKind; key: string; }
 interface AffiliationNode extends Base { 
 	kind: 'affiliation'; 
@@ -11,10 +13,12 @@ interface AffiliationNode extends Base {
 }
 interface TypeNode extends Base { kind: 'type'; affiliation: string; children: RoleNode[]; }
 interface RoleNode extends Base { kind: 'role'; role: Role; affiliation: string; roleType: string; }
+interface DetailNode extends Base { kind: 'detail'; value: string; roleName: string; full?: string; }
+interface DetailLineNode extends Base { kind: 'detailLine'; value: string; roleName: string; }
 interface SpecialRootNode extends Base { kind: 'specialRoot'; children: SpecialTypeNode[]; count: number; }
 interface SpecialTypeNode extends Base { kind: 'specialType'; roleType: string; children: SpecialAffiliationNode[]; }
 interface SpecialAffiliationNode extends Base { kind: 'specialAffiliation'; affiliation: string; children: RoleNode[]; roleType: string; }
-export type AnyNode = AffiliationNode | TypeNode | RoleNode | SpecialRootNode | SpecialTypeNode | SpecialAffiliationNode;
+export type AnyNode = AffiliationNode | TypeNode | RoleNode | DetailNode | DetailLineNode | SpecialRootNode | SpecialTypeNode | SpecialAffiliationNode;
 
 class DocRoleTreeItem extends vscode.TreeItem {
 	constructor(public node: AnyNode) {
@@ -27,14 +31,101 @@ class DocRoleTreeItem extends vscode.TreeItem {
 				title: '打开角色定义',
 				arguments: [node.role]
 			};
+			// 如果配置允许并且角色提供了 svg 字段，则优先使用该 svg 作为图标
+			try {
+				const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+				const useSvg = cfg.get<boolean>('roles.display.useRoleSvgIfPresent', false);
+				const svgField = (node.role as any).svg;
+				if (useSvg && svgField && typeof svgField === 'string') {
+					try {
+						const uri = svgField.startsWith('data:image') ? vscode.Uri.parse(svgField) : vscode.Uri.file(path.isAbsolute(svgField) ? svgField : path.join(node.role.packagePath || '', svgField));
+						this.iconPath = { light: uri, dark: uri };
+					} catch {}
+				}
+			} catch {}
+			if (node.role.sourcePath) {
+				this.resourceUri = vscode.Uri.file(node.role.sourcePath);
+				// 保持可展开时的文件图标（避免变成文件夹图标）
+				if (this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+					const p = node.role.sourcePath.toLowerCase();
+					if (p.endsWith('.json') || p.endsWith('.json5')) {
+						this.iconPath = new vscode.ThemeIcon('file-code');
+					} else if (p.endsWith('.md') || p.endsWith('.markdown') || p.endsWith('.txt')) {
+						this.iconPath = new vscode.ThemeIcon('file-text');
+					} else {
+						this.iconPath = new vscode.ThemeIcon('file');
+					}
+				}
+			}
+		} else if (node.kind === 'detail') {
+			// 只显示 key；对于颜色字段，在右侧显示带颜色的描述（并显示小色块）
+			const dn = node as DetailNode;
+			this.tooltip = dn.full && dn.full.length > (dn.value?.length || 0) ? dn.full : dn.full;
+			// 默认保留原有行为：不显示描述（值在展开后显示完整行）
+			this.description = undefined;
+			try {
+				const keyLower = (dn.key || '').toString().toLowerCase();
+				if (keyLower === 'color' || keyLower === 'colour' || keyLower === '颜色') {
+					const colorValue = (dn.value || '').toString().trim();
+					if (colorValue) {
+						// 在右侧展示颜色值
+						this.description = colorValue;
+						// 生成一个小的 SVG 色块作为图标（data URI），兼容 light/dark
+						const safeColor = colorValue.replace(/"/g, '%22');
+						const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><rect rx="2" ry="2" width="12" height="12" fill="${safeColor}" stroke="#00000020" stroke-width="0.5"/></svg>`;
+						const uri = vscode.Uri.parse('data:image/svg+xml;utf8,' + encodeURIComponent(svg));
+						this.iconPath = { light: uri, dark: uri };
+					}
+				}
+			} catch (e) {
+				// ignore any errors when rendering color icon
+			}
+		} else if (node.kind === 'detailLine') {
+			this.label = node.value;
+			// 若父字段是颜色并且设置允许，则在 value（即 detailLine）上显示色块图标
+			try {
+				const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+				const enabled = cfg.get<boolean>('roles.details.showColorOnValue', true);
+				const fieldKey = (node as any).parentKey as string | undefined;
+				if (enabled && fieldKey) {
+					const keyLower = fieldKey.toLowerCase();
+					if (keyLower === 'color' || keyLower === 'colour' || keyLower === '颜色') {
+						const colorValue = (this.label || '').toString().trim();
+						if (colorValue) {
+							const safeColor = colorValue.replace(/"/g, '%22');
+							const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><rect rx="2" ry="2" width="12" height="12" fill="${safeColor}" stroke="#00000020" stroke-width="0.5"/></svg>`;
+							const uri = vscode.Uri.parse('data:image/svg+xml;utf8,' + encodeURIComponent(svg));
+							this.iconPath = { light: uri, dark: uri };
+						}
+					}
+				}
+			} catch (e) { /* ignore */ }
 		}
 	}
 	static label(n: AnyNode) {
 		if (n.kind === 'role') { return n.role.name; }
+		if (n.kind === 'detail') { return labelForRoleKey(n.key); }
 		if (n.kind === 'specialRoot') { return '词汇 / 敏感词 / 正则表达式'; }
 		return n.key;
 	}
-	static state(n: AnyNode) { return n.kind === 'role' ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.Collapsed; }
+	static state(n: AnyNode) { 
+		if (n.kind === 'role') {
+			const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+			const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+			return enableRoleExpansion ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+		}
+		if (n.kind === 'detail') {
+			const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+			const always = cfg.get<boolean>('roles.details.alwaysExpandable', true);
+			if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
+			const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
+			const dn = n as DetailNode;
+			const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
+			return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+		}
+		if (n.kind === 'detailLine') { return vscode.TreeItemCollapsibleState.None; }
+		return vscode.TreeItemCollapsibleState.Collapsed; 
+	}
 	static idOf(n: AnyNode) {
 		switch (n.kind) {
 			case 'specialRoot': return 'docSpecialRoot';
@@ -49,6 +140,10 @@ class DocRoleTreeItem extends vscode.TreeItem {
 				const nm = encodeURIComponent((n as RoleNode).role.name);
 				return 'docRole:' + p + ':' + aff + ':' + t + ':' + nm;
 			}
+			case 'detail': {
+				const dn = n as DetailNode;
+				return 'docRoleDetail:' + encodeURIComponent(dn.roleName) + ':' + encodeURIComponent(dn.key);
+			}
 		}
 	}
 }
@@ -61,7 +156,44 @@ class DocRolesProvider implements vscode.TreeDataProvider<AnyNode> {
 	getChildren(e?: AnyNode) {
 		if (!e) { return this.build(); }
 		if (e.kind === 'affiliation' || e.kind === 'type' || e.kind === 'specialType' || e.kind === 'specialAffiliation' || e.kind === 'specialRoot') { return (e as any).children || []; }
+		if (e.kind === 'role') { return this.buildRoleDetails(e as RoleNode); }
+		if (e.kind === 'detail') { return this.buildDetailLines(e as DetailNode); }
 		return [];
+	}
+	private buildRoleDetails(rn: RoleNode): DetailNode[] {
+		const r: any = rn.role as any;
+		const entries: [string, any][] = Object.entries(r || {});
+		entries.sort((a,b)=>{
+			if (a[0] === 'name') { return -1; }
+			if (b[0] === 'name') { return 1; }
+			return a[0].localeCompare(b[0], 'zh-Hans', {numeric:true,sensitivity:'base'});
+		});
+		const toStr = (v: any): { short: string; full: string } => {
+			let full: string;
+			if (v === null || v === undefined) { full = String(v); }
+			else if (typeof v === 'string') { full = v; }
+			else if (Array.isArray(v)) { full = v.join(', '); }
+			else if (typeof v === 'object') { try { full = JSON.stringify(v); } catch { full = String(v); } }
+			else { full = String(v); }
+			const limit = 120; const short = full.length > limit ? full.slice(0, limit) + '…' : full; return { short, full };
+		};
+		return entries.map(([k, v]) => { const { short, full } = toStr(v); return { kind:'detail', key:k, value:short, full, roleName: rn.role.name } as DetailNode; });
+	}
+
+	private buildDetailLines(dn: DetailNode): DetailLineNode[] {
+		const full = dn.full ?? dn.value;
+		const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+		const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
+		const lines: string[] = [];
+		const pushWrapped = (s: string) => {
+			const width = wrapCol;
+			if (s.length <= width) { lines.push(s); return; }
+			let i = 0;
+			while (i < s.length) { lines.push(s.slice(i, i + width)); i += width; }
+		};
+		if (full.includes('\n')) { for (const part of full.split(/\r?\n/)) { pushWrapped(part); } } else { pushWrapped(full); }
+		// attach parent key so TreeItem can know field name when rendering
+		return lines.map((val, idx) => ({ kind:'detailLine', key: idx === 0 ? '…' : '  ', value: val, roleName: dn.roleName, parentKey: dn.key } as DetailLineNode & { parentKey?: string }));
 	}
 	private build(): AnyNode[] {
 		const model = getDocumentRolesModel();
@@ -79,13 +211,13 @@ class DocRolesProvider implements vscode.TreeDataProvider<AnyNode> {
 				
 				for (const tg of g.types) {
 					if (tg.type === '__FLAT__') {
-						// 对于扁平标记，直接将角色添加到归属节点下
+						// 扁平：仍然在 role 节点上保留真实的类型，便于显示/唯一键
 						const roleNodes: RoleNode[] = tg.roles.map(r=>({ 
 							kind:'role', 
 							key:r.name, 
 							role:r, 
 							affiliation:g.affiliation, 
-							roleType: tg.type 
+							roleType: (r.type || 'unknown') 
 						}));
 						children.push(...roleNodes);
 					} else {

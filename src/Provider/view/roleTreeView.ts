@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { labelForRoleKey } from '../../utils/i18n';
 import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
 import { buildRoleMarkdown } from '../hoverProvider';
@@ -12,17 +14,19 @@ interface RoleHierarchyAffiliationGroup { affiliation: string; types: RoleHierar
 // level 1: type
 // level 2: role
 
-type NodeKind = 'affiliation' | 'type' | 'role' | 'specialRoot' | 'specialType' | 'specialAffiliation';
+type NodeKind = 'affiliation' | 'type' | 'role' | 'detail' | 'detailLine' | 'specialRoot' | 'specialType' | 'specialAffiliation';
 
 interface BaseNode { kind: NodeKind; key: string; parent?: BaseNode; uid?: string; }
 interface AffiliationNode extends BaseNode { kind: 'affiliation'; children?: (TypeNode | RoleNode)[]; }
 interface TypeNode extends BaseNode { kind: 'type'; affiliation: string; children?: RoleNode[]; }
 interface RoleNode extends BaseNode { kind: 'role'; role: Role; affiliation: string; roleType: string; }
+interface DetailNode extends BaseNode { kind: 'detail'; value: string; roleName: string; full?: string; }
+interface DetailLineNode extends BaseNode { kind: 'detailLine'; value: string; roleName: string; }
 interface SpecialRootNode extends BaseNode { kind: 'specialRoot'; children: SpecialTypeNode[]; count: number; }
 interface SpecialTypeNode extends BaseNode { kind: 'specialType'; roleType: string; children: SpecialAffiliationNode[]; }
 interface SpecialAffiliationNode extends BaseNode { kind: 'specialAffiliation'; affiliation: string; children: RoleNode[]; roleType: string; }
 
-export type AnyNode = AffiliationNode | TypeNode | RoleNode | SpecialRootNode | SpecialTypeNode | SpecialAffiliationNode;
+export type AnyNode = AffiliationNode | TypeNode | RoleNode | DetailNode | DetailLineNode | SpecialRootNode | SpecialTypeNode | SpecialAffiliationNode;
 
 const UNGROUPED = '(未分组)';
 
@@ -50,9 +54,60 @@ export class RoleTreeItem extends vscode.TreeItem {
                 arguments: [node.role]
             };
             this.contextValue = 'roleNode';
+            // 如果配置允许并且角色提供了 svg 字段，则优先使用该 svg 作为图标
+            try {
+                const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const useSvg = cfg.get<boolean>('roles.display.useRoleSvgIfPresent', false);
+                const svgField = (node.role as any).svg;
+                if (useSvg && svgField && typeof svgField === 'string') {
+                    try {
+                        const uri = svgField.startsWith('data:image') ? vscode.Uri.parse(svgField) : vscode.Uri.file(path.isAbsolute(svgField) ? svgField : path.join(node.role.packagePath || '', svgField));
+                        this.iconPath = { light: uri, dark: uri };
+                    } catch {}
+                }
+            } catch {}
             if (node.role.sourcePath) {
                 this.resourceUri = vscode.Uri.file(node.role.sourcePath);
+                // VS Code 对“可展开”的 TreeItem 会倾向使用“文件夹”图标，即使有 resourceUri。
+                // 为了在允许展开时也保留接近原始文件类型的图标，这里按扩展名设置一个内置的文件类图标。
+                if (this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                    const p = node.role.sourcePath.toLowerCase();
+                    if (p.endsWith('.json') || p.endsWith('.json5')) {
+                        this.iconPath = new vscode.ThemeIcon('file-code');
+                    } else if (p.endsWith('.md') || p.endsWith('.markdown') || p.endsWith('.txt')) {
+                        this.iconPath = new vscode.ThemeIcon('file-text');
+                    } else {
+                        this.iconPath = new vscode.ThemeIcon('file');
+                    }
+                }
             }
+        } else if (node.kind === 'detail') {
+            // 只显示 key；value/详细行上会显示实际的值
+            const dn = node as DetailNode;
+            this.tooltip = dn.full && dn.full.length > (dn.value?.length || 0) ? dn.full : dn.full;
+            this.description = undefined;
+            this.contextValue = 'roleDetail';
+        } else if (node.kind === 'detailLine') {
+            this.label = node.value;
+            this.contextValue = 'roleDetailLine';
+            // 若父字段是颜色并且设置允许，则在 value 上显示色块图标
+            try {
+                const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const enabled = cfg.get<boolean>('roles.details.showColorOnValue', true);
+                const fieldKey = (node as any).parentKey as string | undefined;
+                if (enabled && fieldKey) {
+                    const keyLower = fieldKey.toLowerCase();
+                    if (keyLower === 'color' || keyLower === 'colour' || keyLower === '颜色') {
+                        const colorValue = (this.label || '').toString().trim();
+                        if (colorValue) {
+                            const safeColor = colorValue.replace(/"/g, '%22');
+                            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"><rect rx="2" ry="2" width="12" height="12" fill="${safeColor}" stroke="#00000020" stroke-width="0.5"/></svg>`;
+                            const uri = vscode.Uri.parse('data:image/svg+xml;utf8,' + encodeURIComponent(svg));
+                            this.iconPath = { light: uri, dark: uri };
+                        }
+                    }
+                }
+            } catch (e) { /* ignore */ }
         } else if (node.kind === 'type') {
             this.description = `${node.children?.length || 0}`;
             this.contextValue = 'roleTypeNode';
@@ -79,6 +134,14 @@ export class RoleTreeItem extends vscode.TreeItem {
             case 'affiliation': return `aff:${node.key}`;
             case 'type': return `aff:${(node as any).affiliation}|type:${node.key}`;
             case 'role': return `role:${encodeURIComponent((node as any).role?.name || node.key)}`;
+            case 'detail': {
+                const dn = node as DetailNode;
+                return `roleDetail:${encodeURIComponent(dn.roleName)}:${encodeURIComponent(dn.key)}`;
+            }
+            case 'detailLine': {
+                const ln = node as DetailLineNode;
+                return `roleDetailLine:${encodeURIComponent(ln.roleName)}:${encodeURIComponent(ln.key)}:${encodeURIComponent(ln.value.slice(0,40))}`;
+            }
         }
     }
 
@@ -87,6 +150,8 @@ export class RoleTreeItem extends vscode.TreeItem {
             case 'affiliation': return node.key;
             case 'type': return node.key;
             case 'role': return node.role.name;
+            case 'detail': return labelForRoleKey(node.key);
+            case 'detailLine': return node.key;
             case 'specialRoot': return '词汇 / 敏感词 / 正则表达式';
             case 'specialType': return node.key; 
             case 'specialAffiliation': return node.key; 
@@ -94,9 +159,21 @@ export class RoleTreeItem extends vscode.TreeItem {
     }
 
     private static getCollapsibleState(node: AnyNode): vscode.TreeItemCollapsibleState {
-    if (node.kind === 'role') {
-            return vscode.TreeItemCollapsibleState.None;
+        if (node.kind === 'role') {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+            return enableRoleExpansion ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
+        if (node.kind === 'detail') { 
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const always = cfg.get<boolean>('roles.details.alwaysExpandable', true);
+            if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
+            const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
+            const dn = node as DetailNode;
+            const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
+            return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+        }
+        if (node.kind === 'detailLine') { return vscode.TreeItemCollapsibleState.None; }
         return vscode.TreeItemCollapsibleState.Collapsed;
     }
 }
@@ -113,7 +190,7 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
         if (!element) {
             return this.buildHierarchy();
         }
-    if (element.kind === 'affiliation') {
+        if (element.kind === 'affiliation') {
             return element.children || [];
         }
         if (element.kind === 'type') {
@@ -122,9 +199,61 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
         if (element.kind === 'specialRoot') {
             return element.children;
         }
-    if (element.kind === 'specialType') { return element.children; }
-    if (element.kind === 'specialAffiliation') { return element.children; }
+        if (element.kind === 'specialType') { return element.children; }
+        if (element.kind === 'specialAffiliation') { return element.children; }
+    if (element.kind === 'role') { return this.buildRoleDetails(element as RoleNode); }
+    if (element.kind === 'detail') { return this.buildDetailLines(element as DetailNode); }
         return [];
+    }
+
+    private buildRoleDetails(rn: RoleNode): DetailNode[] {
+        const r: any = rn.role as any;
+        const entries: [string, any][] = Object.entries(r || {});
+        // 将 name 置顶，其余按键名排序
+        entries.sort((a,b)=>{
+            if (a[0] === 'name') { return -1; }
+            if (b[0] === 'name') { return 1; }
+            return a[0].localeCompare(b[0], 'zh-Hans', {numeric:true,sensitivity:'base'});
+        });
+        const toStr = (v: any): { short: string; full: string } => {
+            let full: string;
+            if (v === null || v === undefined) { full = String(v); }
+            else if (typeof v === 'string') { full = v; }
+            else if (Array.isArray(v)) { full = v.join(', '); }
+            else if (typeof v === 'object') { try { full = JSON.stringify(v); } catch { full = String(v); } }
+            else { full = String(v); }
+            const limit = 120;
+            const short = full.length > limit ? full.slice(0, limit) + '…' : full;
+            return { short, full };
+        };
+        const details: DetailNode[] = entries.map(([k, v]) => {
+            const { short, full } = toStr(v);
+            return { kind:'detail', key: k, value: short, full, roleName: rn.role.name } as DetailNode;
+        });
+        return details;
+    }
+
+    private buildDetailLines(dn: DetailNode): DetailLineNode[] {
+        const full = dn.full ?? dn.value;
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
+        const lines: string[] = [];
+        const pushWrapped = (s: string) => {
+            const width = wrapCol;
+            if (s.length <= width) { lines.push(s); return; }
+            let i = 0;
+            while (i < s.length) {
+                lines.push(s.slice(i, i + width));
+                i += width;
+            }
+        };
+        if (full.includes('\n')) {
+            for (const part of full.split(/\r?\n/)) { pushWrapped(part); }
+        } else {
+            pushWrapped(full);
+        }
+    // attach parent key so TreeItem can know field name when rendering
+    return lines.map((val, idx) => ({ kind:'detailLine', key: idx === 0 ? '…' : '  ', value: val, roleName: dn.roleName, parentKey: dn.key } as DetailLineNode & { parentKey?: string }));
     }
 
     private buildHierarchy(): AnyNode[] {
@@ -143,7 +272,13 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
         const seen = new Set<Role>(roles);
 
         // 分组构建（与 docRolesModel.hierarchyFromSeen 对齐）
-        const buildCustomGroups = (set: Set<Role>, groups: any[]): RoleHierarchyAffiliationGroup[] => {
+        // 自定义分组：也要尊重 respectAffiliation / respectType
+        const buildCustomGroups = (
+            set: Set<Role>,
+            groups: any[],
+            respectAff: boolean,
+            respectTyp: boolean
+        ): RoleHierarchyAffiliationGroup[] => {
             const grouped = new Map<string, Role[]>();
             const other: Role[] = [];
             for (const g of groups) { if (g?.name) { grouped.set(g.name, []); } }
@@ -151,7 +286,12 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                 let matched = false;
                 for (const g of groups) {
                     if (!g?.name || !Array.isArray(g.patterns)) { continue; }
-                    const field = g.matchType === 'type' ? (r.type || '') : (r.affiliation || '');
+                    // 自定义分组的『匹配归属』不受忽略开关影响：
+                    // 忽略类型/归属 仅影响『显示层级是否按该字段再分组（是否扁平化）』，
+                    // 不应导致匹配不到分组而全部落入“其他”。因此这里始终使用真实字段匹配。
+                    const field = g.matchType === 'type'
+                        ? (r.type || '')
+                        : (r.affiliation || '');
                     if (g.patterns.some((p: string) => field.includes(p))) {
                         grouped.get(g.name)!.push(r); matched = true; break;
                     }
@@ -159,11 +299,34 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                 if (!matched) { other.push(r); }
             }
             if (other.length) { grouped.set('其他', other); }
+            // 若忽略归属，且存在按归属匹配的自定义分组，则在顶层进行扁平化：
+            // 将所有自定义分组合并为一个“全部角色”分组，仅在二级按类型（或扁平）展示。
+            const hasAffBased = groups.some(g => g?.matchType === 'affiliation');
+            if (!respectAff && hasAffBased) {
+                const merged: Role[] = [];
+                for (const arr of grouped.values()) { merged.push(...arr); }
+                if (merged.length === 0) { return []; }
+                const typeMap = new Map<string, Role[]>();
+                for (const r of merged) {
+                    const t = respectTyp ? (r.type || 'unknown') : '__FLAT__';
+                    if (!typeMap.has(t)) { typeMap.set(t, []); }
+                    typeMap.get(t)!.push(r);
+                }
+                const tgs: RoleHierarchyTypeGroup[] = [];
+                for (const [t, rs] of typeMap) { rs.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'})); tgs.push({ type: t, roles: rs }); }
+                tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                return [{ affiliation: '全部角色', types: tgs }];
+            }
             const out: RoleHierarchyAffiliationGroup[] = [];
             for (const [name, arr] of grouped) {
                 if (!arr.length) { continue; }
                 const typeMap = new Map<string, Role[]>();
-                for (const r of arr) { const t = r.type || 'unknown'; if (!typeMap.has(t)) { typeMap.set(t, []); } typeMap.get(t)!.push(r); }
+                for (const r of arr) {
+                    // 忽略类型时，使用扁平占位键，避免再以类型分组
+                    const t = respectTyp ? (r.type || 'unknown') : '__FLAT__';
+                    if (!typeMap.has(t)) { typeMap.set(t, []); }
+                    typeMap.get(t)!.push(r);
+                }
                 const tgs: RoleHierarchyTypeGroup[] = [];
                 for (const [t, rs] of typeMap) { rs.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'})); tgs.push({ type: t, roles: rs }); }
                 tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
@@ -184,7 +347,7 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
             const list = Array.from(seen).sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
             groupsOut = [{ affiliation: '全部角色', types: [{ type: '__FLAT__', roles: list }] }];
         } else if (useCustomGroups && customGroups.length > 0) {
-            groupsOut = buildCustomGroups(seen, customGroups);
+            groupsOut = buildCustomGroups(seen, customGroups, respectAffiliation, respectType);
         } else {
             const map = new Map<string, Map<string, Role[]>>();
             for (const r of seen) {
@@ -291,6 +454,12 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                     const n = encodeURIComponent(rn.role.name);
                     return `role:${p}:${aff}:${t}:${n}`;
                 }
+                case 'detail': {
+                    const dn = node as DetailNode;
+                    return `roleDetail:${encodeURIComponent(dn.roleName)}:${encodeURIComponent(dn.key)}`;
+                }
+                default:
+                    return `node:${encodeURIComponent((node as any).key || '')}`;
             }
         };
         const walk = (node: AnyNode) => {

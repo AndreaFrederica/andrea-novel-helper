@@ -420,6 +420,9 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             const respectType = cfg.get<boolean>('docRoles.respectType', true);
             const primaryGroup = cfg.get<string>('docRoles.primaryGroup', 'affiliation');
             const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
+            const wrapColumn = cfg.get<number>('roles.details.wrapColumn', 20) || 20;
+            const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+            const useRoleSvgIfPresent = cfg.get<boolean>('docRoles.display.useRoleSvgIfPresent', false);
 
             const choices = [
                 {
@@ -447,6 +450,21 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                     label: `${useCustomGroups ? '$(check)' : '$(circle-slash)'} 自定义分组`,
                     description: useCustomGroups ? '当前：使用自定义分组规则' : '当前：使用标准分组',
                     action: 'useCustomGroups'
+                },
+                {
+                    label: '$(word-wrap) 详情折行列数',
+                    description: `当前：${wrapColumn} 列（5-200）`,
+                    action: 'wrapColumn'
+                },
+                {
+                    label: `${enableRoleExpansion ? '$(check)' : '$(circle-slash)'} 允许角色展开详情`,
+                    description: enableRoleExpansion ? '开启：角色节点可展开查看属性' : '关闭：角色节点不可展开',
+                    action: 'toggleRoleExpansion'
+                },
+                {
+                    label: `${useRoleSvgIfPresent ? '$(check)' : '$(circle-slash)'} 使用角色自带 svg 作为图标`,
+                    description: useRoleSvgIfPresent ? '开启：若角色对象含 svg 字段则优先使用' : '关闭：继续使用默认/文件图标',
+                    action: 'toggleUseRoleSvg'
                 },
                 {
                     label: '$(edit) 管理自定义分组规则',
@@ -536,6 +554,38 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                         vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
                         break;
                     }
+                    case 'wrapColumn': {
+                        const cur = wrapColumn;
+                        const val = await vscode.window.showInputBox({
+                            prompt: '设置角色属性详情的折行列数（5-200）',
+                            value: String(cur),
+                            validateInput: (text) => {
+                                const n = Number(text);
+                                if (!Number.isFinite(n)) { return '请输入数字'; }
+                                if (n < 5 || n > 200) { return '范围为 5 到 200'; }
+                                return undefined;
+                            }
+                        });
+                        if (val) {
+                            const n = Math.max(5, Math.min(200, Number(val)));
+                            await cfg.update('roles.details.wrapColumn', n, vscode.ConfigurationTarget.Workspace);
+                            vscode.window.showInformationMessage(`折行列数已设置为 ${n}`);
+                            vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        }
+                        break;
+                    }
+                    case 'toggleRoleExpansion': {
+                        await cfg.update('roles.details.enableRoleExpansion', !enableRoleExpansion, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`角色展开已${!enableRoleExpansion ? '启用' : '禁用'}`);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'toggleUseRoleSvg': {
+                        await cfg.update('docRoles.display.useRoleSvgIfPresent', !useRoleSvgIfPresent, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`当前文章角色：使用角色 svg 图标已${!useRoleSvgIfPresent ? '启用' : '禁用'}`);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
                     case 'manageCustomGroups': {
                         await manageCustomGroups();
                         break;
@@ -562,6 +612,8 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             const respectType = cfg.get<boolean>(`${base}.respectType`, true);
             const primaryGroup = cfg.get<string>(`${base}.primaryGroup`, 'affiliation');
             const useCustomGroups = cfg.get<boolean>(`${base}.useCustomGroups`, false);
+            const wrapColumn = cfg.get<number>('roles.details.wrapColumn', 20) || 20;
+            const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
 
             const choices = [
                 {
@@ -574,6 +626,8 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: `${respectType ? '$(check)' : '$(circle-slash)'} 遵循类型`, description: respectType ? '已启用' : '已禁用', action: 'respectType' },
                 { label: '$(list-tree) 第一级别分组', description: primaryGroup === 'affiliation' ? '当前：归属优先' : '当前：类型优先', action: 'primaryGroup' },
                 { label: `${useCustomGroups ? '$(check)' : '$(circle-slash)'} 自定义分组`, description: useCustomGroups ? '使用自定义规则' : '使用标准分组', action: 'useCustomGroups' },
+                { label: '$(word-wrap) 详情折行列数', description: `当前：${wrapColumn} 列（5-200）`, action: 'wrapColumn' },
+                { label: `${enableRoleExpansion ? '$(check)' : '$(circle-slash)'} 允许角色展开详情`, description: enableRoleExpansion ? '开启：角色节点可展开查看属性' : '关闭：角色节点不可展开', action: 'toggleRoleExpansion' },
                 { label: '$(edit) 管理自定义分组规则', description: '添加、编辑或删除规则（针对 allRoles.* 或 docRoles.*，取决于同步开关）', action: 'manageCustomGroups' },
                 { label: '$(arrow-left) 返回主设置', action: 'back' }
             ];
@@ -633,6 +687,30 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                     case 'useCustomGroups': {
                         await cfg.update('allRoles.useCustomGroups', !useCustomGroups, vscode.ConfigurationTarget.Workspace);
                         vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
+                    case 'wrapColumn': {
+                        const cur = wrapColumn;
+                        const val = await vscode.window.showInputBox({
+                            prompt: '设置角色属性详情的折行列数（5-200）',
+                            value: String(cur),
+                            validateInput: (text) => {
+                                const n = Number(text);
+                                if (!Number.isFinite(n)) { return '请输入数字'; }
+                                if (n < 5 || n > 200) { return '范围为 5 到 200'; }
+                                return undefined;
+                            }
+                        });
+                        if (val) {
+                            const n = Math.max(5, Math.min(200, Number(val)));
+                            await cfg.update('roles.details.wrapColumn', n, vscode.ConfigurationTarget.Workspace);
+                            vscode.window.showInformationMessage(`折行列数已设置为 ${n}`);
+                        }
+                        break;
+                    }
+                    case 'toggleRoleExpansion': {
+                        await cfg.update('roles.details.enableRoleExpansion', !enableRoleExpansion, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`角色展开已${!enableRoleExpansion ? '启用' : '禁用'}`);
                         break;
                     }
                     case 'manageCustomGroups': {

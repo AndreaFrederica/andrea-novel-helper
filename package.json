@@ -25,6 +25,24 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "localizations": [
+      {
+        "languageId": "en",
+        "languageName": "English",
+        "localizedLanguageName": "English",
+        "translations": [
+          { "id": "vscode", "path": "./l10n/bundle.l10n.json" }
+        ]
+      },
+      {
+        "languageId": "zh-cn",
+        "languageName": "Chinese (Simplified)",
+        "localizedLanguageName": "简体中文",
+        "translations": [
+          { "id": "vscode", "path": "./l10n/bundle.l10n.zh-cn.json" }
+        ]
+      }
+    ],
     "customEditors": [
       {
         "viewType": "andrea.roleJson5Editor",
@@ -921,6 +939,26 @@
           "default": false,
           "markdownDescription": "是否启用自定义分组规则（优先级高于 groupBy 设置）"
         },
+        "AndreaNovelHelper.roles.details.showColorOnValue": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "在角色详情的值行上显示颜色预览色块（默认: true）。此设置影响全部角色与当前文章角色视图，除非对应的 allRoles/docRoles 同名设置覆盖。"
+        },
+        "AndreaNovelHelper.roles.display.useRoleSvgIfPresent": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "如果角色对象包含 svg 字段，是否优先使用该 svg 作为角色图标（默认: false）。支持 data URI 或相对/绝对路径。"
+        },
+        "AndreaNovelHelper.docRoles.details.showColorOnValue": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "在当前文章角色视图中，在值行上显示颜色预览色块（默认: true）。"
+        },
+        "AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "在当前文章角色视图中，如果角色对象包含 svg 字段，是否优先使用该 svg 作为角色图标（默认: false）。"
+        },
         "andrea.typeset.statusBar.compact": {
           "type": "boolean",
           "default": false,
@@ -1309,6 +1347,23 @@
           "minimum": 0,
           "maximum": 20,
           "description": "%config.decorations.cacheSize.description%"
+        },
+        "AndreaNovelHelper.roles.details.alwaysExpandable": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "角色属性详情是否总是可展开；开启后所有属性行都能展开为多行显示。"
+        },
+        "AndreaNovelHelper.roles.details.wrapColumn": {
+          "type": "number",
+          "default": 20,
+          "minimum": 5,
+          "maximum": 200,
+          "markdownDescription": "角色属性详情的软折行宽度（列数），用于多行显示的每行最大字符数。"
+        },
+        "AndreaNovelHelper.roles.details.enableRoleExpansion": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否允许角色节点可展开以查看属性详情；关闭后角色节点将不再可展开。"
         }
       }
     },
@@ -1317,30 +1372,30 @@
         {
           "id": "wordCountExplorer",
           "name": "写作资源管理器（小说助手）",
-          "icon": "images/checklist_dark.svg"
+          "icon": "book"
         },
         {
           "id": "docRolesExplorerView",
           "name": "当前文章角色",
           "when": "true",
-          "icon": "images/checklist_dark.svg"
+          "icon": "account"
         }
       ],
       "AndreaNovelHelperSidebar": [
         {
           "id": "packageManagerView",
           "name": "包管理器",
-          "icon": "images/checklist_dark.svg"
+          "icon": "package"
         },
         {
           "id": "docRolesView",
           "name": "当前文章角色",
-          "icon": "images/checklist_dark.svg"
+          "icon": "person"
         },
         {
           "id": "roleHierarchyView",
           "name": "角色",
-          "icon": "images/checklist_dark.svg"
+          "icon": "organization"
         }
       ]
   },
