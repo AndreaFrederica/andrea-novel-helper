@@ -6,6 +6,17 @@ import { getDocumentRolesModel } from './docRolesModel';
 import { labelForRoleKey } from '../../utils/i18n';
 import { iconForRoleKey } from '../../utils/roleKeyIcons';
 
+// ---- Persist expanded state per document for the Explorer doc roles view ----
+const EXPAND_BY_DOC_KEY = 'docRolesExplorerView.expandedByDoc';
+let expandedByDoc: Record<string, Set<string>> = Object.create(null);
+let lastActiveDocKey: string | undefined;
+function getCurrentDocKey(): string | undefined { return vscode.window.activeTextEditor?.document?.uri.toString(); }
+function getExpandedSetForCurrent(): Set<string> {
+    const dk = getCurrentDocKey();
+    if (!dk) { return new Set<string>(); }
+    return expandedByDoc[dk] ?? new Set<string>();
+}
+
 // 复用与侧边栏 docRolesView 相同的分组逻辑，但单独一个 provider 绑定到资源管理器面板
 type NodeKind = 'affiliation' | 'type' | 'role' | 'detail' | 'detailLine' | 'specialRoot' | 'specialType' | 'specialAffiliation';
 interface Base { kind: NodeKind; key: string; }
@@ -98,6 +109,14 @@ class DocRoleExplorerItem extends vscode.TreeItem {
                 }
             } catch { /* ignore */ }
         }
+
+        // 应用展开持久化：如果此节点（可折叠）在当前文档的展开集合中，则设为 Expanded
+        try {
+            if (this.id && this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                const set = getExpandedSetForCurrent();
+                if (set.has(this.id)) { this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded; }
+            }
+        } catch { /* ignore */ }
     }
     static label(n: AnyNode) {
         if (n.kind === 'role') { return n.role.name; }
@@ -287,11 +306,58 @@ export function registerDocRolesExplorerView(context: vscode.ExtensionContext) {
     const provider = new DocRolesExplorerProvider();
     const view = vscode.window.createTreeView('docRolesExplorerView', { treeDataProvider: provider, showCollapseAll: true });
     context.subscriptions.push(view);
-    const EXPAND_KEY = 'docRolesExplorer.expanded';
-    const expanded = new Set<string>(context.workspaceState.get<string[]>(EXPAND_KEY, []));
-    const save = () => context.workspaceState.update(EXPAND_KEY, Array.from(expanded));
-    view.onDidExpandElement(e => { const id = (e.element as any).id; if (id) { expanded.add(id); save(); } });
-    view.onDidCollapseElement(e => { const id = (e.element as any).id; if (id) { expanded.delete(id); save(); } });
+    // 加载按文档存储的展开状态
+    try {
+        const raw = context.workspaceState.get<Record<string, string[]>>(EXPAND_BY_DOC_KEY, {});
+        expandedByDoc = Object.create(null);
+        for (const k of Object.keys(raw || {})) {
+            const arr = (raw as any)[k] as string[] | undefined;
+            expandedByDoc[k] = new Set<string>(arr || []);
+        }
+    } catch { expandedByDoc = Object.create(null); }
+    const persistAll = () => {
+        const out: Record<string, string[]> = {};
+        for (const [doc, set] of Object.entries(expandedByDoc)) {
+            if (set && set.size) { out[doc] = Array.from(set); }
+        }
+        return context.workspaceState.update(EXPAND_BY_DOC_KEY, out);
+    };
+    const addForCurrent = (id: string) => {
+        const dk = getCurrentDocKey();
+        if (!dk) { return; }
+        const set = expandedByDoc[dk] ?? new Set<string>();
+        set.add(id);
+        expandedByDoc[dk] = set;
+        void persistAll();
+    };
+    const removeForCurrent = (id: string) => {
+        const dk = getCurrentDocKey();
+        if (!dk) { return; }
+        const set = expandedByDoc[dk];
+        if (set) {
+            set.delete(id);
+            if (set.size === 0) { delete expandedByDoc[dk]; }
+            void persistAll();
+        }
+    };
+    context.subscriptions.push(
+        view.onDidExpandElement(e => { try { const id = DocRoleExplorerItem.idOf(e.element as AnyNode); if (id) { addForCurrent(id); } } catch {} }),
+        view.onDidCollapseElement(e => { try { const id = DocRoleExplorerItem.idOf(e.element as AnyNode); if (id) { removeForCurrent(id); } } catch {} }),
+        vscode.window.onDidChangeActiveTextEditor(() => {
+            const newKey = getCurrentDocKey();
+            const prevKey = lastActiveDocKey;
+            lastActiveDocKey = newKey;
+            if (!newKey) { provider.refresh(); return; }
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const inherit = cfg.get<boolean>('docRoles.inheritExpandedFromPrevious', true);
+            const hasSet = expandedByDoc[newKey] && expandedByDoc[newKey].size > 0;
+            if (inherit && !hasSet && prevKey && expandedByDoc[prevKey] && expandedByDoc[prevKey].size > 0) {
+                expandedByDoc[newKey] = new Set<string>(expandedByDoc[prevKey]);
+                void persistAll();
+            }
+            provider.refresh();
+        }),
+    );
     const model = getDocumentRolesModel();
     context.subscriptions.push(model.onDidChange(()=> provider.refresh()));
 }

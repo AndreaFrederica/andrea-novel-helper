@@ -6,6 +6,17 @@ import { iconForRoleKey } from '../../utils/roleKeyIcons';
 import { Role } from '../../extension';
 import { getDocumentRolesModel } from './docRolesModel';
 
+// ---- Persist expanded state per document for docRolesView ----
+const EXPAND_BY_DOC_KEY = 'docRolesView.expandedByDoc';
+let expandedByDoc: Record<string, Set<string>> = Object.create(null);
+let lastActiveDocKey: string | undefined;
+function getCurrentDocKey(): string | undefined { return vscode.window.activeTextEditor?.document?.uri.toString(); }
+function getExpandedSetForCurrent(): Set<string> {
+	const dk = getCurrentDocKey();
+	if (!dk) { return new Set<string>(); }
+	return expandedByDoc[dk] ?? new Set<string>();
+}
+
 type NodeKind = 'affiliation' | 'type' | 'role' | 'detail' | 'detailLine' | 'specialRoot' | 'specialType' | 'specialAffiliation';
 interface Base { kind: NodeKind; key: string; }
 interface AffiliationNode extends Base { 
@@ -74,15 +85,14 @@ class DocRoleTreeItem extends vscode.TreeItem {
 					}
 				}
 			}
-		} else if (node.kind === 'detail') {
+		}
+		else if (node.kind === 'detail') {
 			// 只显示 key；值在展开后的 detailLine 显示
 			const dn = node as DetailNode;
 			this.tooltip = dn.full && dn.full.length > (dn.value?.length || 0) ? dn.full : dn.full;
 			// 在 key 行应用内置图标映射
 			this.iconPath = iconForRoleKey(`role.key.${dn.key}`);
 			this.description = undefined;
-			// detail 键图标（ThemeIcon），从映射表获取
-			try { this.iconPath = iconForRoleKey(dn.key); } catch {}
 		} else if (node.kind === 'detailLine') {
 			this.label = node.value;
 			// 若父字段是颜色并且设置允许，则在 value（即 detailLine）上显示色块图标
@@ -104,6 +114,14 @@ class DocRoleTreeItem extends vscode.TreeItem {
 				}
 			} catch (e) { /* ignore */ }
 		}
+
+		// 应用展开持久化：如果此节点（可折叠）在当前文档的展开集合中，则设为 Expanded
+		try {
+			if (this.id && this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+				const set = getExpandedSetForCurrent();
+				if (set.has(this.id)) { this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded; }
+			}
+		} catch { /* ignore */ }
 	}
 	static label(n: AnyNode) {
 		if (n.kind === 'role') { return n.role.name; }
@@ -304,11 +322,61 @@ export function registerDocRolesTreeView(context: vscode.ExtensionContext) {
 	const provider = new DocRolesProvider();
 	const view = vscode.window.createTreeView('docRolesView', { treeDataProvider: provider, showCollapseAll: true });
 	context.subscriptions.push(view);
-	const EXPAND_KEY = 'docRolesView.expanded';
-	const expanded = new Set<string>(context.workspaceState.get<string[]>(EXPAND_KEY, []));
-	const save = () => context.workspaceState.update(EXPAND_KEY, Array.from(expanded));
-	view.onDidExpandElement(e => { const id = (e.element as any).id; if (id) { expanded.add(id); save(); } });
-	view.onDidCollapseElement(e => { const id = (e.element as any).id; if (id) { expanded.delete(id); save(); } });
+	// 加载按文档存储的展开状态
+	try {
+		const raw = context.workspaceState.get<Record<string, string[]>>(EXPAND_BY_DOC_KEY, {});
+		expandedByDoc = Object.create(null);
+		for (const k of Object.keys(raw || {})) {
+			const arr = (raw as any)[k] as string[] | undefined;
+			expandedByDoc[k] = new Set<string>(arr || []);
+		}
+	} catch {
+		expandedByDoc = Object.create(null);
+	}
+	const persistAll = () => {
+		const out: Record<string, string[]> = {};
+		for (const [doc, set] of Object.entries(expandedByDoc)) {
+			if (set && set.size) { out[doc] = Array.from(set); }
+		}
+		return context.workspaceState.update(EXPAND_BY_DOC_KEY, out);
+	};
+	const addForCurrent = (id: string) => {
+		const dk = getCurrentDocKey();
+		if (!dk) { return; }
+		const set = expandedByDoc[dk] ?? new Set<string>();
+		set.add(id);
+		expandedByDoc[dk] = set;
+		void persistAll();
+	};
+	const removeForCurrent = (id: string) => {
+		const dk = getCurrentDocKey();
+		if (!dk) { return; }
+		const set = expandedByDoc[dk];
+		if (set) {
+			set.delete(id);
+			if (set.size === 0) { delete expandedByDoc[dk]; }
+			void persistAll();
+		}
+	};
+	context.subscriptions.push(
+		view.onDidExpandElement(e => { try { const id = DocRoleTreeItem.idOf(e.element as AnyNode); if (id) { addForCurrent(id); } } catch {} }),
+		view.onDidCollapseElement(e => { try { const id = DocRoleTreeItem.idOf(e.element as AnyNode); if (id) { removeForCurrent(id); } } catch {} }),
+		vscode.window.onDidChangeActiveTextEditor(() => {
+			const newKey = getCurrentDocKey();
+			const prevKey = lastActiveDocKey;
+			lastActiveDocKey = newKey;
+			if (!newKey) { provider.refresh(); return; }
+			const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+			const inherit = cfg.get<boolean>('docRoles.inheritExpandedFromPrevious', true);
+			// 如果新文档没有记录或为空，则从上一文档迁移一份（仅影响共有节点会生效）
+			const hasSet = expandedByDoc[newKey] && expandedByDoc[newKey].size > 0;
+			if (inherit && !hasSet && prevKey && expandedByDoc[prevKey] && expandedByDoc[prevKey].size > 0) {
+				expandedByDoc[newKey] = new Set<string>(expandedByDoc[prevKey]);
+				void persistAll();
+			}
+			provider.refresh();
+		}),
+	);
 	// 使用共享模型统一事件，监听模型变化
 	const model = getDocumentRolesModel();
 	context.subscriptions.push(model.onDidChange(()=> provider.refresh()));

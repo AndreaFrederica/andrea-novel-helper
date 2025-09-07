@@ -31,6 +31,10 @@ export type AnyNode = AffiliationNode | TypeNode | RoleNode | DetailNode | Detai
 
 const UNGROUPED = '(未分组)';
 
+// ---- Persist expanded state (global) for All Roles view ----
+const ROLE_EXPAND_KEY = 'roleHierarchyView.expanded';
+let roleExpandedSet: Set<string> = new Set();
+
 export class RoleTreeItem extends vscode.TreeItem {
     constructor(public readonly node: AnyNode) {
         super(RoleTreeItem.getLabel(node), RoleTreeItem.getCollapsibleState(node));
@@ -141,6 +145,13 @@ export class RoleTreeItem extends vscode.TreeItem {
             this.description = `${count}`;
             this.contextValue = 'roleAffiliationNode';
         }
+
+        // 应用展开持久化（全局）：如果此节点在保存的展开集合中，则设为 Expanded
+        try {
+            if (this.id && this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
+                if (roleExpandedSet.has(this.id)) { this.collapsibleState = vscode.TreeItemCollapsibleState.Expanded; }
+            }
+        } catch { /* ignore */ }
     }
 
     private computeId(node: AnyNode): string {
@@ -499,12 +510,41 @@ export function registerRoleTreeView(context: vscode.ExtensionContext) {
     const provider = new RoleTreeDataProvider();
     const view = vscode.window.createTreeView('roleHierarchyView', { treeDataProvider: provider, showCollapseAll: true });
     context.subscriptions.push(view);
-    // persistent expand state
-    const EXPAND_KEY = 'roleHierarchyView.expanded';
-    const expanded: Set<string> = new Set(context.workspaceState.get<string[]>(EXPAND_KEY, []));
-    const save = () => context.workspaceState.update(EXPAND_KEY, Array.from(expanded));
-    view.onDidExpandElement(e=>{ if (e.element instanceof RoleTreeItem) { expanded.add(e.element.id!); save(); } else if ((e.element as any)?.id) { expanded.add((e.element as any).id); save(); }});
-    view.onDidCollapseElement(e=>{ if (e.element instanceof RoleTreeItem) { expanded.delete(e.element.id!); save(); } else if ((e.element as any)?.id) { expanded.delete((e.element as any).id); save(); }});
+    // persistent expand state (global, not per-document)
+    roleExpandedSet = new Set(context.workspaceState.get<string[]>(ROLE_EXPAND_KEY, []));
+    const save = () => context.workspaceState.update(ROLE_EXPAND_KEY, Array.from(roleExpandedSet));
+    const idOf = (el: any): string | undefined => {
+        if (el instanceof RoleTreeItem) { return el.id!; }
+        // element here is the raw AnyNode; reconstruct an id like RoleTreeItem.computeId
+        try {
+            const node = el as AnyNode;
+            if ((node as any).uid) { return (node as any).uid as string; }
+            // fallback minimal: use kind/key based id
+            switch(node.kind) {
+                case 'affiliation': return `aff:${encodeURIComponent(node.key)}`;
+                case 'type': return `aff:${encodeURIComponent((node as any).affiliation)}|type:${encodeURIComponent(node.key)}`;
+                case 'specialRoot': return 'specialRoot';
+                case 'specialType': return `specialType:${encodeURIComponent(node.key)}`;
+                case 'specialAffiliation': return `specialType:${encodeURIComponent((node as any).roleType)}|aff:${encodeURIComponent((node as any).affiliation)}`;
+                case 'role': {
+                    const rn = node as any;
+                    const p = encodeURIComponent(rn.role?.sourcePath || '');
+                    const aff = encodeURIComponent(rn.affiliation || '');
+                    const t = encodeURIComponent(rn.roleType || '');
+                    const n = encodeURIComponent(rn.role?.name || node.key);
+                    return `role:${p}:${aff}:${t}:${n}`;
+                }
+                case 'detail': {
+                    const dn = node as any; return `roleDetail:${encodeURIComponent(dn.roleName)}:${encodeURIComponent(dn.key)}`;
+                }
+                default: return undefined;
+            }
+        } catch { return undefined; }
+    };
+    context.subscriptions.push(
+        view.onDidExpandElement(e => { const id = idOf(e.element as any); if (id) { roleExpandedSet.add(id); save(); } }),
+        view.onDidCollapseElement(e => { const id = idOf(e.element as any); if (id) { roleExpandedSet.delete(id); save(); } }),
+    );
 
     context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.openRoleSource', async (role: Role) => {
         if (!role.sourcePath) { return; }
@@ -550,14 +590,6 @@ export function registerRoleTreeView(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e=>{
         if (e.affectsConfiguration('AndreaNovelHelper.docRoles') || e.affectsConfiguration('AndreaNovelHelper.allRoles')) { provider.refresh(); }
     }));
-    // initial expand restore after short delay (tree populated)
-    setTimeout(()=>{
-    const ids = Array.from(expanded);
-    if (!ids.length) { return; }
-        // attempt shallow reveal per id
-        // (VS Code will auto expand ancestors)
-        // we just iterate top-level ones
-        // no strict guarantee but lightweight
-        provider.refresh();
-    }, 400);
+    // 轻量刷新以应用初始展开状态
+    setTimeout(()=>{ provider.refresh(); }, 300);
 }

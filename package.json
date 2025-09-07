@@ -964,6 +964,11 @@
           "default": false,
           "markdownDescription": "用角色颜色在名称旁显示色块标记（仅影响名称前的图标，不改变文本颜色）。"
         },
+        "AndreaNovelHelper.docRoles.inheritExpandedFromPrevious": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "当切换到一个尚无展开记录的文档时，继承上一个文档的展开集合（仅对两者共有的节点生效）。"
+        },
         "AndreaNovelHelper.allRoles.display.colorizeRoleName": {
           "type": "boolean",
           "default": false,
