@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.3.25",
+  "version": "0.4.0",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -1409,6 +1409,55 @@
           "default": "macro",
           "markdownDescription": "错别字识别模式：macro 使用 /correct（规则）；llm 使用 /correct/llm（大语言模型）"
         },
+        "AndreaNovelHelper.typo.clientLLM.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "使用本地客户端直连大模型进行错别字识别（实验功能，优先于服务端）。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.apiBase": {
+          "type": "string",
+          "default": "https://api.deepseek.com/v1",
+          "markdownDescription": "Chat Completions 兼容 API Base（如 https://api.openai.com/v1 或 DeepSeek）。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "客户端直连大模型 API Key（请注意安全）。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.model": {
+          "type": "string",
+          "default": "deepseek-v3",
+          "markdownDescription": "客户端直连模型名称。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.temperature": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 2,
+          "markdownDescription": "客户端直连模型的 temperature。"
+        },
+        "AndreaNovelHelper.typo.debug.llmTrace": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "调试：输出客户端直连大模型的请求与流式响应到 Output（包含提示词与分段输出，谨慎开启）。"
+        },
+        "AndreaNovelHelper.typo.debug.serverTrace": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "调试：输出服务端 HTTP /correct 与 /correct/llm 的请求/响应概要到 Output。"
+        },
+        "AndreaNovelHelper.typo.debug.compactTrace": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "调试输出是否压缩为单行（合并换行与多余空白）。"
+        },
+        "AndreaNovelHelper.typo.debug.traceMaxLen": {
+          "type": "number",
+          "default": 1200,
+          "minimum": 200,
+          "maximum": 10000,
+          "markdownDescription": "单条调试输出最大长度（字符）。"
+        },
         "AndreaNovelHelper.typo.llm.model": {
           "type": "string",
           "default": "deepseek-v3",
@@ -1430,6 +1479,20 @@
           "minimum": 1,
           "maximum": 200,
           "markdownDescription": "批量调用每次携带的句子数，建议 10-50（macro）/ 5-20（llm）。"
+        },
+        "AndreaNovelHelper.typo.docConcurrency": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 10,
+          "markdownDescription": "每个文档并发扫描段落的最大请求数（限流，以免阻塞外部服务）。"
+        },
+        "AndreaNovelHelper.typo.docGroupSize": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 20,
+          "markdownDescription": "同一文档连续段落的合并扫描组大小（尽可能给大模型更长的上下文）。"
         },
         "AndreaNovelHelper.typo.timeoutMs": {
           "type": "number",

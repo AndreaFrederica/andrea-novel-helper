@@ -3,7 +3,16 @@ import { detectTyposBatchHttp } from './typoHttp';
 
 // Allow host to plug an external detector.
 export type TypoDetectorFn = (sentence: string) => Promise<TypoApiResult | null>;
-export type TypoDetectorBatchFn = (sentences: string[]) => Promise<(TypoApiResult | null)[]>;
+export type TypoDetectorBatchFn = (
+    sentences: string[],
+    ctx?: {
+        docFsPath?: string;
+        docUri?: string;
+        docUuid?: string;
+        roleNames?: string[];
+        onPartial?: (corrections: TypoApiResult[]) => void;
+    }
+) => Promise<(TypoApiResult | null)[]>;
 
 let detectorImpl: TypoDetectorFn | null = null;
 let detectorBatchImpl: TypoDetectorBatchFn | null = null;
@@ -49,13 +58,16 @@ export async function detectTypo(sentence: string): Promise<TypoApiResult | null
     }
 }
 
-export async function detectTyposBatch(sentences: string[]): Promise<(TypoApiResult | null)[]> {
+export async function detectTyposBatch(
+    sentences: string[],
+    ctx?: { docFsPath?: string; docUri?: string; docUuid?: string; roleNames?: string[]; onPartial?: (corrections: TypoApiResult[]) => void }
+): Promise<(TypoApiResult | null)[]> {
     if (detectorBatchImpl) {
-        try { return await detectorBatchImpl(sentences); } catch { /* ignore */ }
+        try { return await detectorBatchImpl(sentences, ctx); } catch { /* ignore */ }
     }
     // Fallback to HTTP client; if not available, fallback to stub per item
     try {
-        return await detectTyposBatchHttp(sentences);
+        return await detectTyposBatchHttp(sentences, ctx);
     } catch {
         const arr: (TypoApiResult | null)[] = [];
         for (const s of sentences) arr.push(await stubDetect(s));

@@ -45,6 +45,7 @@ import { registerPreviewPane } from './Provider/view/previewPane';
 import { stopAllPreviewTTS, PreviewManager } from './Provider/view/previewPane';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
+import { forwardEnterToMaioOrNative } from './typeset/core/maioRoute';
 import { registerFormat } from './typeset/format';
 import { registerLayoutStatusBar } from './typeset/layoutStatusBar';
 import { registerQuickSettings } from './typeset/quickSettings';
@@ -100,6 +101,7 @@ export const onDidChangeRoles = _onDidChangeRoles.event;
 export const _onDidFinishRoles = new vscode.EventEmitter<void>();
 export const onDidFinishRoles = _onDidFinishRoles.event;
 
+// 扩展主体激活状态追踪
 export async function activate(context: vscode.ExtensionContext) {
     // 输出通道用于调试激活阶段错误/栈
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
@@ -140,6 +142,25 @@ export async function activate(context: vscode.ExtensionContext) {
         }
     } else if (wsDisabled) {
         console.log('[ANH] workspaceDisabled=true 跳过激活主体');
+        
+        // 工作区禁用时，注册削弱版智能回车（转发给 Maio 或原生回车）
+        context.subscriptions.push(
+            vscode.commands.registerCommand('andrea.smartEnter', forwardEnterToMaioOrNative)
+        );
+        
+        // 注册禁用状态下的快速设置命令
+        context.subscriptions.push(
+            vscode.commands.registerCommand('andrea.quickSettings', async () => {
+                const choice = await vscode.window.showInformationMessage(
+                    '小说助手已在此工作区禁用。要启用设置功能，请先启用扩展。',
+                    '启用扩展'
+                );
+                if (choice === '启用扩展') {
+                    await vscode.commands.executeCommand('AndreaNovelHelper.enableWorkspace');
+                }
+            })
+        );
+        
         return;
     }
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
@@ -238,7 +259,10 @@ export async function activate(context: vscode.ExtensionContext) {
         registerFormat(context);
 
         const { refresh } = registerLayoutStatusBar(context);
+        
+        // 注册快速设置（此时主扩展已激活）
         registerQuickSettings(context, refresh);
+        
         registerFontManager(context, refresh);
         const previewManager: PreviewManager = registerPreviewPane(context);
         (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用

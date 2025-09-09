@@ -13,12 +13,21 @@ export async function smartEnterImpl() {
     if (!ed) { return; }
     const doc = ed.document;
 
+    // 检查工作区禁用状态
+    const cfg = vscode.workspace.getConfiguration();
+    const wsDisabled = cfg.get<boolean>('AndreaNovelHelper.workspaceDisabled', false);
+    
+    if (wsDisabled) {
+        // 工作区禁用时，直接执行原生回车
+        await forwardEnterToMaioOrNative();
+        return;
+    }
+
     if (!isSupportedDoc(doc)) {
         await forwardEnterToMaioOrNative();
         return;
     }
 
-    const cfg = vscode.workspace.getConfiguration();
     const enableSmartEnter = cfg.get<boolean>('andrea.typeset.enableSmartEnter', true);
     const enableSmartExit  = cfg.get<boolean>('andrea.typeset.enableSmartExit', true);
 

@@ -5,6 +5,7 @@ import { getDocDB, getParagraphResult, resetParagraphs, setParagraphResult, clea
 import { ParagraphPiece, SentencePiece, TypoDiagnosticsApplyOptions, ParagraphScanResult, ParagraphTypoError } from './typoTypes';
 import { getDocumentRoleOccurrences } from '../context/documentRolesCache';
 import { Role } from '../extension';
+import { registerClientLLMDetector } from './typoClientLLM';
 
 // Sentence boundaries for Chinese + general punctuation; newline also ends a sentence
 const SENTENCE_ENDERS = new Set(['。', '！', '？', '!', '?']);
@@ -105,28 +106,119 @@ function splitIntoSentences(para: ParagraphPiece): SentencePiece[] {
     return sents;
 }
 
-async function scanParagraph(para: ParagraphPiece): Promise<ParagraphScanResult | null> {
-    const sentences = splitIntoSentences(para);
-    const texts = sentences.map(s => s.text);
-    const results = await detectTyposBatch(texts);
-    const errors: ParagraphTypoError[] = [];
-    for (let i = 0; i < sentences.length; i++) {
-        const r = results[i];
-        if (!r || !Array.isArray(r.errors) || r.errors.length === 0) continue;
-        const s = sentences[i];
-        for (const [wrong, correct, offset, score] of r.errors) {
-            const length = wrong?.length ?? 0;
-            if (!wrong || !correct || typeof offset !== 'number' || length <= 0) continue;
-            const offInPara = (s.startOffset - para.startOffset) + offset;
-            errors.push({ wrong, correct, offset: offInPara, length, score });
+function computeBestOffset(sentence: string, wrong: string, correct?: string, target?: string, hint?: number): number | null {
+    // 1) If hint valid and matches
+    if (typeof hint === 'number' && hint >= 0 && hint + wrong.length <= sentence.length) {
+        if (sentence.slice(hint, hint + wrong.length) === wrong) return hint;
+    }
+    // 2) Exact find all candidates
+    const idxs: number[] = [];
+    let pos = sentence.indexOf(wrong);
+    while (pos >= 0) { idxs.push(pos); pos = sentence.indexOf(wrong, pos + 1); }
+    if (idxs.length === 1) return idxs[0];
+    if (idxs.length > 1 && typeof target === 'string' && correct) {
+        // Pick the one leading to target when replaced once
+        for (const i of idxs) {
+            const tmp = sentence.slice(0, i) + correct + sentence.slice(i + wrong.length);
+            if (tmp === target) return i;
+        }
+        // Otherwise pick first
+        return idxs[0];
+    }
+    if (idxs.length > 0) return idxs[0];
+    // 3) Fallback: simple approximate by scanning substrings of same length and picking minimal Hamming distance
+    const L = wrong.length;
+    if (L === 0 || L > sentence.length) return null;
+    let bestI = -1, bestD = Number.MAX_SAFE_INTEGER;
+    for (let i = 0; i + L <= sentence.length; i++) {
+        let d = 0; for (let k = 0; k < L; k++) if (sentence.charCodeAt(i + k) !== wrong.charCodeAt(k)) d++;
+        if (d < bestD) { bestD = d; bestI = i; if (d === 0) break; }
+    }
+    return bestI >= 0 ? bestI : null;
+}
+
+async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocument): Promise<Map<string, ParagraphScanResult>> {
+    const allSentences: { para: ParagraphPiece; s: SentencePiece; idxInPara: number }[] = [];
+    for (const para of group) {
+        const sents = splitIntoSentences(para);
+        for (let i = 0; i < sents.length; i++) {
+            allSentences.push({ para, s: sents[i], idxInPara: i });
         }
     }
-    return {
-        paragraphHash: para.hash,
-        scannedAt: Date.now(),
-        paragraphTextSnapshot: para.text,
-        errors
+    const texts = allSentences.map(x => x.s.text);
+    // Prepare role names context: exclude 正则表达式 and 敏感词
+    let roleNamesCtx: string[] | undefined = undefined;
+    try {
+        const occ = getDocumentRoleOccurrences(doc);
+        if (occ) {
+            const names = new Set<string>();
+            for (const [role] of occ.entries()) {
+                const t = (role as Role).type;
+                if (t === '正则表达式' || t === '敏感词') continue;
+                if (role.name) names.add(role.name);
+            }
+            if (names.size) roleNamesCtx = Array.from(names);
+        }
+    } catch { /* ignore */ }
+    const perPara = new Map<string, ParagraphScanResult>();
+    const appliedSignatures = new Map<number, Set<string>>(); // sentenceIndex -> sigs
+    const applyCorrections = (corrs: import('./typoTypes').TypoApiResult[]) => {
+        for (let i = 0; i < corrs.length; i++) {
+            const r = corrs[i];
+            const idx = typeof r?.index === 'number' ? r.index : i;
+            if (idx < 0 || idx >= allSentences.length) continue;
+            const { para, s } = allSentences[idx];
+            const key = para.hash;
+            let rec = perPara.get(key);
+            if (!rec) {
+                rec = { paragraphHash: para.hash, scannedAt: Date.now(), paragraphTextSnapshot: para.text, errors: [] };
+                perPara.set(key, rec);
+            }
+            const seen = appliedSignatures.get(idx) || new Set<string>();
+            appliedSignatures.set(idx, seen);
+            for (const tuple of r.errors || []) {
+                const wrong = tuple?.[0]; const correct = tuple?.[1];
+                const hint = typeof tuple?.[2] === 'number' ? tuple[2] : undefined;
+                const score = typeof tuple?.[3] === 'number' ? tuple[3] : undefined;
+                if (!wrong || !correct) continue;
+                const sig = `${wrong}@${correct}@${hint ?? -1}`;
+                if (seen.has(sig)) continue;
+                const offInSentence = computeBestOffset(s.text, wrong, correct, (r as any).target || undefined, hint);
+                if (offInSentence === null) continue;
+                const offInPara = (s.startOffset - para.startOffset) + offInSentence;
+                rec.errors.push({ wrong, correct, offset: offInPara, length: wrong.length, score });
+                seen.add(sig);
+            }
+        }
+        const docKey = doc.uri.toString();
+        for (const [_, res] of perPara) { setParagraphResult(docKey, res); }
+        enqueueApply(doc);
     };
+    const results = await detectTyposBatch(texts, { docFsPath: doc.uri.fsPath, docUri: doc.uri.toString(), roleNames: roleNamesCtx, onPartial: applyCorrections });
+    
+    for (let i = 0; i < allSentences.length; i++) {
+        const { para, s } = allSentences[i];
+        const key = para.hash;
+        let rec = perPara.get(key);
+        if (!rec) {
+            rec = { paragraphHash: para.hash, scannedAt: Date.now(), paragraphTextSnapshot: para.text, errors: [] };
+            perPara.set(key, rec);
+        }
+        const r = results[i];
+        if (!r || !Array.isArray(r.errors) || r.errors.length === 0) continue;
+        for (const tuple of r.errors) {
+            const wrong = tuple?.[0];
+            const correct = tuple?.[1];
+            const hint = typeof tuple?.[2] === 'number' ? tuple[2] : undefined;
+            const score = typeof tuple?.[3] === 'number' ? tuple[3] : undefined;
+            if (!wrong || !correct) continue;
+            const offInSentence = computeBestOffset(s.text, wrong, correct, (r as any).target || undefined, hint);
+            if (offInSentence === null) continue;
+            const offInPara = (s.startOffset - para.startOffset) + offInSentence;
+            rec.errors.push({ wrong, correct, offset: offInPara, length: wrong.length, score });
+        }
+    }
+    return perPara;
 }
 
 function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDiagnosticsApplyOptions) {
@@ -196,6 +288,7 @@ function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDiagnost
 const diagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper Typo');
 const scanTimers = new Map<string, NodeJS.Timeout>();
 const flushTimers = new Map<string, NodeJS.Timeout>();
+const applyQueues = new Map<string, Promise<void>>(); // per-doc serial apply queue
 const scanningDocs = new Set<string>();
 
 let statusItem: vscode.StatusBarItem | null = null;
@@ -276,21 +369,25 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
             const text = doc.getText();
             const paras = splitIntoParagraphs(text);
             const tasks: Promise<void>[] = [];
+            const maxConc = vscode.workspace.getConfiguration('AndreaNovelHelper').get<number>('typo.docConcurrency', 3) || 3;
+            const limiter = createLimiter(docKey, maxConc);
+            // collect missing paragraphs first
+            const missing: ParagraphPiece[] = [];
             for (const p of paras) {
                 const exist = opts?.force ? undefined : getParagraphResult(docKey, p.hash);
-                if (exist) continue; // already scanned
+                if (!exist) missing.push(p);
+            }
+            const groupSize = vscode.workspace.getConfiguration('AndreaNovelHelper').get<number>('typo.docGroupSize', 3) || 3;
+            for (let i = 0; i < missing.length; i += Math.max(1, groupSize)) {
+                const slice = missing.slice(i, i + Math.max(1, groupSize));
                 tasks.push((async () => {
-                    const res = await scanParagraph(p);
-                    if (res) {
+                    await limiter.acquire();
+                    const map = await scanParagraphGroup(slice, doc);
+                    for (const [_, res] of map) {
                         setParagraphResult(docKey, res);
-                        // Progressive flush: update UI shortly after each paragraph completes
-                        const prevFlush = flushTimers.get(docKey);
-                        if (prevFlush) clearTimeout(prevFlush);
-                        const fh = setTimeout(() => {
-                            try { createDiagnosticsForDoc(doc, { diagnosticCollection }); } catch { /* ignore */ }
-                        }, 100);
-                        flushTimers.set(docKey, fh);
                     }
+                    enqueueApply(doc);
+                    limiter.release();
                 })());
             }
             if (tasks.length) {
@@ -298,7 +395,7 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
                 await Promise.all(tasks);
                 scanningDocs.delete(docKey); updateStatusBar();
             }
-            createDiagnosticsForDoc(doc, { diagnosticCollection });
+            enqueueApply(doc);
         } catch (e) {
             // no-op
         }
@@ -308,6 +405,8 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
 
 export function registerTypoFeature(context: vscode.ExtensionContext) {
     context.subscriptions.push(diagnosticCollection);
+    // Optional: enable client-side LLM detector when configured
+    try { registerClientLLMDetector(context); } catch { /* ignore */ }
 
     // Commands: scan & rescan current document
     context.subscriptions.push(
@@ -375,6 +474,58 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
     }
     updateStatusBar();
 }
+
+function enqueueApply(doc: vscode.TextDocument) {
+    const docKey = doc.uri.toString();
+    const prev = applyQueues.get(docKey) || Promise.resolve();
+    const startVersion = doc.version;
+    const task = prev.then(async () => {
+        try {
+            if (doc.isClosed || !typoFeatureEnabled()) {
+                // When disabled or closed, ensure UI cleared and skip
+                diagnosticCollection.delete(doc.uri);
+                clearDocDecorations(doc);
+                return;
+            }
+            // Apply latest snapshot; createDiagnosticsForDoc internally recomputes ranges
+            createDiagnosticsForDoc(doc, { diagnosticCollection });
+            // If version changed significantly during apply, next queued apply will catch it
+        } catch { /* ignore */ }
+    });
+    applyQueues.set(docKey, task.finally(() => {
+        // Keep chain short: if this was the last task, reset chain
+        if (applyQueues.get(docKey) === task) {
+            applyQueues.set(docKey, Promise.resolve());
+        }
+    }));
+}
+
+function createLimiter(key: string, max: number) {
+    const state = limiterStates.get(key) || { active: 0, queue: [] as Array<() => void> };
+    limiterStates.set(key, state);
+    return {
+        acquire() {
+            return new Promise<void>((resolve) => {
+                if (state.active < Math.max(1, max)) {
+                    state.active++;
+                    resolve();
+                } else {
+                    state.queue.push(resolve);
+                }
+            });
+        },
+        release() {
+            if (state.queue.length > 0) {
+                const next = state.queue.shift()!;
+                next();
+            } else {
+                state.active = Math.max(0, state.active - 1);
+            }
+        }
+    };
+}
+
+const limiterStates = new Map<string, { active: number; queue: Array<() => void> }>();
 
 // Re-export for external integration convenience
 export { setTypoDetector } from './typoDetector';
