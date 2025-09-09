@@ -6,6 +6,7 @@
   "engines": {
     "vscode": "^1.101.0"
   },
+  "homepage": "blog.sirrus.cc",
   "publisher": "andreafrederica",
   "license": "MPL-2.0",
   "repository": {
@@ -461,6 +462,17 @@
       {
         "command": "AndreaNovelHelper.enableWorkspace",
         "title": "%command.enableWorkspace.title%"
+      }
+      ,
+      {
+        "command": "andrea.typo.scanDocument",
+        "title": "扫描错别字（未扫描段落）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.typo.rescanDocument",
+        "title": "重新扫描错别字（强制全量）",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [
@@ -1379,6 +1391,74 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "是否允许角色节点可展开以查看属性详情；关闭后角色节点将不再可展开。"
+        }
+        ,
+        "AndreaNovelHelper.typo.service.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8001",
+          "markdownDescription": "错别字服务 API 基地址，例如 http://127.0.0.1:8001"
+        },
+        "AndreaNovelHelper.typo.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用错别字识别与诊断（关闭后不再调用服务、扫描或标注）。"
+        },
+        "AndreaNovelHelper.typo.mode": {
+          "type": "string",
+          "enum": ["macro", "llm"],
+          "default": "macro",
+          "markdownDescription": "错别字识别模式：macro 使用 /correct（规则）；llm 使用 /correct/llm（大语言模型）"
+        },
+        "AndreaNovelHelper.typo.llm.model": {
+          "type": "string",
+          "default": "deepseek-v3",
+          "markdownDescription": "LLM 模型（可选）。为空表示由服务端默认。"
+        },
+        "AndreaNovelHelper.typo.llm.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "LLM API Key（可选）。为空表示由服务端默认。"
+        },
+        "AndreaNovelHelper.typo.llm.apiBase": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "LLM API Base（可选）。为空表示由服务端默认。"
+        },
+        "AndreaNovelHelper.typo.batchSize": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 200,
+          "markdownDescription": "批量调用每次携带的句子数，建议 10-50（macro）/ 5-20（llm）。"
+        },
+        "AndreaNovelHelper.typo.timeoutMs": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 1000,
+          "maximum": 300000,
+          "markdownDescription": "调用错别字服务的超时时间（毫秒）。LLM 模式建议 120000。"
+        },
+        "AndreaNovelHelper.typo.enableHighlight": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否为错别字添加标黄背景（诊断之外的视觉装饰）。"
+        },
+        "AndreaNovelHelper.typo.highlightColor": {
+          "type": "string",
+          "default": "#fff3a3",
+          "markdownDescription": "错别字标黄背景色（CSS 颜色，如 #fff3a3）。"
+        },
+        "AndreaNovelHelper.typo.maxDocs": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 200,
+          "markdownDescription": "错别字内存数据库最大文档数（LRU 淘汰）。"
+        },
+        "AndreaNovelHelper.typo.keepCacheOnClose": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "关闭编辑器后是否保留错别字扫描缓存（由 LRU 控制释放）。关闭则在关闭文档时立即清理缓存。"
         }
       }
     },

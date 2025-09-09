@@ -51,6 +51,7 @@ import { registerQuickSettings } from './typeset/quickSettings';
 import { registerFontManager } from './typeset/fontManager';
 import { registerContextKeys } from './typeset/contextKeys';
 import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOverride';
+import { registerTypoFeature } from './typo/typoService';
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
@@ -510,6 +511,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // 确保 andrea.openFileAt 命令注册一次，用于稳定的文件打开并定位
     ensureRegisterOpenFileAt(context);
     registerOpenRoleSource(context);
+        // Typo feature (stateful, per-paragraph scanning + quick fixes)
+        registerTypoFeature(context);
 
         // Word Count 树视图
         // 手动排序管理器
