@@ -204,6 +204,26 @@
         "title": "%command.myPreview.copyPlainText.title%"
       },
       {
+        "command": "andrea.comments.open",
+        "title": "打开批注面板",
+        "icon": {
+          "light": "images/comments_light.svg",
+          "dark": "images/comments_dark.svg"
+        }
+      },
+      {
+        "command": "andrea.comments.add",
+        "title": "添加批注（选区）"
+      },
+      {
+        "command": "andrea.comments.resolve",
+        "title": "将批注标记为已解决"
+      },
+      {
+        "command": "andrea.comments.reopen",
+        "title": "重新打开批注"
+      },
+      {
         "command": "WordCount.exportTxt",
         "title": "%command.wordCount.exportTxt.title%"
       },
@@ -764,6 +784,11 @@
           "group": "navigation"
         },
         {
+          "command": "andrea.comments.open",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation@101"
+        },
+        {
           "command": "AndreaNovelHelper.openDoubleOutline",
           "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
           "group": "navigation"
@@ -774,6 +799,16 @@
           "command": "andrea.formatDocument",
           "when": "editorLangId == markdown || editorLangId == plaintext || editorLangId == json5",
           "group": "navigation@9"
+        },
+        {
+          "when": "editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "andrea.comments.add",
+          "group": "1_modification@97"
+        },
+        {
+          "when": "editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "andrea.comments.open",
+          "group": "navigation@97"
         },
         {
           "when": "editorHasSelection",
@@ -816,10 +851,55 @@
         }
       ]
     },
+    
     "configuration": {
       "type": "object",
       "title": "%config.title%",
       "properties": {
+        "AndreaNovelHelper.comments.authorName": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "批注作者显示名（留空则使用系统用户名）"
+        },
+        "AndreaNovelHelper.comments.showInOverviewRuler": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "在编辑器右侧概览标尺中显示批注范围标记"
+        },
+        "AndreaNovelHelper.comments.style.mode": {
+          "type": "string",
+          "enum": ["underline", "highlight"],
+          "default": "underline",
+          "markdownDescription": "批注范围展示风格：下划线或高亮背景"
+        },
+        "AndreaNovelHelper.comments.style.underlineStyle": {
+          "type": "string",
+          "enum": ["solid", "wavy", "dotted", "dashed"],
+          "default": "solid",
+          "markdownDescription": "下划线样式"
+        },
+        "AndreaNovelHelper.comments.style.underlineColor": {
+          "type": "string",
+          "default": "#0e639c",
+          "markdownDescription": "下划线颜色（CSS 颜色）"
+        },
+        "AndreaNovelHelper.comments.style.highlightOffset": {
+          "type": "number",
+          "default": 0.06,
+          "minimum": 0,
+          "maximum": 0.5,
+          "markdownDescription": "高亮背景强度：在当前主题背景上叠加的透明度偏移（亮色为黑、暗色为白）"
+        },
+        "AndreaNovelHelper.comments.hoverEnabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "鼠标悬停批注范围时显示批注内容"
+        },
+        "AndreaNovelHelper.comments.showGutterInfo": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "在有批注的行号区域显示信息图标，便于快速定位（可关闭）"
+        },
         "AndreaNovelHelper.allRoles.syncWithDocRoles": {
           "type": "boolean",
           "default": true,

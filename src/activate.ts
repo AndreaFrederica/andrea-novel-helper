@@ -43,6 +43,7 @@ import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
 import { registerPreviewPane } from './Provider/view/previewPane';
 import { stopAllPreviewTTS, PreviewManager } from './Provider/view/previewPane';
+import { registerCommentsFeature } from './comments/controller';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
 import { forwardEnterToMaioOrNative } from './typeset/core/maioRoute';
@@ -267,6 +268,8 @@ export async function activate(context: vscode.ExtensionContext) {
         const previewManager: PreviewManager = registerPreviewPane(context);
         (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
         _previewManager = previewManager; // 模块级保存
+        // 批注专用面板与装饰
+        try { registerCommentsFeature(context); } catch (e) { console.warn('[ANH] registerCommentsFeature failed', e); }
 
         // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
         setTimeout(() => {

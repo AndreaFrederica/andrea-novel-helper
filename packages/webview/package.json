@@ -36,9 +36,9 @@
     "eslint-plugin-vue": "^9.30.0",
     "globals": "^15.12.0",
     "prettier": "^3.3.3",
-    "typescript": "~5.5.3",
+    "typescript": "^5.8.0",
     "vite-plugin-checker": "^0.9.0",
-    "vue-tsc": "^2.0.29"
+    "vue-tsc": "^2.1.0"
   },
   "engines": {
     "node": "^28 || ^26 || ^24 || ^22 || ^20 || ^18",
