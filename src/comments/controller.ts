@@ -1,8 +1,10 @@
+/* eslint-disable curly */
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { CommentThreadData, rangeToVSCodeRange } from './types';
 import { addThread, addSingleThread, getDocUuidForDocument, loadComments, paragraphIndexOfRange, updateThreadsByDoc, loadCommentContent, saveCommentContent } from './storage';
 import { registerCommentDefinitionProvider, CommentDefinitionProvider } from './definitionProvider';
+import { setActiveCommentPanel } from '../context/commentRedirect';
 
 // 创建诊断集合用于在问题面板显示批注信息
 const commentDiagnosticCollection = vscode.languages.createDiagnosticCollection('AndreaNovelHelper Comments');
@@ -35,6 +37,13 @@ class CommentsController {
   private heartbeat?: NodeJS.Timeout;
   private lastTick?: { docUri?: string; topLine?: number };
   private definitionProvider?: CommentDefinitionProvider;
+  private scrollDebounceTimeout?: NodeJS.Timeout;
+  private lastScrollSent?: { docUri: string; topLine: number; timestamp: number };
+  private lastRevealedLine?: { docUri: string; line: number; timestamp: number }; // 缓存最后reveal的行
+  private editorHasFocus: boolean = true; // 默认编辑器有焦点
+  private lastEditorInteraction: number = Date.now();
+  private focusCheckInterval?: NodeJS.Timeout;
+  private suppressEditorToPanelUntil?: number; // 面板驱动reveal后，抑制编辑器->面板滚动上报的时间点（时间戳）
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -65,10 +74,18 @@ class CommentsController {
       vscode.window.onDidChangeActiveTextEditor(ed => {
         if (!ed?.document) return;
         if (!this.isSupportedDoc(ed.document)) return;
+        // 编辑器焦点变化时更新状态
+        this.editorHasFocus = true;
+        this.lastEditorInteraction = Date.now();
         // 始终为当前文档确保加载装饰
         this.ensureCommentsLoaded(ed.document);
         // 若面板存在，同步绑定
         if (this.panel) { this.bindPanelToDoc(ed.document); }
+      }),
+      // 监听编辑器选择变化（光标移动、文本选择等）
+      vscode.window.onDidChangeTextEditorSelection(e => {
+        this.editorHasFocus = true;
+        this.lastEditorInteraction = Date.now();
       }),
       vscode.workspace.onDidOpenTextDocument(doc => { if (this.isSupportedDoc(doc)) { this.ensureCommentsLoaded(doc); } }),
       vscode.workspace.onDidChangeTextDocument(e => {
@@ -147,7 +164,13 @@ class CommentsController {
 
   private ensurePanel(): vscode.WebviewPanel {
     // 若已有有效面板（关闭时会在 onDidDispose 中置为 undefined），直接复用
-    if (this.panel) return this.panel;
+    if (this.panel) {
+      // 确保活跃状态正确设置
+      if (this.activeDocUri) {
+        setActiveCommentPanel(this.activeDocUri);
+      }
+      return this.panel;
+    }
     const panel = vscode.window.createWebviewPanel(
       'andreaComments',
       '批注',
@@ -162,7 +185,22 @@ class CommentsController {
       light: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'comments_light.svg'),
       dark: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'comments_dark.svg'),
     };
-    panel.onDidDispose(() => { this.panel = undefined; }, null, this.disposables);
+    panel.onDidDispose(() => { 
+      this.panel = undefined;
+      // 清除活跃批注面板状态
+      setActiveCommentPanel(undefined);
+    }, null, this.disposables);
+    panel.onDidChangeViewState(e => {
+      if (e.webviewPanel.active) {
+        // 面板获得焦点时设置活跃状态
+        if (this.activeDocUri) {
+          setActiveCommentPanel(this.activeDocUri);
+        }
+      } else {
+        // 面板失去焦点时清除活跃状态
+        setActiveCommentPanel(undefined);
+      }
+    }, null, this.disposables);
     panel.webview.onDidReceiveMessage(msg => this.onMessage(msg));
     panel.webview.html = this.wrapHtml(panel.webview);
     this.panel = panel;
@@ -253,6 +291,10 @@ class CommentsController {
   private async bindPanelToDoc(doc: vscode.TextDocument) {
     const panel = this.ensurePanel();
     this.activeDocUri = doc.uri.toString();
+    // 设置活跃批注面板状态
+    if (this.panel && this.panel.active) {
+      setActiveCommentPanel(this.activeDocUri);
+    }
     try { await this.context.workspaceState.update(CommentsController.STATE_KEY, this.activeDocUri); } catch {}
     const docUuid = getDocUuidForDocument(doc);
     const data = docUuid ? await loadComments(docUuid) : [];
@@ -492,8 +534,51 @@ class CommentsController {
     this.panel.webview.postMessage({ type: 'threads', lineHeight: metrics.lineHeight, items, totalLines: doc.lineCount, topPad: metrics.topPad || 0 });
   }
 
+  private debouncedPostEditorScroll(doc: vscode.TextDocument, topLine: number) {
+    const docUri = doc.uri.toString();
+    const now = Date.now();
+    
+    // 优化防抖逻辑：减少延迟，提高响应性
+    const shouldDebounce = this.lastScrollSent && 
+      this.lastScrollSent.docUri === docUri && 
+      Math.abs(this.lastScrollSent.topLine - topLine) < 2 && // 减少阈值，更精确的滚动
+      (now - this.lastScrollSent.timestamp) < 100; // 减少到100ms内的连续滚动
+    
+    if (this.scrollDebounceTimeout) {
+      clearTimeout(this.scrollDebounceTimeout);
+    }
+    
+    const doScroll = () => {
+      this.postEditorScroll(doc);
+      this.lastScrollSent = { docUri, topLine, timestamp: Date.now() };
+    };
+    
+    if (shouldDebounce) {
+      // 防抖：减少延迟（从100ms减少到30ms）
+      this.scrollDebounceTimeout = setTimeout(doScroll, 0);
+    } else {
+      // 立即发送
+      doScroll();
+    }
+  }
+
   private postEditorScroll(doc: vscode.TextDocument) {
     if (!this.panel) return;
+
+    // 在面板驱动的 reveal 窗口内，抑制编辑器 -> 面板的滚动上报，避免回环导致“抽搐”
+    if (this.suppressEditorToPanelUntil && Date.now() < this.suppressEditorToPanelUntil) {
+      console.log('Skipping editor->panel scroll: suppressed until', this.suppressEditorToPanelUntil);
+      return;
+    }
+    
+    // 焦点感知：仅在编辑器有焦点或最近交互时上报；
+    // 同时允许在极短时间（<150ms）内的 reveal 后补一次上报用于对齐
+    const hasRecentInteraction = Date.now() - this.lastEditorInteraction < 3000; // 放宽到3秒
+    const revealRecent = !!(this.lastRevealedLine && (Date.now() - this.lastRevealedLine.timestamp) < 150);
+    const shouldSync = this.editorHasFocus || hasRecentInteraction || revealRecent;
+    
+    if (!shouldSync) return;
+    
     const ed = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === doc.uri.toString());
     if (!ed) return;
     const vr = ed.visibleRanges[0];
@@ -504,6 +589,7 @@ class CommentsController {
     const maxTop = this.computeMaxTop(total, vis, beyond);
     const ratio = maxTop > 0 ? Math.min(1, top / maxTop) : 0;
     const metrics = this.estimateEditorPixels(doc);
+    console.log('Sending editor scroll:', { ratio, top, docUri: doc.uri.toString() });
     this.panel.webview.postMessage({ type: 'editorScroll', ratio, meta: { top, maxTop, total, visibleApprox: vis, beyond }, lineHeight: metrics.lineHeight });
   }
 
@@ -559,7 +645,7 @@ class CommentsController {
     const top = vr ? vr.start.line : 0;
     if (this.panel) {
       const changed = (!this.lastTick || this.lastTick.docUri !== docUri || this.lastTick.topLine !== top);
-      if (changed) { this.postEditorScroll(doc); }
+      if (changed) { this.debouncedPostEditorScroll(doc, top); }
     }
     this.lastTick = { docUri, topLine: top };
   }
@@ -929,8 +1015,72 @@ class CommentsController {
     }
     // Webview 主动滚动：按比例 reveal 到对应顶部行
     if (msg.type === 'panelScroll') {
-      const ed = vscode.window.activeTextEditor; if (!ed) return;
-      const doc = ed.document; if (!this.isSupportedDoc(doc)) return;
+      // 优先使用绑定的文档（当焦点在面板上时，activeTextEditor 可能为 undefined）
+      let ed = vscode.window.activeTextEditor as vscode.TextEditor | undefined;
+      let doc: vscode.TextDocument | undefined;
+
+      if (this.activeDocUri) {
+        try {
+          doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(this.activeDocUri));
+        } catch (err) {
+          console.log('[Controller] Failed to open activeDocUri for panelScroll:', err);
+        }
+      }
+      if (!doc && ed) {
+        doc = ed.document;
+      }
+      if (!doc) {
+        console.log('[Controller] No target document for panelScroll');
+        return;
+      }
+      if (!this.isSupportedDoc(doc)) return;
+
+      // 如果当前活动编辑器不匹配目标文档，尝试在可见编辑器中查找
+      if (!ed || ed.document.uri.toString() !== doc.uri.toString()) {
+        const visible = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === doc!.uri.toString());
+        if (visible) {
+          ed = visible;
+        } else {
+          // 打开但不抢占焦点
+          try {
+            ed = await vscode.window.showTextDocument(doc, { preserveFocus: true, preview: true });
+          } catch (err) {
+            console.log('[Controller] showTextDocument failed for panelScroll:', err);
+            return;
+          }
+        }
+      }
+      
+      // 焦点感知：检查面板焦点状态和编辑器焦点状态
+      const panelHasFocus = msg.panelHasFocus || false;
+      const panelRecentInteraction = msg.lastInteraction && (Date.now() - msg.lastInteraction < 3000); // 放宽到3秒
+      const editorRecentInteraction = Date.now() - this.lastEditorInteraction < 3000; // 放宽到3秒
+      
+      // 优先级判断：面板有焦点或最近交互 > 编辑器最近交互
+      const panelShouldControl = panelHasFocus || panelRecentInteraction;
+      const editorShouldControl = this.editorHasFocus || editorRecentInteraction;
+      
+      console.log('Panel scroll priority check:', {
+        panelHasFocus,
+        panelRecentInteraction,
+        editorRecentInteraction,
+        panelShouldControl,
+        editorShouldControl,
+        editorHasFocus: this.editorHasFocus
+      });
+      
+      // 若面板近期有交互，则允许面板主导；仅在编辑器显式聚焦且面板完全无交互时才跳过
+      if (this.editorHasFocus && !panelShouldControl && !panelRecentInteraction) {
+        console.log('Skipping panel scroll - editor has explicit focus and panel has no recent interaction');
+        return;
+      }
+      
+      // 清除任何待处理的编辑器滚动防抖
+      if (this.scrollDebounceTimeout) {
+        clearTimeout(this.scrollDebounceTimeout);
+        this.scrollDebounceTimeout = undefined;
+      }
+      
       const vr = ed.visibleRanges[0];
       const vis = vr ? Math.max(1, vr.end.line - vr.start.line) : 1;
       const total = doc.lineCount;
@@ -939,7 +1089,60 @@ class CommentsController {
       const clamped = Math.max(0, Math.min(1, Number(msg.ratio) || 0));
       const targetTop = Math.round(clamped * maxTop);
       const line = Math.min(Math.max(0, targetTop), Math.max(0, total - 1));
-      ed.revealRange(new vscode.Range(line, 0, line, 0), vscode.TextEditorRevealType.AtTop);
+      
+      console.log('Panel scroll received:', { ratio: msg.ratio, targetLine: line, currentTop: vr?.start.line });
+      
+      // 检查是否需要滚动（避免不必要的操作）
+      const currentTop = vr?.start.line || 0;
+      const scrollThreshold = 1; // 缩小阈值到1行，提升连续性，减少跳变
+      const docUri = doc.uri.toString();
+      const now = Date.now();
+      
+      // 检查是否刚刚reveal过相同的行（避免重复操作）
+      const recentlyRevealed = this.lastRevealedLine && 
+        this.lastRevealedLine.docUri === docUri && 
+        Math.abs(this.lastRevealedLine.line - line) <= 1 && 
+        (now - this.lastRevealedLine.timestamp) < 100;
+      
+      if (recentlyRevealed) {
+        console.log('Skipping scroll - recently revealed similar line:', { line, lastRevealed: this.lastRevealedLine?.line });
+        return;
+      }
+      
+      if (Math.abs(currentTop - line) > scrollThreshold) {
+        // 暂时禁用心跳检测，避免立即触发反向同步
+        const originalLastTick = this.lastTick;
+        this.lastTick = { docUri, topLine: line };
+        
+        // 使用更智能的reveal策略
+        const lineDiff = Math.abs(currentTop - line);
+        let revealType: vscode.TextEditorRevealType;
+        
+        if (lineDiff > vis * 2) {
+          // 仅在非常大的跨越时使用 AtTop，避免顶部“吸附感”
+          revealType = vscode.TextEditorRevealType.AtTop;
+        } else {
+          // 其他情况尽量使用 InCenterIfOutsideViewport，减少来回小幅修正
+          revealType = vscode.TextEditorRevealType.InCenterIfOutsideViewport;
+        }
+        
+        ed.revealRange(new vscode.Range(line, 0, line, 0), revealType);
+        
+        // 记录reveal操作
+        this.lastRevealedLine = { docUri, line, timestamp: now };
+        
+        // 移除延迟，立即恢复心跳检测
+        setTimeout(() => {
+          if (this.lastTick && this.lastTick.topLine === line) {
+            // 如果位置没有再次改变，保持当前状态
+          } else {
+            this.lastTick = originalLastTick;
+          }
+        }, 0);
+      } else {
+        console.log('Skipping scroll - target line within threshold:', { currentTop, targetLine: line, threshold: scrollThreshold });
+      }
+      
       return;
     }
   }

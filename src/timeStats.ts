@@ -15,6 +15,7 @@ import { getFileTracker } from './utils/tracker/fileTracker';
 import { getIgnoredWritingStatsManager } from './utils/WritingCount/ignoredWritingStats';
 import { CombinedIgnoreParser } from './utils/Parser/gitignoreParser';
 import { getEffectiveDocumentSync, onDidChangeEffectiveDocument, setActivePreview } from './context/previewRedirect';
+import { isAnyCommentPanelActive } from './context/commentRedirect';
 
 // -------------------- 数据结构 --------------------
 interface Bucket {
@@ -49,7 +50,8 @@ let isIdle = true; // 冷启动默认空闲：不开会话、不建桶
 let statusBarItem: vscode.StatusBarItem | undefined;
 // Webview面板状态管理
 let dashboardPanel: vscode.WebviewPanel | undefined;
-let suspendedByPreview = false; // 预览期间“暂挂”的标记
+let suspendedByPreview = false; // 预览期间"暂挂"的标记
+let suspendedByCommentPanel = false; // 批注面板期间"暂挂"的标记
 let statusBarTicker: NodeJS.Timeout | undefined;
 
 // 放在文件顶部“运行时状态”附近
@@ -76,6 +78,14 @@ function stopStatusBarTicker() {
 function isAnyPreviewActive(): boolean {
     try {
         return !!(getEffectiveDocumentSync()); // 只要有效预览在报 uri 就算活跃
+    } catch {
+        return false;
+    }
+}
+
+function isAnyPanelActive(): boolean {
+    try {
+        return isAnyPreviewActive() || isAnyCommentPanelActive(); // 预览面板或批注面板活跃
     } catch {
         return false;
     }
@@ -1002,8 +1012,13 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
 
     // 预览（任意 webview）抢焦点：activeTextEditor 会变成 undefined。
     // 这不是“无活动编辑器”，不要结算会话。
-    if (!editor && isAnyPreviewActive()) {
-        suspendedByPreview = true; // 仅打标
+    if (!editor && isAnyPanelActive()) {
+        if (isAnyPreviewActive()) {
+            suspendedByPreview = true;
+        }
+        if (isAnyCommentPanelActive()) {
+            suspendedByCommentPanel = true;
+        }
         updateStatusBar();
         return;
     }
@@ -1020,9 +1035,9 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     // 仅在“真的切到别的文件/关闭编辑器”时，才冲刷并结束旧会话。
     // 注意：从预览回到同文件的竞态里，可能暂时判断为 !sameDoc，此时若仍处于预览挂起态就不要结算。
     if (!sameDoc && currentDocPath) {
-        if (suspendedByPreview || isAnyPreviewActive()) {
-            // 这是预览→编辑器切换过程中的竞态，先不动会话，稍后 sameDoc 分支会接手续会。
-            tsDebug('preview-return:skip-end-on-race', { currentDocPath, newPath });
+        if (suspendedByPreview || suspendedByCommentPanel || isAnyPanelActive()) {
+            // 这是预览/批注→编辑器切换过程中的竞态，先不动会话，稍后 sameDoc 分支会接手续会。
+            tsDebug('panel-return:skip-end-on-race', { currentDocPath, newPath, suspendedByPreview, suspendedByCommentPanel });
         } else {
             const oldDoc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
             if (oldDoc) { flushDocStats(oldDoc); }
@@ -1051,8 +1066,9 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
 
     // 从预览回到“同一个文件”：接续会话，不结束/重开
     // if (sameDoc && suspendedByPreview) {
-    if (sameDoc && suspendedByPreview && !isAnyPreviewActive()) {
+    if (sameDoc && (suspendedByPreview || suspendedByCommentPanel) && !isAnyPanelActive()) {
         suspendedByPreview = false;
+        suspendedByCommentPanel = false;
         if (!ignored && checkExitIdle('editor-change')) {
             resetIdleTimer(idleThresholdMs);
         }

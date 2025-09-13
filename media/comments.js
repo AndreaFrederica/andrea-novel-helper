@@ -1,3 +1,4 @@
+/* eslint-disable curly */
 // media/comments.js
 (() => {
   const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null;
@@ -29,7 +30,26 @@
   let state = (vscode && vscode.getState && vscode.getState()) || {};
   let collapsedByDoc = state.collapsedByDoc || {};
   let syncing = false;
+  // 滚动防抖相关变量（优化性能）
+  let scrollTimeout = null;
+  let lastScrollTime = 0;
+  const SCROLL_DEBOUNCE_MS = 0; // 移除防抖延迟，实现即时响应
   let maxTop = 0; // 最大可达顶部行（用于 1:1 高度）
+  // 程序驱动的滚动同步控制
+  let syncingUntil = 0;
+  const PROGRAM_SYNC_MIN = 120; // ms
+  const PROGRAM_SYNC_MAX = 400; // ms
+  +const USER_SCROLL_SUPPRESS_MS = 800; // 用户在面板中滚动时，抑制一段时间内来自编辑器的滚动同步，避免回拉
+  
+  // 焦点感知相关变量
+  let panelHasFocus = false;
+  let panelHasMouseOver = false;
+  let lastUserInteraction = 0;
+  
+  // 添加平滑滚动样式
+  if (root) {
+    root.style.scrollBehavior = 'smooth';
+  }
 
   function clear() { while (track.firstChild) track.removeChild(track.firstChild); }
 
@@ -336,13 +356,41 @@
       if (typeof msg.lineHeight === 'number') lineHeight = msg.lineHeight;
       if (msg.meta && Number.isInteger(msg.meta.maxTop)) maxTop = msg.meta.maxTop;
       const ratio = Number(msg.ratio || 0);
+      
+      // 清除任何待处理的面板滚动事件
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = null;
+      }
+      
       // 更新高度后再同步滚动
       const contentHeight = Math.max(0, Math.round(maxTop * lineHeight + root.clientHeight));
       track.style.height = contentHeight + 'px';
       const max = Math.max(1, root.scrollHeight - root.clientHeight);
++
++      // 若用户刚在面板中滚动，则忽略来自编辑器的同步，避免回拉
++      if (Date.now() < suppressUntil) {
++        console.log('Editor scroll ignored due to recent user scroll', { suppressUntil });
++        return;
++      }
+       
+      // 优化同步锁定时间，提高响应性，并避免与用户滚动互相拉扯
       syncing = true;
+      syncingUntil = Date.now() + PROGRAM_SYNC_MAX;
+      // 临时禁用平滑，避免“抽搐”
+      const prevBehavior = root.style.scrollBehavior;
+      if (prevBehavior !== 'auto') root.style.scrollBehavior = 'auto';
       root.scrollTop = Math.max(0, Math.min(max, ratio * max));
-      requestAnimationFrame(()=> syncing = false);
+      // 恢复原样式
+      setTimeout(() => {
+        root.style.scrollBehavior = prevBehavior || 'smooth';
+      }, PROGRAM_SYNC_MIN);
+      
+      // 稍后解除锁定
+      setTimeout(() => {
+        syncing = false;
+        console.log('Editor scroll sync unlocked');
+      }, PROGRAM_SYNC_MIN);
       return;
     }
   });
@@ -353,14 +401,87 @@
   // Wire search / filter
   if (searchEl) searchEl.addEventListener('input', render);
   if (filterEl) filterEl.addEventListener('change', render);
-
+  
+  // 焦点感知事件监听
+  root.addEventListener('mouseenter', () => {
+    panelHasMouseOver = true;
+    lastUserInteraction = Date.now();
+  });
+  
+  root.addEventListener('mouseleave', () => {
+    panelHasMouseOver = false;
+  });
+  
+  root.addEventListener('focus', () => {
+    panelHasFocus = true;
+    lastUserInteraction = Date.now();
+  }, true);
+  
+  root.addEventListener('blur', () => {
+    panelHasFocus = false;
+  }, true);
+  
+  // 检测用户主动滚动（鼠标滚轮、拖拽滚动条等）
+  root.addEventListener('wheel', () => {
+    lastUserInteraction = Date.now();
++    suppressUntil = lastUserInteraction + USER_SCROLL_SUPPRESS_MS;
+  }, { passive: true });
+-  root.addEventListener('mousedown', (e) => {
+-    if (e.target.closest('.scrollbar, ::-webkit-scrollbar')) {
+-      lastUserInteraction = Date.now();
+-    }
+-  });
++  root.addEventListener('mousedown', (e) => {
++    // 无法可靠判断是否点在原生滚动条上，这里统一认为用户开始交互
++    lastUserInteraction = Date.now();
++    suppressUntil = lastUserInteraction + USER_SCROLL_SUPPRESS_MS;
++  });
+  
   function persistState(){ try{ state.docUri = docUri; state.collapsedByDoc = collapsedByDoc; vscode && vscode.setState(state); }catch{} }
 
-  // 面板 -> 扩展：按比例上报滚动
+  // 面板 -> 扩展：按比例上报滚动（带防抖）
   root.addEventListener('scroll', () => {
-    if (syncing) return;
-    const max = Math.max(1, root.scrollHeight - root.clientHeight);
-    const ratio = root.scrollTop / max;
-    vscode && vscode.postMessage({ type: 'panelScroll', ratio });
+    if (syncing || Date.now() < syncingUntil) return;
+    
+    const now = Date.now();
+    lastScrollTime = now;
+    
+    // 清除之前的定时器
+    if (scrollTimeout) {
+      clearTimeout(scrollTimeout);
+    }
+    
+    // 设置防抖定时器
+    scrollTimeout = setTimeout(() => {
+      // 确保这是最后一次滚动事件
+      if (Date.now() - lastScrollTime >= SCROLL_DEBOUNCE_MS - 10) {
+        // 焦点感知：放宽同步条件，确保面板滚动能够正常工作
+        const hasRecentInteraction = Date.now() - lastUserInteraction < 3000; // 3秒内的交互
+        const shouldSync = panelHasFocus || panelHasMouseOver || hasRecentInteraction;
+        
+        console.log('Panel scroll sync check:', { 
+          panelHasFocus, 
+          panelHasMouseOver, 
+          hasRecentInteraction, 
+          shouldSync,
+          timeSinceInteraction: Date.now() - lastUserInteraction 
+        });
+        
+        if (!shouldSync) {
+          console.log('Panel scroll blocked - no focus or recent interaction');
+          return;
+        }
+        
+        const max = Math.max(1, root.scrollHeight - root.clientHeight);
+        const ratio = root.scrollTop / max;
+        console.log('Panel scroll debounced:', { ratio, scrollTop: root.scrollTop, max });
+        vscode && vscode.postMessage({ 
+          type: 'panelScroll', 
+          ratio, 
+          panelHasFocus: panelHasFocus || panelHasMouseOver,
+          lastInteraction: lastUserInteraction 
+        });
+      }
+    }, SCROLL_DEBOUNCE_MS);
   }, { passive: true });
 })();
