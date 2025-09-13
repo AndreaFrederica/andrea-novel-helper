@@ -5,9 +5,7 @@ let shownOnce = false;
 
 export function getLLMLogChannel(): vscode.OutputChannel {
     if (!ch) ch = vscode.window.createOutputChannel('Andrea Typo LLM');
-    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const show = cfg.get<boolean>('typo.debug.llmTrace', false) || cfg.get<boolean>('typo.debug.serverTrace', false);
-    if (show && !shownOnce) { ch.show(true); shownOnce = true; }
+    // 移除自动显示窗口的逻辑，让用户手动控制窗口显示
     return ch;
 }
 
@@ -37,6 +35,8 @@ function compactOnce(s: string): string {
 
 export function appendTrace(line: string) {
     try {
+        // 检查调试开关，只有开启时才输出日志
+        if (!isClientLLMTraceEnabled() && !isServerTraceEnabled()) return;
         const out = getLLMLogChannel();
         let text = String(line ?? '');
         if (isCompactTraceEnabled()) text = compactOnce(text);

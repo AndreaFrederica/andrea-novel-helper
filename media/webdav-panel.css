@@ -1,0 +1,1004 @@
+/* WebDAV管理面板样式 */
+
+:root {
+    --vscode-font-family: var(--vscode-font-family);
+    --primary-color: var(--vscode-button-background);
+    --primary-hover: var(--vscode-button-hoverBackground);
+    --secondary-color: var(--vscode-button-secondaryBackground);
+    --secondary-hover: var(--vscode-button-secondaryHoverBackground);
+    --danger-color: var(--vscode-errorForeground);
+    --success-color: var(--vscode-terminal-ansiGreen);
+    --warning-color: var(--vscode-terminal-ansiYellow);
+    --border-color: var(--vscode-panel-border);
+    --background-color: var(--vscode-editor-background);
+    --foreground-color: var(--vscode-editor-foreground);
+    --input-background: var(--vscode-input-background);
+    --input-border: var(--vscode-input-border);
+    --hover-background: var(--vscode-list-hoverBackground);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--foreground-color);
+    background-color: var(--background-color);
+    margin: 0;
+    padding: 0;
+    line-height: 1.4;
+}
+
+.container {
+    padding: 16px;
+    max-width: 100%;
+}
+
+/* 区域样式 */
+.section {
+    margin-bottom: 24px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background-color: var(--vscode-titleBar-activeBackground);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.section-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--vscode-titleBar-activeForeground);
+}
+
+/* 按钮样式 */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: var(--vscode-button-foreground);
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+}
+
+.btn-secondary {
+    background-color: var(--secondary-color);
+    color: var(--vscode-button-secondaryForeground);
+}
+
+.btn-secondary:hover {
+    background-color: var(--secondary-hover);
+}
+
+.btn-danger {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: color-mix(in srgb, var(--danger-color) 80%, black);
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.sync-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+/* 账户列表样式 */
+.accounts-list {
+    padding: 16px;
+}
+
+.account-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    margin-bottom: 8px;
+    background-color: var(--input-background);
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.account-item:hover {
+    background-color: var(--hover-background);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.account-item:last-child {
+    margin-bottom: 0;
+}
+
+.account-info {
+    flex: 1;
+}
+
+.account-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.account-url {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 4px;
+    word-break: break-all;
+}
+
+.account-status {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.account-status.enabled {
+    background-color: color-mix(in srgb, var(--success-color) 20%, transparent);
+    color: var(--success-color);
+}
+
+.account-status.disabled {
+    background-color: color-mix(in srgb, var(--danger-color) 20%, transparent);
+    color: var(--danger-color);
+}
+
+.account-actions {
+    display: flex;
+    gap: 4px;
+}
+
+/* 同步进度样式 */
+.sync-progress {
+    padding: 16px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background-color: var(--vscode-progressBar-background);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: var(--primary-color);
+    transition: width 0.3s ease;
+    border-radius: 4px;
+}
+
+.progress-fill.syncing {
+    background-color: var(--warning-color);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.progress-fill.completed {
+    background-color: var(--success-color);
+}
+
+.progress-fill.error {
+    background-color: var(--danger-color);
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.progress-text {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    text-align: center;
+}
+
+/* 文件差异样式 */
+.diffs-list {
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.diff-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    border-left: 3px solid transparent;
+    background-color: var(--input-background);
+    transition: all 0.2s ease;
+}
+
+.diff-item:hover {
+    background-color: var(--hover-background);
+}
+
+.diff-item.added {
+    border-left-color: var(--success-color);
+    background-color: color-mix(in srgb, var(--success-color) 10%, var(--input-background));
+}
+
+.diff-item.modified {
+    border-left-color: var(--warning-color);
+    background-color: color-mix(in srgb, var(--warning-color) 10%, var(--input-background));
+}
+
+.diff-item.deleted {
+    border-left-color: var(--danger-color);
+    background-color: color-mix(in srgb, var(--danger-color) 10%, var(--input-background));
+}
+
+.diff-item.conflict {
+    border-left-color: var(--vscode-terminal-ansiMagenta);
+    background-color: color-mix(in srgb, var(--vscode-terminal-ansiMagenta) 10%, var(--input-background));
+}
+
+.diff-info {
+    flex: 1;
+}
+
+.diff-path {
+    font-weight: 500;
+    font-size: 12px;
+    margin-bottom: 2px;
+    word-break: break-all;
+}
+
+.diff-status {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 2px;
+}
+
+.diff-sizes {
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.diff-actions {
+    display: flex;
+    gap: 4px;
+}
+
+/* 空状态样式 */
+.empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--vscode-descriptionForeground);
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal {
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow: hidden;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--vscode-titleBar-activeBackground);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--vscode-titleBar-activeForeground);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    color: var(--vscode-titleBar-activeForeground);
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+}
+
+.modal-close:hover {
+    background-color: var(--hover-background);
+}
+
+.modal-body {
+    padding: 16px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--vscode-titleBar-inactiveBackground);
+}
+
+/* 表单样式 */
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--foreground-color);
+}
+
+.form-group input[type="text"],
+.form-group input[type="url"],
+.form-group input[type="password"] {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+    background-color: var(--input-background);
+    color: var(--foreground-color);
+    font-size: 12px;
+    transition: border-color 0.2s ease;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="url"]:focus,
+.form-group input[type="password"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 20%, transparent);
+}
+
+.form-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.form-group label:has(input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--vscode-scrollbarSlider-background);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-hoverBackground);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-activeBackground);
+}
+
+/* 响应式设计 */
+@media (max-width: 600px) {
+    .container {
+        padding: 8px;
+    }
+    
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .sync-buttons {
+        flex-direction: column;
+    }
+    
+    .account-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .account-actions {
+        justify-content: flex-end;
+    }
+    
+    .diff-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .diff-actions {
+        justify-content: flex-end;
+    }
+}
+
+/* 文件差异统计样式 */
+.diff-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    padding: 16px;
+    background-color: var(--vscode-editor-inactiveSelectionBackground);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.summary-label {
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 4px;
+}
+
+.summary-value {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--foreground-color);
+}
+
+.summary-value.local-only {
+    color: var(--vscode-terminal-ansiBlue);
+}
+
+.summary-value.remote-only {
+    color: var(--vscode-terminal-ansiMagenta);
+}
+
+.summary-value.modified {
+    color: var(--warning-color);
+}
+
+.summary-value.identical {
+    color: var(--success-color);
+}
+
+/* 差异标签样式 */
+.diff-tabs {
+    display: flex;
+    background-color: var(--vscode-tab-inactiveBackground);
+    border-bottom: 1px solid var(--border-color);
+    overflow-x: auto;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 12px 16px;
+    color: var(--vscode-tab-inactiveForeground);
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    background-color: var(--hover-background);
+    color: var(--foreground-color);
+}
+
+.tab-btn.active {
+    background-color: var(--vscode-tab-activeBackground);
+    color: var(--vscode-tab-activeForeground);
+    border-bottom-color: var(--primary-color);
+}
+
+/* 文件列表样式 */
+.file-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.file-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--vscode-list-inactiveSelectionBackground);
+    transition: background-color 0.2s ease;
+}
+
+.file-item:hover {
+    background-color: var(--hover-background);
+}
+
+.file-item:last-child {
+    border-bottom: none;
+}
+
+.file-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.file-name {
+    font-family: var(--vscode-editor-font-family);
+    font-size: 13px;
+    color: var(--foreground-color);
+    word-break: break-all;
+    flex: 1;
+    margin-right: 12px;
+}
+
+.file-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.file-status.local-only {
+    background-color: var(--vscode-terminal-ansiBlue);
+    color: white;
+}
+
+.file-status.remote-only {
+    background-color: var(--vscode-terminal-ansiMagenta);
+    color: white;
+}
+
+.file-status.modified {
+    background-color: var(--warning-color);
+    color: var(--vscode-editor-background);
+}
+
+.file-status.identical {
+    background-color: var(--success-color);
+    color: var(--vscode-editor-background);
+}
+
+.file-details {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+}
+
+.file-size, .file-time {
+    white-space: nowrap;
+}
+
+/* 修改文件的特殊样式 */
+.modified-file .file-details {
+    flex-direction: column;
+    gap: 8px;
+}
+
+.file-version {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 6px 12px;
+    background-color: var(--vscode-editor-inactiveSelectionBackground);
+    border-radius: 4px;
+}
+
+.version-label {
+    font-weight: 500;
+    min-width: 40px;
+}
+
+/* 无差异消息样式 */
+.no-diff-message {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+}
+
+/* 响应式调整 */
+@media (max-width: 600px) {
+    .diff-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        padding: 12px;
+    }
+    
+    .diff-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+    
+    .file-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    
+    .file-details {
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .file-version {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
+
+/* 项目关联样式 */
+.project-link-section {
+    background-color: var(--vscode-editor-background);
+}
+
+.link-status-text {
+    font-size: 14px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    background-color: var(--vscode-inputValidation-warningBackground);
+    color: var(--vscode-inputValidation-warningForeground);
+    border: 1px solid var(--vscode-inputValidation-warningBorder);
+}
+
+.link-status-text.linked {
+    background-color: var(--vscode-inputValidation-infoBackground);
+    color: var(--vscode-inputValidation-infoForeground);
+    border-color: var(--vscode-inputValidation-infoBorder);
+}
+
+.link-info {
+    background-color: var(--vscode-editor-inactiveSelectionBackground);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.link-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.link-detail:last-child {
+    margin-bottom: 0;
+}
+
+.link-detail strong {
+    color: var(--vscode-editor-foreground);
+    min-width: 80px;
+}
+
+.link-detail span {
+    color: var(--vscode-descriptionForeground);
+    font-family: var(--vscode-editor-font-family);
+    word-break: break-all;
+}
+
+.link-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.link-actions .btn {
+    flex: 1;
+    min-width: 100px;
+}
+
+/* 远程文件树样式 */
+.remote-file-tree {
+    padding: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+    background-color: var(--input-background);
+    border: 1px solid var(--input-border);
+    border-radius: 4px;
+}
+
+.no-tree-message {
+    text-align: center;
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+    padding: 20px;
+}
+
+.error-message {
+    color: var(--danger-color);
+    text-align: center;
+    padding: 12px;
+    background-color: var(--vscode-inputValidation-errorBackground);
+    border: 1px solid var(--vscode-inputValidation-errorBorder);
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
+.tree-item {
+    margin: 2px 0;
+}
+
+.tree-node {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background-color 0.2s;
+}
+
+.tree-node:hover {
+    background-color: var(--hover-background);
+}
+
+.tree-toggle {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 10px;
+    margin-right: 4px;
+    transition: transform 0.2s;
+}
+
+.tree-item.expanded .tree-toggle {
+    transform: rotate(90deg);
+}
+
+.tree-spacer {
+    width: 16px;
+    margin-right: 4px;
+}
+
+.tree-icon {
+    margin-right: 6px;
+    font-size: 14px;
+}
+
+.tree-name {
+    flex: 1;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tree-info {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    margin-left: 8px;
+    white-space: nowrap;
+}
+
+.tree-children {
+    margin-left: 20px;
+    display: none;
+}
+
+.tree-item.expanded > .tree-children {
+    display: block;
+}
+
+.root-children {
+    margin-left: 0;
+    display: block;
+}
+
+/* 加密设置样式 */
+.encryption-section {
+    margin-bottom: 20px;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 6px;
+    background: var(--vscode-editor-background);
+}
+
+.encryption-config {
+    padding: 15px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: var(--vscode-foreground);
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.form-control {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    font-size: 13px;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+    box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+.btn-icon {
+    padding: 8px;
+    min-width: auto;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.encryption-status {
+    padding: 10px;
+    border-radius: 4px;
+    background: var(--vscode-textBlockQuote-background);
+    border-left: 3px solid var(--vscode-textBlockQuote-border);
+}
+
+.status-text {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-text.enabled {
+    color: var(--vscode-testing-iconPassed);
+}
+
+.status-text.disabled {
+    color: var(--vscode-testing-iconFailed);
+}
+
+.btn-warning {
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: 1px solid var(--vscode-button-border);
+}
+
+.btn-warning:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}
+
+@media (max-width: 600px) {
+    .link-actions {
+        flex-direction: column;
+    }
+    
+    .link-actions .btn {
+        flex: none;
+        width: 100%;
+    }
+    
+    .link-detail {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .remote-file-tree {
+        max-height: 300px;
+    }
+    
+    .tree-children {
+        margin-left: 12px;
+    }
+    
+    .encryption-section .section-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .input-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .btn-icon {
+        width: 100%;
+        margin-top: 5px;
+    }
+}

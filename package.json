@@ -493,6 +493,46 @@
         "command": "andrea.typo.rescanDocument",
         "title": "重新扫描错别字（强制全量）",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.webdav.manageAccounts",
+        "title": "WebDAV 账户管理"
+      },
+      {
+        "command": "andrea.webdav.syncNow",
+        "title": "WebDAV 立即同步"
+      },
+      {
+        "command": "andrea.webdav.openPanel",
+        "title": "打开WebDAV管理面板"
+      },
+      {
+        "command": "andrea.webdav.refreshFiles",
+        "title": "刷新WebDAV文件列表"
+      },
+      {
+        "command": "andrea.webdav.openFile",
+        "title": "打开WebDAV文件"
+      },
+      {
+        "command": "andrea.webdav.uploadFile",
+        "title": "上传文件到WebDAV"
+      },
+      {
+        "command": "andrea.webdav.deleteFile",
+        "title": "删除WebDAV文件"
+      },
+      {
+        "command": "andrea.webdav.createFolder",
+        "title": "创建WebDAV文件夹"
+      },
+      {
+        "command": "andrea.webdav.renameFile",
+        "title": "重命名WebDAV文件"
+      },
+      {
+        "command": "andrea.webdav.copyFile",
+        "title": "复制WebDAV文件"
       }
     ],
     "walkthroughs": [
@@ -1634,9 +1674,54 @@
           "id": "roleHierarchyView",
           "name": "角色",
           "icon": "organization"
+        },
+        {
+          "id": "andrea.webdavPanel",
+          "type": "webview",
+          "name": "WebDAV 管理",
+          "icon": "cloud"
+        },
+        {
+          "id": "andrea.webdavFiles",
+          "name": "WebDAV 文件",
+          "icon": "cloud-download"
         }
       ]
-  },
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "andrea.webdav.openFile",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFile",
+          "group": "navigation@1"
+        },
+        {
+          "command": "andrea.webdav.renameFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@1"
+        },
+        {
+          "command": "andrea.webdav.copyFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@2"
+        },
+        {
+          "command": "andrea.webdav.deleteFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@3"
+        },
+        {
+          "command": "andrea.webdav.createFolder",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
+          "group": "3_new@1"
+        },
+        {
+          "command": "andrea.webdav.uploadFile",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
+          "group": "3_new@2"
+        }
+      ]
+    },
     "keybindings": [
       {
         "key": "enter",
@@ -1690,6 +1775,7 @@
     "json5": "^2.2.3",
     "jsonc-parser": "^3.3.1",
     "memfs": "^4.17.2",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "webdav": "^5.7.0"
   }
 }

@@ -61,9 +61,23 @@ import { activateDefLinks } from './Provider/defLinksProvider';
 import { registerOpenRoleSource } from './commands/openRoleSource';
 import { setWordCounterContext, setWordCounterGitGuard } from './utils/WordCount/asyncWordCounter';
 import { setAsyncRoleMatcherContext } from './utils/asyncRoleMatcher';
+import { WebDAVAccountManager } from './sync/accountManager';
+import { WebDAVSyncService } from './sync/webdavSync';
+import { registerWebDAVPanel } from './Provider/view/webdavPanel';
+import { registerWebDAVTreeView } from './Provider/view/webdavTreeView';
+import { WebDAVFileSystemProvider } from './Provider/fileSystem/webdavFileSystemProvider';
+import { initI18n } from './utils/i18n';
+import { ProjectConfigManager } from './projectConfig/projectConfigManager';
+import { ProjectConfigLinter } from './projectConfig/projectConfigLinter';
+import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
+import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
+
+// 全局变量存储lint系统实例
+let projectConfigLinter: ProjectConfigLinter | undefined;
+let projectConfigDecorator: ProjectConfigDecorator | undefined;
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -104,6 +118,9 @@ export const onDidFinishRoles = _onDidFinishRoles.event;
 
 // 扩展主体激活状态追踪
 export async function activate(context: vscode.ExtensionContext) {
+    // 初始化 i18n，优先使用vscode.l10n，fallback到手动加载
+    initI18n(context.extensionPath);
+    
     // 输出通道用于调试激活阶段错误/栈
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
     setWordCounterContext(context);
@@ -181,7 +198,18 @@ export async function activate(context: vscode.ExtensionContext) {
         file_outline_url = 'andrea-outline://outline/outline_file.md';
     }
     //TODO工作区里的多个文件夹兼容没做(要命)
-    if (!ws) return;
+    if (!ws) {
+        // 没有工作区时，询问是否从WebDAV还原
+        const choice = await vscode.window.showInformationMessage(
+            '检测到没有打开的工作区。是否要从WebDAV还原项目？',
+            '是',
+            '否'
+        );
+        if (choice === '是') {
+            await vscode.commands.executeCommand('andrea-novel-helper.webdav.restore');
+        }
+        return;
+    }
     const wsFolders = vscode.workspace.workspaceFolders;
     // 兼容后续旧代码引用
     const folders1 = wsFolders;
@@ -216,6 +244,26 @@ export async function activate(context: vscode.ExtensionContext) {
         log('开始执行主初始化');
         // 统一由独立模块检测并可提示初始化
         maybePromptProjectInit();
+        
+        // 检查并创建项目配置文件
+        const projectConfigManager = new ProjectConfigManager(ws);
+        if (!projectConfigManager.exists()) {
+            // 如果配置文件不存在，可以选择创建默认配置
+            // 这里暂时不自动创建，让用户通过命令手动创建
+        }
+        
+        // 初始化lint系统
+        projectConfigLinter = new ProjectConfigLinter(context);
+        projectConfigDecorator = new ProjectConfigDecorator(context, projectConfigLinter);
+        
+        // 注册补全提供器
+        const completionProvider = new ProjectConfigCompletionProvider();
+        context.subscriptions.push(
+            vscode.languages.registerCompletionItemProvider(
+                { scheme: 'file', pattern: '**/project-config.json5' },
+                completionProvider
+            )
+        );
         // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
         outlineFS = new MemoryOutlineFSProvider(path.join(wsRoot, outlineRel));
         if (!outlineFS) {
@@ -924,6 +972,77 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking)
         );
 
+        // WebDAV：账户管理与同步命令
+        context.subscriptions.push(
+            vscode.commands.registerCommand('andrea.webdav.manageAccounts', async () => {
+                const mgr = new WebDAVAccountManager(context);
+                const action = await vscode.window.showQuickPick([
+                    { label: '➕ 新增账户', action: 'add' },
+                    { label: '✏️ 编辑账户', action: 'edit' },
+                    { label: '🗑️ 删除账户', action: 'delete' },
+                    { label: '📃 查看账户列表', action: 'list' }
+                ], { placeHolder: 'WebDAV 账户管理' });
+                if (!action) return;
+                if ((action as any).action === 'add') {
+                    await mgr.addOrEdit({});
+                } else if ((action as any).action === 'edit') {
+                    const acc = await mgr.pickAccount();
+                    if (acc) await mgr.addOrEdit(acc);
+                } else if ((action as any).action === 'delete') {
+                    await mgr.remove();
+                } else if ((action as any).action === 'list') {
+                    const list = await mgr.listAccounts();
+                    if (!list.length) { vscode.window.showInformationMessage('尚无账户'); return; }
+                    const lines = list.map(a => `${a.name}  (${a.username}@${a.url}${a.rootPath ? a.rootPath : ''})`);
+                    vscode.window.showInformationMessage(lines.join('\n'), { modal: true });
+                }
+            }),
+            vscode.commands.registerCommand('andrea.webdav.syncNow', async () => {
+                const svc = new WebDAVSyncService(context);
+                const pick = await vscode.window.showQuickPick([
+                    { label: '双向同步（较新者覆盖）', v: 'two-way' },
+                    { label: '仅推送（本地覆盖远端）', v: 'push' },
+                    { label: '仅拉取（远端覆盖本地）', v: 'pull' }
+                ], { placeHolder: '选择同步方向' });
+                if (!pick) return;
+                await svc.syncNow((pick as any).v);
+            })
+        );
+
+        // 注册WebDAV面板和TreeView
+        registerWebDAVPanel(context);
+        const webdavTreeProvider = registerWebDAVTreeView(context);
+        
+        // 注册WebDAV文件系统提供器
+        const webdavFileSystemProvider = new WebDAVFileSystemProvider(context);
+        context.subscriptions.push(
+            vscode.workspace.registerFileSystemProvider('anh-webdav', webdavFileSystemProvider, {
+                isCaseSensitive: true,
+                isReadonly: false
+            })
+        );
+        
+        // 重新注册openFile命令以使用文件系统提供器
+        context.subscriptions.push(
+            vscode.commands.registerCommand('andrea.webdav.openFile', async (fileItem: any) => {
+                if (fileItem.type === 'file' && fileItem.accountId) {
+                    // 确保路径以/开头
+                    const normalizedPath = fileItem.path.startsWith('/') ? fileItem.path : '/' + fileItem.path;
+                    const uri = vscode.Uri.parse(`anh-webdav://${fileItem.accountId}${normalizedPath}`);
+                    try {
+                        const document = await vscode.workspace.openTextDocument(uri);
+                        await vscode.window.showTextDocument(document);
+                    } catch (error) {
+                        vscode.window.showErrorMessage(`打开文件失败: ${error}`);
+                        console.error('WebDAV文件打开错误:', error);
+                    }
+                }
+            })
+        );
+
+        context.subscriptions.push(
+        );
+
         // 启动后异步检查（避免阻塞激活）
         setTimeout(() => {
             if (projectInitWizardRunning) { return; }
@@ -948,6 +1067,16 @@ export function deactivate() {
     deactivateMarkdownToolbar();
     deactivateTimeStats();
     try { stopAllPreviewTTS(_previewManager); } catch { }
+    
+    // 清理lint系统资源
+    if (projectConfigLinter) {
+        projectConfigLinter.dispose();
+        projectConfigLinter = undefined;
+    }
+    if (projectConfigDecorator) {
+        projectConfigDecorator.dispose();
+        projectConfigDecorator = undefined;
+    }
 }
 
 let _previewManager: PreviewManager | undefined;

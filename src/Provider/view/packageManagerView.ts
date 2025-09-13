@@ -5,6 +5,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
+import { loadRoles } from '../../utils/utils';
+import { updateDecorations } from '../../events/updateDecorations';
 
 // 解析文件名冲突：如果同名存在，则追加 _YYYYMMDD_HHmmss 或递增索引
 function resolveFileConflict(dir: string, baseName: string, ext: string): { path: string; conflicted: boolean; } {
@@ -635,8 +637,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         
         // 只有角色相关文件才触发角色数据更新
         if (shouldUpdateRoles(uri)) {
-            // 动态导入并触发角色数据增量更新
-            import('../../utils/utils.js').then(({ loadRoles }) => {
+            try {
                 if (changeType === 'delete') {
                     // 文件删除：强制完整刷新
                     loadRoles(true);
@@ -646,11 +647,11 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
                 }
                 
                 // 触发装饰器更新
-                import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
+                try {
                     updateDecorations();
-                }).catch(error => {
+                } catch (error) {
                     console.error(`装饰器更新失败: ${error}`);
-                });
+                }
                 
                 // 显示用户通知
                 const fileName = path.basename(uri.fsPath);
@@ -660,9 +661,9 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
                     'change': '修改'
                 };
                 vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[changeType]}: ${fileName}`);
-            }).catch(error => {
+            } catch (error) {
                 console.error(`角色数据更新失败: ${error}`);
-            });
+            }
         }
     };
 
@@ -688,19 +689,18 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             
             // 只有角色相关文件才触发角色数据更新
             if (shouldUpdateRoles(document.uri)) {
-                // 触发角色数据增量更新
-                import('../../utils/utils.js').then(({ loadRoles }) => {
+                try {
                     loadRoles(false, [filePath]);
                     
                     // 触发装饰器更新
-                    import('../../events/updateDecorations.js').then(({ updateDecorations }) => {
+                    try {
                         updateDecorations();
-                    }).catch(error => {
+                    } catch (error) {
                         console.error(`装饰器更新失败: ${error}`);
-                    });
-                }).catch(error => {
+                    }
+                } catch (error) {
                     console.error(`角色数据更新失败: ${error}`);
-                });
+                }
             }
         }
     });

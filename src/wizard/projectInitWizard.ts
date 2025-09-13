@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createCharacterGalleryFile, createSensitiveWordsFile, createVocabularyFile, createRegexPatternsFile, ensureDir } from './packageFileCreators';
 import { generateMarkdownRoleTemplate } from '../templates/templateGenerators';
+import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
 import { exec } from 'child_process';
 
 // 标记：项目初始化向导是否正在运行（用于抑制其它 Git 配置弹窗等）
@@ -57,6 +58,13 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
   let ignoreHistory = true; // .gitignore:.history/
   let wcIgnoreVscode = true; // .wcignore:.vscode/
   let wcIgnoreOutOfInsights = true; // .wcignore:.out-of-code-insights/
+  
+  // 项目信息收集变量
+  let projectName = '';
+  let projectDescription = '';
+  let projectAuthor = '';
+  let projectSummary = '';
+  let projectTags: string[] = [];
 
       // Git 用户配置优先（若安装了 Git）
   if (gitInstalled) {
@@ -95,6 +103,64 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
       if (!aborted && gitInstalled && !hasRepo) {
         const repoPick = await vscode.window.showQuickPick(['初始化 Git 仓库','跳过'], { placeHolder: '当前目录未初始化 Git，是否创建？(稍后执行)' });
         if (!repoPick) { abort(); } else if (repoPick === '初始化 Git 仓库') { needInitRepo = true; }
+      }
+
+      // 收集项目信息
+      if (!aborted) {
+        const workspaceName = path.basename(ws);
+        const nameInput = await vscode.window.showInputBox({ 
+          prompt: '请输入项目名称（书籍名称）', 
+          value: workspaceName,
+          ignoreFocusOut: true, 
+          validateInput: v => v.trim() ? undefined : '项目名称不能为空' 
+        });
+        if (!nameInput) { abort(); } else { projectName = nameInput.trim(); }
+      }
+
+      if (!aborted) {
+        const descInput = await vscode.window.showInputBox({ 
+          prompt: '请输入项目描述', 
+          value: '这是一个小说项目',
+          ignoreFocusOut: true, 
+          validateInput: v => v.trim() ? undefined : '项目描述不能为空' 
+        });
+        if (!descInput) { abort(); } else { projectDescription = descInput.trim(); }
+      }
+
+      if (!aborted) {
+        const authorInput = await vscode.window.showInputBox({ 
+          prompt: '请输入作者姓名', 
+          value: gitUserName || '作者',
+          ignoreFocusOut: true, 
+          validateInput: v => v.trim() ? undefined : '作者姓名不能为空' 
+        });
+        if (!authorInput) { abort(); } else { projectAuthor = authorInput.trim(); }
+      }
+
+      if (!aborted) {
+        const summaryInput = await vscode.window.showInputBox({ 
+          prompt: '请输入项目简介（可选）', 
+          value: '项目简介',
+          ignoreFocusOut: true 
+        });
+        if (summaryInput !== undefined) { projectSummary = summaryInput.trim(); }
+      }
+
+      if (!aborted) {
+        const tagsInput = await vscode.window.showInputBox({ 
+          prompt: '请输入项目标签（用逗号分隔，如：小说,奇幻,冒险）', 
+          value: '小说,创作',
+          ignoreFocusOut: true,
+          validateInput: v => {
+            if (!v.trim()) return '至少需要一个标签';
+            const tags = v.split(',').map(t => t.trim()).filter(t => t.length > 0);
+            return tags.length > 0 ? undefined : '请输入有效的标签';
+          }
+        });
+        if (!tagsInput) { abort(); } 
+        else { 
+          projectTags = tagsInput.split(',').map(t => t.trim()).filter(t => t.length > 0);
+        }
       }
 
       if (!aborted) {
@@ -139,6 +205,12 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
 
       // 最终确认概要
       const summary: string[] = [];
+      
+      // 项目信息概要
+      summary.push(`创建项目: ${projectName}`);
+      summary.push(`作者: ${projectAuthor}`);
+      summary.push(`标签: ${projectTags.join(', ')}`);
+      
       if (gitInstalled) {
         if (configureGitUser) { summary.push(`配置Git用户(${gitUserScope})`); }
         if (needInitRepo) { summary.push('初始化仓库'); }
@@ -175,6 +247,27 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
             if (setEmail.code !== 0) { vscode.window.showErrorMessage('设置 user.email 失败: '+setEmail.stderr); }
           }
         }
+        // 创建项目配置文件（无论是否创建示例结构都要创建）
+        try {
+          const configManager = new ProjectConfigManager(ws);
+          if (!configManager.exists()) {
+            // 使用用户输入的信息创建配置
+            const customConfig = {
+              name: projectName,
+              description: projectDescription,
+              author: projectAuthor,
+              summary: projectSummary || '项目简介',
+              tags: projectTags
+            };
+            await configManager.createDefaultConfig(projectName);
+            // 立即更新为用户输入的完整信息
+            await configManager.updateConfig(customConfig);
+            vscode.window.showInformationMessage('已创建项目配置文件 anhproject.md');
+          }
+        } catch (e) {
+          vscode.window.showWarningMessage('创建项目配置文件失败: ' + (e as any)?.message);
+        }
+        
         if (createStructure) {
           const root = path.join(ws, 'novel-helper');
           ensureDir(root);
