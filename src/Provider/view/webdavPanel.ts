@@ -821,7 +821,7 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
                             
                             // 获取配置中的时间容差设置
                             const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
-                            const timeTolerance = config.get<number>('timeTolerance', 2000);
+                            const timeTolerance = config.get<number>('timeTolerance', 15000);
                             
                             const syncResult = this._shouldSyncFile(
                                 { path: path, mtime: localTime, size: localFile.size },

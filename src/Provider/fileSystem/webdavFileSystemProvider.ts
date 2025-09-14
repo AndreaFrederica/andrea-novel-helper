@@ -53,7 +53,7 @@ export class WebDAVFileSystemProvider implements vscode.FileSystemProvider {
             if (targetFile) {
                 console.log('[WebDAV-FileSystem] stat 找到目标文件:', targetFile);
                 return {
-                    type: targetFile.isDirectory ? vscode.FileType.Directory : vscode.FileType.File,
+                    type: (targetFile.type === 'directory' || targetFile.isDirectory) ? vscode.FileType.Directory : vscode.FileType.File,
                     ctime: targetFile.lastModified?.getTime() || Date.now(),
                     mtime: targetFile.lastModified?.getTime() || Date.now(),
                     size: targetFile.size || 0
@@ -120,7 +120,7 @@ export class WebDAVFileSystemProvider implements vscode.FileSystemProvider {
                 if (pathParts.length === 1) {
                     // 直接子项
                     const name = pathParts[0];
-                    const type = file.isDirectory ? vscode.FileType.Directory : vscode.FileType.File;
+                    const type = (file.type === 'directory' || file.isDirectory) ? vscode.FileType.Directory : vscode.FileType.File;
                     result.push([name, type]);
                 } else if (pathParts.length > 1) {
                     // 子目录中的文件，添加子目录

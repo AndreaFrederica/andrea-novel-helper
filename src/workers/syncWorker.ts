@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import { createClient, WebDAVClient } from 'webdav';
 
 // 时间容差常量（毫秒）
-const TIME_TOLERANCE = 2000;
+const TIME_TOLERANCE = 15000;
 
 interface SyncMessage {
     id: string;
@@ -288,44 +288,44 @@ class SyncWorker {
                         size: entry.size
                     });
                     
-                    if (entry.type === 'directory') {
-                        // 修复：使用entry.filename作为下一级目录路径进行递归
-                        await walk(entry.filename, depth + 1);
-                    } else {
-                        // 正确计算相对路径，保持目录结构
-                        let relativePath = entry.filename;
-                        
-                        // 标准化处理，确保路径计算的一致性
-                        const baseRemotePath = normalizedRemotePath.replace(/\/+$/, '');
-                        const entryPath = relativePath.replace(/\/+$/, '');
-                        
-                        if (entryPath.startsWith(baseRemotePath + '/')) {
-                            relativePath = entryPath.substring(baseRemotePath.length + 1);
-                        } else if (entryPath.startsWith(baseRemotePath) && entryPath.length > baseRemotePath.length) {
-                            const remaining = entryPath.substring(baseRemotePath.length);
-                            relativePath = remaining.startsWith('/') ? remaining.substring(1) : remaining;
-                        } else if (entryPath === baseRemotePath) {
-                            // 如果是根目录文件，使用文件名
-                            relativePath = path.basename(entryPath);
-                        }
-                        
-                        // 确保相对路径不以/开头
-                        if (relativePath.startsWith('/')) {
-                            relativePath = relativePath.substring(1);
-                        }
+                    // 计算相对于基础路径的相对路径
+                    let relativePath = entry.filename;
+                    if (entry.filename.startsWith(normalizedRemotePath)) {
+                        relativePath = entry.filename.substring(normalizedRemotePath.length);
+                    } else if (entry.filename.startsWith(remotePath)) {
+                        const baseLength = remotePath.endsWith('/') ? remotePath.length : remotePath.length + 1;
+                        relativePath = entry.filename.substring(baseLength);
+                    }
+                    
+                    // 确保相对路径不以斜杠开头
+                    if (relativePath.startsWith('/')) {
+                        relativePath = relativePath.substring(1);
+                    }
+                    
+                    // 只添加文件类型的条目到文件列表，目录不添加
+                    if (entry.type === 'file') {
+                        const fileInfo = {
+                            path: relativePath,
+                            type: entry.type,
+                            mtime: new Date(entry.lastmod).getTime(),
+                            size: entry.size || 0
+                        };
                         
                         console.log('[SyncWorker] walkRemote 添加文件:', {
-                            originalPath: entry.filename,
-                            relativePath: relativePath,
-                            mtime: new Date(entry.lastmod).getTime(),
-                            size: entry.size || 0
+                            path: fileInfo.path,
+                            type: fileInfo.type,
+                            mtime: fileInfo.mtime,
+                            size: fileInfo.size
                         });
                         
-                        files.push({
-                            path: relativePath,
-                            mtime: new Date(entry.lastmod).getTime(),
-                            size: entry.size || 0
-                        });
+                        files.push(fileInfo);
+                    } else if (entry.type === 'directory') {
+                        console.log('[SyncWorker] walkRemote 跳过目录:', relativePath);
+                    }
+                    
+                    if (entry.type === 'directory') {
+                        // 递归处理子目录
+                        await walk(entry.filename, depth + 1);
                     }
                 }
             } catch (error) {
@@ -343,6 +343,105 @@ class SyncWorker {
         return files;
     }
 
+    /**
+     * 专门用于TreeView的远程文件遍历方法
+     * 与walkRemote不同，这个方法会返回所有文件和目录信息
+     */
+    private async walkRemoteForTreeView(remotePath: string): Promise<Array<{ path: string; mtime: number; size: number; type: string }>> {
+        console.log('[SyncWorker] walkRemoteForTreeView 开始:', { remotePath });
+        if (!this.webdavClient) {
+            throw new Error('WebDAV client not initialized');
+        }
+
+        const files: Array<{ path: string; mtime: number; size: number; type: string }> = [];
+        const visitedPaths = new Set<string>(); // 防止循环引用
+        const maxDepth = 50; // 限制递归深度
+        
+        // 标准化远程路径，确保以/结尾
+        const normalizedRemotePath = remotePath.endsWith('/') ? remotePath : remotePath + '/';
+        console.log('[SyncWorker] walkRemoteForTreeView 标准化路径:', { normalizedRemotePath });
+
+        const walk = async (currentPath: string, depth: number = 0) => {
+            // 检查递归深度限制
+            if (depth > maxDepth) {
+                console.warn('[SyncWorker] walkRemoteForTreeView 达到最大递归深度，跳过:', { currentPath, depth });
+                return;
+            }
+
+            // 检查是否已访问过此路径（防止循环引用）
+            const normalizedCurrentPath = currentPath.replace(/\/+$/, '') || '/';
+            if (visitedPaths.has(normalizedCurrentPath)) {
+                console.warn('[SyncWorker] walkRemoteForTreeView 检测到循环引用，跳过:', { currentPath });
+                return;
+            }
+            visitedPaths.add(normalizedCurrentPath);
+
+            try {
+                console.log('[SyncWorker] walkRemoteForTreeView 获取目录内容:', { currentPath, depth });
+                const response = await this.webdavClient!.getDirectoryContents(currentPath);
+                // 处理可能的ResponseDataDetailed类型
+                const entries = Array.isArray(response) ? response : response.data;
+                console.log('[SyncWorker] walkRemoteForTreeView 目录内容获取成功，条目数:', entries.length);
+                
+                for (const entry of entries) {
+                    console.log('[SyncWorker] walkRemoteForTreeView 处理条目:', {
+                        filename: entry.filename,
+                        type: entry.type,
+                        lastmod: entry.lastmod,
+                        size: entry.size
+                    });
+                    
+                    // 计算相对于基础路径的相对路径
+                    let relativePath = entry.filename;
+                    if (entry.filename.startsWith(normalizedRemotePath)) {
+                        relativePath = entry.filename.substring(normalizedRemotePath.length);
+                    } else if (entry.filename.startsWith(remotePath)) {
+                        const baseLength = remotePath.endsWith('/') ? remotePath.length : remotePath.length + 1;
+                        relativePath = entry.filename.substring(baseLength);
+                    }
+                    
+                    // 确保相对路径不以斜杠开头
+                    if (relativePath.startsWith('/')) {
+                        relativePath = relativePath.substring(1);
+                    }
+                    
+                    // 添加所有条目（文件和目录）到列表中
+                    const fileInfo = {
+                        path: entry.filename, // 使用完整路径，让treeview自己处理
+                        type: entry.type,
+                        mtime: new Date(entry.lastmod).getTime(),
+                        size: entry.size || 0
+                    };
+                    
+                    console.log('[SyncWorker] walkRemoteForTreeView 添加条目:', {
+                        path: fileInfo.path,
+                        type: fileInfo.type,
+                        mtime: fileInfo.mtime,
+                        size: fileInfo.size
+                    });
+                    
+                    files.push(fileInfo);
+                    
+                    if (entry.type === 'directory') {
+                        // 递归处理子目录
+                        await walk(entry.filename, depth + 1);
+                    }
+                }
+            } catch (error) {
+                // 目录不存在或无权限访问
+                console.error('[SyncWorker] walkRemoteForTreeView 无法访问目录:', { currentPath, error, depth });
+            } finally {
+                // 访问完成后从已访问集合中移除，允许其他路径访问
+                visitedPaths.delete(normalizedCurrentPath);
+            }
+        };
+        
+        await walk(remotePath);
+        console.log('[SyncWorker] walkRemoteForTreeView 完成，总条目数:', files.length);
+        console.log('[SyncWorker] walkRemoteForTreeView 条目列表:', files.map(f => `${f.path} (${f.type})`));
+        return files;
+    }
+
     private async calculateSyncActions(
         localFiles: Array<{ path: string; mtime: number; size: number }>,
         remoteFiles: Array<{ path: string; mtime: number; size: number }>,
@@ -356,9 +455,6 @@ class SyncWorker {
         const actions: Array<{ type: 'upload' | 'download'; localPath: string; remotePath: string }> = [];
         const localMap = new Map(localFiles.map(f => [f.path, f]));
         const remoteMap = new Map(remoteFiles.map(f => [f.path, f]));
-        
-        // 时间戳容差（毫秒），用于处理时间戳精度差异
-        const TIME_TOLERANCE = 15000; // 15秒的时间容差
 
         // 处理本地文件
         for (const localFile of localFiles) {
@@ -731,15 +827,15 @@ class SyncWorker {
 
     private async handleFileList(data: { url?: string; username?: string; password?: string; dirPath: string }): Promise<SyncResponse> {
         try {
-            let files: Array<{ path: string; mtime: number; size: number }>;
+            let files: Array<{ path: string; mtime: number; size: number; type?: string }>;
             
             if (data.url && data.username && data.password) {
-                // 处理远程WebDAV文件列表
+                // 处理远程WebDAV文件列表 - 使用专门的treeview方法
                 this.webdavClient = createClient(data.url, {
                     username: data.username,
                     password: data.password
                 });
-                files = await this.walkRemote(data.dirPath);
+                files = await this.walkRemoteForTreeView(data.dirPath);
             } else {
                 // 处理本地文件列表
                 files = await this.walkLocal(data.dirPath);

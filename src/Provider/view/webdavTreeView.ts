@@ -332,15 +332,15 @@ export class WebDAVTreeDataProvider implements vscode.TreeDataProvider<WebDAVTre
                 }
                 seenPaths.add(directChildPath);
                 
-                // 判断是文件还是目录
-                const isDirectory = pathParts.length > 1 || file.type === 'directory';
+                // 判断是文件还是目录 - 优先使用从WebDAV返回的type信息
+                const isDirectory = file.type === 'directory' || pathParts.length > 1;
                 
                 const fileItem: WebDAVFileItem = {
                     name: directChildName,
                     path: directChildPath,
                     type: isDirectory ? 'directory' as const : 'file' as const,
                     size: isDirectory ? undefined : (file.size || 0),
-                    modified: file.mtime ? new Date(file.mtime * 1000) : undefined,
+                    modified: file.mtime ? new Date(file.mtime) : undefined,
                     accountId: accountId
                 };
                 

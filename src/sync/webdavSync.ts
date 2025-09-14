@@ -206,7 +206,7 @@ export class WebDAVSyncService {
                 // 读取同步策略配置
                 const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
                 const syncStrategy = config.get<'timestamp' | 'size' | 'both' | 'content'>('strategy', 'timestamp');
-                const timeTolerance = config.get<number>('timeTolerance', 2000);
+                const timeTolerance = config.get<number>('timeTolerance', 15000);
                 const enableSmartComparison = config.get<boolean>('enableSmartComparison', true);
 
                 // 更新同步状态
@@ -366,17 +366,43 @@ export class WebDAVSyncService {
             throw new Error('账户密码不存在');
         }
 
+        // 构建完整的远程路径
+        let fullRemotePath = dirPath;
+        if (account.rootPath && account.rootPath !== '/') {
+            // 确保rootPath以/开头但不以/结尾
+            const normalizedRootPath = account.rootPath.startsWith('/') ? account.rootPath : '/' + account.rootPath;
+            const cleanRootPath = normalizedRootPath.endsWith('/') ? normalizedRootPath.slice(0, -1) : normalizedRootPath;
+            
+            // 如果dirPath是根路径或等于rootPath，直接使用rootPath
+            if (dirPath === '/' || dirPath === account.rootPath) {
+                fullRemotePath = cleanRootPath;
+            } else {
+                // 确保dirPath以/开头
+                const normalizedDirPath = dirPath.startsWith('/') ? dirPath : '/' + dirPath;
+                
+                // 如果dirPath已经包含rootPath，直接使用
+                if (normalizedDirPath.startsWith(cleanRootPath)) {
+                    fullRemotePath = normalizedDirPath;
+                } else {
+                    // 否则拼接rootPath和dirPath
+                    fullRemotePath = cleanRootPath + normalizedDirPath;
+                }
+            }
+        }
+        
+        console.log(`[WebDAV-Sync] getDirectoryFileList: 完整远程路径`, { originalDirPath: dirPath, fullRemotePath });
+
         try {
             console.log(`[WebDAV-Sync] getDirectoryFileList: 发送file-list消息`, {
                 url: account.url,
                 username: account.username,
-                dirPath: dirPath
+                dirPath: fullRemotePath
             });
             const result = await this.sendMessage('file-list', {
                 url: account.url,
                 username: account.username,
                 password: password,
-                dirPath: dirPath
+                dirPath: fullRemotePath
             });
             console.log(`[WebDAV-Sync] getDirectoryFileList: 收到结果`, result);
             return result.files || [];
