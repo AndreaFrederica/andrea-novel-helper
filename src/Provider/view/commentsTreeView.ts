@@ -82,12 +82,43 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
     private searchQuery: string = '';
     private statusFilter: 'all' | 'active' | 'resolved' = 'all';
     private isFiltered: boolean = false;
+    // 已发现的v2批注目录缓存（用于构造正确的索引路径）
+    private commentsDirs: string[] = [];
 
     constructor() {
         this.initWorker();
         this.watchCommentChanges();
         // 初始化时自动扫描批注
         this.refresh();
+    }
+
+    // 计算指定文档的索引文件路径（使用v2 comments目录）
+    private getIndexPathForDoc(docUuid: string, fileInfo: CommentFileInfo): string {
+        // 规范化大小写（Windows不区分大小写），优先匹配与文件同一工作区下的comments目录
+        const filePathLower = path.resolve(fileInfo.filePath).toLowerCase();
+        let pickedDir: string | undefined;
+
+        for (const dir of this.commentsDirs || []) {
+            const dirResolved = path.resolve(dir);
+            const workspaceRoot = path.dirname(dirResolved);
+            const workspaceRootLower = workspaceRoot.toLowerCase();
+            if (filePathLower.startsWith(workspaceRootLower + path.sep) || filePathLower === workspaceRootLower) {
+                pickedDir = dirResolved;
+                break;
+            }
+        }
+
+        // 若未匹配到同工作区目录，但存在扫描到的目录，则选第一个
+        if (!pickedDir && this.commentsDirs && this.commentsDirs.length > 0) {
+            pickedDir = path.resolve(this.commentsDirs[0]);
+        }
+
+        if (pickedDir) {
+            return path.join(pickedDir, `${docUuid}.json`);
+        }
+
+        // 如果没有找到comments目录，抛出错误
+        throw new Error(`未找到批注目录，请确保项目中存在comments目录`);
     }
 
     /**
@@ -179,6 +210,9 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             
             console.log(`[comments] Found ${commentsDirs.length} comment directories:`, commentsDirs);
             
+            // 缓存目录，供后续构造索引路径使用
+            this.commentsDirs = commentsDirs;
+            
             if (commentsDirs.length === 0) {
                 this.commentFiles = [];
                 this._onDidChangeTreeData.fire();
@@ -225,8 +259,18 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
         
         try {
             if (data.eventType === 'rename' || data.eventType === 'change') {
+                // 找到对应的文件信息
+                const fileInfo = this.commentFiles.find(f => f.docUuid === data.docUuid);
+                if (!fileInfo) {
+                    console.warn('[comments] File info not found for docUuid:', data.docUuid);
+                    return;
+                }
+                
+                // 使用正确的路径计算方法
+                const correctFilePath = this.getIndexPathForDoc(data.docUuid, fileInfo);
+                
                 // 文件被修改或重命名，重新加载该文件
-                const result = await this.sendWorkerMessage('load-comment-file', { filePath: data.filePath });
+                const result = await this.sendWorkerMessage('load-comment-file', { filePath: correctFilePath });
                 if (result && result.commentData) {
                     // 更新或添加文件信息
                     const existingIndex = this.commentFiles.findIndex(f => f.docUuid === data.docUuid);
@@ -241,7 +285,7 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
                         
                         this.commentFiles[existingIndex] = {
                             docUuid: data.docUuid,
-                            filePath: commentData.docPath || data.filePath,
+                            filePath: commentData.docPath || correctFilePath,
                             relativePath: this.commentFiles[existingIndex].relativePath,
                             commentCount,
                             resolvedCount,
@@ -258,8 +302,8 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
                         
                         this.commentFiles.push({
                             docUuid: data.docUuid,
-                            filePath: commentData.docPath || data.filePath,
-                            relativePath: path.basename(commentData.docPath || data.filePath),
+                            filePath: commentData.docPath || correctFilePath,
+                            relativePath: path.basename(commentData.docPath || correctFilePath),
                             commentCount,
                             resolvedCount,
                             lastModified: Date.now()
@@ -347,7 +391,7 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
                 return;
             }
             
-            const commentFilePath = path.join(path.dirname(fileInfo.filePath), '..', '.vscode', 'comments', `${docUuid}.json`);
+            const commentFilePath = this.getIndexPathForDoc(docUuid, fileInfo);
             
             // 加载批注文件
             const result = await this.sendWorkerMessage('load-comment-file', { filePath: commentFilePath });
@@ -1038,7 +1082,7 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             }
             
             const result = await this.sendWorkerMessage('load-comment-file', { 
-                filePath: path.join(path.dirname(fileInfo.filePath), '..', '.vscode', 'comments', `${docUuid}.json`) 
+                filePath: this.getIndexPathForDoc(docUuid, fileInfo) 
             });
             
             if (result && result.commentData) {
@@ -1084,8 +1128,9 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             const fileUri = vscode.Uri.file(fileInfo.filePath);
             
             // 使用worker加载批注文件详细信息
+            const commentFilePath = this.getIndexPathForDoc(docUuid, fileInfo);
             const result = await this.sendWorkerMessage('load-comment-file', { 
-                filePath: path.join(path.dirname(fileInfo.filePath), '..', '.vscode', 'comments', `${docUuid}.json`) 
+                filePath: commentFilePath 
             });
             
             if (result && result.commentData) {
@@ -1177,7 +1222,7 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             
             // 使用worker加载批注文件详细信息
             const result = await this.sendWorkerMessage('load-comment-file', { 
-                filePath: path.join(path.dirname(fileInfo.filePath), '..', '.vscode', 'comments', `${docUuid}.json`) 
+                filePath: this.getIndexPathForDoc(docUuid, fileInfo)
             });
             
             if (result && result.commentData) {
@@ -1260,8 +1305,9 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             const fileUri = vscode.Uri.file(fileInfo.filePath);
             
             // 使用worker加载批注文件详细信息
+            const commentFilePath = this.getIndexPathForDoc(docUuid, fileInfo);
             const result = await this.sendWorkerMessage('load-comment-file', { 
-                filePath: path.join(path.dirname(fileInfo.filePath), '..', '.vscode', 'comments', `${docUuid}.json`) 
+                filePath: commentFilePath 
             });
             
             if (result && result.commentData) {
