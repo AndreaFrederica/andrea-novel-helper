@@ -1183,6 +1183,13 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
                         threadItem.contextValue = 'commentThread';
                         threadItem.docUuid = docUuid;
                         
+                        // 设置跳转命令
+                        threadItem.command = {
+                            command: 'andrea.commentsExplorer.openComment',
+                            title: '跳转到批注',
+                            arguments: [threadItem]
+                        };
+                        
                         // 设置图标
                         threadItem.iconPath = new vscode.ThemeIcon(
                             isResolved ? 'check' : 'comment-discussion',
@@ -1260,6 +1267,13 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
                         );
                         messageItem.contextValue = 'commentMessage';
                         messageItem.docUuid = docUuid;
+                        
+                        // 设置跳转命令
+                        messageItem.command = {
+                            command: 'andrea.commentsExplorer.openComment',
+                            title: '跳转到批注',
+                            arguments: [messageItem]
+                        };
                         
                         // 根据消息位置设置不同图标
                         if (i === 0) {
