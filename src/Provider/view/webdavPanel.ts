@@ -781,7 +781,10 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
             const normalizedPath = normalizeLocalPath(f.path);
             return [normalizedPath, { ...f, normalizedPath }];
         }));
-        const remoteMap = new Map(remoteFiles.map(f => {
+        
+        // 过滤掉目录类型，只保留文件
+        const filteredRemoteFiles = remoteFiles.filter(f => f.type !== 'directory');
+        const remoteMap = new Map(filteredRemoteFiles.map(f => {
             const normalizedPath = normalizeRemotePath(f.path || f.name);
             return [normalizedPath, { ...f, normalizedPath }];
         }));
@@ -797,7 +800,8 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
         // 添加调试日志
         console.log('[WebDAV-Panel] 文件比较开始:', {
             localFiles: localFiles.length,
-            remoteFiles: remoteFiles.length,
+            remoteFiles: filteredRemoteFiles.length,
+            originalRemoteFiles: remoteFiles.length,
             localPaths: Array.from(localMap.keys()).slice(0, 5),
             remotePaths: Array.from(remoteMap.keys()).slice(0, 5)
         });
@@ -897,7 +901,7 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
             hasMoreDiffs,
             summary: {
                 totalLocal: localFiles.length,
-                totalRemote: remoteFiles.length,
+                totalRemote: filteredRemoteFiles.length,
                 onlyLocalCount: onlyLocal.length,
                 onlyRemoteCount: onlyRemote.length,
                 modifiedCount: modified.length,

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -120,6 +120,16 @@
           "id": "AndreaNovelHelperSidebar",
           "title": "%sidebar.anh.title%",
           "icon": "images/anh_logo_dark.svg"
+        },
+        {
+          "id": "AndreaCommentsSidebar",
+          "title": "小说助手:批注管理",
+          "icon": "$(comment-discussion)"
+        },
+        {
+          "id": "AndreaWebDAVSidebar",
+          "title": "小说助手:WebDAV 管理",
+          "icon": "$(cloud)"
         }
       ]
     },
@@ -1958,7 +1968,16 @@
           "id": "roleHierarchyView",
           "name": "角色",
           "icon": "organization"
-        },
+        }
+      ],
+      "AndreaCommentsSidebar": [
+        {
+          "id": "andrea.commentsExplorer",
+          "name": "批注管理",
+          "icon": "comment-discussion"
+        }
+      ],
+      "AndreaWebDAVSidebar": [
         {
           "id": "andrea.webdavPanel",
           "type": "webview",
@@ -1969,11 +1988,6 @@
           "id": "andrea.webdavFiles",
           "name": "WebDAV 文件",
           "icon": "cloud-download"
-        },
-        {
-          "id": "andrea.commentsExplorer",
-          "name": "批注管理",
-          "icon": "comment-discussion"
         }
       ]
     },
