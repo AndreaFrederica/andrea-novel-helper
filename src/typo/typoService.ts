@@ -181,11 +181,12 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
                 const hint = typeof tuple?.[2] === 'number' ? tuple[2] : undefined;
                 const score = typeof tuple?.[3] === 'number' ? tuple[3] : undefined;
                 if (!wrong || !correct) continue;
-                const sig = `${wrong}@${correct}@${hint ?? -1}`;
-                if (seen.has(sig)) continue;
+                // 先计算位置，再基于位置构建签名，确保与最终结果聚合一致，从源头去重
                 const offInSentence = computeBestOffset(s.text, wrong, correct, (r as any).target || undefined, hint);
                 if (offInSentence === null) continue;
                 const offInPara = (s.startOffset - para.startOffset) + offInSentence;
+                const sig = `${wrong}@${correct}@${hint ?? -1}@${offInPara}`;
+                if (seen.has(sig)) continue;
                 rec.errors.push({ wrong, correct, offset: offInPara, length: wrong.length, score });
                 seen.add(sig);
             }
@@ -199,6 +200,7 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
             setParagraphResultSync(docKey, res);
         }
     }
+        // 流式装饰：在接收到部分结果时通过装饰器管理器应用装饰
         enqueueApply(doc);
     };
     const results = await detectTyposBatch(texts, { docFsPath: doc.uri.fsPath, docUri: doc.uri.toString(), roleNames: roleNamesCtx, onPartial: applyCorrections });
@@ -213,6 +215,9 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
         }
         const r = results[i];
         if (!r || !Array.isArray(r.errors) || r.errors.length === 0) continue;
+        // 与 partial 路径共用签名集合，避免“partial + final”重复
+        const seen = appliedSignatures.get(i) || new Set<string>();
+        appliedSignatures.set(i, seen);
         for (const tuple of r.errors) {
             const wrong = tuple?.[0];
             const correct = tuple?.[1];
@@ -222,14 +227,17 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
             const offInSentence = computeBestOffset(s.text, wrong, correct, (r as any).target || undefined, hint);
             if (offInSentence === null) continue;
             const offInPara = (s.startOffset - para.startOffset) + offInSentence;
+            const sig = `${wrong}@${correct}@${hint ?? -1}@${offInPara}`;
+            if (seen.has(sig)) continue;
             rec.errors.push({ wrong, correct, offset: offInPara, length: wrong.length, score });
+            seen.add(sig);
         }
     }
     return perPara;
 }
 
 async function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDiagnosticsApplyOptions) {
-    if (!typoFeatureEnabled()) {
+    if (!typoFeatureEnabled() || doc.isClosed) {
         options.diagnosticCollection.delete(doc.uri);
         clearDocDecorations(doc);
         updateStatusBar();
@@ -304,13 +312,8 @@ async function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDi
         }
     }
 
-    // Apply typo highlight decorations for this document
-    const deco = ensureTypoDecorationType();
-    for (const ed of vscode.window.visibleTextEditors) {
-        if (ed.document.uri.toString() !== doc.uri.toString()) continue;
-        if (deco) ed.setDecorations(deco, typoRanges);
-        else if (typoDeco) ed.setDecorations(typoDeco, []);
-    }
+    // Apply typo highlight decorations for this document using decorator manager
+    decoratorManager.requestDecoration(docKey, typoRanges);
     updateStatusBar();
 }
 
@@ -319,6 +322,115 @@ const scanTimers = new Map<string, NodeJS.Timeout>();
 const flushTimers = new Map<string, NodeJS.Timeout>();
 const applyQueues = new Map<string, Promise<void>>(); // per-doc serial apply queue
 const scanningDocs = new Set<string>();
+
+/**
+ * 文档装饰器管理器 - 统一管理所有装饰请求，进行去重和批量应用
+ */
+class DocumentDecoratorManager {
+    private pendingDecorations = new Map<string, vscode.Range[]>(); // 待应用的装饰
+    private applyTimers = new Map<string, NodeJS.Timeout>(); // 防抖定时器
+    private currentDecorations = new Map<string, vscode.Range[]>(); // 当前已应用的装饰
+    private readonly debounceMs = 50; // 防抖延迟
+
+    /**
+     * 请求应用装饰到文档
+     * @param docKey 文档键
+     * @param ranges 装饰范围数组
+     */
+    requestDecoration(docKey: string, ranges: vscode.Range[]) {
+        // 更新待应用的装饰
+        this.pendingDecorations.set(docKey, ranges);
+        
+        // 清除现有定时器
+        const existingTimer = this.applyTimers.get(docKey);
+        if (existingTimer) {
+            clearTimeout(existingTimer);
+        }
+        
+        // 设置新的防抖定时器
+        const timer = setTimeout(() => {
+            this.flushDecorations(docKey);
+            this.applyTimers.delete(docKey);
+        }, this.debounceMs);
+        
+        this.applyTimers.set(docKey, timer);
+    }
+    
+    /**
+     * 立即应用装饰（跳过防抖）
+     * @param docKey 文档键
+     */
+    flushDecorations(docKey: string) {
+        const ranges = this.pendingDecorations.get(docKey);
+        if (!ranges) return;
+        
+        // 获取当前装饰
+        const currentRanges = this.currentDecorations.get(docKey) || [];
+        
+        // 检查是否需要更新（去重逻辑）
+        if (rangesEqual(currentRanges, ranges)) {
+            return; // 装饰相同，无需更新
+        }
+        
+        // 应用新装饰
+        this.applyDecorationsToDocument(docKey, ranges);
+        
+        // 更新记录
+        this.currentDecorations.set(docKey, ranges);
+        this.pendingDecorations.delete(docKey);
+    }
+    
+    /**
+     * 实际应用装饰到文档
+     * @param docKey 文档键
+     * @param ranges 装饰范围
+     */
+    private applyDecorationsToDocument(docKey: string, ranges: vscode.Range[]) {
+        const deco = ensureTypoDecorationType();
+        if (!deco) return;
+        
+        // 找到对应的编辑器
+        const editors = vscode.window.visibleTextEditors.filter(e => e.document.uri.toString() === docKey);
+        
+        for (const editor of editors) {
+            editor.setDecorations(deco, ranges);
+        }
+    }
+    
+    /**
+     * 清除文档的所有装饰
+     * @param docKey 文档键
+     */
+    clearDecorations(docKey: string) {
+        // 取消待处理的装饰请求
+        const timer = this.applyTimers.get(docKey);
+        if (timer) {
+            clearTimeout(timer);
+            this.applyTimers.delete(docKey);
+        }
+        
+        this.pendingDecorations.delete(docKey);
+        this.currentDecorations.delete(docKey);
+        
+        // 清除实际装饰
+        this.applyDecorationsToDocument(docKey, []);
+    }
+    
+    /**
+     * 清理所有资源
+     */
+    dispose() {
+        // 清除所有定时器
+        for (const timer of this.applyTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.applyTimers.clear();
+        this.pendingDecorations.clear();
+    }
+}
+
+// 全局装饰器管理器实例
+const decoratorManager = new DocumentDecoratorManager();
 
 let statusItem: vscode.StatusBarItem | null = null;
 
@@ -405,11 +517,18 @@ function typoFeatureEnabled(): boolean {
 }
 
 function clearDocDecorations(doc: vscode.TextDocument) {
-    if (!typoDeco) return;
-    for (const ed of vscode.window.visibleTextEditors) {
-        if (ed.document.uri.toString() !== doc.uri.toString()) continue;
-        try { ed.setDecorations(typoDeco, []); } catch { /* ignore */ }
+    const docKey = doc.uri.toString();
+    decoratorManager.clearDecorations(docKey);
+}
+
+function rangesEqual(ranges1: vscode.Range[], ranges2: vscode.Range[]): boolean {
+    if (ranges1.length !== ranges2.length) return false;
+    for (let i = 0; i < ranges1.length; i++) {
+        const r1 = ranges1[i];
+        const r2 = ranges2[i];
+        if (!r1.isEqual(r2)) return false;
     }
+    return true;
 }
 
 async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }) {
@@ -421,8 +540,8 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
     const handle = setTimeout(async () => {
         try {
             if (!typoFeatureEnabled()) {
-                diagnosticCollection.delete(doc.uri);
-                clearDocDecorations(doc);
+                // 功能被禁用时，通过enqueueApply统一处理清理逻辑
+                enqueueApply(doc);
                 return;
             }
             const text = doc.getText();
@@ -465,9 +584,12 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
                 scanningDocs.add(docKey); updateStatusBar();
                 await Promise.all(tasks);
                 scanningDocs.delete(docKey); updateStatusBar();
+                // 扫描完成后统一应用诊断
+                enqueueApply(doc);
+            } else {
+                // 没有新任务但仍需要应用现有结果
+                enqueueApply(doc);
             }
-            // 只在所有任务完成后统一应用一次诊断
-            enqueueApply(doc);
         } catch (e) {
             // no-op
         }
@@ -491,6 +613,11 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
             const editor = vscode.window.activeTextEditor;
             if (!editor) { vscode.window.showInformationMessage('没有活动编辑器'); return; }
             const docKey = editor.document.uri.toString();
+            
+            // 先清除现有的装饰和诊断，避免新旧装饰叠加
+            diagnosticCollection.delete(editor.document.uri);
+            clearDocDecorations(editor.document);
+            
             try {
                 await resetParagraphs(docKey, editor.document);
             } catch {
@@ -511,15 +638,20 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeTextDocument(e => { if (supported(e.document)) { scheduleScan(e.document); updateStatusBar(); } }),
         vscode.workspace.onDidCloseTextDocument(async (doc) => {
             if (supported(doc)) {
+                const docKey = doc.uri.toString();
                 diagnosticCollection.delete(doc.uri);
+                
+                // 清理装饰器管理器中的相关数据
+                decoratorManager.clearDecorations(docKey);
+                
                 const keep = vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('typo.keepCacheOnClose', true);
                 if (!keep) {
                     // Immediately drop cache if user prefers
                     try {
-                        await clearDocDB(doc.uri.toString(), doc);
+                        await clearDocDB(docKey, doc);
                     } catch {
                         // 如果异步失败，使用同步版本作为后备
-                        clearDocDBSync(doc.uri.toString());
+                        clearDocDBSync(docKey);
                     }
                 }
                 // If keep=true: keep in-memory DB; LRU 会优先淘汰已关闭文档
@@ -536,6 +668,8 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
                             clearDocDecorations(ed.document);
                         }
                     }
+                    // 清理装饰器管理器
+                    decoratorManager.dispose();
                 } else {
                     // Rescan all visible supported documents to apply new settings
                     for (const ed of vscode.window.visibleTextEditors) {
@@ -563,13 +697,7 @@ function enqueueApply(doc: vscode.TextDocument) {
     const startVersion = doc.version;
     const task = prev.then(async () => {
         try {
-            if (doc.isClosed || !typoFeatureEnabled()) {
-                // When disabled or closed, ensure UI cleared and skip
-                diagnosticCollection.delete(doc.uri);
-                clearDocDecorations(doc);
-                return;
-            }
-            // Apply latest snapshot; createDiagnosticsForDoc internally recomputes ranges
+            // createDiagnosticsForDoc内部会检查功能状态和文档状态，统一处理清理逻辑
             await createDiagnosticsForDoc(doc, { diagnosticCollection });
             // If version changed significantly during apply, next queued apply will catch it
         } catch { /* ignore */ }
