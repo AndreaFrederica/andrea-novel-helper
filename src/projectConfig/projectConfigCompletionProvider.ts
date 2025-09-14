@@ -9,9 +9,9 @@ export class ProjectConfigCompletionProvider implements vscode.CompletionItemPro
         { label: '项目名称', detail: '项目的名称', insertText: '## 项目名称\n' },
         { label: '项目描述', detail: '项目的详细描述', insertText: '## 项目描述\n' },
         { label: '作者', detail: '项目作者信息', insertText: '## 作者\n' },
-        { label: '项目标识', detail: '项目的唯一标识符', insertText: '## 项目标识\n' },
+        { label: '项目UUID', detail: '项目的唯一标识符', insertText: '## 项目UUID\n' },
         { label: '封面', detail: '项目封面图片路径', insertText: '## 封面\n' },
-        { label: '简介', detail: '项目简介', insertText: '## 简介\n' },
+        { label: '项目简介', detail: '项目简介', insertText: '## 项目简介\n' },
         { label: '标签', detail: '项目标签，用逗号分隔', insertText: '## 标签\n' },
         { label: '创建时间', detail: '项目创建时间', insertText: '## 创建时间\n' },
         { label: '更新时间', detail: '项目更新时间', insertText: '## 更新时间\n' }

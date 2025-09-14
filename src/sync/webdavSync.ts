@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { WebDAVAccountManager, WebDAVAccount } from './accountManager';
 import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
+import { WebDAVSyncStatusManager } from './webdavSyncStatusManager';
 
 export type SyncDirection = 'two-way' | 'push' | 'pull';
 
@@ -31,9 +32,11 @@ export class WebDAVSyncService {
     private messageId = 0;
     private pendingMessages = new Map<string, { resolve: Function; reject: Function }>();
     private static readonly LAST_SYNC_KEY = 'webdav.lastSyncTime';
+    private syncStatusManager: WebDAVSyncStatusManager;
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
+        this.syncStatusManager = WebDAVSyncStatusManager.getInstance();
         this.initWorker();
     }
 
@@ -165,6 +168,9 @@ export class WebDAVSyncService {
         }
 
         try {
+            // 开始同步，更新状态
+            this.syncStatusManager.startSync('正在连接WebDAV服务器...');
+            
             // 使用worker进行同步
             const progressOpts = {
                 location: vscode.ProgressLocation.Notification,
@@ -176,6 +182,7 @@ export class WebDAVSyncService {
                 const initialMessage = '正在连接WebDAV服务器...';
                 progress.report({ message: initialMessage });
                 progressCallback?.onProgress?.(0, 100, initialMessage);
+                this.syncStatusManager.updateProgress(0, 100, initialMessage);
                 
                 // 将direction转换为worker期望的格式
                 let workerDirection: 'upload' | 'download' | 'two-way';
@@ -202,6 +209,9 @@ export class WebDAVSyncService {
                 const timeTolerance = config.get<number>('timeTolerance', 2000);
                 const enableSmartComparison = config.get<boolean>('enableSmartComparison', true);
 
+                // 更新同步状态
+                this.syncStatusManager.updateProgress(10, 100, '正在同步文件...');
+                
                 const result = await this.sendMessage('webdav-sync', {
                     url: acc.url,
                     username: acc.username,
@@ -245,6 +255,9 @@ export class WebDAVSyncService {
                 progressCallback?.onProgress?.(100, 100, completionMessage);
                 progressCallback?.onComplete?.(failCount === 0, completionMessage);
                 
+                // 结束同步，更新状态
+                this.syncStatusManager.endSync(completionMessage);
+                
                 if (failCount > 0) {
                     vscode.window.showWarningMessage(completionMessage);
                 } else {
@@ -255,6 +268,9 @@ export class WebDAVSyncService {
             out.appendLine(`[WebDAV] 同步失败: ${error}`);
             vscode.window.showErrorMessage(`WebDAV 同步失败: ${error}`);
             progressCallback?.onError?.(String(error));
+            
+            // 同步失败，结束状态
+            this.syncStatusManager.endSync(`同步失败: ${error}`);
         }
     }
 

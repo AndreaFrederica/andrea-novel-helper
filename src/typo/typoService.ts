@@ -275,7 +275,17 @@ async function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDi
                 if (coveredByNonSensitive) continue;
             }
             const msg = `错别字: ${e.wrong} → ${e.correct}`;
-            const diag = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Information);
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const warningLevel = cfg.get<string>('typo.warningLevel', 'information');
+            let severity: vscode.DiagnosticSeverity;
+            switch (warningLevel) {
+                case 'error': severity = vscode.DiagnosticSeverity.Error; break;
+                case 'warning': severity = vscode.DiagnosticSeverity.Warning; break;
+                case 'information': severity = vscode.DiagnosticSeverity.Information; break;
+                case 'hint': severity = vscode.DiagnosticSeverity.Hint; break;
+                default: severity = vscode.DiagnosticSeverity.Information;
+            }
+            const diag = new vscode.Diagnostic(range, msg, severity);
             diag.source = 'AndreaNovelHelper Typo';
             (diag as any).anhFixs = [e.correct]; // reuse existing CodeAction provider
             (diag as any).anhSensitiveWord = e.wrong; // label
@@ -340,6 +350,7 @@ function ensureStatusItem() {
     statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     statusItem.name = 'Andrea Typo';
     statusItem.tooltip = '错别字识别状态';
+    statusItem.command = 'andrea.typo.quickSettings';
 }
 
 function updateStatusBar() {
@@ -348,14 +359,43 @@ function updateStatusBar() {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const mode = cfg.get<'macro' | 'llm'>('typo.mode', 'macro');
     const enabled = cfg.get<boolean>('typo.enabled', true);
-    if (!enabled) { statusItem!.hide(); return; }
+    const clientLLMEnabled = cfg.get<boolean>('typo.clientLLM.enabled', false);
+    const persistenceEnabled = cfg.get<boolean>('typo.persistence.enabled', false);
+    
+    if (!enabled) { 
+        statusItem!.tooltip = '错别字识别已禁用\n点击打开快速设置';
+        statusItem!.hide(); 
+        return; 
+    }
+    
     if (!ed || ed.document.uri.scheme !== 'file' || !['markdown', 'plaintext'].includes(ed.document.languageId)) {
+        statusItem!.tooltip = '错别字识别\n当前文件类型不支持或无活动编辑器\n点击打开快速设置';
         statusItem!.hide();
         return;
     }
+    
     const key = ed.document.uri.toString();
     const busy = scanningDocs.has(key);
+    const modeText = mode === 'macro' ? '规则识别' : '大语言模型';
+    
+    // 构建详细的tooltip信息
+    let tooltip = `错别字识别状态\n`;
+    tooltip += `模式: ${modeText}\n`;
+    tooltip += `状态: ${busy ? '正在扫描...' : '就绪'}\n`;
+    
+    if (mode === 'llm' && clientLLMEnabled) {
+        const apiBase = cfg.get<string>('typo.clientLLM.apiBase', 'https://api.deepseek.com/v1');
+        const model = cfg.get<string>('typo.clientLLM.model', 'deepseek-v3');
+        tooltip += `客户端直连: 已启用\n`;
+        tooltip += `API: ${new URL(apiBase).hostname}\n`;
+        tooltip += `模型: ${model}\n`;
+    }
+    
+    tooltip += `数据持久化: ${persistenceEnabled ? '已启用' : '已禁用'}\n`;
+    tooltip += `\n点击打开快速设置`;
+    
     statusItem!.text = busy ? '$(sync~spin) Typo ' + mode : '$(check) Typo ' + mode;
+    statusItem!.tooltip = tooltip;
     statusItem!.show();
 }
 
@@ -418,7 +458,6 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
                         setParagraphResultSync(docKey, res);
                     }
                     }
-                    enqueueApply(doc);
                     limiter.release();
                 })());
             }
@@ -427,6 +466,7 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
                 await Promise.all(tasks);
                 scanningDocs.delete(docKey); updateStatusBar();
             }
+            // 只在所有任务完成后统一应用一次诊断
             enqueueApply(doc);
         } catch (e) {
             // no-op

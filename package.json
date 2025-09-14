@@ -1690,6 +1690,18 @@
           "default": true,
           "markdownDescription": "关闭编辑器后是否保留错别字扫描缓存（由 LRU 控制释放）。关闭则在关闭文档时立即清理缓存。"
         },
+        "AndreaNovelHelper.typo.warningLevel": {
+          "type": "string",
+          "enum": ["error", "warning", "information", "hint"],
+          "default": "warning",
+          "markdownDescription": "错别字诊断的警告级别：error（错误）、warning（警告）、information（信息）、hint（提示）。"
+        },
+        "AndreaNovelHelper.sensitiveWords.warningLevel": {
+          "type": "string",
+          "enum": ["error", "warning", "information", "hint"],
+          "default": "error",
+          "markdownDescription": "敏感词诊断的警告级别：error（错误）、warning（警告）、information（信息）、hint（提示）。"
+        },
         "AndreaNovelHelper.webdav.sync.strategy": {
           "type": "string",
           "default": "timestamp",

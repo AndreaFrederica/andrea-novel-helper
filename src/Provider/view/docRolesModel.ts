@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { isHugeFile, getSupportedLanguages, getSupportedExtensions } from '../../utils/utils';
 import { getEffectiveDocumentSync } from '../../context/previewRedirect';
+import { getEffectiveCommentDocumentSync, onDidChangeActiveCommentPanel } from '../../context/commentRedirect';
 import { getDocumentRoleOccurrences } from '../../context/documentRolesCache';
 import { onDidUpdateDecorations } from '../../events/updateDecorations';
 import { Role } from '../../extension';
@@ -51,7 +52,7 @@ class DocumentRolesModel {
     private constructor() {
         // 监听装饰刷新完成事件：表示最新的角色命中缓存已写入，可直接重建模型
         onDidUpdateDecorations(e => {
-            const active = vscode.window.activeTextEditor?.document;
+            const active = this.getEffectiveDocument();
             if (!active) { return; }
             if (e.uri.toString() === active.uri.toString()) {
                 const changed = this.rebuild(true);
@@ -60,6 +61,9 @@ class DocumentRolesModel {
         });
         // 仍监听主动切换（避免尚未触发装饰的第一次进入）
         vscode.window.onDidChangeActiveTextEditor(() => this.scheduleRebuild());
+        
+        // 监听批注面板状态变化
+        onDidChangeActiveCommentPanel(() => this.scheduleRebuild());
         
         // 监听角色显示配置变化
         vscode.workspace.onDidChangeConfiguration(e => {
@@ -86,7 +90,7 @@ class DocumentRolesModel {
     }
 
     getHierarchy(): RoleHierarchyAffiliationGroup[] {
-    const active = getEffectiveDocumentSync() ?? vscode.window.activeTextEditor?.document;
+        const active = this.getEffectiveDocument();
         if (!active) { return []; }
         if (active.uri.toString() !== this.lastDocUri || active.version !== this.lastVersion) {
             this.rebuild();
@@ -94,8 +98,13 @@ class DocumentRolesModel {
         return this.cachedHierarchy;
     }
 
+    /** 获取有效文档：优先批注面板绑定的文档，然后是预览面板，最后是活跃编辑器 */
+    private getEffectiveDocument(): vscode.TextDocument | undefined {
+        return getEffectiveCommentDocumentSync() ?? getEffectiveDocumentSync() ?? vscode.window.activeTextEditor?.document;
+    }
+
     private rebuild(force = false): boolean {
-    const active = getEffectiveDocumentSync() ?? vscode.window.activeTextEditor?.document;
+        const active = this.getEffectiveDocument();
         if (!active) {
             if (this.cachedHierarchy.length) {
                 this.cachedHierarchy = [];

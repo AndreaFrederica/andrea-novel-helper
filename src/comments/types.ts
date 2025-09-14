@@ -60,6 +60,7 @@ export interface CommentMetadata {
   anchor: CommentAnchor;
   contentFile: string; // 对应的MD文件名
   messages: CommentMessage[];
+  deleted?: boolean; // 软删除标记，true表示已删除
 }
 
 export function rangeToVSCodeRange(r: { start: { line: number; ch: number }; end: { line: number; ch: number } }): vscode.Range {

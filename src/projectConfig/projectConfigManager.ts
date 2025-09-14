@@ -198,7 +198,8 @@ export class ProjectConfigManager {
             case 'author':
                 config.author = content;
                 break;
-            case '项目标识':
+            case '项目uuid':
+            case '项目标识':  // 保持向后兼容
             case 'uuid':
                 config.uuid = content;
                 break;
@@ -206,7 +207,8 @@ export class ProjectConfigManager {
             case 'cover':
                 config.cover = content;
                 break;
-            case '简介':
+            case '项目简介':
+            case '简介':  // 保持向后兼容
             case 'summary':
                 config.summary = content;
                 break;
@@ -240,13 +242,13 @@ ${config.description}
 ## 作者
 ${config.author}
 
-## 项目标识
+## 项目UUID
 ${config.uuid}
 
 ## 封面
 ${config.cover || ''}
 
-## 简介
+## 项目简介
 ${config.summary || ''}
 
 ## 标签

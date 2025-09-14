@@ -1,17 +1,8 @@
-# (小说助手) Andrea N> 最新版本：**0.> 最新版本：**0.3.25 (2025-09-07)**  
-> 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节"近期版本速览"。  
-> 近期版添加了大量新功能，若从老版本升级，请阅读ChangeLog6 (2025-09-07)**  
-> 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节"近期版本速览"。6. 角色层级树视图：按【从属 → 类型 → 角色】分层，词汇/敏感词/正则表达式三类统一置底"特殊分类"分组；展开状态持久化，支持跨文档继承。
-7. "当前文章角色" 双视图：侧边栏 & Explorer 各一份实时显示当前文档出现过的角色/词汇/敏感词/正则命中，复用缓存免重复扫描；展开状态持久化，支持跨文档继承。
-8. 写作资源视图（Word Count Explorer）：可替代原生 Explorer，聚焦写作文件字数、排序、索引管理与拖拽组织，现在支持显示参考资料；展开状态持久化。
-9. 性能优化：懒加载大纲、分片文件追踪数据库、读写降噪、共享缓存 + 异步刷新（含文档角色缓存模型）。
-10. 写作时间 & 统计仪表板：分钟级/会话级统计、CPM（字符每分钟）峰值、活跃度趋势。
-11. 一键导出txt/纯文本内容
-12. 写作预览工具
-13. 写作版式设置，格式化工具
-14. 角色卡编辑器（可视化）
-15. 支持基于自定义分类的角色显示，可以按类型或归属进行更灵活的分组
-16. 角色显示增强：支持自带SVG图标、颜色字段可视化、角色名彩色标记、详情键图标映射加了大量新功能，若从老版本升级，请阅读ChangeLogl Helper
+# Andrea Novel Helper (小说助手)
+
+> **最新版本：0.4.0 (2025-01-15)**  
+> 🚀 **重大更新：新增WebDAV云端同步功能，支持不依赖Git跨设备协作写作！**  
+> 📝 近期已大幅重构异步加载与性能管线，若从老版本升级，建议阅读"近期版本速览"。
 
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
@@ -28,19 +19,32 @@
 [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/andrea-novel-helper?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 [![Open VSX Downloads](https://img.shields.io/open-vsx/dt/andreafrederica/andrea-novel-helper?label=Open%20VSX%20Downloads)](https://open-vsx.org/extension/andreafrederica/andrea-novel-helper)
 
-> 最新版本：**0.3.25 (2025-09-07)**  
-> 近期已大幅重构异步加载与性能管线，若从老版本 (<0.0.21) 升级，建议阅读本节“近期版本速览”。  
-> 近期版添加了大量新功能，若从老版本升级，请阅读ChangeLog
+## 📖 简介
 
-一个围绕“设定集 / 资料集”组织写作资产的 VS Code 小说写作增强扩展。核心理念：把你的世界观、角色、敏感词、专业词汇、正则高亮规则和章节文件放进一个“包”（Package），由“包管理器”统一可视化管理与快速生成。
-## 反馈和交流
-- Github Issues
+一个围绕"设定集 / 资料集"组织写作资产的 VS Code 小说写作增强扩展。核心理念：把你的世界观、角色、敏感词、专业词汇、正则高亮规则和章节文件放进一个"包"（Package），由"包管理器"统一可视化管理与快速生成。
+
+## 💬 反馈和交流
+
+- [GitHub Issues](https://github.com/AndreaFrederica/andrea-novel-helper/issues)
 - [QQ群【小说助手用户反馈和交流】](https://qm.qq.com/q/SG5A3XLoSQ)
 
 ## 🔔 近期版本速览
 
-### 0.3.25（2025-09-07）
-### ✨ 新增
+### 🌟 0.4.0（2025-01-15）- WebDAV云端同步
+
+#### ✨ 新增功能
+- **🌐 WebDAV云端同步功能**：支持与WebDAV服务器进行文件同步，实现跨设备协作写作
+- **📊 WebDAV同步状态栏**：实时显示同步状态，支持转圈动画和进度显示，让同步过程一目了然
+- **👤 WebDAV账户管理**：支持多账户配置和管理，方便切换不同的云端存储服务
+- **📁 WebDAV文件树视图**：可视化管理云端文件，支持文件上传、下载、删除等操作
+- **⚙️ WebDAV同步面板**：提供详细的同步配置和状态信息，包括同步规则、排除文件等设置
+- **🔍 错别字统计功能**：智能识别和统计文档中的错别字，提供详细的错误分析和修正建议
+- **📝 批注功能**：支持在文档中添加、编辑和管理批注，便于写作过程中的备注和协作交流
+
+
+### 0.3.25（2025-09-07）- 展开状态持久化
+
+#### ✨ 新增功能
 - 新增展开状态持久化功能：所有角色视图、当前文章角色视图（侧边栏和Explorer）、包管理器视图现在都会记住用户的展开/折叠状态
 - 新增跨文档展开状态继承：切换到新文档时，如果新文档尚无展开记录，可继承上个文档的展开集合（仅对共有的节点生效）
 - 新增设置开关 `AndreaNovelHelper.docRoles.inheritExpandedFromPrevious`：控制是否启用跨文档展开状态继承（默认开启）
@@ -49,99 +53,66 @@
 - 新增角色详情键图标映射：基于JSON配置为不同类型的角色字段显示对应的VS Code内置图标
 - 写作资源管理器现在支持显示参考资料（如图片、PDF等不计入字数统计的文件）
 - 支持基于自定义分类的角色显示，可以按类型或归属进行更灵活的分组
-### 🐛 修复
+
+#### 🐛 修复问题
 - 修复角色视图展开状态在重启VS Code后丢失的问题
 - 修复切换文档时布局被重置的问题
 - 略微优化了Decorations性能，减少大文件打开时的阻塞
 
-### 0.3.12（2025-08-25）
-### 🐛 修复
-- 修复了着色器偶发失效（修正了状态校验边界问题）
-### ✨ 新增
-- 新增了可视化角色卡编辑器
-- 新增了切换Json5格式角色库的默认打开编辑器开关
-- 支持了角色卡编辑器的一键转跳定义
-### ⚠️ 问题
-- 角色卡编辑器目前只支持light和dark两种主题，其他主题可能会有显示问题，后续会继续优化
+*更早的功能里程碑见 [CHANGELOG.md](CHANGELOG.md)*
 
-## [0.3.9] - 2025-08-23
-### 🐛 修复
-- 修复了着色器偶发失效（修正了缓存错误）
-- 修复了txt的预览不能分页的问题
-### ✨ 新增
-- 新增了智慧回车功能
-- 新增了智慧括号功能
-- 新增了版式设置
-- 新增了字体家族可视化编辑器
-- 新增了文章格式化工具
-- 新增了编辑器区和写作资源管理器区的快速导出txt和纯文本功能（右键）
+## 🚀 核心功能概览
 
+### 📦 包管理器（设定集中心）
+图形化管理 `novel-helper/` 下的"包"与资源文件（JSON5 / Markdown / TXT）。
 
-### 0.3.1 (2025-08-18)
-**新增**
-- 初始化向导改进：项目/库缺失时更直观的创建引导。
+### 📝 多格式设定集支持
+- **Markdown 设定集**：可用纯 Markdown 撰写角色/词汇/敏感词，自动解析章节式结构与字段标题
+- **JSON5 结构化数据**：角色库 / 敏感词库 / 词汇库 / 正则库统一 JSON5；支持注释、尾逗号、灵活顺序
+- **TXT 快速迁移**：支持放置 `*.txt`（一行一条）快速从其它软件/导出数据导入，后续再渐进转 Markdown / JSON5 精细化
 
-**修复（重点是前一轮“仓促异步化”遗留问题）**
-- Definition 在 JSON5 中失效。
-- 补全项颜色不显示 / 补全偶发整体失效。
-- 着色尾拖 / 着色随机失效 / 别名不着色。
-- “当前文章角色” 视图偶发不刷新。
-- 敏感词库文件内部仍报敏感词诊断（已针对多敏感词库支持修复）。
+### 🎯 智能补全与着色
+主名称 + 别名 / 词汇 / 敏感词 / 正则匹配全部支持补全、跳转、Hover、着色。
 
-### 0.2.24 (2025-08-17)
-- 角色加载状态在缺失描述文件时不消失的问题。
-- 版本号长时间未按语义化递增的矫正。
+### 🌳 角色层级树视图
+按【从属 → 类型 → 角色】分层，词汇/敏感词/正则表达式三类统一置底"特殊分类"分组；展开状态持久化。
 
-### 0.0.23 (2025-08-17) – 性能与准确性聚焦
-- Aho-Corasick 匹配全面异步化（共享 Worker）。
-- 装饰刷新差异化 / 正则分片切片 / 大文件防护策略。
-- 目录与字数聚合缓存 / 大文件近似字数 (≈) + 后台校准。
-- 分词过滤：短词自动边界验证 (`Intl.Segmenter`)；可配置开关与长度阈值。
-- Worker 构建等待 & 搜索超时防护，重建触发与缓存版本化。 
+### 👥 "当前文章角色" 双视图
+侧边栏 & Explorer 各一份实时显示当前文档出现过的角色/词汇/敏感词/正则命中，复用缓存免重复扫描；展开状态持久化，支持跨文档继承。
 
-（更早的功能里程碑见下文“Release Notes” 与 CHANGELOG）
+### 📊 写作资源视图（Word Count Explorer）
+可替代原生 Explorer，聚焦写作文件字数、排序、索引管理与拖拽组织，现在支持显示参考资料；展开状态持久化。
 
+### ⚡ 性能优化
+懒加载大纲、分片文件追踪数据库、读写降噪、共享缓存 + 异步刷新（含文档角色缓存模型）。
 
-## 🚀 核心亮点概览
+### 📈 写作统计与时间追踪
+- 分钟级/会话级统计
+- CPM（字符每分钟）峰值
+- 活跃度趋势
+- 写作统计仪表板
 
-1. 包管理器（设定集中心）：图形化管理 `novel-helper/` 下的“包”与资源文件（JSON5 / Markdown / TXT）。
-2. Markdown 设定集：可用纯 Markdown 撰写角色/词汇/敏感词，自动解析章节式结构与字段标题。
-3. JSON5 结构化数据：角色库 / 敏感词库 / 词汇库 / 正则库统一 JSON5；支持注释、尾逗号、灵活顺序。
-4. TXT 快速迁移：支持放置 `*.txt`（一行一条）快速从其它软件/导出数据导入，后续再渐进转 Markdown / JSON5 精细化。
-5. 智能补全与着色：主名称 + 别名 / 词汇 / 敏感词 / 正则匹配全部支持补全、跳转、Hover、着色。
-6. 角色层级树视图：按【从属 → 类型 → 角色】分层，词汇/敏感词/正则表达式三类统一置底“特殊分类”分组；展开状态持久化。
-7. “当前文章角色” 双视图：侧边栏 & Explorer 各一份实时显示当前文档出现过的角色/词汇/敏感词/正则命中，复用缓存免重复扫描。
-8. 写作资源视图（Word Count Explorer）：可替代原生 Explorer，聚焦写作文件字数、排序、索引管理与拖拽组织，现在支持显示参考资料。
-9. 性能优化：懒加载大纲、分片文件追踪数据库、读写降噪、共享缓存 + 异步刷新（含文档角色缓存模型）。
-10. 写作时间 & 统计仪表板：分钟级/会话级统计、CPM（字符每分钟）峰值、活跃度趋势。
-11. 一键导出txt/纯文本内容
-12. 写作预览工具
-13. 写作版式设置，格式化工具
-14. 角色卡编辑器（可视化）
-15. 支持基于自定义分类的角色显示，可以按类型或归属进行更灵活的分组
+### 🛠️ 其他实用工具
+- 一键导出txt/纯文本内容
+- 写作预览工具
+- 写作版式设置，格式化工具
+- 角色卡编辑器（可视化）
+- 敏感词识别与高亮
+- 正则表达式着色
 
----
-## ⚡ 0.0.23 匹配性能
-
-本版本开始：
-
-- Aho-Corasick 角色/词汇匹配迁移到共享 Worker 异步执行，避免主线程在长文本上被阻塞。
-- 增加了大文件防护，对于过大的文件（默认超过 100KB）将不再自动触发角色/词汇匹配，避免卡顿。
-- 增加了大文件字数估计，用户可在设置中调整阈值，先估算再慢慢统计。
-- 实时字数统计异步化处理，TimeStats的实时字数统计将不再阻塞主线程。
-
-
----
 ## 📦 包管理器深入指南
 
-包管理器视图（侧边栏 “包管理器”）以目录 = 包（Package）为单位管理四大主资源类型：
+包管理器视图（侧边栏 "包管理器"）以目录 = 包（Package）为单位管理四大主资源类型：
+
 | 资源 | 典型文件 | 支持格式 | 说明 |
 |------|----------|----------|------|
 | 角色 | `character-gallery.json5` / `*.md` / `*.txt` | JSON5 / Markdown / TXT | 角色设定、别名、颜色、类型、扩展字段；TXT 便于快速导入 |
 | 敏感词 | `sensitive-words.json5` / `*.md` / `*.txt` | JSON5 / Markdown / TXT | 内容安全或需要标识的词汇集合；TXT 一行一个词 |
 | 词汇 | `vocabulary.json5` / `*.md` / `*.txt` | JSON5 / Markdown / TXT | 世界观专有名词、术语表；TXT 快速迁移来源数据 |
 | 正则规则 | `regex-patterns.json5` | JSON5 | 自定义正则高亮/着色规则 |
+
 ### 包结构建议
+
 ```
 novel-helper/
   main/                         # 主设定包（集中核心/跨包共享设定）
@@ -155,7 +126,9 @@ novel-helper/
   faction-b/                    # 阵营 / 派系 B
     character-gallery.json5
 ```
-可将“人物 / 地点 / 事件 / 道具”等再拆分为不同包，利于大型世界观分层：
+
+可将"人物 / 地点 / 事件 / 道具"等再拆分为不同包，利于大型世界观分层：
+
 ```
 novel-helper/
   characters-core/              # 核心角色（主视角 / 常驻）
@@ -165,7 +138,7 @@ novel-helper/
     scarlet_roles.md
     kappa_roles.md
   locations/                    # 地点（文件名含 role/character 则按角色规则；或使用 vocabulary 形式）
-    locations_vocabulary.md     # 以“地点名”作为词汇/可着色实体
+    locations_vocabulary.md     # 以"地点名"作为词汇/可着色实体
   events/                       # 重大事件（可当词汇/角色混合，取决于命名关键字）
     historic_roles.md
   items/                        # 重要神器 / 道具
@@ -177,15 +150,18 @@ novel-helper/
   regex/                        # 着色正则
     regex-patterns.json5
 ```
-> 拆分策略：按“检索与协作粒度”决定；频繁联动/引用的放在同包，低耦合专题独立包。Markdown 追加文件命名确保含关键词 (roles / character / vocabulary / sensitive 等)。
+
+**拆分策略**：按"检索与协作粒度"决定；频繁联动/引用的放在同包，低耦合专题独立包。Markdown 追加文件命名确保含关键词 (roles / character / vocabulary / sensitive 等)。
 
 ### 示例设定条目（Markdown 片段）
+
 下面展示一个角色（含多字段 + 自定义字段）在 Markdown 中的写法：
+
 ```markdown
 # 博丽灵梦
 
 ## 立绘
-![博丽灵梦（萃梦想 立绘）](https://upload.thbwiki.cc/b/ba/%E5%8D%9A%E4%B8%BD%E7%81%B5%E6%A2%A6%EF%BC%88%E8%90%83%E6%A2%A6%E6%83%B3%E7%AB%8B%E7%BB%98%EF%BC%89.png)
+![](https://upload.thbwiki.cc/b/ba/%E5%8D%9A%E4%B8%BD%E7%81%B5%E6%A2%A6%EF%BC%88%E8%90%83%E6%A2%A6%E6%83%B3%E7%AB%8B%E7%BB%98%EF%BC%89.png)
 
 ## 别名
 - 博丽灵梦
@@ -193,13 +169,13 @@ novel-helper/
 - Reimu
 
 ## 描述
-乐园的巫女。作为“博丽神社”的现任巫女，灵梦负责维持幻想乡的安宁与秩序——把异变当作日常，把非日常当作寻常。她看似大而化之，实则直觉敏锐，面对异变时往往以最直接的方式闯到问题核心；神社香火的清淡与钱包的清冷则是她永恒的现实烦恼。她在空中轻盈自如，飞舞的御札与阴阳玉描出红白交错的轨迹，最终以“梦想封印”一口气收束混乱。
+乐园的巫女。作为"博丽神社"的现任巫女，灵梦负责维持幻想乡的安宁与秩序——把异变当作日常，把非日常当作寻常。她看似大而化之，实则直觉敏锐，面对异变时往往以最直接的方式闯到问题核心；神社香火的清淡与钱包的清冷则是她永恒的现实烦恼。她在空中轻盈自如，飞舞的御札与阴阳玉描出红白交错的轨迹，最终以"梦想封印"一口气收束混乱。
 
 ## 类型
 主角
 
 ## 从属
-博丽神社（现任巫女，负责维护博丽大结界与日常的“妖怪退治”）。
+博丽神社（现任巫女，负责维护博丽大结界与日常的"妖怪退治"）。
 
 ## 颜色
 #e94152ff —— 红白主色（巫女服与阴阳玉的印象色）。
@@ -210,12 +186,12 @@ novel-helper/
 
 ## 性格
 - 大而化之、随性懒散，但直觉敏锐、行动果断。
-- 不愿拐弯抹角，讲究“解决就完了”的实干路线。
+- 不愿拐弯抹角，讲究"解决就完了"的实干路线。
 - 对金钱不敏感，却又为神社香火清淡而烦恼。
 
 ## 背景
-- 人类。幻想乡“博丽神社”的巫女。
-- 处理异变是她的日常工作，也因此与各路人妖都“熟得过分”。
+- 人类。幻想乡"博丽神社"的巫女。
+- 处理异变是她的日常工作，也因此与各路人妖都"熟得过分"。
 - 居住在博丽神社，守护并调停人妖两界的平衡。
 
 ## 技能
@@ -234,16 +210,18 @@ novel-helper/
 - **乐园的巫女** 等（各作随情境变化）。
 
 ## 爱好
-- 与其说“爱好”，不如说“把异变当工作”；偶尔也会悠闲地泡茶、打扫神社（如果她想起来的话）。
+- 与其说"爱好"，不如说"把异变当工作"；偶尔也会悠闲地泡茶、打扫神社（如果她想起来的话）。
 
 ## 关系（简述）
-- 与雾雨魔理沙等常在异变中并肩或对阵；与人类与妖怪两边都交情复杂，既是调停者也是“对手”。（概括性描述）
+- 与雾雨魔理沙等常在异变中并肩或对阵；与人类与妖怪两边都交情复杂，既是调停者也是"对手"。（概括性描述）
 
 ## 备注
-- 作为系列门面的“红白”，灵梦的立场介于“人之侧”与“幻想乡整体秩序”之间：与其讨好某一方，不如把问题本身一击了断。
-- 神社香火、打赏与“工作费”常年不足，这一点在日常段子与设定补充中反复出现。
+- 作为系列门面的"红白"，灵梦的立场介于"人之侧"与"幻想乡整体秩序"之间：与其讨好某一方，不如把问题本身一击了断。
+- 神社香火、打赏与"工作费"常年不足，这一点在日常段子与设定补充中反复出现。
 ```
+
 ### 常用操作（右键 / 命令）
+
 | 操作 | 作用 |
 |------|------|
 | 新建子包 | 在当前包目录下创建新子目录（继承结构）|
@@ -255,25 +233,29 @@ novel-helper/
 | 在文件资源管理器中显示 | 跳转系统文件夹 |
 | 重命名 / 删除 | 修改或移除文件/包 |
 | 复制 / 剪切 / 粘贴 | 包或资源的物理复制移动 |
-拖拽：
-* 同目录内：重排文件顺序（配合写作视图索引更直观）
-* 跨目录：物理移动文件/包
-* 支持直接放置 `.txt` 文件（角色 / 敏感词 / 词汇）后再逐步结构化迁移为 JSON5 / Markdown。
 
----
-## 📝 Markdown & TXT 设定集语法
+**拖拽**：
+- 同目录内：重排文件顺序（配合写作视图索引更直观）
+- 跨目录：物理移动文件/包
 
-Markdown 方式可一次性定义多个角色 / 词汇 / 敏感词。TXT 方式用于“快速粗导入”：
-* `*.txt` 读取规则（简单模式）：一行一个条目，忽略空行；自动去重（同名合并至第一次出现）；默认类型：放入的上下文（角色/敏感词/词汇）推断。
-* 可后续右键“打开方式…”转为 Markdown 或复制到 JSON5 精细补充字段。
+支持直接放置 .txt 文件（角色 / 敏感词 / 词汇）后再逐步结构化迁移为 JSON5 / Markdown。
 
-Markdown 解析逻辑：
+### 📝 Markdown & TXT 设定集语法
+
+Markdown 方式可一次性定义多个角色 / 词汇 / 敏感词。TXT 方式用于"快速粗导入"：
+
+- **\*.txt 读取规则（简单模式）**：一行一个条目，忽略空行；自动去重（同名合并至第一次出现）；默认类型：放入的上下文（角色/敏感词/词汇）推断。
+- 可后续右键"打开方式…"转为 Markdown 或复制到 JSON5 精细补充字段。
+
+**Markdown 解析逻辑**：
+
 1. 顶级或同级标题（# / ## / ### ...）作为角色起点。
-2. 若该标题下存在下一层子标题，且这些子标题名称属于已知字段（中英文均可），则判定为“结构化角色”。
+2. 若该标题下存在下一层子标题，且这些子标题名称属于已知字段（中英文均可），则判定为"结构化角色"。
 3. 没有字段子标题的简单标题 == 仅 name 角色。
-4. 字段标题支持中文别名：例如 “外貌” = appearance, “性格” = personality。
+4. 字段标题支持中文别名：例如 "外貌" = appearance, "性格" = personality。
 
-示例（多角色混合）：
+**示例（多角色混合）**：
+
 ```markdown
 # 艾丽西亚
 ## 描述
@@ -290,62 +272,28 @@ Markdown 解析逻辑：
 ```
 
 ### 支持字段（英文 / 中文别名）
-```
-novel-helper/
-  main/                       # 主设定包（命名需含关键字方可被扫描）
-    character-gallery.json5   # 角色（主集合）
-    world_roles.md            # 角色追加（MD：多角色/字段）
-    sensitive-words.json5     # 敏感词（或 sensitive-words.txt / sensitive-extra.md）
-    vocabulary.json5          # 词汇（或 vocabulary.txt / glossary_vocabulary.md）
-    regex-patterns.json5      # 正则规则（仅 json5 支持）
-  faction-a/
-    character-gallery.json5   # 分支/阵营角色（文件名带 character / role）
-  faction-b/
-    character-gallery.json5
-  notes/                      # 纯资料：不含关键字 -> 不会被自动解析（可当普通笔记）
-    worldbuilding.md
-```
-> 说明：不想被解析的设定文稿命名不要包含上述关键字；想被解析的必须包含并使用支持的扩展名。
-name(名称), description(描述), type(类型), color(颜色), affiliation(从属), alias/aliases(别名), age(年龄), gender(性别), occupation(职业), personality(性格), appearance(外貌), background(背景), relationship(s)(关系), skill(s)(技能), weakness(es)(弱点), goal(s)(目标), motivation(动机), fear(s)(恐惧), secret(s)(秘密), quote(s)(台词), note(s)(备注), tag(s)(标签), category(分类), level(等级), status(状态), location(位置), origin(出身), family(家庭), education(教育), hobby/hobbies(爱好)
+
+**name**(名称), **description**(描述), **type**(类型), **color**(颜色), **affiliation**(从属), **alias/aliases**(别名), **age**(年龄), **gender**(性别), **occupation**(职业), **personality**(性格), **appearance**(外貌), **background**(背景), **relationship(s)**(关系), **skill(s)**(技能), **weakness(es)**(弱点), **goal(s)**(目标), **motivation**(动机), **fear(s)**(恐惧), **secret(s)**(秘密), **quote(s)**(台词), **note(s)**(备注), **tag(s)**(标签), **category**(分类), **level**(等级), **status**(状态), **location**(位置), **origin**(出身), **family**(家庭), **education**(教育), **hobby/hobbies**(爱好)
 
 ### 文件命名规范（必须匹配才能被扫描加载）
-### 自定义 / 扩展字段
-解析器策略（见 `markdownParser.ts`）：
-1. 标准字段名或其中文别名会被规范化为标准英文 key（例如 “外貌” -> `appearance`）。
-2. 任何未出现在内置映射里的子标题，直接以小写（去首尾空白）作为新字段 key，值为其下方 Markdown 原文（保留格式）。
-3. 同名字段再次出现会覆盖前一个（建议同一字段集中书写）。
-4. 角色标题下未归属任何字段的直写文本，会并入 `description`（若已存在则前置补入）。
-5. `aliases/别名` 会按逗号或换行拆分成数组；其他自定义字段不做结构分析，只存 Markdown。
 
-示例（自定义字段）：
-```markdown
-# 黑曜导师
-## 描述
-沉默而克制的炼金顾问。
-## 战斗风格
-偏向防御反击，擅长利用环境。
-## 信仰
-旧王廷秘教
-## 装备
-- 黑曜法杖\\n- 腐蚀手甲
-```
-最终将追加字段：`战斗风格` -> `战斗风格` (key: `战斗风格`)、`信仰`、`装备`，可在 Hover 中被使用（若前端实现显示）。
-基于 `loadRoles` / `isRoleFile` 规则，只有文件名同时满足“包含关键词 + 允许扩展名”才会被自动加载。
+基于 `loadRoles` / `isRoleFile` 规则，只有文件名同时满足"包含关键词 + 允许扩展名"才会被自动加载。
 
 | 资源类型 | 允许扩展 | 关键词(文件名中需包含任一) | 示例 |
-|----------|----------|----------------------------|------|
+|----------|----------|---------------------------|------|
 | 角色 | .json5 .md .txt | `character-gallery` `character` `role` `roles` | `character-gallery.json5` / `world_roles.md` |
 | 敏感词 | .json5 .md .txt | `sensitive-words` `sensitive` | `sensitive-words.txt` |
 | 词汇 | .json5 .md .txt | `vocabulary` `vocab` | `my_vocabulary.md` |
 | 正则规则 | 仅 .json5 | `regex-patterns` `regex` | `regex-patterns.json5` |
 
-注意：
-1. 正则规则不支持 `.md` / `.txt`。
-2. 其它任意命名（如 `people.md`）即使结构正确也不会被解析。
-3. 推荐：**主集合使用** `character-gallery.json5`；章节/专题补充使用 `xxx_roles.md`；批量外部迁移先放 `xxx_vocabulary.txt` / `xxx_sensitive.txt`。
-4. 不要在文件名里只写单个极短词（例如 `role.md` + 无字段）而期望高性能批量导入，尽量保持清晰前缀。
+**注意**：
 
-开发者提示：判定是否解析的关键字列表在源码 `src/utils/utils.ts` 中常量 `roleKeywords`：
+- 正则规则不支持 .md / .txt。
+- 其它任意命名（如 `people.md`）即使结构正确也不会被解析。
+- **推荐**：主集合使用 `character-gallery.json5`；章节/专题补充使用 `xxx_roles.md`；批量外部迁移先放 `xxx_vocabulary.txt` / `xxx_sensitive.txt`。
+- 不要在文件名里只写单个极短词（例如 `role.md` + 无字段）而期望高性能批量导入，尽量保持清晰前缀。
+
+**开发者提示**：判定是否解析的关键字列表在源码 `src/utils/utils.ts` 中常量 `roleKeywords`。
 ```ts
 const roleKeywords = [
   'character-gallery', 'character', 'role', 'roles',
@@ -371,62 +319,244 @@ Markdown 中的相对图片 `![](images/a.png)` 会自动转换为绝对 `file:/
 ### 颜色字段解析
 支持：HEX (#RGB/#RRGGBB/#RRGGBBAA/#RGBA)、rgb()/rgba()、hsl()/hsla()、hsv()/hsva()；混入文字仍可提取 (`#ff1e40 (主色)`)。
 
----
-## 📄 JSON5 数据格式规范
+### 自定义 / 扩展字段
 
-所有库文件（除正则配置外）均是“数组形式”的条目集合：
+解析器策略（见 `markdownParser.ts`）：
+
+1. 标准字段名或其中文别名会被规范化为标准英文 key（例如 "外貌" -> appearance）。
+2. 任何未出现在内置映射里的子标题，直接以小写（去首尾空白）作为新字段 key，值为其下方 Markdown 原文（保留格式）。
+3. 同名字段再次出现会覆盖前一个（建议同一字段集中书写）。
+4. 角色标题下未归属任何字段的直写文本，会并入 description（若已存在则前置补入）。
+5. `aliases/别名` 会按逗号或换行拆分成数组；其他自定义字段不做结构分析，只存 Markdown。
+
+**示例（自定义字段）**：
+
+```markdown
+# 黑曜导师
+## 描述
+沉默而克制的炼金顾问。
+## 战斗风格
+偏向防御反击，擅长利用环境。
+## 信仰
+旧王廷秘教
+## 装备
+- 黑曜法杖
+- 腐蚀手甲
+```
+
+最终将追加字段：`战斗风格` -> 战斗风格 (key: 战斗风格)、`信仰`、`装备`，可在 Hover 中被使用（若前端实现显示）。
+
+## 📝 数据格式说明
+
+### JSON5 格式示例
+
+#### 角色库示例（character-gallery.json5）
+
 ```json5
 [
   {
     name: '艾丽西亚',                // 角色/词条主名称（必填）
     type: '主角',                    // 类型：决定默认色，可自定义扩展
     aliases: ['小艾','旅者'],        // 别名数组（可选）
-    description: '北境旅者...',      // Markdown 片段 / 纯文本
+    description: '北境旅者，拥有冰霜魔法的天赋。性格坚毅但内心温柔，为了寻找失踪的妹妹而踏上冒险之路。',
     color: '#ff1e40',               // 优先级高于类型默认色
     affiliation: '北境雪原',         // 从属/阵营
     priority: 10,                   // 着色/匹配优先级（数值小优先）
-    appearance: '高挑，绿瞳',        // 任意扩展字段都保留
+    appearance: '高挑，绿瞳，银发',   // 任意扩展字段都保留
+    age: 22,                        // 年龄
+    weapon: '冰霜法杖',             // 武器
+    skills: ['冰霜魔法', '治疗术', '剑术基础'],
+    personality: '坚毅、温柔、责任感强',
+    background: '出生于北境的魔法世家，从小接受严格的魔法训练'
+  },
+  {
+    name: '暗影刺客',
+    type: '反派',
+    aliases: ['影子', '夜行者'],
+    description: '神秘的刺客组织成员，行踪诡秘。',
+    color: '#2d2d2d',
+    affiliation: '暗影公会',
+    priority: 5,
+    skills: ['潜行', '暗杀', '毒术'],
+    weapon: '双刃匕首'
   }
 ]
 ```
 
-### 敏感词 / 词汇
-```json5
-[{ name: '禁忌术', type: '敏感词', color: '#ff0000', description: '需要替换' }]
-[{ name: '魔能', type: '词汇', description: '世界观能量单位' }]
-```
-TXT 快速格式（示例 `sensitive-words.txt`）：
-```
-禁忌术
-违禁品
-审查词
-```
-TXT 快速格式（示例 `vocabulary.txt`）：
-```
-魔能
-源质结晶
-反应堆
-```
+#### 敏感词库示例（sensitive-words.json5）
 
-### 正则规则 (regex-patterns.json5)
 ```json5
 [
-  { name: '书名号内容', type: '正则表达式', regex: '《[^》]+》', regexFlags: 'g', color: '#0088ff', priority: 50 },
-  { name: '单引号内容', type: '正则表达式', regex: "'[^']+'", regexFlags: 'g', color: '#ffaa00' }
+  {
+    name: '血腥',
+    description: '暴力内容警告',
+    category: '暴力',
+    severity: 'high'
+  },
+  {
+    name: '政治敏感词',
+    aliases: ['敏感政治', '政治话题'],
+    description: '涉及政治敏感内容',
+    category: '政治',
+    severity: 'critical'
+  }
 ]
 ```
-字段说明：
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| name | 是 | 规则名称/显示名 |
-| type | 是 | 固定可用 '正则表达式' 或自定义分类 |
-| regex | 是 | JS 正则表达式主体（不含 `/` 分隔符）|
-| regexFlags | 否 | g / i / m / u / s 等组合 |
-| color | 否 | 覆盖类型颜色 |
-| priority | 否 | 匹配/着色优先（数值小优先）|
 
----
-## 🔍 补全 / 着色 / 跳转行为
+#### 词汇库示例（vocabulary.json5）
+
+```json5
+[
+  {
+    name: '魔法水晶',
+    description: '蕴含魔力的天然水晶，可用于制作魔法道具或增强法术威力。',
+    category: '道具',
+    rarity: 'rare',
+    properties: ['魔力增幅', '法术储存']
+  },
+  {
+    name: '龙语',
+    aliases: ['古龙语', '龙族语言'],
+    description: '古代龙族使用的神秘语言，掌握者可以施展强大的龙语魔法。',
+    category: '语言',
+    difficulty: 'legendary'
+  }
+]
+```
+
+#### 正则规则示例（regex-patterns.json5）
+
+```json5
+[
+  {
+    name: '时间标记',
+    pattern: '\\d{4}年\\d{1,2}月\\d{1,2}日',
+    description: '高亮时间格式',
+    color: '#4CAF50',
+    priority: 1
+  },
+  {
+    name: '魔法咒语',
+    pattern: '【[^】]+】',
+    description: '魔法咒语格式',
+    color: '#9C27B0',
+    priority: 2
+  },
+  {
+    name: '心理描写',
+    pattern: '（[^）]*心想[^）]*）',
+    description: '心理活动描写',
+    color: '#FF9800',
+    priority: 3
+  }
+]
+```
+
+### Markdown 格式示例
+
+```markdown
+# 艾丽西亚
+
+## 描述
+这是一个复杂的角色，有着**丰富的内心世界**和*独特的经历*。
+
+北境旅者，拥有冰霜魔法的天赋。性格坚毅但内心温柔，为了寻找失踪的妹妹而踏上冒险之路。
+
+主要特点：
+- 善良而坚强
+- 富有同情心
+- 面对困难从不退缩
+
+> 这个角色代表着希望与勇气
+
+## 类型
+主角
+
+## 别名
+- 小艾
+- 旅者
+- 冰霜法师
+
+## 颜色
+rgb(255, 30, 64) - 温暖的红色，也可以用 #ff1e40 或 hsl(348, 100%, 56%)
+
+## 从属
+北境雪原
+
+## 外貌
+- **身高**: 175cm
+- **发色**: 银色长发
+- **眼睛**: 明亮的绿色眼眸
+- **特征**: 左手腕有一个小小的疤痕
+
+## 性格
+性格复杂多面：
+
+1. **表面**: 开朗活泼，善于交际
+2. **内心**: 有时会感到孤独和迷茫
+3. **压力下**: 表现出惊人的冷静和理智
+
+```
+核心信念：永远不要放弃希望
+```
+
+## 背景
+出生在北境的魔法世家，从小接受严格的魔法训练。
+
+### 童年
+- 在雪原中长大
+- 喜欢研究古老的魔法典籍
+
+### 青少年时期
+- 掌握了基础的冰霜魔法
+- 经历了妹妹失踪的重大变故
+
+### 成年时期
+- 踏上寻找妹妹的冒险之路
+- 不断提升自己的魔法能力
+
+## 关系
+- **妹妹**: 莉莉安（失踪，正在寻找）
+- **导师**: 冰霜大法师（魔法启蒙老师）
+- **伙伴**: 火焰剑士雷克斯（冒险途中结识）
+
+## 技能
+1. 冰霜魔法（高级）
+2. 治疗术（中级）
+3. 剑术基础
+4. 古文字解读
+
+## 武器
+冰霜法杖 - 家族传承的魔法道具
+
+## 弱点
+- 对火系魔法抗性较低
+- 过于信任他人
+- 对妹妹的思念影响判断
+
+## 目标
+找到失踪的妹妹，揭开家族的秘密
+
+## 台词
+"冰雪虽冷，但我的心永远温暖。"
+"为了妹妹，我愿意面对任何困难。"
+
+## 备注
+角色设计灵感来源于北欧神话中的冰雪女神
+```
+
+### 文件命名规范
+
+| 资源类型 | 允许扩展 | 关键词(文件名中需包含任一) | 示例 |
+|----------|----------|----------------------------|------|
+| 角色 | .json5 .md .txt | `character-gallery` `character` `role` `roles` | `character-gallery.json5` / `world_roles.md` |
+| 敏感词 | .json5 .md .txt | `sensitive-words` `sensitive` | `sensitive-words.txt` |
+| 词汇 | .json5 .md .txt | `vocabulary` `vocab` | `my_vocabulary.md` |
+| 正则规则 | 仅 .json5 | `regex-patterns` `regex` | `regex-patterns.json5` |
+
+## 🔍 智能功能说明
+
+### 补全 / 着色 / 跳转行为
 
 | 资源 | 触发方式 | Hover | 跳转定义 | 备注 |
 |------|----------|-------|----------|------|
@@ -435,82 +565,147 @@ TXT 快速格式（示例 `vocabulary.txt`）：
 | 词汇 | 前缀 | 描述 | 源位置 | 与角色独立，不着色冲突 |
 | 正则 | 模式匹配 | 规则说明 | 规则定义 | 高亮任意结构文本 |
 
-优先级：显式 priority < 颜色与类型默认；正则命中按 priority 升序应用，防止覆盖。
+## ⚙️ 重要配置
 
----
-## 📊 写作资源视图（Word Count Explorer）要点
-* 支持 `.wcignore` + `.gitignore` 忽略（可配置是否尊重 wcignore）。
-* 手动排序：稀疏索引 (默认步长 10) + 自动重排 + 前导零格式化。
-* 自定义显示：raw / wan / k / qian。
-* 上下插入文件/文件夹、批量生成索引、清除索引、跨目录拖动移动。
-* 现在支持显示参考资料（如图片、PDF等不计入字数统计的文件），方便在写作资源管理器中查看和管理相关参考资料。
+| 配置项 | 说明 |
+|--------|------|
+| `AndreaNovelHelper.outline.lazyMode` | 未打开大纲编辑器不生成大纲文件 |
+| `AndreaNovelHelper.fileTracker.writeLegacySnapshot` | 控制是否写出旧版 `file-tracking.json` |
+| `AndreaNovelHelper.timeStats.persistReadOnlySessions` | 是否持久化纯阅读会话 |
+| `AndreaNovelHelper.wordCount.order.*` | 手动排序显示/索引步长/补零/自动重排 |
+| `AndreaNovelHelper.wordCount.displayFormat` | 字数格式转换 |
+| `AndreaNovelHelper.wordCount.debug` | 启用字数统计调试日志 |
+| `AndreaNovelHelper.docRoles.inheritExpandedFromPrevious` | 控制是否启用跨文档展开状态继承 |
 
-相关配置前缀：`AndreaNovelHelper.wordCount.*`
+## 🛠️ 快速开始
 
----
-## ⚙️ 关键配置补充
-| 键 | 说明 |
-|----|------|
-| outline.lazyMode | 未打开大纲编辑器不生成大纲文件 |
-| fileTracker.writeLegacySnapshot | 控制是否写出旧版 `file-tracking.json` |
-| timeStats.persistReadOnlySessions | 是否持久化纯阅读会话 |
-| wordCount.order.* | 手动排序显示/索引步长/补零/自动重排 |
-| wordCount.displayFormat | 字数格式转换 |
-| wordCount.debug | 启用字数统计调试日志（编码探测/忽略命中/零结果原因） |
+### 🚀 项目初始化向导（推荐）
 
----
-## 🛠️ 示例工作流
-1. 新建 `novel-helper/main/` 目录，创建 `character-gallery.json5`；若已有外部名单，先贴入 `character-gallery.txt`。
-2. 若使用 TXT：启动后补全 / 解析可见基础高亮；逐步转 Markdown 或补全 JSON5 字段。
-3. 创建 `sensitive-words.json5`、`vocabulary.json5` 或先丢入对应 `.txt` 进行批量迁移。
-4. 根据需要添加 `regex-patterns.json5` 定义高亮规则。
-5. 使用 Word Count Explorer 组织章节：索引/排序/重排/拖拽。
-6. 持续补齐描述、别名、颜色、扩展字段（Markdown 或 JSON5）。
-7. 查看写作统计 / 时间追踪，优化节奏。
+**自动启动**：当您打开一个空的工作区时，初始化向导会自动弹出，引导您快速配置项目。
 
----
-## 🧪 性能与文件追踪 (0.0.20)
-详见 CHANGELOG：分片文件追踪 DB、惰性大纲、只读会话抑制、脏分片原因日志、缓存与异步刷新。
+**手动启动**：
+1. **启动初始化向导**：打开命令面板（Ctrl+Shift+P），搜索并执行 "Andrea Novel Helper: Initialize Project"
+2. **配置项目信息**：按向导提示填写项目名称、描述、作者等基本信息
+3. **自动生成配置**：向导会自动创建 `anhproject.md` 项目配置文件和基础目录结构
+4. **开始写作**：配置完成后即可开始使用所有功能进行创作
 
----
-## 📝 已知问题
-（节选，更多见 Issue / CHANGELOG）
-* 极大库首轮扫描可能轻微延迟。
-* 分词偶尔误判（考虑更换分词引擎）。
-* Markdown 角色解析依赖标题结构，非规范标题可能被视为普通文本。
-* 分词尚不理想 ~~某些词 比如说“睡觉” 觉 可能被发现为角色~~ 单字角色名已经优化
-* ~~角色名字发生包含时，可能会导致着色不准确~~
-* 没有 UUID 支持，需要手动保证角色名字不重合
-* 目前没有关系类型支持，后期可能参考数据库的关系模式添加
-* ~~没有自定义角色类型支持，后期可能添加~~
-* ~~实验性字数统计功能可能会有性能问题，尤其在大项目中（后续考虑加入缓存机制）~~
+> 💡 **提示**：向导会在检测到空工作区时自动弹出，为新用户提供最佳的入门体验。
 
----
-## 🧩 Release Notes
-(早期版本节选，完整参见 CHANGELOG)
+### 📝 项目配置文件示例（anhproject.md）
 
-### 0.0.21
-角色层级树（按从属 → 类型 → 角色，特殊类型置底分组）、“当前文章角色” 双视图（侧边栏 & Explorer）、展开状态持久化、共享文档角色缓存（避免重复扫描）、重复 TreeItem ID 报错修复。
+```markdown
+# testbook
 
-### 0.0.20
-Word Count Explorer 大幅升级、包管理器资源操作完善、性能分片与懒加载、统计优化。
+## 项目名称
+testbook-一本测试小说
 
----
-## 🤝 反馈
+## 项目描述
+这是一个小说项目
+
+## 作者
+AndreaFrederica
+
+## 项目UUID
+145dd1ab-a4b6-40d7-b4c9-461fbf04fac8
+
+## 封面
+
+
+## 项目简介
+项目简介1111111111111111111122222
+
+## 标签
+小说, 创作
+
+## 创建时间
+2025-09-13T17:41:55.107Z
+
+## 更新时间
+2025-09-13T17:41:55.118Z
+```
+
+### 🔧 手动配置（高级用户）
+
+1. **创建设定包**：新建 `novel-helper/main/` 目录，创建 `character-gallery.json5`
+2. **导入现有数据**：若已有外部名单，先贴入 `character-gallery.txt`
+3. **逐步完善**：启动后补全 / 解析可见基础高亮；逐步转 Markdown 或补全 JSON5 字段
+4. **添加其他资源**：创建 `sensitive-words.json5`、`vocabulary.json5` 或先丢入对应 `.txt` 进行批量迁移
+5. **自定义高亮**：根据需要添加 `regex-patterns.json5` 定义高亮规则
+6. **组织章节**：使用 Word Count Explorer 组织章节：索引/排序/重排/拖拽
+7. **持续优化**：持续补齐描述、别名、颜色、扩展字段（Markdown 或 JSON5）
+8. **查看统计**：查看写作统计 / 时间追踪，优化节奏
+
+## 🌐 WebDAV 云端同步使用指南
+
+### 配置 WebDAV 账户
+
+1. 打开命令面板（Ctrl+Shift+P）
+2. 搜索并执行 "Andrea Novel Helper: Configure WebDAV"
+3. 输入 WebDAV 服务器信息：
+   - 服务器地址（如：https://your-webdav-server.com/dav/）
+   - 用户名和密码
+   - 账户名称（用于区分多个账户）
+
+### 开始同步
+
+1. 配置完成后，在状态栏会显示 WebDAV 同步状态
+2. 点击状态栏图标可以手动触发同步
+3. 支持自动同步和手动同步两种模式
+
+### 同步规则
+
+- 默认同步整个工作区
+- 自动排除 `.git` 和 `.anh-fsdb` 文件夹
+- 支持自定义排除规则
+- 冲突时优先保留本地文件
+
+### WebDAV 服务器推荐
+
+- **坚果云**：国内用户推荐，稳定可靠
+- **Nextcloud**：开源自建方案
+- **ownCloud**：企业级解决方案
+- **Box**、**Dropbox** 等商业云存储服务
+
+## 📋 已知问题
+
+- 极大库首轮扫描可能轻微延迟
+- 分词偶尔误判（考虑更换分词引擎）
+- Markdown 角色解析依赖标题结构，非规范标题可能被视为普通文本
+- 没有 UUID 支持，需要手动保证角色名字不重合
+- 目前没有关系类型支持，后期可能参考数据库的关系模式添加
+
+## 🤝 贡献与反馈
+
 欢迎提交 Issue / PR 改进字段支持、解析策略、性能与新场景。
 
----
-**Enjoy Writing!** ✨
+### 📢 社区讨论
 
-## 演示 (部分沿用旧示例)
+- **GitHub Discussions**: [https://github.com/AndreaFrederica/andrea-novel-helper/discussions](https://github.com/AndreaFrederica/andrea-novel-helper/discussions)
+  - 功能建议和想法交流
+  - 使用经验分享
+  - 问题求助和解答
+  - 社区互动和反馈
+
+### 🐛 问题报告
+
+- **GitHub Issues**: 用于报告 Bug 和提交功能请求
+- **Pull Requests**: 欢迎直接提交代码改进
+
+## 📄 许可证
+
+本项目采用 [MPL-2.0](https://www.mozilla.org/MPL/2.0/) 许可证。
+
+## 📺 演示 (部分沿用旧示例)
 
 ### 旧示例
 
+以下演示来自 0.0.x 版本，展示了扩展的核心功能：
+
 - **创建角色**
-  ![创建角色演示](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/%E5%88%9B%E5%BB%BA%E8%A7%92%E8%89%B2.gif)
+  ![创建角色](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/%E5%88%9B%E5%BB%BA%E8%A7%92%E8%89%B2.gif)
 
 - **为角色创建颜色**
-  ![创建颜色](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/为角色创建颜色.gif)
+  ![为角色创建颜色](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/为角色创建颜色.gif)
 
 - **中文分词**
   ![中文分词](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/中文分词.gif)
@@ -530,105 +725,12 @@ Word Count Explorer 大幅升级、包管理器资源操作完善、性能分片
 - **实验性大纲**
   ![实验性大纲](https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/master/resources/实验性大纲.gif)
 
-## 发布说明 / Release Notes
+## 🙏 致谢
 
-### 0.0.1
-
-初始版本：实现基础的 JSON5 角色库加载、分词补全和着色功能
-添加别名支持，补全与着色同时涵盖主名称与所有别名
-优化补全结果排序：前缀匹配优先
-引入 HoverProvider，鼠标悬停显示简介、类型、从属与颜色预览
-实现 Go To Definition（Ctrl/Cmd+Click / F12）跳转至角色定义
-新增右键命令 “Create Role from Selection”，支持交互式创建新角色
-增加文件系统监视器，角色库文件保存时自动刷新补全与着色
-使用 `Intl.Segmenter` 实现中文分词，支持多种语言
-
-### 0.0.2
-
-支持部分 i18n，添加中文语言包
-增加角色类型支持，提供默认颜色映射
-
-### 0.0.4
-
-修复了不能动态提供建议的问题
-
-### 0.0.5
-
-增加 CSpell 字典生成，支持角色名拼写检查
-
-### 0.0.6
-
-重构装饰更新逻辑，独立 `updateDecorations` 函数
-优化工具函数，添加区间重叠检查和正则转义功能
-现在能避免 hoverRanges 区间重复的问题
-修复了角色信息窗口不能显示颜色的 bug
-
-### 0.0.8
-
-新增实验性字数统计功能，提供对工作区内所有支持文件的字数统计
-
-### 0.0.9
-修复了非资源管理器面板打开文件强制重定向到资源管理器的问题
-新增敏感词和词汇功能，更新相关配置和命令
-更改了 `rolesFile` 的默认路径为 `novel-helper/character-gallery.json5`，以便更好地适应项目结构
-
-### 以后的版本见ChangeLog
-## 问题
-
-分词尚不理想 ~~某些词 比如说“睡觉” 觉 可能被发现为角色~~ 单字角色名已经优化
-角色名字发生包含时，可能会导致着色不准确
-没有 UUID 支持，需要手动保证角色名字不重合
-目前没有关系类型支持，后期可能参考数据库的关系模式添加
-没有自定义角色类型支持，后期可能添加
-实验性字数统计功能可能会有性能问题，尤其在大项目中（后续考虑加入缓存机制）
-
-**Enjoy / Happy Writing!**
-# andrea-novel-helper README
-
-andrea-novel-helper 是一个面向 Markdown 写作的 VS Code 扩展，帮助你：
-
-- 在项目根目录维护一个 JSON5 格式的角色库
-- 支持中文分词后基于主名称与别名的智能补全
-- 在编辑器中为角色名及别名自动着色
-- 鼠标悬停时显示角色的简介、类型、从属与颜色信息
-- Ctrl/Cmd+Click 或 F12 跳转到角色库定义
-- 右键选中文本快速创建新角色并追加到角色库
-- 实时监控角色库文件改动并自动刷新，或通过命令手动刷新
-
-andrea-novel-helper is a VS Code extension for Markdown writing that lets you:
-
-- Maintain a JSON5-based character library at your workspace root
-- Provide intelligent completions for names and aliases using Chinese word segmentation
-- Automatically colorize character names and aliases in the editor
-- Show hover tooltips with description, type, affiliation, and color
-- Go to definition (Ctrl/Cmd+Click or F12) to jump to the character’s JSON5 entry
-- Right-click selection to quickly create a new character in the library
-- Auto-refresh on library changes or manually trigger a refresh command
+- 感谢所有贡献者和 Beta 测试用户
+- 特别感谢 VS Code 扩展开发社区
+- 灵感来源于全世界创作者的需求
 
 ---
 
-## 特性 / Features
-
-- **多名称补全**：输入角色名或任意别名前缀，即可在 Markdown 中补全至对应名称
-- **中文分词**：利用 `Intl.Segmenter` 精准提取中文“词”级前缀，无需空格
-- **编辑器着色**：根据角色类型或自定义颜色，为主名称和别名统一着色
-- **Hover 提示**：详情面板展示角色简介、类型、从属标签和颜色预览
-- **转到定义**：在文档中按 F12 或 Ctrl/Cmd+Click 跳到角色库文件内的定义行
-- **快速创建**：选中文本右键，填写属性后自动追加 JSON5 格式角色条目
-- **自动/手动刷新**：`character-gallery.json5` 保存时即时刷新，或在命令面板执行 "Refresh Role Library"
-- **字数统计 / 写作资源视图**：可替代原生 Explorer 的写作专用视图：
-  - 目录/文件字数聚合 + 忽略规则 (`.gitignore` / `.wcignore`)
-  - 手动/自动排序模式（稀疏索引，支持步长与补零宽度配置）
-  - 同目录拖拽重排 / 跨目录拖拽物理移动 / 复制剪切粘贴
-  - 可选在标签前显示序号 + 自定义显示格式 (raw / wan / k / qian)
-  - 支持显示参考资料（如图片、PDF等不计入字数统计的文件）
-  - **性能提升**：内部加入结果缓存与异步增量刷新，避免全量同步扫描造成卡顿
-- **敏感词识别**：自动检测并高亮敏感词，支持自定义敏感词列表
-- **词汇库**：提供词汇库支持，可以定义词汇并高亮显示
-- **大纲**：提供一个大纲功能，支持在工作区内创建和管理大纲文件（自动创建）
-- **包管理器（设定集管理器）**：提供一个包管理器视图，支持创建、重命名和删除设定集（包），以及管理每个包内的资源文件
-- **快速格式化工具**：新增快速格式化工具，支持在Markdown文件中快速应用常用格式
-- **写作时间追踪（实验性）**：新增写作时间追踪功能，提供实时的写作速度统计（CPM）
-- **正则表达式着色**：支持使用正则表达式为文本着色，提供更灵活的样式应用（比如说着色各种标点符号框起来的字符）
-- **写作统计仪表板（实验性）**：新增写作统计仪表板，今日和历史的写作时间、平均速度和峰值速度统计,活跃度统计
-- **支持基于自定义分类的角色显示**：可以按类型或归属进行更灵活的分组
+**Enjoy Writing!** ✨

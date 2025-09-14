@@ -572,7 +572,31 @@ export async function updateDecorations() {
                 const lineNum = range.start.line + 1;
                 const lineText = doc.lineAt(range.start.line).text.trim();
                 const msg = `${base}\n第 ${lineNum} 行: ${lineText}`;
-                const diag = new vscode.Diagnostic(range, msg, vscode.DiagnosticSeverity.Warning);
+                
+                // 读取敏感词警告级别配置
+                const config = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const sensitiveWordsWarningLevel = config.get<string>('sensitiveWords.warningLevel', 'warning');
+                
+                // 转换警告级别
+                let severity: vscode.DiagnosticSeverity;
+                switch (sensitiveWordsWarningLevel.toLowerCase()) {
+                    case 'error':
+                        severity = vscode.DiagnosticSeverity.Error;
+                        break;
+                    case 'warning':
+                        severity = vscode.DiagnosticSeverity.Warning;
+                        break;
+                    case 'information':
+                        severity = vscode.DiagnosticSeverity.Information;
+                        break;
+                    case 'hint':
+                        severity = vscode.DiagnosticSeverity.Hint;
+                        break;
+                    default:
+                        severity = vscode.DiagnosticSeverity.Warning;
+                }
+                
+                const diag = new vscode.Diagnostic(range, msg, severity);
                 diag.source = 'AndreaNovelHelper';
                 // 添加修复选项元数据供 CodeAction 提供者使用
                 const currentRoleFixesArr: string[] | undefined = (role as any).fixes || (role as any).fixs;

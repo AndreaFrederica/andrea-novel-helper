@@ -2,14 +2,18 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { getFileByPath } from '../utils/tracker/globalFileTracking';
 import { WordCountProvider } from './view/wordCountProvider';
+import { WebDAVSyncStatusManager, WebDAVSyncStatusChangeEvent } from '../sync/webdavSyncStatusManager';
 
 /**
  * 状态栏提供器 - 显示当前文档的写作统计
  */
 export class StatusBarProvider {
     private statusBarItem: vscode.StatusBarItem;
+    private webdavStatusBarItem: vscode.StatusBarItem;
     private currentFilePath: string | undefined;
     private wordCountProvider: WordCountProvider;
+    private webdavSyncStatusManager: WebDAVSyncStatusManager;
+    private syncStatusDisposable: vscode.Disposable | undefined;
 
     constructor(wordCountProvider: WordCountProvider) {
         this.wordCountProvider = wordCountProvider;
@@ -19,6 +23,17 @@ export class StatusBarProvider {
         );
         this.statusBarItem.command = 'AndreaNovelHelper.showCurrentFileStats';
         this.statusBarItem.tooltip = '点击查看详细写作统计';
+        
+        // 创建WebDAV同步状态栏项
+        this.webdavStatusBarItem = vscode.window.createStatusBarItem(
+            vscode.StatusBarAlignment.Left,
+            99 // 优先级比写作统计稍低
+        );
+        this.webdavStatusBarItem.command = 'andrea.webdav.syncNow';
+        this.webdavStatusBarItem.tooltip = '点击开始WebDAV同步';
+        
+        // 获取同步状态管理器实例
+        this.webdavSyncStatusManager = WebDAVSyncStatusManager.getInstance();
     }
 
     /**
@@ -26,6 +41,7 @@ export class StatusBarProvider {
      */
     activate(context: vscode.ExtensionContext): void {
         context.subscriptions.push(this.statusBarItem);
+        context.subscriptions.push(this.webdavStatusBarItem);
         
         // 监听编辑器切换
         context.subscriptions.push(
@@ -49,9 +65,18 @@ export class StatusBarProvider {
                 this.showDetailedStats();
             })
         );
+        
+        // 监听WebDAV同步状态变化
+        this.syncStatusDisposable = this.webdavSyncStatusManager.onDidChangeStatus(
+            (event: WebDAVSyncStatusChangeEvent) => {
+                this.updateWebDAVStatusBar(event);
+            }
+        );
+        context.subscriptions.push(this.syncStatusDisposable);
 
         // 初始更新
         this.updateStatusBar(vscode.window.activeTextEditor);
+        this.updateWebDAVStatusBar({ status: this.webdavSyncStatusManager.status });
     }
 
     /**
@@ -196,10 +221,35 @@ export class StatusBarProvider {
     }
 
     /**
+     * 更新WebDAV同步状态栏
+     */
+    private updateWebDAVStatusBar(event: WebDAVSyncStatusChangeEvent): void {
+        if (event.status === 'syncing') {
+            // 显示转圈动画和同步状态
+            this.webdavStatusBarItem.text = '$(sync~spin) WebDAV同步中';
+            this.webdavStatusBarItem.tooltip = event.message || '正在同步WebDAV文件...';
+            
+            // 如果有进度信息，显示进度
+            if (event.progress) {
+                const percentage = Math.round((event.progress.current / event.progress.total) * 100);
+                this.webdavStatusBarItem.text = `$(sync~spin) WebDAV同步中 ${percentage}%`;
+                this.webdavStatusBarItem.tooltip = `${event.message || '正在同步WebDAV文件...'} (${event.progress.current}/${event.progress.total})`;
+            }
+        } else {
+            // 空闲状态，显示静态图标
+            this.webdavStatusBarItem.text = '$(cloud) WebDAV';
+            this.webdavStatusBarItem.tooltip = '点击开始WebDAV同步';
+        }
+        
+        this.webdavStatusBarItem.show();
+    }
+
+    /**
      * 手动刷新状态栏
      */
     public refresh(): void {
         this.updateStatusBar(vscode.window.activeTextEditor);
+        this.updateWebDAVStatusBar({ status: this.webdavSyncStatusManager.status });
     }
 
     /**
@@ -207,5 +257,7 @@ export class StatusBarProvider {
      */
     dispose(): void {
         this.statusBarItem.dispose();
+        this.webdavStatusBarItem.dispose();
+        this.syncStatusDisposable?.dispose();
     }
 }

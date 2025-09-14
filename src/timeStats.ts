@@ -1269,7 +1269,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
     // 消息通道
     const getStatsData = async () => {
-        console.log('TimeStats: API called to get stats data');
+        tsDebug('API called to get stats data');
 
         // 准备数据：当前文件 + 跨文件（若可）
         const { bucketSizeMs } = getConfig();
@@ -1279,7 +1279,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
         if (currentDocPath) {
             const fileStats = getFileStats(currentDocPath);
-            console.log('TimeStats: Current file stats:', {
+            tsDebug('Current file stats:', {
                 path: currentDocPath,
                 totalMillis: fileStats.totalMillis,
                 charsAdded: fileStats.charsAdded,
@@ -1293,10 +1293,10 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
                 .sort((a, b) => a.start - b.start)
                 .map(b => ({ t: b.start, cpm: Math.round((b.charsAdded * 60000) / bucketSizeMs) }));
         } else {
-            console.log('TimeStats: No current document, using empty per-file line data');
+            tsDebug('No current document, using empty per-file line data');
         }
 
-        console.log('TimeStats: Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
+        tsDebug('Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
 
         // 跨文件汇总（尽量从全局拿；否则降级为当前文件）
         const globalFileTracking = getGlobalFileTracking?.();
@@ -1312,7 +1312,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
         let allStats: Ws[] = [];
         let globalCapable = false;
 
-        console.log('TimeStats: Global file tracking available:', !!globalFileTracking);
+        tsDebug('Global file tracking available:', !!globalFileTracking);
 
         // if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
         //     try {
@@ -1355,7 +1355,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
             } else {
                 // 没有当前文件，使用空数据
                 allStats = [];
-                console.log('TimeStats: No current document and no global tracking, using empty stats');
+                tsDebug('No current document and no global tracking, using empty stats');
             }
         }
 
@@ -1453,7 +1453,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
             bucketSizeMs
         };
 
-        console.log('TimeStats: Generated stats data:', {
+        tsDebug('Generated stats data:', {
             globalCapable,
             allStatsCount: allStats.length,
             perFileLineLength: perFileLine.length,
@@ -1469,10 +1469,10 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
     // 监听来自webview的API调用
     const messageDisposable = panel.webview.onDidReceiveMessage(
         async message => {
-            console.log('TimeStats: Received message from webview:', message);
+            tsDebug('Received message from webview:', message);
 
             if (message.type === 'get-stats-data') {
-                console.log('TimeStats: API request for stats data');
+                tsDebug('API request for stats data');
                 const data = await getStatsData();
                 // 总是返回数据，即使没有当前文档也显示全局统计
                 panel.webview.postMessage(data);

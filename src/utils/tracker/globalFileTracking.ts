@@ -215,8 +215,9 @@ export function getFileUuid(filePath: string): string | undefined {
     if (!tracker) {
         return undefined;
     }
-
-    return tracker.getFileUuid(filePath);
+    
+    const uuid = tracker.getFileUuid(filePath);
+    return uuid;
 }
 
 /**

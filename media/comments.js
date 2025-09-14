@@ -39,12 +39,13 @@
   let syncingUntil = 0;
   const PROGRAM_SYNC_MIN = 120; // ms
   const PROGRAM_SYNC_MAX = 400; // ms
-  +const USER_SCROLL_SUPPRESS_MS = 800; // 用户在面板中滚动时，抑制一段时间内来自编辑器的滚动同步，避免回拉
+  const USER_SCROLL_SUPPRESS_MS = 800; // 用户在面板中滚动时，抑制一段时间内来自编辑器的滚动同步，避免回拉
   
   // 焦点感知相关变量
   let panelHasFocus = false;
   let panelHasMouseOver = false;
   let lastUserInteraction = 0;
+  let suppressUntil = 0; // 抑制编辑器滚动同步的截止时间
   
   // 添加平滑滚动样式
   if (root) {
@@ -74,24 +75,51 @@
       return String(it.body||'').toLowerCase().includes(query);
     });
 
-    // 避免卡片过于靠近：按起始行排序并做最小间距布局
+    // 智能卡片布局：支持碰撞检测和紧密排列
     const sorted = filtered.slice().sort((a,b)=>a.start-b.start);
-    const placed = [];
-    const MIN_SPACING = Math.max(24, Math.round(lineHeight * 1.2));
+    const placedCards = []; // 存储已放置的卡片信息 {top, bottom, height}
+    const MIN_SPACING = 8; // 最小间距，允许卡片更紧密排列
+    
     for (const it of sorted) {
       const card = document.createElement('div');
       card.className = 'card';
       card.dataset.status = it.status;
       const collapsed = !!(collapsedByDoc[docUri] && collapsedByDoc[docUri][it.id]);
       if (collapsed) card.classList.add('collapsed');
-      let top = Math.round(it.start * lineHeight) + 8;
-      if (placed.length) {
-        const prev = placed[placed.length-1];
-        const spacing = collapsed ? Math.max(16, Math.round(lineHeight * 0.6)) : MIN_SPACING;
-        if (top < prev + spacing) top = prev + spacing;
+      
+      // 计算理想位置（基于代码行位置）
+      let idealTop = Math.round(it.start * lineHeight) + 8;
+      
+      // 估算卡片高度（折叠状态下更小）
+      const estimatedHeight = collapsed ? 60 : (it.messageCount || 1) * 80 + 100;
+      
+      // 碰撞检测：找到不与现有卡片重叠的位置
+      let finalTop = idealTop;
+      let hasCollision = true;
+      
+      while (hasCollision) {
+        hasCollision = false;
+        const proposedBottom = finalTop + estimatedHeight;
+        
+        for (const placed of placedCards) {
+          // 检查是否与已放置的卡片重叠
+          if (!(finalTop >= placed.bottom + MIN_SPACING || proposedBottom <= placed.top - MIN_SPACING)) {
+            // 有重叠，将卡片移到冲突卡片下方
+            finalTop = placed.bottom + MIN_SPACING;
+            hasCollision = true;
+            break;
+          }
+        }
       }
-      placed.push(top);
-      card.style.top = top + 'px';
+      
+      // 记录卡片位置信息
+      placedCards.push({
+        top: finalTop,
+        bottom: finalTop + estimatedHeight,
+        height: estimatedHeight
+      });
+      
+      card.style.top = finalTop + 'px';
       card.style.left = '0';
       const main = document.createElement('div');
       const caret = document.createElement('span'); caret.className='caret'; caret.textContent = collapsed ? '▸' : '▾';
@@ -330,6 +358,54 @@
   }
 
   function truncate(s, n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
+  
+  // 显示通知消息
+  function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    notification.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 16px;
+      border-radius: 4px;
+      color: white;
+      font-size: 14px;
+      z-index: 1000;
+      max-width: 300px;
+      word-wrap: break-word;
+      transition: opacity 0.3s ease;
+    `;
+    
+    // 根据类型设置背景色
+    switch (type) {
+      case 'success':
+        notification.style.backgroundColor = '#28a745';
+        break;
+      case 'error':
+        notification.style.backgroundColor = '#dc3545';
+        break;
+      case 'warning':
+        notification.style.backgroundColor = '#ffc107';
+        notification.style.color = '#212529';
+        break;
+      default:
+        notification.style.backgroundColor = '#17a2b8';
+    }
+    
+    document.body.appendChild(notification);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+      notification.style.opacity = '0';
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      }, 300);
+    }, 3000);
+  }
 
   window.addEventListener('message', ev => {
     const msg = ev.data || {};
@@ -344,7 +420,6 @@
       return;
     }
     if (msg.type === 'threads') {
-      console.log('Updating threads with items:', msg.items, 'lineHeight:', msg.lineHeight, 'totalLines:', msg.totalLines);
       lineHeight = msg.lineHeight || lineHeight;
       totalLines = msg.totalLines || totalLines;
       items = Array.isArray(msg.items) ? msg.items : [];
@@ -367,12 +442,12 @@
       const contentHeight = Math.max(0, Math.round(maxTop * lineHeight + root.clientHeight));
       track.style.height = contentHeight + 'px';
       const max = Math.max(1, root.scrollHeight - root.clientHeight);
-+
-+      // 若用户刚在面板中滚动，则忽略来自编辑器的同步，避免回拉
-+      if (Date.now() < suppressUntil) {
-+        console.log('Editor scroll ignored due to recent user scroll', { suppressUntil });
-+        return;
-+      }
+
+      // 若用户刚在面板中滚动，则忽略来自编辑器的同步，避免回拉
+      if (Date.now() < suppressUntil) {
+        console.log('Editor scroll ignored due to recent user scroll', { suppressUntil });
+        return;
+      }
        
       // 优化同步锁定时间，提高响应性，并避免与用户滚动互相拉扯
       syncing = true;
@@ -393,6 +468,22 @@
       }, PROGRAM_SYNC_MIN);
       return;
     }
+    if (msg.type === 'garbageCollectResult') {
+      console.log('Garbage collection result:', msg);
+      const message = msg.deletedCount > 0 
+        ? `已清理 ${msg.deletedCount} 个已删除的批注`
+        : '没有找到需要清理的已删除批注';
+      showNotification(message, msg.deletedCount > 0 ? 'success' : 'info');
+      return;
+    }
+    if (msg.type === 'restoreCommentResult') {
+      console.log('Restore comment result:', msg);
+      const message = msg.success 
+        ? '批注已成功恢复'
+        : '恢复批注失败';
+      showNotification(message, msg.success ? 'success' : 'error');
+      return;
+    }
   });
 
   // Restore persisted state and notify extension when webview loads
@@ -401,6 +492,16 @@
   // Wire search / filter
   if (searchEl) searchEl.addEventListener('input', render);
   if (filterEl) filterEl.addEventListener('change', render);
+  
+  // Wire garbage collect button
+  const garbageCollectBtn = document.getElementById('garbageCollectBtn');
+  if (garbageCollectBtn) {
+    garbageCollectBtn.addEventListener('click', () => {
+      if (postMessage({ type: 'garbageCollect' })) {
+        showNotification('正在清理已删除的批注...', 'info');
+      }
+    });
+  }
   
   // 焦点感知事件监听
   root.addEventListener('mouseenter', () => {
@@ -424,18 +525,14 @@
   // 检测用户主动滚动（鼠标滚轮、拖拽滚动条等）
   root.addEventListener('wheel', () => {
     lastUserInteraction = Date.now();
-+    suppressUntil = lastUserInteraction + USER_SCROLL_SUPPRESS_MS;
+    suppressUntil = lastUserInteraction + USER_SCROLL_SUPPRESS_MS;
   }, { passive: true });
--  root.addEventListener('mousedown', (e) => {
--    if (e.target.closest('.scrollbar, ::-webkit-scrollbar')) {
--      lastUserInteraction = Date.now();
--    }
--  });
-+  root.addEventListener('mousedown', (e) => {
-+    // 无法可靠判断是否点在原生滚动条上，这里统一认为用户开始交互
-+    lastUserInteraction = Date.now();
-+    suppressUntil = lastUserInteraction + USER_SCROLL_SUPPRESS_MS;
-+  });
+
+  root.addEventListener('mousedown', (e) => {
+    // 无法可靠判断是否点在原生滚动条上，这里统一认为用户开始交互
+    lastUserInteraction = Date.now();
+    suppressUntil = lastUserInteraction + USER_SCROLL_SUPPRESS_MS;
+  });
   
   function persistState(){ try{ state.docUri = docUri; state.collapsedByDoc = collapsedByDoc; vscode && vscode.setState(state); }catch{} }
 

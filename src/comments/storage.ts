@@ -46,8 +46,9 @@ function commentsContentDir(): string | undefined {
 
 export function getDocUuidForDocument(doc: vscode.TextDocument): string | undefined {
   try {
-    const u = getFileUuid(doc.uri.fsPath);
-    return u || undefined;
+    const filePath = doc.uri.fsPath;
+    const uuid = getFileUuid(filePath);
+    return uuid || undefined;
   } catch {
     return undefined;
   }
@@ -138,7 +139,7 @@ export async function loadComments(docUuid: string): Promise<CommentThreadData[]
   
   for (const threadId of index.threadIds) {
     const metadata = await loadCommentMetadata(threadId);
-    if (metadata) {
+    if (metadata && !metadata.deleted) { // 过滤掉已删除的批注
       const thread: CommentThreadData = {
         id: metadata.id,
         status: metadata.status,
@@ -401,14 +402,24 @@ export async function deleteThread(commentId: string): Promise<void> {
   const metadata = await loadCommentMetadata(commentId);
   if (!metadata) return;
   
+  // 软删除：标记为已删除而不是物理删除
+  metadata.deleted = true;
+  metadata.updatedAt = Date.now();
+  await saveCommentMetadata(metadata);
+  
+  // 从md文件中删除注解（保持原有行为）
+  await removeThreadFromMd(metadata.docUuid, commentId);
+}
+
+// 物理删除已标记删除的批注（垃圾回收）
+export async function permanentlyDeleteThread(commentId: string): Promise<void> {
+  const metadata = await loadCommentMetadata(commentId);
+  if (!metadata || !metadata.deleted) return;
+  
   // 从文档索引中移除
   const index = await loadCommentIndex(metadata.docUuid);
   index.threadIds = index.threadIds.filter(id => id !== commentId);
   await saveCommentIndex(index);
-  
-  // 从md文件中删除注解
-  // 删除整个线程从md文件
-  await removeThreadFromMd(metadata.docUuid, commentId);
   
   // 删除元数据和内容文件
   const metadataPath = metadataFilePathForComment(commentId);
@@ -422,6 +433,56 @@ export async function deleteThread(commentId: string): Promise<void> {
       fs.unlinkSync(contentPath);
     }
   } catch { /* ignore */ }
+}
+
+// 垃圾回收：清理所有已标记删除的批注
+export async function garbageCollectDeletedComments(docUuid?: string): Promise<{ deletedCount: number; commentIds: string[] }> {
+  const deletedComments: string[] = [];
+  
+  if (docUuid) {
+    // 清理指定文档的已删除批注
+    const index = await loadCommentIndex(docUuid);
+    for (const threadId of index.threadIds) {
+      const metadata = await loadCommentMetadata(threadId);
+      if (metadata && metadata.deleted) {
+        await permanentlyDeleteThread(threadId);
+        deletedComments.push(threadId);
+      }
+    }
+  } else {
+    // 清理所有文档的已删除批注
+    const dataDir = commentsDataDir();
+    if (!dataDir || !fs.existsSync(dataDir)) {
+      return { deletedCount: 0, commentIds: [] };
+    }
+    
+    const files = fs.readdirSync(dataDir);
+    for (const file of files) {
+      if (file.endsWith('.json')) {
+        const commentId = file.replace('.json', '');
+        const metadata = await loadCommentMetadata(commentId);
+        if (metadata && metadata.deleted) {
+          await permanentlyDeleteThread(commentId);
+          deletedComments.push(commentId);
+        }
+      }
+    }
+  }
+  
+  return { deletedCount: deletedComments.length, commentIds: deletedComments };
+}
+
+// 恢复已删除的批注
+export async function restoreDeletedThread(commentId: string): Promise<boolean> {
+  const metadata = await loadCommentMetadata(commentId);
+  if (!metadata || !metadata.deleted) return false;
+  
+  // 移除删除标记
+  metadata.deleted = false;
+  metadata.updatedAt = Date.now();
+  await saveCommentMetadata(metadata);
+  
+  return true;
 }
 
 // 兼容旧接口的updateThread函数

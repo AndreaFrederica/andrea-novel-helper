@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { CommentThreadData, rangeToVSCodeRange } from './types';
-import { addThread, addSingleThread, getDocUuidForDocument, loadComments, paragraphIndexOfRange, updateThreadsByDoc, loadCommentContent, saveCommentContent } from './storage';
+import { addThread, addSingleThread, getDocUuidForDocument, loadComments, paragraphIndexOfRange, updateThreadsByDoc, loadCommentContent, saveCommentContent, garbageCollectDeletedComments, restoreDeletedThread } from './storage';
 import { registerCommentDefinitionProvider, CommentDefinitionProvider } from './definitionProvider';
 import { setActiveCommentPanel } from '../context/commentRedirect';
 
@@ -137,6 +137,11 @@ class CommentsController {
     const diagnostics: vscode.Diagnostic[] = [];
     
     for (const thread of threads) {
+      // 跳过已软删除的批注
+      if ((thread as any).deleted) {
+        continue;
+      }
+      
       if (thread.status === 'open' && thread.anchor.ranges.length > 0) {
         const range = rangeToVSCodeRange(thread.anchor.ranges[0]);
         const messageCount = thread.messages ? thread.messages.length : 0;
@@ -201,6 +206,11 @@ class CommentsController {
         setActiveCommentPanel(undefined);
       }
     }, null, this.disposables);
+    
+    // 面板创建时立即设置活跃状态（如果有绑定文档）
+    if (this.activeDocUri) {
+      setActiveCommentPanel(this.activeDocUri);
+    }
     panel.webview.onDidReceiveMessage(msg => this.onMessage(msg));
     panel.webview.html = this.wrapHtml(panel.webview);
     this.panel = panel;
@@ -238,6 +248,9 @@ class CommentsController {
       .toolbar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #0002;position:sticky;top:0;background:inherit;z-index:10}
       .toolbar input[type=text]{flex:1;min-width:120px;padding:4px 6px;border-radius:6px;border:1px solid #5557;background:#0003;color:inherit}
       .toolbar select{padding:4px 6px;border-radius:6px;border:1px solid #5557;background:#0003;color:inherit}
+      .toolbar-btn{padding:4px 8px;border-radius:6px;border:1px solid #5557;background:var(--vscode-button-background);color:var(--vscode-button-foreground);cursor:pointer;font-size:12px;white-space:nowrap}
+      .toolbar-btn:hover{background:var(--vscode-button-hoverBackground)}
+      .toolbar-btn:active{background:var(--vscode-button-activeBackground)}
       .root{position:relative;height:calc(100vh - 42px);overflow:auto}
       .track{position:relative;margin:0;height:100%;padding:0 8px;box-sizing:border-box}
       .card{position:absolute;left:8px;right:8px;min-width:220px;max-width:calc(100% - 16px);padding:10px 12px;border-radius:8px;border:1px solid var(--vscode-editorWidget-border);
@@ -274,6 +287,7 @@ class CommentsController {
             <option value="open">未解决</option>
             <option value="resolved">已解决</option>
           </select>
+          <button id="garbageCollectBtn" class="toolbar-btn" title="清理已删除的批注">🗑️ 清理</button>
         </div>
         <div class="root" id="root"><div id="track" class="track"></div></div>
       <script nonce="${nonce}" src="${scriptUri}"></script>
@@ -291,13 +305,13 @@ class CommentsController {
   private async bindPanelToDoc(doc: vscode.TextDocument) {
     const panel = this.ensurePanel();
     this.activeDocUri = doc.uri.toString();
-    // 设置活跃批注面板状态
-    if (this.panel && this.panel.active) {
-      setActiveCommentPanel(this.activeDocUri);
-    }
+    // 设置活跃批注面板状态（无论面板是否当前活跃）
+    setActiveCommentPanel(this.activeDocUri);
     try { await this.context.workspaceState.update(CommentsController.STATE_KEY, this.activeDocUri); } catch {}
+    
     const docUuid = getDocUuidForDocument(doc);
     const data = docUuid ? await loadComments(docUuid) : [];
+    
     this.threadsByDoc.set(doc.uri.toString(), data);
     this.postInit(doc, data);
     this.applyDecorations(doc);
@@ -426,9 +440,9 @@ class CommentsController {
     const list = this.threadsByDoc.get(doc.uri.toString()) || [];
     const hoverOn = vscode.workspace.getConfiguration('AndreaNovelHelper.comments').get<boolean>('hoverEnabled', true);
     
-    // 支持多范围装饰
+    // 支持多范围装饰，过滤掉已软删除的批注
     const decoOpts: vscode.DecorationOptions[] = [];
-    for (const t of list.filter(t => t.status === 'open')) {
+    for (const t of list.filter(t => t.status === 'open' && !(t as any).deleted)) {
       // 为每个范围创建装饰选项
       for (const range of t.anchor.ranges) {
         decoOpts.push({
@@ -448,14 +462,16 @@ class CommentsController {
       if (this.decorationUnderline) ed.setDecorations(this.decorationUnderline, []);
     }
 
-    // Gutter info markers
+    // Gutter info markers，过滤掉已软删除的批注
     const showGutter = cfg.get<boolean>('showGutterInfo', true);
     if (this.decorationGutter) {
       if (showGutter) {
-        const gopts: vscode.DecorationOptions[] = list.map(t => ({
-          range: new vscode.Range(new vscode.Position(t.anchor.ranges[0].start.line, 0), new vscode.Position(t.anchor.ranges[0].start.line, 0)),
-          hoverMessage: hoverOn ? this.makeHoverMarkdown(t) : undefined,
-        }));
+        const gopts: vscode.DecorationOptions[] = list
+          .filter(t => !(t as any).deleted)
+          .map(t => ({
+            range: new vscode.Range(new vscode.Position(t.anchor.ranges[0].start.line, 0), new vscode.Position(t.anchor.ranges[0].start.line, 0)),
+            hoverMessage: hoverOn ? this.makeHoverMarkdown(t) : undefined,
+          }));
         ed.setDecorations(this.decorationGutter, gopts);
       } else {
         ed.setDecorations(this.decorationGutter, []);
@@ -985,32 +1001,103 @@ class CommentsController {
       return;
     }
     if (msg.type === 'delete' && typeof msg.id === 'string') {
-      const ed = vscode.window.activeTextEditor; if (!ed) return; const docUuid = getDocUuidForDocument(ed.document); if (!docUuid) return;
+      console.log('[Controller] Processing delete:', { threadId: msg.id });
+      
+      // 使用绑定的文档而不是activeTextEditor，因为焦点可能在批注面板上
+      if (!this.activeDocUri) {
+        console.log('[Controller] No active document URI');
+        return;
+      }
+      
+      let targetDoc: vscode.TextDocument | undefined;
+      try {
+        const uri = vscode.Uri.parse(this.activeDocUri);
+        targetDoc = await vscode.workspace.openTextDocument(uri);
+      } catch (err) {
+        console.log('[Controller] Failed to open document:', err);
+        return;
+      }
+      
+      const docUuid = getDocUuidForDocument(targetDoc);
+      if (!docUuid) {
+        console.log('[Controller] No docUuid for document');
+        return;
+      }
+      
+      console.log('[Controller] Deleting thread with docUuid:', docUuid);
       const updated = await updateThreadsByDoc(docUuid, (threads) => {
-        const i = threads.findIndex(t => t.id === msg.id); if (i >= 0) threads.splice(i, 1);
+        const i = threads.findIndex(t => t.id === msg.id);
+        if (i >= 0) {
+          console.log('[Controller] Found thread to delete at index:', i);
+          threads.splice(i, 1);
+        } else {
+          console.log('[Controller] Thread not found for deletion:', msg.id);
+        }
       });
-      const key = ed.document.uri.toString(); this.threadsByDoc.set(key, updated);
+      
+      const key = targetDoc.uri.toString();
+      this.threadsByDoc.set(key, updated);
+      console.log('[Controller] Updated threadsByDoc for key:', key);
       
       // 更新定义跳转提供器的线程数据
       if (this.definitionProvider) {
         this.definitionProvider.updateThreads(key, updated);
       }
-      this.applyDecorations(ed.document); this.postThreads(ed.document, updated);
+      
+      this.applyDecorations(targetDoc);
+      this.postThreads(targetDoc, updated);
+      console.log('[Controller] delete processing completed');
       return;
     }
     if (msg.type === 'toggleStatus' && typeof msg.id === 'string') {
-      const ed = vscode.window.activeTextEditor; if (!ed) return; const docUuid = getDocUuidForDocument(ed.document); if (!docUuid) return;
+      console.log('[Controller] Processing toggleStatus:', { threadId: msg.id });
+      
+      // 使用绑定的文档而不是activeTextEditor，因为焦点可能在批注面板上
+      if (!this.activeDocUri) {
+        console.log('[Controller] No active document URI');
+        return;
+      }
+      
+      let targetDoc: vscode.TextDocument | undefined;
+      try {
+        const uri = vscode.Uri.parse(this.activeDocUri);
+        targetDoc = await vscode.workspace.openTextDocument(uri);
+      } catch (err) {
+        console.log('[Controller] Failed to open document:', err);
+        return;
+      }
+      
+      const docUuid = getDocUuidForDocument(targetDoc);
+      if (!docUuid) {
+        console.log('[Controller] No docUuid for document');
+        return;
+      }
+      
+      console.log('[Controller] Toggling status for thread with docUuid:', docUuid);
       const updated = await updateThreadsByDoc(docUuid, (threads) => {
-        const it = threads.find(t => t.id === msg.id); if (it) { it.status = (it.status === 'open' ? 'resolved' : 'open'); it.updatedAt = Date.now(); }
+        const it = threads.find(t => t.id === msg.id);
+        if (it) {
+          const oldStatus = it.status;
+          it.status = (it.status === 'open' ? 'resolved' : 'open');
+          it.updatedAt = Date.now();
+          console.log('[Controller] Status changed from', oldStatus, 'to', it.status);
+        } else {
+          console.log('[Controller] Thread not found for status toggle:', msg.id);
+        }
       });
-      const key = ed.document.uri.toString(); this.threadsByDoc.set(key, updated);
+      
+      const key = targetDoc.uri.toString();
+      this.threadsByDoc.set(key, updated);
+      console.log('[Controller] Updated threadsByDoc for key:', key);
       
       // 更新定义跳转提供器的线程数据
       if (this.definitionProvider) {
         this.definitionProvider.updateThreads(key, updated);
       }
       
-      this.applyDecorations(ed.document); this.postThreads(ed.document, updated);
+      this.applyDecorations(targetDoc);
+      this.postThreads(targetDoc, updated);
+      console.log('[Controller] toggleStatus processing completed');
       return;
     }
     // Webview 主动滚动：按比例 reveal 到对应顶部行
@@ -1141,6 +1228,104 @@ class CommentsController {
         }, 0);
       } else {
         console.log('Skipping scroll - target line within threshold:', { currentTop, targetLine: line, threshold: scrollThreshold });
+      }
+      
+      return;
+    }
+    
+    // 垃圾回收命令：清理已删除的批注
+    if (msg.type === 'garbageCollect') {
+      console.log('[Controller] Processing garbageCollect');
+      
+      if (!this.activeDocUri) {
+        console.log('[Controller] No active document URI for garbage collection');
+        return;
+      }
+      
+      let targetDoc: vscode.TextDocument | undefined;
+      try {
+        const uri = vscode.Uri.parse(this.activeDocUri);
+        targetDoc = await vscode.workspace.openTextDocument(uri);
+      } catch (err) {
+        console.log('[Controller] Failed to open document for garbage collection:', err);
+        return;
+      }
+      
+      const docUuid = getDocUuidForDocument(targetDoc);
+      if (!docUuid) {
+        console.log('[Controller] No docUuid for document in garbage collection');
+        return;
+      }
+      
+      try {
+        const result = await garbageCollectDeletedComments(docUuid);
+        console.log('[Controller] Garbage collection completed:', result);
+        
+        // 刷新批注列表
+        const updated = await loadComments(docUuid);
+        const key = targetDoc.uri.toString();
+        this.threadsByDoc.set(key, updated);
+        
+        if (this.definitionProvider) {
+          this.definitionProvider.updateThreads(key, updated);
+        }
+        
+        this.applyDecorations(targetDoc);
+        this.postThreads(targetDoc, updated);
+        
+        // 向面板发送垃圾回收结果
+        if (this.panel) {
+          this.panel.webview.postMessage({
+            type: 'garbageCollectResult',
+            deletedCount: result.deletedCount,
+            commentIds: result.commentIds
+          });
+        }
+      } catch (err) {
+        console.error('[Controller] Garbage collection failed:', err);
+      }
+      
+      return;
+    }
+    
+    // 恢复已删除的批注
+    if (msg.type === 'restoreComment' && typeof msg.id === 'string') {
+      console.log('[Controller] Processing restoreComment:', { id: msg.id });
+      
+      try {
+        const success = await restoreDeletedThread(msg.id);
+        console.log('[Controller] Restore comment result:', success);
+        
+        if (success && this.activeDocUri) {
+          // 刷新批注列表
+          const uri = vscode.Uri.parse(this.activeDocUri);
+          const targetDoc = await vscode.workspace.openTextDocument(uri);
+          const docUuid = getDocUuidForDocument(targetDoc);
+          
+          if (docUuid) {
+            const updated = await loadComments(docUuid);
+            const key = targetDoc.uri.toString();
+            this.threadsByDoc.set(key, updated);
+            
+            if (this.definitionProvider) {
+              this.definitionProvider.updateThreads(key, updated);
+            }
+            
+            this.applyDecorations(targetDoc);
+            this.postThreads(targetDoc, updated);
+          }
+        }
+        
+        // 向面板发送恢复结果
+        if (this.panel) {
+          this.panel.webview.postMessage({
+            type: 'restoreCommentResult',
+            success,
+            commentId: msg.id
+          });
+        }
+      } catch (err) {
+        console.error('[Controller] Restore comment failed:', err);
       }
       
       return;
