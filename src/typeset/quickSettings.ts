@@ -1034,6 +1034,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: '$(milestone) 配置：字数里程碑提醒', cmd: 'andrea.configureMilestones' },
                 { label: '$(organization) 配置：当前文章角色显示', cmd: 'andrea.configureDocRoles' },
                 { label: '$(organization) 配置：全部角色显示', cmd: 'andrea.configureAllRoles' },
+                { label: '$(search-fuzzy) 错别字识别快速设置', cmd: 'andrea.typo.quickSettings' },
                 { label: `${minimap ? '$(check)' : '$(circle-slash)'} 切换：Minimap（小地图）`, cmd: 'andrea.toggleMinimap' },
                 { label: `${wheelZoom ? '$(check)' : '$(circle-slash)'} 切换：Ctrl+滚轮快速缩放字体`, cmd: 'andrea.toggleMouseWheelZoom' },
 

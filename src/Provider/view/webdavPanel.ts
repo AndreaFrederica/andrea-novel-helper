@@ -52,11 +52,23 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
     };
     private _fileDiffs: FileDiff[] = [];
     private _projectLink: ProjectLink | null = null;
+    private _autoSyncTimer: NodeJS.Timeout | null = null;
+    private _autoSyncEnabled: boolean = false;
 
     constructor(context: vscode.ExtensionContext) {
         this._context = context;
         this.accountManager = new WebDAVAccountManager(context);
         this.syncService = new WebDAVSyncService(context);
+        
+        // 初始化定时同步
+        this._initAutoSync();
+        
+        // 监听配置变化
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('AndreaNovelHelper.webdav.sync.autoSync')) {
+                this._initAutoSync();
+            }
+        });
     }
 
     public resolveWebviewView(
@@ -213,6 +225,13 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
             // 同步完成后重新计算差异
             if (this._syncProgress.status === 'completed') {
                 await this._calculateDiffs();
+                
+                // 根据配置决定是否输出diff表
+                const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+                const showDiffTable = config.get<boolean>('showDiffTable', false);
+                if (showDiffTable) {
+                    await this._printSyncDiffTable();
+                }
             }
         } catch (error) {
             this._syncProgress.status = 'error';
@@ -236,16 +255,6 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
         
         this._diffCalculationTimeout = setTimeout(async () => {
             try {
-                // 只有在有项目关联时才计算差异
-                if (!this._projectLink) {
-                    this._fileDiffs = [];
-                    this._postMessage({
-                        command: 'diffsUpdated',
-                        data: this._fileDiffs
-                    });
-                    return;
-                }
-
                 const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
                 if (!workspaceFolder) {
                     this._fileDiffs = [];
@@ -256,9 +265,28 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
                     return;
                 }
 
-                // 获取本地和远程文件列表
+                // 获取本地文件列表
                 const localFiles = await this._getLocalFiles(workspaceFolder.uri.fsPath);
-                const remoteFiles = await this.syncService.getFileList(this._projectLink.accountId);
+                
+                // 如果没有项目关联，只显示本地文件
+                if (!this._projectLink) {
+                    // 将本地文件转换为diff格式，状态为'added'（仅本地存在）
+                    this._fileDiffs = localFiles.map(file => ({
+                        path: file.path,
+                        status: 'added' as const,
+                        localSize: file.size,
+                        localModified: new Date(file.lastModified)
+                    }));
+                    
+                    this._postMessage({
+                        command: 'diffsUpdated',
+                        data: this._fileDiffs
+                    });
+                    return;
+                }
+
+                // 有项目关联时，获取远程文件并比较差异
+                const remoteFiles = await this.syncService.getDirectoryFileList(this._projectLink.accountId, this._projectLink.remotePath);
                 
                 // 比较文件差异
                 const diff = await this._compareFiles(localFiles, remoteFiles);
@@ -364,6 +392,10 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
             };
 
             await this._sendProjectLink();
+            
+            // 重新初始化定时同步
+            this._initAutoSync();
+            
             vscode.window.showInformationMessage(`项目已成功关联到WebDAV: ${account.name || account.url}`);
         } catch (error) {
             console.error('关联项目失败:', error);
@@ -382,6 +414,10 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
             await this._context.workspaceState.update(`webdav.projectLink.${workspaceRoot}`, undefined);
             
             this._projectLink = null;
+            
+            // 停止定时同步
+            this._stopAutoSync();
+            
             await this._sendProjectLink();
             vscode.window.showInformationMessage('项目关联已取消');
         } catch (error) {
@@ -404,8 +440,13 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
 
             let remoteFiles: any[] = [];
             if (accountId) {
-                // 获取远程文件列表
-                remoteFiles = await this.syncService.getFileList(accountId);
+                // 如果有项目关联，获取项目路径下的文件列表
+                if (this._projectLink && this._projectLink.accountId === accountId) {
+                    remoteFiles = await this.syncService.getDirectoryFileList(accountId, this._projectLink.remotePath);
+                } else {
+                    // 否则获取整个账户的文件列表
+                    remoteFiles = await this.syncService.getFileList(accountId);
+                }
             }
             
             // 获取本地文件列表
@@ -426,8 +467,39 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
     }
 
     private static readonly MAX_FILES_LIMIT = 5000; // 限制最大文件数量
-    private static readonly IGNORED_DIRS = new Set(['.git', '.vscode', 'node_modules', '.next', 'dist', 'build', '.cache']);
-    private static readonly IGNORED_EXTENSIONS = new Set(['.log', '.tmp', '.temp', '.cache']);
+    
+    private _getIgnoredDirectories(): Set<string> {
+        const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+        const ignoredDirs = config.get<string[]>('ignoredDirectories', [
+            '.git', 'node_modules', '.pixi', '.venv', '__pycache__', '.pytest_cache',
+            'target', 'build', 'dist', '.gradle', '.mvn', 'bin', 'obj', '.vs', '.idea',
+            '.next', '.nuxt', '.cache', '.tmp', 'tmp'
+        ]);
+        return new Set(ignoredDirs);
+    }
+    
+    private _getIgnoredFiles(): Set<string> {
+        const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+        const ignoredFiles = config.get<string[]>('ignoredFiles', [
+            '.DS_Store', 'Thumbs.db', 'desktop.ini', '*.tmp', '*.temp', '*.log', '*.pid', '*.lock'
+        ]);
+        return new Set(ignoredFiles);
+    }
+    
+    private _isFileIgnored(fileName: string, ignoredPatterns: Set<string>): boolean {
+        for (const pattern of ignoredPatterns) {
+            if (pattern.includes('*')) {
+                // 简单的通配符匹配
+                const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$', 'i');
+                if (regex.test(fileName)) {
+                    return true;
+                }
+            } else if (fileName === pattern) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private async _getLocalFiles(rootPath: string): Promise<any[]> {
         const files: any[] = [];
@@ -454,14 +526,26 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
                         const stat = fs.statSync(fullPath);
                         
                         if (stat.isDirectory()) {
-                            // 跳过忽略的目录
-                            if (!item.startsWith('.') && !WebDAVPanelProvider.IGNORED_DIRS.has(item)) {
-                                scanDirectory(fullPath, relPath);
+                            // 跳过配置中的忽略目录
+                            const ignoredDirs = this._getIgnoredDirectories();
+                            if (ignoredDirs.has(item)) {
+                                continue; // 跳过忽略目录
                             }
+                            
+                            // 检查是否为.anh-fsdb目录，使用独立配置
+                            if (item === '.anh-fsdb') {
+                                const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+                                const ignoreAppDataDirectories = config.get<boolean>('ignoreAppDataDirectories', true);
+                                if (ignoreAppDataDirectories) {
+                                    continue; // 跳过.anh-fsdb目录
+                                }
+                            }
+                            
+                            scanDirectory(fullPath, relPath);
                         } else if (stat.isFile()) {
-                            // 跳过忽略的文件扩展名
-                            const ext = path.extname(item).toLowerCase();
-                            if (!WebDAVPanelProvider.IGNORED_EXTENSIONS.has(ext)) {
+                            // 跳过配置中的忽略文件
+                            const ignoredFiles = this._getIgnoredFiles();
+                            if (!this._isFileIgnored(item, ignoredFiles)) {
                                 files.push({
                                     name: item,
                                     path: relPath,
@@ -495,10 +579,212 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
 
     private static readonly BATCH_SIZE = 500; // 分批处理大小
     private static readonly MAX_DIFF_DISPLAY = 1000; // 最大显示差异数量
+    
+    /**
+     * 判断两个文件是否需要同步
+     * @param localFile 本地文件信息
+     * @param remoteFile 远程文件信息
+     * @param timeTolerance 时间容差（毫秒）
+     * @returns boolean 是否需要同步
+     */
+    private _shouldSyncFile(
+        localFile: { path: string; mtime: number; size: number },
+        remoteFile: { path: string; mtime: number; size: number },
+        timeTolerance: number
+    ): { needsSync: boolean; reason?: string } {
+        // 首先比较文件大小
+        if (localFile.size !== remoteFile.size) {
+            // 大小不同，需要同步
+            const sizeDiff = Math.abs(localFile.size - remoteFile.size);
+            return {
+                needsSync: true,
+                reason: `文件大小不同 (本地: ${this._formatSize(localFile.size)}, 远程: ${this._formatSize(remoteFile.size)}, 差异: ${this._formatSize(sizeDiff)})`
+            };
+        }
+        
+        // 大小相同，比较修改时间（考虑容差）
+        const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+        
+        if (timeDiff <= timeTolerance) {
+            // 时间差在容差范围内，认为文件相同，不需要同步
+            return { needsSync: false };
+        }
+        
+        // 时间差超过容差，需要同步
+        const timeDiffSeconds = Math.round(timeDiff / 1000);
+        const localTime = new Date(localFile.mtime).toLocaleString('zh-CN');
+        const remoteTime = new Date(remoteFile.mtime).toLocaleString('zh-CN');
+        return {
+            needsSync: true,
+            reason: `修改时间差异过大 (本地: ${localTime}, 远程: ${remoteTime}, 差异: ${timeDiffSeconds}秒)`
+        };
+    }
+
+    private _formatSize(bytes: number): string {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * 打印同步后的diff表，显示相同和不同的项目
+     */
+    private async _printSyncDiffTable(): Promise<void> {
+        try {
+            if (!this._projectLink) {
+                console.log('[WebDAV-Panel] 未找到项目链接，无法生成diff表');
+                return;
+            }
+
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                console.log('[WebDAV-Panel] 未找到工作区文件夹');
+                return;
+            }
+
+            // 重新获取文件列表进行比较
+            const localFiles = await this._getLocalFiles(workspaceFolder.uri.fsPath);
+            const accounts = await this.accountManager.getAccounts();
+            const account = accounts.find(acc => acc.id === this._projectLink!.accountId);
+            if (!account) {
+                console.log('[WebDAV-Panel] 未找到WebDAV账户');
+                return;
+            }
+
+            // 获取远程文件列表
+            const remoteFiles = await this.syncService.getDirectoryFileList(
+                this._projectLink!.accountId,
+                this._projectLink!.remotePath
+            );
+
+            // 比较文件
+            const comparison = await this._compareFiles(localFiles, remoteFiles);
+
+            // 打印详细的diff表
+            console.log('\n' + '='.repeat(80));
+            console.log('📊 WebDAV 同步后文件差异报告');
+            console.log('='.repeat(80));
+            
+            // 打印统计信息
+            console.log('\n📈 统计摘要:');
+            console.log(`   本地文件总数: ${comparison.summary.totalLocal}`);
+            console.log(`   远程文件总数: ${comparison.summary.totalRemote}`);
+            console.log(`   相同文件数量: ${comparison.summary.identicalCount}`);
+            console.log(`   不同文件数量: ${comparison.summary.modifiedCount}`);
+            console.log(`   仅本地文件: ${comparison.summary.onlyLocalCount}`);
+            console.log(`   仅远程文件: ${comparison.summary.onlyRemoteCount}`);
+            
+            if (comparison.summary.hasMoreDiffs) {
+                console.log(`   ⚠️  注意: 差异文件过多，仅显示前 ${WebDAVPanelProvider.MAX_DIFF_DISPLAY} 个`);
+            }
+
+            // 打印相同文件列表
+            if (comparison.identical.length > 0) {
+                console.log('\n✅ 相同文件 (' + comparison.identical.length + ' 个):');
+                console.log('-'.repeat(60));
+                comparison.identical.slice(0, 20).forEach((file: any, index: number) => {
+                    const size = this._formatSize(file.size || 0);
+                    const time = new Date(file.lastModified).toLocaleString('zh-CN');
+                    console.log(`   ${index + 1}. ${file.path} (${size}, ${time})`);
+                });
+                if (comparison.identical.length > 20) {
+                    console.log(`   ... 还有 ${comparison.identical.length - 20} 个相同文件`);
+                }
+            }
+
+            // 打印不同文件列表
+            if (comparison.modified.length > 0) {
+                console.log('\n🔄 不同文件 (' + comparison.modified.length + ' 个):');
+                console.log('-'.repeat(60));
+                comparison.modified.forEach((file: any, index: number) => {
+                    const localSize = this._formatSize(file.local?.size || 0);
+                    const remoteSize = this._formatSize(file.remote?.size || 0);
+                    const localTime = new Date(file.local?.lastModified || 0).toLocaleString('zh-CN');
+                    const remoteTime = new Date(file.remote?.mtime || file.remote?.lastModified || 0).toLocaleString('zh-CN');
+                    console.log(`   ${index + 1}. ${file.path}`);
+                    console.log(`      本地: ${localSize}, ${localTime}`);
+                    console.log(`      远程: ${remoteSize}, ${remoteTime}`);
+                    console.log(`      原因: ${file.reason}`);
+                });
+            }
+
+            // 打印仅本地文件
+            if (comparison.onlyLocal.length > 0) {
+                console.log('\n📁 仅本地文件 (' + comparison.onlyLocal.length + ' 个):');
+                console.log('-'.repeat(60));
+                comparison.onlyLocal.forEach((file: any, index: number) => {
+                    const size = this._formatSize(file.size || 0);
+                    const time = new Date(file.lastModified).toLocaleString('zh-CN');
+                    console.log(`   ${index + 1}. ${file.path} (${size}, ${time})`);
+                });
+            }
+
+            // 打印仅远程文件
+            if (comparison.onlyRemote.length > 0) {
+                console.log('\n☁️  仅远程文件 (' + comparison.onlyRemote.length + ' 个):');
+                console.log('-'.repeat(60));
+                comparison.onlyRemote.forEach((file: any, index: number) => {
+                    const size = this._formatSize(file.size || 0);
+                    const time = new Date(file.mtime || file.lastModified || 0).toLocaleString('zh-CN');
+                    console.log(`   ${index + 1}. ${file.path} (${size}, ${time})`);
+                });
+            }
+
+            console.log('\n' + '='.repeat(80));
+            console.log('✨ diff表生成完成');
+            console.log('='.repeat(80) + '\n');
+
+            // 同时在VS Code中显示通知
+            const totalDiffs = comparison.summary.modifiedCount + comparison.summary.onlyLocalCount + comparison.summary.onlyRemoteCount;
+            if (totalDiffs === 0) {
+                vscode.window.showInformationMessage(`🎉 同步完成！所有 ${comparison.summary.identicalCount} 个文件都已同步，无差异。`);
+            } else {
+                vscode.window.showInformationMessage(
+                    `📊 同步完成！相同文件: ${comparison.summary.identicalCount}，差异文件: ${totalDiffs}。详细信息请查看控制台输出。`
+                );
+            }
+
+        } catch (error) {
+            console.error('[WebDAV-Panel] 生成diff表时出错:', error);
+            vscode.window.showErrorMessage('生成diff表时出错: ' + (error instanceof Error ? error.message : String(error)));
+        }
+    }
 
     private async _compareFiles(localFiles: any[], remoteFiles: any[]): Promise<any> {
-        const localMap = new Map(localFiles.map(f => [f.path, f]));
-        const remoteMap = new Map(remoteFiles.map(f => [f.path || f.name, f]));
+        // 标准化远程文件路径，将完整路径转换为相对路径
+        const normalizeRemotePath = (remotePath: string): string => {
+            if (!this._projectLink || !remotePath) return remotePath;
+            
+            const projectRemotePath = this._projectLink.remotePath;
+            // 确保项目远程路径以/结尾
+            const normalizedProjectPath = projectRemotePath.endsWith('/') ? projectRemotePath : projectRemotePath + '/';
+            
+            // 如果远程文件路径以项目路径开头，则移除项目路径前缀
+            if (remotePath.startsWith(normalizedProjectPath)) {
+                return remotePath.substring(normalizedProjectPath.length);
+            } else if (remotePath.startsWith(projectRemotePath) && remotePath.length > projectRemotePath.length) {
+                const remaining = remotePath.substring(projectRemotePath.length);
+                return remaining.startsWith('/') ? remaining.substring(1) : remaining;
+            }
+            
+            return remotePath;
+        };
+        
+        // 标准化本地文件路径，确保使用正斜杠
+        const normalizeLocalPath = (localPath: string): string => {
+            return localPath.replace(/\\/g, '/').replace(/^\/+/, '');
+        };
+        
+        const localMap = new Map(localFiles.map(f => {
+            const normalizedPath = normalizeLocalPath(f.path);
+            return [normalizedPath, { ...f, normalizedPath }];
+        }));
+        const remoteMap = new Map(remoteFiles.map(f => {
+            const normalizedPath = normalizeRemotePath(f.path || f.name);
+            return [normalizedPath, { ...f, normalizedPath }];
+        }));
         
         const onlyLocal: any[] = [];
         const onlyRemote: any[] = [];
@@ -507,6 +793,14 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
         
         const totalFiles = localFiles.length + remoteFiles.length;
         let processedFiles = 0;
+        
+        // 添加调试日志
+        console.log('[WebDAV-Panel] 文件比较开始:', {
+            localFiles: localFiles.length,
+            remoteFiles: remoteFiles.length,
+            localPaths: Array.from(localMap.keys()).slice(0, 5),
+            remotePaths: Array.from(remoteMap.keys()).slice(0, 5)
+        });
         
         // 分批处理本地文件
         const localEntries = Array.from(localMap.entries());
@@ -520,29 +814,41 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
                         onlyLocal.push(localFile);
                     }
                 } else {
-                    // 比较修改时间或大小
-                    try {
-                        const localTime = new Date(localFile.lastModified).getTime();
-                        const remoteTime = new Date(remoteFile.lastModified || remoteFile.lastmod).getTime();
-                        
-                        if (Math.abs(localTime - remoteTime) > 1000 || localFile.size !== remoteFile.size) {
-                            if (modified.length < WebDAVPanelProvider.MAX_DIFF_DISPLAY) {
-                                modified.push({
-                                    path: path,
-                                    local: localFile,
-                                    remote: remoteFile
-                                });
+                    // 使用改进的文件比较算法
+                        try {
+                            const localTime = new Date(localFile.lastModified).getTime();
+                            const remoteTime = remoteFile.mtime || new Date(remoteFile.lastModified || remoteFile.lastmod || 0).getTime();
+                            
+                            // 获取配置中的时间容差设置
+                            const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+                            const timeTolerance = config.get<number>('timeTolerance', 2000);
+                            
+                            const syncResult = this._shouldSyncFile(
+                                { path: path, mtime: localTime, size: localFile.size },
+                                { path: path, mtime: remoteTime, size: remoteFile.size },
+                                timeTolerance
+                            );
+                            
+                            if (syncResult.needsSync) {
+                                if (modified.length < WebDAVPanelProvider.MAX_DIFF_DISPLAY) {
+                                    modified.push({
+                                        path: path,
+                                        local: localFile,
+                                        remote: remoteFile,
+                                        reason: syncResult.reason || '未知原因'
+                                    });
+                                }
+                            } else {
+                                identical.push(localFile);
                             }
-                        } else {
-                            identical.push(localFile);
-                        }
                     } catch (error) {
                         // 时间解析错误，视为修改
                         if (modified.length < WebDAVPanelProvider.MAX_DIFF_DISPLAY) {
                             modified.push({
                                 path: path,
                                 local: localFile,
-                                remote: remoteFile
+                                remote: remoteFile,
+                                reason: '时间解析错误，无法比较修改时间'
                             });
                         }
                     }
@@ -911,12 +1217,85 @@ export class WebDAVPanelProvider implements vscode.WebviewViewProvider {
 </html>`;
     }
 
+    private _initAutoSync() {
+        const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync.autoSync');
+        const enabled = config.get<boolean>('enabled', false);
+        const intervalMinutes = config.get<number>('intervalMinutes', 30);
+        
+        // 停止现有定时器
+        this._stopAutoSync();
+        
+        this._autoSyncEnabled = enabled;
+        
+        if (enabled && this._projectLink) {
+            this._startAutoSync(intervalMinutes);
+        }
+    }
+    
+    private _startAutoSync(intervalMinutes: number) {
+        if (this._autoSyncTimer) {
+            clearInterval(this._autoSyncTimer);
+        }
+        
+        const intervalMs = intervalMinutes * 60 * 1000;
+        
+        this._autoSyncTimer = setInterval(() => {
+            this._performAutoSync();
+        }, intervalMs);
+        
+        console.log(`定时同步已启动，间隔：${intervalMinutes}分钟`);
+    }
+    
+    private _stopAutoSync() {
+        if (this._autoSyncTimer) {
+            clearInterval(this._autoSyncTimer);
+            this._autoSyncTimer = null;
+            console.log('定时同步已停止');
+        }
+    }
+    
+    private async _performAutoSync() {
+        try {
+            // 检查是否有项目关联且当前没有正在进行的同步
+            if (!this._projectLink || this._syncProgress.status === 'syncing') {
+                return;
+            }
+            
+            // 获取配置的同步方法
+            const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync.autoSync');
+            const syncMethod = config.get<string>('method', 'bidirectional');
+            
+            // 将配置值转换为_startSync方法需要的参数
+            let direction: 'two-way' | 'push' | 'pull';
+            switch (syncMethod) {
+                case 'upload':
+                    direction = 'push';
+                    break;
+                case 'download':
+                    direction = 'pull';
+                    break;
+                case 'bidirectional':
+                default:
+                    direction = 'two-way';
+                    break;
+            }
+            
+            console.log(`执行定时同步 (${syncMethod})...`);
+            await this._startSync(direction);
+        } catch (error) {
+            console.error('定时同步失败:', error);
+        }
+    }
+
     public dispose() {
         // 清理资源
         if (this._diffCalculationTimeout) {
             clearTimeout(this._diffCalculationTimeout);
             this._diffCalculationTimeout = undefined;
         }
+        
+        // 停止定时同步
+        this._stopAutoSync();
     }
 }
 

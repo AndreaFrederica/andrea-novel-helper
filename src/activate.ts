@@ -54,6 +54,7 @@ import { registerFontManager } from './typeset/fontManager';
 import { registerContextKeys } from './typeset/contextKeys';
 import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOverride';
 import { registerTypoFeature } from './typo/typoService';
+import { registerTypoQuickSettings } from './typo/typoQuickSettings';
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
@@ -311,6 +312,9 @@ export async function activate(context: vscode.ExtensionContext) {
         
         // 注册快速设置（此时主扩展已激活）
         registerQuickSettings(context, refresh);
+        
+        // 注册typo快速设置
+        registerTypoQuickSettings(context);
         
         registerFontManager(context, refresh);
         const previewManager: PreviewManager = registerPreviewPane(context);

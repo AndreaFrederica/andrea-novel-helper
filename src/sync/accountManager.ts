@@ -40,7 +40,22 @@ export class WebDAVAccountManager {
 
   private initWorker(): void {
     const workerPath = path.join(__dirname, '../workers/syncWorker.js');
-    this.worker = new Worker(workerPath);
+    
+    // 获取配置数据传递给worker
+     const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+     const ignoredDirectories = config.get('ignoredDirectories', []);
+     const ignoredFiles = config.get('ignoredFiles', []);
+     const ignoreAppDataDirectories = config.get('ignoreAppDataDirectories', true);
+    
+    const workerData = {
+      config: {
+        ignoredDirectories,
+        ignoredFiles,
+        ignoreAppDataDirectories
+      }
+    };
+    
+    this.worker = new Worker(workerPath, { workerData });
     
     this.worker.on('message', (response: SyncResponse) => {
       const pending = this.pendingMessages.get(response.id);

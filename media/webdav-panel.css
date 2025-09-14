@@ -669,6 +669,27 @@ body {
     border-radius: 4px;
 }
 
+/* 修改原因样式 */
+.file-reason {
+    margin: 6px 0;
+    padding: 8px 12px;
+    background-color: var(--vscode-textBlockQuote-background);
+    border-left: 3px solid var(--warning-color);
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+}
+
+.reason-label {
+    font-weight: 600;
+    color: var(--warning-color);
+    margin-right: 8px;
+}
+
+.reason-text {
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+}
+
 .version-label {
     font-weight: 500;
     min-width: 40px;
@@ -1000,5 +1021,128 @@ body {
     .btn-icon {
         width: 100%;
         margin-top: 5px;
+    }
+}
+
+/* 虚拟滚动样式 */
+.virtual-scroll-container {
+    height: 400px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.virtual-scroll-viewport {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.virtual-scroll-content {
+    position: relative;
+}
+
+.virtual-scroll-item {
+    position: absolute;
+    left: 0;
+    right: 0;
+    transition: none;
+}
+
+.virtual-scroll-placeholder {
+    height: 1px;
+    background: transparent;
+}
+
+/* 虚拟滚动中的文件项样式 */
+.virtual-file-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--vscode-list-inactiveSelectionBackground);
+    background-color: var(--vscode-editor-background);
+    transition: background-color 0.2s ease;
+}
+
+.virtual-file-item:hover {
+    background-color: var(--hover-background);
+}
+
+.virtual-file-item .file-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.virtual-file-item .file-name {
+    font-family: var(--vscode-editor-font-family);
+    font-size: 13px;
+    color: var(--foreground-color);
+    word-break: break-all;
+    flex: 1;
+    margin-right: 12px;
+}
+
+.virtual-file-item .file-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.virtual-file-item .file-details {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+}
+
+/* 虚拟滚动加载指示器 */
+.virtual-scroll-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: var(--vscode-descriptionForeground);
+    font-size: 12px;
+}
+
+.virtual-scroll-loading::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--vscode-descriptionForeground);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* 虚拟滚动响应式调整 */
+@media (max-width: 600px) {
+    .virtual-scroll-container {
+        height: 300px;
+    }
+    
+    .virtual-file-item {
+        padding: 10px 12px;
+    }
+    
+    .virtual-file-item .file-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    
+    .virtual-file-item .file-details {
+        flex-direction: column;
+        gap: 4px;
     }
 }

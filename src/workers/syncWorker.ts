@@ -1,9 +1,11 @@
 import { parentPort, workerData } from 'worker_threads';
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { createClient, WebDAVClient } from 'webdav';
+
+// 时间容差常量（毫秒）
+const TIME_TOLERANCE = 2000;
 
 interface SyncMessage {
     id: string;
@@ -100,6 +102,9 @@ class SyncWorker {
         remotePath: string;
         incremental?: boolean;
         lastSyncTime?: number;
+        syncStrategy?: 'timestamp' | 'size' | 'both' | 'content';
+        timeTolerance?: number;
+        enableSmartComparison?: boolean;
     }): Promise<SyncResponse> {
         // 验证和修正URL格式
         let correctedUrl = this.validateAndCorrectWebDAVUrl(data.url);
@@ -117,7 +122,16 @@ class SyncWorker {
         const localFiles = await this.walkLocal(data.localPath, data.incremental ? data.lastSyncTime : undefined);
         const remoteFiles = await this.walkRemote(data.remotePath);
 
-        const actions = this.calculateSyncActions(localFiles, remoteFiles, data.direction);
+        const actions = await this.calculateSyncActions(
+            localFiles, 
+            remoteFiles, 
+            data.direction,
+            data.syncStrategy || 'timestamp',
+            data.timeTolerance || TIME_TOLERANCE,
+            data.enableSmartComparison !== undefined ? data.enableSmartComparison : true,
+            data.localPath,
+            data.remotePath
+        );
         const results = [];
 
         for (const action of actions) {
@@ -147,8 +161,42 @@ class SyncWorker {
         };
     }
 
+    private _getIgnoredDirectories(): string[] {
+        // 从workerData中获取配置，如果没有则使用默认值
+        return workerData?.ignoredDirectories || [
+            '.git', 'node_modules', '.pixi', '.venv', '__pycache__', '.pytest_cache',
+            'target', 'build', 'dist', '.gradle', '.mvn', 'bin', 'obj', '.vs', '.idea',
+            '.next', '.nuxt', '.cache', '.tmp', 'tmp', '.cargo', 'vendor', 'coverage',
+            '.nyc_output', '.tox', '.nox', 'out', 'Debug', 'Release', '.dart_tool', '.pub-cache'
+        ];
+    }
+
+    private _getIgnoredFiles(): string[] {
+        // 从workerData中获取配置，如果没有则使用默认值
+        return workerData?.ignoredFiles || [
+            '.DS_Store', 'Thumbs.db', 'desktop.ini', '*.tmp', '*.temp', '*.log', '*.pid', '*.lock'
+        ];
+    }
+
+    private _isFileIgnored(fileName: string): boolean {
+        const ignoredFiles = this._getIgnoredFiles();
+        return ignoredFiles.some(pattern => {
+            if (pattern.includes('*')) {
+                const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+                return regex.test(fileName);
+            }
+            return fileName === pattern;
+        });
+    }
+
+    private _shouldIgnoreAppDataDirectories(): boolean {
+        const config = workerData?.config;
+        return config?.ignoreAppDataDirectories !== false; // 默认为true
+    }
+
     private async walkLocal(dirPath: string, lastSyncTime?: number): Promise<Array<{ path: string; mtime: number; size: number }>> {
         const files: Array<{ path: string; mtime: number; size: number }> = [];
+        const ignoredDirectories = this._getIgnoredDirectories();
         
         const walk = async (currentPath: string) => {
             const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
@@ -156,15 +204,23 @@ class SyncWorker {
             for (const entry of entries) {
                 const fullPath = path.join(currentPath, entry.name);
                 
-                // 跳过隐藏文件和系统文件，但保留重要配置文件
-                const allowedHiddenFiles = ['.gitignore', '.vscode'];
-                if (entry.name.startsWith('.') && !allowedHiddenFiles.includes(entry.name)) {
+                // 检查是否为忽略的目录
+                if (entry.isDirectory() && ignoredDirectories.includes(entry.name)) {
                     continue;
                 }
                 
-                // 跳过特殊的应用程序文件（可选同步）
-                const skipSpecialFiles = ['.anh-fsdb', 'node_modules', '.git', '.DS_Store', 'Thumbs.db'];
-                if (skipSpecialFiles.some(pattern => entry.name === pattern || entry.name.endsWith(pattern))) {
+                // 检查是否为忽略的文件
+                if (entry.isFile() && this._isFileIgnored(entry.name)) {
+                    continue;
+                }
+                
+                // 检查是否为忽略的目录或文件
+                if (entry.isFile() && this._isFileIgnored(entry.name)) {
+                    continue;
+                }
+                
+                // 检查应用程序内部数据目录
+                if (entry.name === '.anh-fsdb' && this._shouldIgnoreAppDataDirectories()) {
                     continue;
                 }
                 
@@ -219,7 +275,9 @@ class SyncWorker {
 
             try {
                 console.log('[SyncWorker] walkRemote 获取目录内容:', { currentPath, depth });
-                const entries = await this.webdavClient!.getDirectoryContents(currentPath);
+                const response = await this.webdavClient!.getDirectoryContents(currentPath);
+                // 处理可能的ResponseDataDetailed类型
+                const entries = Array.isArray(response) ? response : response.data;
                 console.log('[SyncWorker] walkRemote 目录内容获取成功，条目数:', entries.length);
                 
                 for (const entry of entries) {
@@ -236,13 +294,24 @@ class SyncWorker {
                     } else {
                         // 正确计算相对路径，保持目录结构
                         let relativePath = entry.filename;
-                        if (relativePath.startsWith(normalizedRemotePath)) {
-                            relativePath = relativePath.substring(normalizedRemotePath.length);
-                        } else if (relativePath.startsWith(remotePath)) {
-                            relativePath = relativePath.substring(remotePath.length);
-                            if (relativePath.startsWith('/')) {
-                                relativePath = relativePath.substring(1);
-                            }
+                        
+                        // 标准化处理，确保路径计算的一致性
+                        const baseRemotePath = normalizedRemotePath.replace(/\/+$/, '');
+                        const entryPath = relativePath.replace(/\/+$/, '');
+                        
+                        if (entryPath.startsWith(baseRemotePath + '/')) {
+                            relativePath = entryPath.substring(baseRemotePath.length + 1);
+                        } else if (entryPath.startsWith(baseRemotePath) && entryPath.length > baseRemotePath.length) {
+                            const remaining = entryPath.substring(baseRemotePath.length);
+                            relativePath = remaining.startsWith('/') ? remaining.substring(1) : remaining;
+                        } else if (entryPath === baseRemotePath) {
+                            // 如果是根目录文件，使用文件名
+                            relativePath = path.basename(entryPath);
+                        }
+                        
+                        // 确保相对路径不以/开头
+                        if (relativePath.startsWith('/')) {
+                            relativePath = relativePath.substring(1);
                         }
                         
                         console.log('[SyncWorker] walkRemote 添加文件:', {
@@ -274,14 +343,22 @@ class SyncWorker {
         return files;
     }
 
-    private calculateSyncActions(
+    private async calculateSyncActions(
         localFiles: Array<{ path: string; mtime: number; size: number }>,
         remoteFiles: Array<{ path: string; mtime: number; size: number }>,
-        direction: 'upload' | 'download' | 'two-way'
+        direction: 'upload' | 'download' | 'two-way',
+        syncStrategy: 'timestamp' | 'size' | 'both' | 'content' = 'timestamp',
+        timeTolerance: number = TIME_TOLERANCE,
+        enableSmartComparison: boolean = true,
+        localBasePath: string,
+        remoteBasePath: string
     ) {
         const actions: Array<{ type: 'upload' | 'download'; localPath: string; remotePath: string }> = [];
         const localMap = new Map(localFiles.map(f => [f.path, f]));
         const remoteMap = new Map(remoteFiles.map(f => [f.path, f]));
+        
+        // 时间戳容差（毫秒），用于处理时间戳精度差异
+        const TIME_TOLERANCE = 15000; // 15秒的时间容差
 
         // 处理本地文件
         for (const localFile of localFiles) {
@@ -296,11 +373,30 @@ class SyncWorker {
                         remotePath: localFile.path
                     });
                 }
-            } else if (localFile.mtime > remoteFile.mtime) {
-                // 本地更新，需要上传
-                if (direction === 'upload' || direction === 'two-way') {
+            } else {
+                // 文件都存在，需要比较是否需要同步
+                const fullLocalPath = path.join(localBasePath, localFile.path);
+                const fullRemotePath = path.posix.join(remoteBasePath, localFile.path).replace(/\\/g, '/');
+                
+                const needsSync = await this.shouldSyncFile(
+                    localFile, 
+                    remoteFile, 
+                    timeTolerance, 
+                    syncStrategy, 
+                    enableSmartComparison,
+                    fullLocalPath,
+                    fullRemotePath
+                );
+                
+                if (needsSync === 'upload' && (direction === 'upload' || direction === 'two-way')) {
                     actions.push({
                         type: 'upload',
+                        localPath: localFile.path,
+                        remotePath: localFile.path
+                    });
+                } else if (needsSync === 'download' && (direction === 'download' || direction === 'two-way')) {
+                    actions.push({
+                        type: 'download',
                         localPath: localFile.path,
                         remotePath: localFile.path
                     });
@@ -308,7 +404,7 @@ class SyncWorker {
             }
         }
 
-        // 处理远程文件
+        // 处理远程文件（只检查本地不存在的情况）
         for (const remoteFile of remoteFiles) {
             const localFile = localMap.get(remoteFile.path);
             
@@ -321,19 +417,138 @@ class SyncWorker {
                         remotePath: remoteFile.path
                     });
                 }
-            } else if (remoteFile.mtime > localFile.mtime) {
-                // 远程更新，需要下载
-                if (direction === 'download' || direction === 'two-way') {
-                    actions.push({
-                        type: 'download',
-                        localPath: remoteFile.path,
-                        remotePath: remoteFile.path
-                    });
-                }
             }
+            // 注意：如果本地存在，已经在上面的循环中处理过了
         }
 
         return actions;
+    }
+    
+    /**
+     * 计算文件的MD5哈希值
+     */
+    private async calculateFileHash(filePath: string): Promise<string> {
+        const content = await fs.promises.readFile(filePath);
+        return crypto.createHash('md5').update(content).digest('hex');
+    }
+
+    /**
+     * 计算远程文件的MD5哈希值
+     */
+    private async calculateRemoteFileHash(remotePath: string): Promise<string> {
+        if (!this.webdavClient) {
+            throw new Error('WebDAV client not initialized');
+        }
+        
+        const content = await this.webdavClient.getFileContents(remotePath) as Buffer;
+        // 如果内容被加密，需要先解密
+        const finalContent = this.encryptionKey ? this.decryptContent(content) : content;
+        return crypto.createHash('md5').update(finalContent).digest('hex');
+    }
+
+    /**
+     * 判断两个文件是否需要同步
+     * @param localFile 本地文件信息
+     * @param remoteFile 远程文件信息
+     * @param timeTolerance 时间容差（毫秒）
+     * @returns 'upload' | 'download' | null
+     */
+    private async shouldSyncFile(
+        localFile: { path: string; mtime: number; size: number },
+        remoteFile: { path: string; mtime: number; size: number },
+        timeTolerance: number,
+        strategy: 'timestamp' | 'size' | 'both' | 'content' = 'timestamp',
+        enableSmartComparison: boolean = true,
+        localPath?: string,
+        remotePath?: string
+    ): Promise<'upload' | 'download' | null> {
+        switch (strategy) {
+            case 'size':
+                // 仅基于文件大小比较
+                if (localFile.size === remoteFile.size) {
+                    return null; // 大小相同，不需要同步
+                }
+                // 大小不同，选择修改时间更新的文件
+                return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                
+            case 'timestamp':
+                // 基于时间戳比较，同时确保文件大小一致
+                const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                if (timeDiff <= timeTolerance) {
+                    // 时间差在容差范围内，但还需检查文件大小是否一致
+                    if (localFile.size !== remoteFile.size) {
+                        // 大小不一致，选择修改时间更新的文件
+                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    }
+                    return null; // 时间和大小都匹配，不需要同步
+                }
+                return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                
+            case 'content':
+                // 基于内容哈希比较
+                if (localPath && remotePath) {
+                    try {
+                        const localHash = await this.calculateFileHash(localPath);
+                        const remoteHash = await this.calculateRemoteFileHash(remotePath);
+                        
+                        if (localHash === remoteHash) {
+                            return null; // 内容相同，不需要同步
+                        }
+                        
+                        // 内容不同，选择修改时间更新的文件
+                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    } catch (error) {
+                        console.warn('无法计算文件哈希，回退到时间戳比较:', error);
+                        // 回退到时间戳比较
+                        const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                        if (timeDiff <= timeTolerance) {
+                            return null;
+                        }
+                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    }
+                } else {
+                    // 没有提供文件路径，回退到大小+时间戳比较
+                    if (localFile.size === remoteFile.size) {
+                        const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                        if (timeDiff <= timeTolerance) {
+                            return null;
+                        }
+                    }
+                    return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                }
+                
+            case 'both':
+            default:
+                // 智能比较算法：结合大小和时间戳
+                if (enableSmartComparison) {
+                    // 首先比较文件大小
+                    if (localFile.size !== remoteFile.size) {
+                        // 大小不同，选择修改时间更新的文件
+                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    }
+                    
+                    // 大小相同，比较修改时间（考虑容差）
+                    const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                    
+                    if (timeDiff <= timeTolerance) {
+                        // 时间差在容差范围内，认为文件相同，不需要同步
+                        return null;
+                    }
+                    
+                    // 时间差超过容差，选择更新的文件
+                    return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                } else {
+                    // 简单的both策略：大小或时间戳任一不同就同步
+                    if (localFile.size !== remoteFile.size) {
+                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    }
+                    const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                    if (timeDiff > timeTolerance) {
+                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    }
+                    return null;
+                }
+        }
     }
 
     private async uploadFile(localPath: string, remotePath: string): Promise<void> {
@@ -342,6 +557,10 @@ class SyncWorker {
         }
 
         try {
+            // 获取本地文件的stat信息，保留原始修改时间
+            const localStat = await fs.promises.stat(localPath);
+            const originalMtime = localStat.mtime;
+            
             // 确保文件的父目录存在
             const remoteDir = path.posix.dirname(remotePath);
             if (remoteDir !== '.' && remoteDir !== '/') {
@@ -352,6 +571,30 @@ class SyncWorker {
             // 如果设置了加密密钥，对内容进行加密
             const finalContent = this.encryptContent(content);
             await this.webdavClient!.putFileContents(remotePath, finalContent);
+            
+            // 尝试设置远程文件的修改时间
+            try {
+                const lastModified = originalMtime.toUTCString();
+                await this.webdavClient!.customRequest(remotePath, {
+                    method: 'PROPPATCH',
+                    headers: {
+                        'Content-Type': 'application/xml; charset=utf-8'
+                    },
+                    data: `<?xml version="1.0" encoding="utf-8" ?>
+                    <D:propertyupdate xmlns:D="DAV:">
+                        <D:set>
+                            <D:prop>
+                                <D:getlastmodified>${lastModified}</D:getlastmodified>
+                            </D:prop>
+                        </D:set>
+                    </D:propertyupdate>`
+                });
+                console.log(`文件上传成功并设置修改时间: ${remotePath}, 修改时间: ${lastModified}`);
+            } catch (proppatchError) {
+                // 如果设置修改时间失败，记录警告但不影响上传成功
+                console.warn(`文件上传成功但设置修改时间失败: ${remotePath}`, proppatchError);
+                console.log(`文件上传成功: ${remotePath}, 本地修改时间: ${originalMtime.toISOString()}`);
+            }
         } catch (error: any) {
             // 提供更详细的错误信息
             if (error.status === 403) {

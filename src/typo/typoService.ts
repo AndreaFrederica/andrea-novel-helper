@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { detectTyposBatch } from './typoDetector';
 import { onTypoConfigChanged } from './typoHttp';
-import { getDocDB, getParagraphResult, resetParagraphs, setParagraphResult, clearDocDB, pruneStoreToLimit } from './typoDB';
+import { getDocDB, getParagraphResult, resetParagraphs, setParagraphResult, clearDocDB, pruneStoreToLimit, getDocDBSync, getParagraphResultSync, setParagraphResultSync, resetParagraphsSync, clearDocDBSync } from './typoDB';
 import { ParagraphPiece, SentencePiece, TypoDiagnosticsApplyOptions, ParagraphScanResult, ParagraphTypoError } from './typoTypes';
 import { getDocumentRoleOccurrences } from '../context/documentRolesCache';
 import { Role } from '../extension';
@@ -162,7 +162,7 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
     } catch { /* ignore */ }
     const perPara = new Map<string, ParagraphScanResult>();
     const appliedSignatures = new Map<number, Set<string>>(); // sentenceIndex -> sigs
-    const applyCorrections = (corrs: import('./typoTypes').TypoApiResult[]) => {
+    const applyCorrections = async (corrs: import('./typoTypes').TypoApiResult[]) => {
         for (let i = 0; i < corrs.length; i++) {
             const r = corrs[i];
             const idx = typeof r?.index === 'number' ? r.index : i;
@@ -191,7 +191,14 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
             }
         }
         const docKey = doc.uri.toString();
-        for (const [_, res] of perPara) { setParagraphResult(docKey, res); }
+        for (const [_, res] of perPara) { 
+        try {
+            await setParagraphResult(docKey, res, doc);
+        } catch {
+            // 如果异步失败，使用同步版本作为后备
+            setParagraphResultSync(docKey, res);
+        }
+    }
         enqueueApply(doc);
     };
     const results = await detectTyposBatch(texts, { docFsPath: doc.uri.fsPath, docUri: doc.uri.toString(), roleNames: roleNamesCtx, onPartial: applyCorrections });
@@ -221,7 +228,7 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
     return perPara;
 }
 
-function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDiagnosticsApplyOptions) {
+async function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDiagnosticsApplyOptions) {
     if (!typoFeatureEnabled()) {
         options.diagnosticCollection.delete(doc.uri);
         clearDocDecorations(doc);
@@ -229,7 +236,13 @@ function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDiagnost
         return;
     }
     const docKey = doc.uri.toString();
-    const db = getDocDB(docKey);
+    let db;
+    try {
+        db = await getDocDB(docKey, doc);
+    } catch {
+        // 如果异步失败，使用同步版本作为后备
+        db = getDocDBSync(docKey);
+    }
     const text = doc.getText();
     const paras = splitIntoParagraphs(text);
 
@@ -239,7 +252,13 @@ function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDiagnost
     const roleMap = getDocumentRoleOccurrences(doc);
     for (const p of paras) {
         currentHashes.add(p.hash);
-        const res = getParagraphResult(docKey, p.hash);
+        let res;
+        try {
+            res = await getParagraphResult(docKey, p.hash, doc);
+        } catch {
+            // 如果异步失败，使用同步版本作为后备
+            res = getParagraphResultSync(docKey, p.hash);
+        }
         if (!res || !res.errors?.length) continue;
         for (const e of res.errors) {
             const absStart = p.startOffset + e.offset;
@@ -374,7 +393,15 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
             // collect missing paragraphs first
             const missing: ParagraphPiece[] = [];
             for (const p of paras) {
-                const exist = opts?.force ? undefined : getParagraphResult(docKey, p.hash);
+                let exist;
+            if (!opts?.force) {
+                try {
+                    exist = await getParagraphResult(docKey, p.hash, doc);
+                } catch {
+                    // 如果异步失败，使用同步版本作为后备
+                    exist = getParagraphResultSync(docKey, p.hash);
+                }
+            }
                 if (!exist) missing.push(p);
             }
             const groupSize = vscode.workspace.getConfiguration('AndreaNovelHelper').get<number>('typo.docGroupSize', 3) || 3;
@@ -384,7 +411,12 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
                     await limiter.acquire();
                     const map = await scanParagraphGroup(slice, doc);
                     for (const [_, res] of map) {
-                        setParagraphResult(docKey, res);
+                        try {
+                        await setParagraphResult(docKey, res, doc);
+                    } catch {
+                        // 如果异步失败，使用同步版本作为后备
+                        setParagraphResultSync(docKey, res);
+                    }
                     }
                     enqueueApply(doc);
                     limiter.release();
@@ -419,7 +451,12 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
             const editor = vscode.window.activeTextEditor;
             if (!editor) { vscode.window.showInformationMessage('没有活动编辑器'); return; }
             const docKey = editor.document.uri.toString();
-            resetParagraphs(docKey);
+            try {
+                await resetParagraphs(docKey, editor.document);
+            } catch {
+                // 如果异步失败，使用同步版本作为后备
+                resetParagraphsSync(docKey);
+            }
             await scheduleScan(editor.document, { force: true });
         })
     );
@@ -432,13 +469,18 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(doc => { if (supported(doc)) { scheduleScan(doc); updateStatusBar(); } }),
         vscode.workspace.onDidChangeTextDocument(e => { if (supported(e.document)) { scheduleScan(e.document); updateStatusBar(); } }),
-        vscode.workspace.onDidCloseTextDocument(doc => {
+        vscode.workspace.onDidCloseTextDocument(async (doc) => {
             if (supported(doc)) {
                 diagnosticCollection.delete(doc.uri);
                 const keep = vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('typo.keepCacheOnClose', true);
                 if (!keep) {
                     // Immediately drop cache if user prefers
-                    clearDocDB(doc.uri.toString());
+                    try {
+                        await clearDocDB(doc.uri.toString(), doc);
+                    } catch {
+                        // 如果异步失败，使用同步版本作为后备
+                        clearDocDBSync(doc.uri.toString());
+                    }
                 }
                 // If keep=true: keep in-memory DB; LRU 会优先淘汰已关闭文档
                 updateStatusBar();
@@ -488,7 +530,7 @@ function enqueueApply(doc: vscode.TextDocument) {
                 return;
             }
             // Apply latest snapshot; createDiagnosticsForDoc internally recomputes ranges
-            createDiagnosticsForDoc(doc, { diagnosticCollection });
+            await createDiagnosticsForDoc(doc, { diagnosticCollection });
             // If version changed significantly during apply, next queued apply will catch it
         } catch { /* ignore */ }
     });

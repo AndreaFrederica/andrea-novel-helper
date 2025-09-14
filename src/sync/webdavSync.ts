@@ -39,7 +39,29 @@ export class WebDAVSyncService {
 
     private initWorker(): void {
         const workerPath = path.join(__dirname, '../workers/syncWorker.js');
-        this.worker = new Worker(workerPath);
+        
+        // 获取配置数据传递给worker
+        const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+        const ignoredDirectories = config.get<string[]>('ignoredDirectories', [
+            '.git', 'node_modules', '.pixi', '.venv', '__pycache__', '.pytest_cache',
+            'target', 'build', 'dist', '.gradle', '.mvn', 'bin', 'obj', '.vs', '.idea',
+            '.next', '.nuxt', '.cache', '.tmp', 'tmp', '.cargo', 'vendor', 'coverage',
+            '.nyc_output', '.tox', '.nox', 'out', 'Debug', 'Release', '.dart_tool', '.pub-cache'
+        ]);
+        const ignoredFiles = config.get<string[]>('ignoredFiles', [
+            '.DS_Store', 'Thumbs.db', 'desktop.ini', '*.tmp', '*.temp', '*.log', '*.pid', '*.lock'
+        ]);
+        const ignoreAppDataDirectories = config.get<boolean>('ignoreAppDataDirectories', true);
+        
+        const workerData = {
+            config: {
+                ignoredDirectories,
+                ignoredFiles,
+                ignoreAppDataDirectories
+            }
+        };
+        
+        this.worker = new Worker(workerPath, { workerData });
         
         this.worker.on('message', (response: SyncResponse) => {
             const pending = this.pendingMessages.get(response.id);
@@ -174,6 +196,12 @@ export class WebDAVSyncService {
                 // 只有在上次同步时间存在且在1小时内才使用增量同步，避免过度过滤文件
                 const isIncremental = lastSyncTime && (Date.now() - lastSyncTime) < 60 * 60 * 1000; // 1小时内使用增量同步
 
+                // 读取同步策略配置
+                const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');
+                const syncStrategy = config.get<'timestamp' | 'size' | 'both' | 'content'>('strategy', 'timestamp');
+                const timeTolerance = config.get<number>('timeTolerance', 2000);
+                const enableSmartComparison = config.get<boolean>('enableSmartComparison', true);
+
                 const result = await this.sendMessage('webdav-sync', {
                     url: acc.url,
                     username: acc.username,
@@ -182,7 +210,10 @@ export class WebDAVSyncService {
                     localPath: root,
                     remotePath: remoteBase,
                     incremental: isIncremental,
-                    lastSyncTime: lastSyncTime
+                    lastSyncTime: lastSyncTime,
+                    syncStrategy: syncStrategy,
+                    timeTolerance: timeTolerance,
+                    enableSmartComparison: enableSmartComparison
                 });
 
                 const successCount = result.results.filter((r: any) => r.success).length;
@@ -191,9 +222,11 @@ export class WebDAVSyncService {
                 // 记录详细结果
                 for (const r of result.results) {
                     if (r.success) {
-                        out.appendLine(`[WebDAV] 成功 ${r.action.type} ${r.action.localPath}`);
+                        const arrow = r.action.type === 'upload' ? '↑' : r.action.type === 'download' ? '↓' : '';
+                        out.appendLine(`[WebDAV] 成功 ${arrow} ${r.action.type} ${r.action.localPath}`);
                     } else {
-                        out.appendLine(`[WebDAV] 失败 ${r.action.type} ${r.action.localPath}: ${r.error}`);
+                        const arrow = r.action.type === 'upload' ? '↑' : r.action.type === 'download' ? '↓' : '';
+                        out.appendLine(`[WebDAV] 失败 ${arrow} ${r.action.type} ${r.action.localPath}: ${r.error}`);
                     }
                 }
 

@@ -815,6 +815,36 @@
           "when": "view == packageManagerView && viewItem == package",
           "command": "AndreaNovelHelper.package.paste",
           "group": "6_clip@3"
+        },
+        {
+          "command": "andrea.webdav.openFile",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFile",
+          "group": "navigation@1"
+        },
+        {
+          "command": "andrea.webdav.renameFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@1"
+        },
+        {
+          "command": "andrea.webdav.copyFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@2"
+        },
+        {
+          "command": "andrea.webdav.deleteFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@3"
+        },
+        {
+          "command": "andrea.webdav.createFolder",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
+          "group": "3_new@1"
+        },
+        {
+          "command": "andrea.webdav.uploadFile",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
+          "group": "3_new@2"
         }
       ],
       "editor/title": [
@@ -1566,6 +1596,23 @@
           "default": false,
           "markdownDescription": "调试：输出服务端 HTTP /correct 与 /correct/llm 的请求/响应概要到 Output。"
         },
+        "AndreaNovelHelper.typo.persistence.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用错别字数据持久化存储。开启后，错别字扫描结果将保存到本地文件，重启后可恢复之前的扫描结果。"
+        },
+        "AndreaNovelHelper.typo.persistence.autoCleanup": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "自动清理过期的错别字数据文件。"
+        },
+        "AndreaNovelHelper.typo.persistence.maxAgeDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 365,
+          "markdownDescription": "错别字数据文件的最大保存天数，超过此时间的文件将被自动清理。"
+        },
         "AndreaNovelHelper.typo.debug.compactTrace": {
           "type": "boolean",
           "default": false,
@@ -1642,6 +1689,114 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "关闭编辑器后是否保留错别字扫描缓存（由 LRU 控制释放）。关闭则在关闭文档时立即清理缓存。"
+        },
+        "AndreaNovelHelper.webdav.sync.strategy": {
+          "type": "string",
+          "default": "timestamp",
+          "enum": [
+            "timestamp",
+            "size",
+            "both",
+            "content"
+          ],
+          "enumDescriptions": [
+            "基于文件修改时间戳比较（默认）",
+            "基于文件大小比较",
+            "同时比较时间戳和文件大小",
+            "基于文件内容哈希比较（最准确但较慢）"
+          ],
+          "markdownDescription": "WebDAV 同步策略：选择如何判断文件是否需要同步。timestamp 基于修改时间，size 基于文件大小，both 同时检查两者，content 基于内容哈希。"
+        },
+        "AndreaNovelHelper.webdav.sync.timeTolerance": {
+          "type": "number",
+          "default": 15000,
+          "minimum": 0,
+          "maximum": 60000,
+          "markdownDescription": "时间戳比较的容差（毫秒）。由于网络传输和服务器处理延迟，允许一定的时间差异。设置为 0 表示严格比较。"
+        },
+        "AndreaNovelHelper.webdav.sync.enableSmartComparison": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用智能比较算法。结合文件大小和修改时间进行更准确的同步判断，减少误同步。"
+        },
+        "AndreaNovelHelper.webdav.sync.ignoredDirectories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".git",
+            "node_modules",
+            ".pixi",
+            ".venv",
+            "__pycache__",
+            ".pytest_cache",
+            ".gradle",
+            ".mvn",
+            "bin",
+            "obj",
+            ".vs",
+            ".idea",
+            ".next",
+            ".nuxt",
+            ".cache",
+            ".tmp",
+            "tmp",
+            ".cargo",
+            "vendor",
+            "coverage",
+            ".nyc_output",
+            ".tox",
+            ".nox",
+            ".dart_tool",
+            ".pub-cache"
+          ],
+          "markdownDescription": "WebDAV 同步时忽略的目录列表。默认忽略版本控制、依赖包、编译缓存等目录。IDE 和编辑器目录（如 .vscode、.idea 等）不会被忽略，以支持跨设备的开发环境同步。"
+        },
+        "AndreaNovelHelper.webdav.sync.ignoredFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".DS_Store",
+            "Thumbs.db",
+            "desktop.ini",
+            "*.tmp",
+            "*.temp",
+            "*.log",
+            "*.pid",
+            "*.lock"
+          ],
+          "markdownDescription": "WebDAV 同步时忽略的文件模式列表。支持通配符匹配，用于过滤系统文件、临时文件等。"
+        },
+        "AndreaNovelHelper.webdav.sync.ignoreAppDataDirectories": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否忽略应用程序内部数据目录（如 .anh-fsdb）。启用时不会同步写作统计、文件追踪等内部数据，推荐保持启用以避免数据冲突。"
+        },
+        "AndreaNovelHelper.webdav.sync.showDiffTable": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "同步完成后是否在输出日志中显示文件差异表。启用后可以查看本次同步涉及的所有文件变更详情。"
+        },
+        "AndreaNovelHelper.webdav.sync.autoSync.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否启用定时自动同步。启用后将按设定的时间间隔自动执行双向同步。"
+        },
+        "AndreaNovelHelper.webdav.sync.autoSync.intervalMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 1440,
+          "markdownDescription": "定时同步的时间间隔（分钟）。范围：1-1440分钟（1分钟到24小时）。"
+        },
+        "AndreaNovelHelper.webdav.sync.autoSync.method": {
+          "type": "string",
+          "enum": ["bidirectional", "upload", "download"],
+          "default": "bidirectional",
+          "markdownDescription": "定时同步的方法。bidirectional: 双向同步（默认），upload: 仅上传本地文件到服务器，download: 仅从服务器下载文件到本地。"
         }
       }
     },
@@ -1688,40 +1843,7 @@
         }
       ]
     },
-    "menus": {
-      "view/item/context": [
-        {
-          "command": "andrea.webdav.openFile",
-          "when": "view == andrea.webdavFiles && viewItem == webdavFile",
-          "group": "navigation@1"
-        },
-        {
-          "command": "andrea.webdav.renameFile",
-          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
-          "group": "2_workspace@1"
-        },
-        {
-          "command": "andrea.webdav.copyFile",
-          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
-          "group": "2_workspace@2"
-        },
-        {
-          "command": "andrea.webdav.deleteFile",
-          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
-          "group": "2_workspace@3"
-        },
-        {
-          "command": "andrea.webdav.createFolder",
-          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
-          "group": "3_new@1"
-        },
-        {
-          "command": "andrea.webdav.uploadFile",
-          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
-          "group": "3_new@2"
-        }
-      ]
-    },
+
     "keybindings": [
       {
         "key": "enter",

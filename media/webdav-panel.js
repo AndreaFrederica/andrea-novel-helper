@@ -674,6 +674,20 @@
         renderCurrentTabFiles();
     }
     
+    // 虚拟滚动配置
+    const VIRTUAL_SCROLL_CONFIG = {
+        itemHeight: 80, // 每个文件项的高度（像素）
+        bufferSize: 5,  // 缓冲区大小（额外渲染的项目数）
+        containerHeight: 400 // 容器高度（像素）
+    };
+    
+    let virtualScrollState = {
+        scrollTop: 0,
+        startIndex: 0,
+        endIndex: 0,
+        visibleCount: 0
+    };
+    
     // 渲染当前标签的文件
     function renderCurrentTabFiles() {
         if (!currentDiffData) return;
@@ -705,55 +719,158 @@
             return;
         }
         
+        // 如果文件数量较少，使用普通渲染
+        if (files.length <= 100) {
+            renderAllFiles(files);
+        } else {
+            // 使用虚拟滚动渲染
+            renderVirtualScrollFiles(files);
+        }
+    }
+    
+    // 普通渲染所有文件
+    function renderAllFiles(files) {
         let html = '<div class="file-list">';
         
         files.forEach(file => {
-            if (activeTab === 'modified') {
-                // 修改的文件显示本地和远程信息
-                html += `
-                    <div class="file-item modified-file">
-                        <div class="file-header">
-                            <span class="file-name">${escapeHtml(file.path)}</span>
-                            <span class="file-status modified">已修改</span>
-                        </div>
-                        <div class="file-details">
-                            <div class="file-version">
-                                <span class="version-label">本地:</span>
-                                <span class="file-size">${formatSize(file.local.size)}</span>
-                                <span class="file-time">${formatTime(file.local.lastModified)}</span>
-                            </div>
-                            <div class="file-version">
-                                <span class="version-label">远程:</span>
-                                <span class="file-size">${formatSize(file.remote.size)}</span>
-                                <span class="file-time">${formatTime(file.remote.lastModified || file.remote.lastmod)}</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                // 其他类型的文件
-                const statusClass = activeTab === 'onlyLocal' ? 'local-only' : 
-                                  activeTab === 'onlyRemote' ? 'remote-only' : 'identical';
-                const statusText = activeTab === 'onlyLocal' ? '仅本地' : 
-                                 activeTab === 'onlyRemote' ? '仅远程' : '相同';
-                
-                html += `
-                    <div class="file-item">
-                        <div class="file-header">
-                            <span class="file-name">${escapeHtml(file.path || file.name)}</span>
-                            <span class="file-status ${statusClass}">${statusText}</span>
-                        </div>
-                        <div class="file-details">
-                            <span class="file-size">${formatSize(file.size)}</span>
-                            <span class="file-time">${formatTime(file.lastModified || file.lastmod)}</span>
-                        </div>
-                    </div>
-                `;
-            }
+            html += renderFileItem(file);
         });
         
         html += '</div>';
         diffsList.innerHTML = html;
+    }
+    
+    // 虚拟滚动渲染文件
+    function renderVirtualScrollFiles(files) {
+        const totalHeight = files.length * VIRTUAL_SCROLL_CONFIG.itemHeight;
+        const visibleCount = Math.ceil(VIRTUAL_SCROLL_CONFIG.containerHeight / VIRTUAL_SCROLL_CONFIG.itemHeight);
+        
+        // 创建虚拟滚动容器
+        const virtualContainer = document.createElement('div');
+        virtualContainer.className = 'virtual-scroll-container';
+        virtualContainer.style.cssText = `
+            height: ${VIRTUAL_SCROLL_CONFIG.containerHeight}px;
+            overflow-y: auto;
+            position: relative;
+        `;
+        
+        // 创建总高度占位符
+        const spacer = document.createElement('div');
+        spacer.className = 'virtual-scroll-spacer';
+        spacer.style.cssText = `
+            height: ${totalHeight}px;
+            position: relative;
+        `;
+        
+        // 创建可见内容容器
+        const visibleContent = document.createElement('div');
+        visibleContent.className = 'virtual-scroll-content';
+        visibleContent.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+        `;
+        
+        spacer.appendChild(visibleContent);
+        virtualContainer.appendChild(spacer);
+        
+        // 初始化虚拟滚动状态
+        virtualScrollState.visibleCount = visibleCount;
+        
+        // 渲染初始可见项
+        updateVirtualScrollContent(files, visibleContent, 0);
+        
+        // 添加滚动事件监听器
+        virtualContainer.addEventListener('scroll', () => {
+            const scrollTop = virtualContainer.scrollTop;
+            updateVirtualScrollContent(files, visibleContent, scrollTop);
+        });
+        
+        // 替换diffsList内容
+        diffsList.innerHTML = '';
+        diffsList.appendChild(virtualContainer);
+    }
+    
+    // 更新虚拟滚动内容
+    function updateVirtualScrollContent(files, container, scrollTop) {
+        const startIndex = Math.floor(scrollTop / VIRTUAL_SCROLL_CONFIG.itemHeight);
+        const endIndex = Math.min(
+            startIndex + virtualScrollState.visibleCount + VIRTUAL_SCROLL_CONFIG.bufferSize * 2,
+            files.length
+        );
+        
+        const actualStartIndex = Math.max(0, startIndex - VIRTUAL_SCROLL_CONFIG.bufferSize);
+        
+        // 更新容器位置
+        container.style.transform = `translateY(${actualStartIndex * VIRTUAL_SCROLL_CONFIG.itemHeight}px)`;
+        
+        // 渲染可见项
+        let html = '';
+        for (let i = actualStartIndex; i < endIndex; i++) {
+            if (files[i]) {
+                html += renderFileItem(files[i]);
+            }
+        }
+        
+        container.innerHTML = html;
+        
+        // 更新状态
+        virtualScrollState.scrollTop = scrollTop;
+        virtualScrollState.startIndex = actualStartIndex;
+        virtualScrollState.endIndex = endIndex;
+    }
+    
+    // 渲染单个文件项
+    function renderFileItem(file) {
+        if (activeTab === 'modified') {
+            // 修改的文件显示本地和远程信息
+            return `
+                <div class="file-item modified-file">
+                    <div class="file-header">
+                        <span class="file-name">${escapeHtml(file.path)}</span>
+                        <span class="file-status modified">已修改</span>
+                    </div>
+                    ${file.reason ? `
+                        <div class="file-reason">
+                            <span class="reason-label">修改原因:</span>
+                            <span class="reason-text">${escapeHtml(file.reason)}</span>
+                        </div>
+                    ` : ''}
+                    <div class="file-details">
+                        <div class="file-version">
+                            <span class="version-label">本地:</span>
+                            <span class="file-size">${formatSize(file.local.size)}</span>
+                            <span class="file-time">${formatTime(file.local.lastModified)}</span>
+                        </div>
+                        <div class="file-version">
+                            <span class="version-label">远程:</span>
+                            <span class="file-size">${formatSize(file.remote.size)}</span>
+                            <span class="file-time">${formatTime(file.remote.mtime || file.remote.lastModified || file.remote.lastmod)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // 其他类型的文件
+            const statusClass = activeTab === 'onlyLocal' ? 'local-only' : 
+                              activeTab === 'onlyRemote' ? 'remote-only' : 'identical';
+            const statusText = activeTab === 'onlyLocal' ? '仅本地' : 
+                             activeTab === 'onlyRemote' ? '仅远程' : '相同';
+            
+            return `
+                <div class="file-item">
+                    <div class="file-header">
+                        <span class="file-name">${escapeHtml(file.path || file.name)}</span>
+                        <span class="file-status ${statusClass}">${statusText}</span>
+                    </div>
+                    <div class="file-details">
+                        <span class="file-size">${formatSize(file.size)}</span>
+                        <span class="file-time">${formatTime(file.mtime || file.lastModified || file.lastmod)}</span>
+                    </div>
+                </div>
+            `;
+        }
     }
     
     // 格式化时间
