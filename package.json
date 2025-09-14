@@ -224,6 +224,78 @@
         "title": "重新打开批注"
       },
       {
+        "command": "andrea.commentsExplorer.toggleStatus",
+        "title": "切换批注状态",
+        "icon": {
+          "light": "$(check)",
+          "dark": "$(check)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.openComment",
+        "title": "跳转到批注",
+        "icon": {
+          "light": "$(go-to-file)",
+          "dark": "$(go-to-file)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.refresh",
+        "title": "刷新批注列表",
+        "icon": {
+          "light": "$(refresh)",
+          "dark": "$(refresh)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.search",
+        "title": "搜索批注",
+        "icon": {
+          "light": "$(search)",
+          "dark": "$(search)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.filterByStatus",
+        "title": "按状态过滤",
+        "icon": {
+          "light": "$(filter)",
+          "dark": "$(filter)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.clearFilter",
+        "title": "清除过滤",
+        "icon": {
+          "light": "$(clear-all)",
+          "dark": "$(clear-all)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.exportComments",
+        "title": "导出批注",
+        "icon": {
+          "light": "$(export)",
+          "dark": "$(export)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.exportToMarkdown",
+        "title": "导出为Markdown",
+        "icon": {
+          "light": "$(markdown)",
+          "dark": "$(markdown)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.exportToJson",
+        "title": "导出为JSON",
+        "icon": {
+          "light": "$(json)",
+          "dark": "$(json)"
+        }
+      },
+      {
         "command": "WordCount.exportTxt",
         "title": "%command.wordCount.exportTxt.title%"
       },
@@ -845,6 +917,51 @@
           "command": "andrea.webdav.uploadFile",
           "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
           "group": "3_new@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.openComment",
+          "when": "view == andrea.commentsExplorer && (viewItem == commentThread || viewItem == commentMessage)",
+          "group": "navigation@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.toggleStatus",
+          "when": "view == andrea.commentsExplorer && viewItem == commentThread",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.refresh",
+          "when": "view == andrea.commentsExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.search",
+          "when": "view == andrea.commentsExplorer",
+          "group": "navigation@3"
+        },
+        {
+          "command": "andrea.commentsExplorer.filterByStatus",
+          "when": "view == andrea.commentsExplorer",
+          "group": "2_filter@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.clearFilter",
+          "when": "view == andrea.commentsExplorer",
+          "group": "2_filter@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.exportComments",
+          "when": "view == andrea.commentsExplorer",
+          "group": "3_export@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.exportToMarkdown",
+          "when": "view == andrea.commentsExplorer",
+          "group": "3_export@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.exportToJson",
+          "when": "view == andrea.commentsExplorer",
+          "group": "3_export@3"
         }
       ],
       "editor/title": [
@@ -1852,6 +1969,11 @@
           "id": "andrea.webdavFiles",
           "name": "WebDAV 文件",
           "icon": "cloud-download"
+        },
+        {
+          "id": "andrea.commentsExplorer",
+          "name": "批注管理",
+          "icon": "comment-discussion"
         }
       ]
     },

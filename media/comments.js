@@ -199,7 +199,7 @@
       // 只有单条消息时才显示编辑按钮，多条消息时每条消息都有自己的编辑按钮
       const btnEdit = (it.messages && it.messages.length > 1) ? null : button('编辑', () => showEdit(card, it.id, String(it.body||'')));
       const btnToggle = button(it.status === 'open' ? '解决' : '重开', () => postMessage({ type: 'toggleStatus', id: it.id }));
-      const btnDelete = button('删除', () => { if (confirm('删除此批注？')) postMessage({ type: 'delete', id: it.id }); });
+      const btnDelete = button('删除', () => { showConfirm('删除此批注？').then(ok => { if (ok) postMessage({ type: 'delete', id: it.id }); }); });
       if (btnEdit) {
         actions.append(btnGoto, btnReply, btnEdit, btnToggle, btnDelete);
       } else {
@@ -347,6 +347,110 @@
         e.preventDefault();
         cancel.click();
       }
+    });
+  }
+
+  // 自定义确认对话框，替代原生confirm()以避免沙盒环境问题
+  function showConfirm(message) {
+    return new Promise((resolve) => {
+      // 创建模态对话框
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      `;
+      
+      const dialog = document.createElement('div');
+      dialog.style.cssText = `
+        background: var(--vscode-editor-background, #1e1e1e);
+        color: var(--vscode-editor-foreground, #cccccc);
+        padding: 20px;
+        border-radius: 6px;
+        min-width: 300px;
+        max-width: 500px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      `;
+      
+      const messageEl = document.createElement('div');
+      messageEl.textContent = message;
+      messageEl.style.cssText = 'margin-bottom: 16px; font-size: 14px;';
+      
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = 'display: flex; gap: 8px; justify-content: flex-end;';
+      
+      const confirmBtn = document.createElement('button');
+      confirmBtn.textContent = '确定';
+      confirmBtn.style.cssText = `
+        padding: 6px 12px;
+        background: var(--vscode-button-background, #0e639c);
+        color: var(--vscode-button-foreground, #ffffff);
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+      `;
+      
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = '取消';
+      cancelBtn.style.cssText = `
+        padding: 6px 12px;
+        background: var(--vscode-button-secondaryBackground, #3c3c3c);
+        color: var(--vscode-button-secondaryForeground, #cccccc);
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+      `;
+      
+      function cleanup() {
+        document.body.removeChild(modal);
+        document.removeEventListener('keydown', handleKeydown);
+      }
+      
+      function handleKeydown(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          cleanup();
+          resolve(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup();
+          resolve(false);
+        }
+      }
+      
+      confirmBtn.addEventListener('click', () => {
+        cleanup();
+        resolve(true);
+      });
+      
+      cancelBtn.addEventListener('click', () => {
+        cleanup();
+        resolve(false);
+      });
+      
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          cleanup();
+          resolve(false);
+        }
+      });
+      
+      buttonContainer.appendChild(cancelBtn);
+      buttonContainer.appendChild(confirmBtn);
+      dialog.appendChild(messageEl);
+      dialog.appendChild(buttonContainer);
+      modal.appendChild(dialog);
+      document.body.appendChild(modal);
+      
+      document.addEventListener('keydown', handleKeydown);
+      confirmBtn.focus();
     });
   }
 

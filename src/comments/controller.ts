@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { CommentThreadData, rangeToVSCodeRange } from './types';
-import { addThread, addSingleThread, getDocUuidForDocument, loadComments, paragraphIndexOfRange, updateThreadsByDoc, loadCommentContent, saveCommentContent, garbageCollectDeletedComments, restoreDeletedThread } from './storage';
+import { addThread, addSingleThread, getDocUuidForDocument, loadComments, paragraphIndexOfRange, updateThreadsByDoc, loadCommentContent, saveCommentContent, garbageCollectDeletedComments, restoreDeletedThread, deleteThread } from './storage';
 import { registerCommentDefinitionProvider, CommentDefinitionProvider } from './definitionProvider';
 import { setActiveCommentPanel } from '../context/commentRedirect';
 
@@ -238,7 +238,21 @@ class CommentsController {
     if (!targetDoc || !(targetDoc.languageId === 'markdown' || targetDoc.languageId === 'plaintext')) {
       const ed = vscode.window.activeTextEditor; if (ed && (ed.document.languageId === 'markdown' || ed.document.languageId === 'plaintext')) targetDoc = ed.document;
     }
-    if (targetDoc) await this.bindPanelToDoc(targetDoc);
+    
+    // 如果仍然没有找到目标文档，延迟绑定直到有合适的编辑器打开
+    if (targetDoc) {
+      await this.bindPanelToDoc(targetDoc);
+    } else {
+      // 监听编辑器变化，一旦有合适的文档就立即绑定
+      const disposable = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+        if (editor && (editor.document.languageId === 'markdown' || editor.document.languageId === 'plaintext')) {
+          await this.bindPanelToDoc(editor.document);
+          disposable.dispose(); // 绑定成功后移除监听器
+        }
+      });
+      // 5秒后自动清理监听器，避免内存泄漏
+      setTimeout(() => disposable.dispose(), 5000);
+    }
   }
 
   private wrapHtml(webview: vscode.Webview): string {
@@ -1025,15 +1039,12 @@ class CommentsController {
       }
       
       console.log('[Controller] Deleting thread with docUuid:', docUuid);
-      const updated = await updateThreadsByDoc(docUuid, (threads) => {
-        const i = threads.findIndex(t => t.id === msg.id);
-        if (i >= 0) {
-          console.log('[Controller] Found thread to delete at index:', i);
-          threads.splice(i, 1);
-        } else {
-          console.log('[Controller] Thread not found for deletion:', msg.id);
-        }
-      });
+      
+      // 执行软删除操作
+      await deleteThread(msg.id);
+      
+      // 重新加载批注列表以反映软删除状态
+      const updated = await loadComments(docUuid);
       
       const key = targetDoc.uri.toString();
       this.threadsByDoc.set(key, updated);
