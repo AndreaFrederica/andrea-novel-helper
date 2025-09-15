@@ -1,8 +1,7 @@
 # Andrea Novel Helper (小说助手)
 
-> **最新版本：0.4.1 (2025-01-15)**  
-> 🚀 **重大更新：新增独立侧边栏功能，优化用户界面布局！**  
-> 🔧 **修复更新：解决WebDAV面板diff列表混入目录的问题！**  
+> **最新版本：0.4.2 (2025-01-15)**  
+> 🔧 **兼容性更新：降低 VS Code 引擎要求至 ^1.100.0，支持 Trae 安装与运行**  
 > 📝 近期已大幅重构异步加载与性能管线，若从老版本升级，建议阅读"近期版本速览"。
 
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)
