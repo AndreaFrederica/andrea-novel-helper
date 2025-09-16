@@ -82,14 +82,14 @@
 
 <script lang="ts" setup>
 import { computed, inject, ref } from 'vue';
-import type { RGNode } from 'relation-graph-vue3';
+import type { RGNode, RelationGraphInstance2, RGOptions } from 'relation-graph-vue3';
 import { graphKey } from 'relation-graph-vue3';
 import { Notify } from 'quasar';
 
 // 定义graph的类型
 interface GraphContext {
-  options?: any;
-  instance?: any;
+  options?: RGOptions;
+  instance?: RelationGraphInstance2;
 }
 
 const newNodeIdIndex = ref(1);
@@ -122,21 +122,21 @@ const refresh = () => {
   }
 };
 
-const zoomToFit = () => {
+const zoomToFit = async () => {
   const graphInstance = relationGraph.value;
   if (graphInstance) {
-    graphInstance.setZoom(100);
-    graphInstance.moveToCenter();
-    graphInstance.zoomToFit();
+    await graphInstance.setZoom(100);
+    graphInstance.focusRootNode();
+    await graphInstance.zoomToFit();
   }
 };
 
-const startAddNode = (e: MouseEvent) => {
+const startAddNode = (e: MouseEvent | Event) => {
   console.log('startAddNode called');
-  
+
   const graphInstance = relationGraph.value;
   console.log('graphInstance for node:', graphInstance);
-  
+
   if (!graphInstance) {
     Notify.create({
       type: 'negative',
@@ -147,7 +147,7 @@ const startAddNode = (e: MouseEvent) => {
   }
 
   try {
-    graphInstance.startCreatingNodePlot(e, {
+    graphInstance.startCreatingNodePlot(e as MouseEvent, {
       templateText: '新节点',
       templateNode: {
         className: 'my-node-template'
@@ -164,7 +164,7 @@ const startAddNode = (e: MouseEvent) => {
         };
         console.log('Adding node:', newNode);
         relationGraph.value?.addNodes([newNode]);
-        
+
         Notify.create({
           type: 'positive',
           message: '节点创建成功！',
@@ -183,12 +183,12 @@ const startAddNode = (e: MouseEvent) => {
   }
 };
 
-const startAddLine = (e: MouseEvent) => {
+const startAddLine = (e: MouseEvent | Event) => {
   console.log('startAddLine called');
-  
+
   const graphInstance = relationGraph.value;
   console.log('graphInstance:', graphInstance);
-  
+
   if (!graphInstance) {
     Notify.create({
       type: 'negative',
@@ -203,9 +203,9 @@ const startAddLine = (e: MouseEvent) => {
     message: '点击一个节点开始创建连线！',
     position: 'top'
   });
-  
+
   try {
-    graphInstance.startCreatingLinePlot(e, {
+    graphInstance.startCreatingLinePlot(e as MouseEvent, {
       template: {
         lineWidth: 3,
         color: '#8080ff',
@@ -224,7 +224,7 @@ const startAddLine = (e: MouseEvent) => {
           };
           console.log('Adding line:', newLine);
           relationGraph.value?.addLines([newLine]);
-          
+
           Notify.create({
             type: 'positive',
             message: '连线创建成功！',

@@ -91,6 +91,9 @@ import '@he-tree/vue/style/material-design.css'
 type NodeType = 'folder' | 'file' | 'action'
 type ActionKind = 'add-folder' | 'add-file'
 
+type TargetStat = { data?: TreeEntity }
+type DragCtx = { targetInfo?: { where?: 'before' | 'after' | 'inside' } }
+
 interface BaseNode {
   id: string
   label: string
@@ -166,9 +169,9 @@ function onTreeChanged(nextTree: TreeEntity[]) {
 }
 
 /** —— he-tree 钩子：只能 inside 到 folder；action 节点完全不可作为放置目标 —— */
-function allowDrop(targetStat: any): boolean {
-  const where = (dragContext as any)?.targetInfo?.where as 'before' | 'after' | 'inside' | undefined
-  const target = targetStat?.data as TreeEntity | undefined
+function allowDrop(targetStat: TargetStat): boolean {
+  const where = (dragContext as unknown as DragCtx)?.targetInfo?.where
+  const target = targetStat?.data
   if (!target) return false
   if (target.type === 'action') return false
   if (where === 'inside') {
@@ -179,30 +182,34 @@ function allowDrop(targetStat: any): boolean {
 }
 
 /** —— he-tree 钩子：禁止拖动 action 节点 —— */
-function isDraggable(stat: any): boolean {
-  return (stat?.data as TreeEntity)?.type !== 'action'
+function isDraggable(stat: TargetStat): boolean {
+  return (stat?.data)?.type !== 'action'
 }
 
 /** —— 工具 —— */
 function cloneNodes(nodes: TreeEntity[]): TreeEntity[] {
   return nodes.map(n => {
-    const base: any = { id: n.id, label: n.label, type: n.type }
     if (n.type === 'action') {
-      base.act = (n as ActionNode).act
-      base.targetId = (n as ActionNode).targetId
-      return base as ActionNode
+      const a: ActionNode = { id: n.id, label: n.label, type: 'action', act: n.act, targetId: n.targetId }
+      return a
+    } else {
+      const base: { id: string; label: string; type: 'folder' | 'file'; children?: TreeEntity[] } = {
+        id: n.id, label: n.label, type: n.type
+      }
+      if (n.children?.length) base.children = cloneNodes(n.children)
+      return base
     }
-    if (n.children?.length) base.children = cloneNodes(n.children)
-    return base as TreeEntity
   })
 }
 function stripActions(nodes: TreeEntity[]): TreeEntity[] {
   const out: TreeEntity[] = []
   for (const n of nodes) {
     if (n.type === 'action') continue
-    const m: any = { id: n.id, label: n.label, type: n.type }
+    const m: { id: string; label: string; type: 'folder' | 'file'; children?: TreeEntity[] } = {
+      id: n.id, label: n.label, type: n.type
+    }
     if (n.children?.length) m.children = stripActions(n.children)
-    out.push(m as TreeEntity)
+    out.push(m)
   }
   return out
 }
@@ -262,9 +269,9 @@ function sanitizeContainers(nodes: TreeEntity[], parentId: string | null) {
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i]
       if (!n) continue
-      if (n.type === 'file' && (n as BaseNode).children?.length) {
-        const moved = (n as BaseNode).children!
-        delete (n as any).children
+      if (n.type === 'file' && n.children?.length) {
+        const moved = n.children
+        delete (n as BaseNode).children
         nodes.splice(i + 1, 0, ...moved)
         i += moved.length
       }
@@ -272,8 +279,8 @@ function sanitizeContainers(nodes: TreeEntity[], parentId: string | null) {
   // 递归处理子容器
   for (const n of nodes) {
     if (n.type === 'folder') {
-      if (!n.children) (n as any).children = []
-      sanitizeContainers(n.children!, n.id)
+      if (!n.children) n.children = []
+      sanitizeContainers(n.children, n.id)
     }
   }
   // 移除旧动作节点，末尾追加两条
@@ -291,7 +298,13 @@ function sanitizeContainers(nodes: TreeEntity[], parentId: string | null) {
 /** —— 动作实现 —— */
 function addNode(parentId: string | null, type: 'folder' | 'file') {
   const container = parentId ? findNode(realTree.value, parentId) : null
-  const arr = container ? ((container as any).children ?? ((container as any).children = [])) : realTree.value
+  let arr: TreeEntity[]
+  if (container && container.type === 'folder') {
+    container.children = container.children ?? []
+    arr = container.children
+  } else {
+    arr = realTree.value
+  }
   const base = type === 'folder' ? '新建文件夹' : '新建文件'
   const node: TreeEntity = type === 'folder'
     ? { id: newId(), label: uniqueName(arr, base), type, children: [] }

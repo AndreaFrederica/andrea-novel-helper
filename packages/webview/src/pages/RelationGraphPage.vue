@@ -37,26 +37,42 @@
                 <q-item-section avatar>
                   <q-icon :name="isDashed(currentLine) ? 'check_box' : 'check_box_outline_blank'" />
                 </q-item-section>
-                <q-item-section>{{ isDashed(currentLine) ? '切换为实线' : '切换为虚线' }}</q-item-section>
+                <q-item-section>{{
+                  isDashed(currentLine) ? '切换为实线' : '切换为虚线'
+                }}</q-item-section>
               </q-item>
 
               <q-item clickable v-close-popup @click="toggleStartArrow">
                 <q-item-section avatar>
-                  <q-icon :name="currentLine?.showStartArrow && !currentLine?.isHideArrow ? 'check_box' : 'check_box_outline_blank'" />
+                  <q-icon
+                    :name="
+                      currentLine?.showStartArrow && !currentLine?.isHideArrow
+                        ? 'check_box'
+                        : 'check_box_outline_blank'
+                    "
+                  />
                 </q-item-section>
                 <q-item-section>起点箭头</q-item-section>
               </q-item>
 
               <q-item clickable v-close-popup @click="toggleEndArrow">
                 <q-item-section avatar>
-                  <q-icon :name="currentLine?.showEndArrow && !currentLine?.isHideArrow ? 'check_box' : 'check_box_outline_blank'" />
+                  <q-icon
+                    :name="
+                      currentLine?.showEndArrow && !currentLine?.isHideArrow
+                        ? 'check_box'
+                        : 'check_box_outline_blank'
+                    "
+                  />
                 </q-item-section>
                 <q-item-section>终点箭头</q-item-section>
               </q-item>
 
               <q-item clickable v-close-popup @click="toggleHideAllArrows">
                 <q-item-section avatar>
-                  <q-icon :name="currentLine?.isHideArrow ? 'check_box' : 'check_box_outline_blank'" />
+                  <q-icon
+                    :name="currentLine?.isHideArrow ? 'check_box' : 'check_box_outline_blank'"
+                  />
                 </q-item-section>
                 <q-item-section>隐藏全部箭头</q-item-section>
               </q-item>
@@ -65,19 +81,37 @@
 
               <q-item clickable v-close-popup @click="setLineWidth(1)">
                 <q-item-section avatar>
-                  <q-icon :name="currentLine?.lineWidth === 1 ? 'radio_button_checked' : 'radio_button_unchecked'" />
+                  <q-icon
+                    :name="
+                      currentLine?.lineWidth === 1
+                        ? 'radio_button_checked'
+                        : 'radio_button_unchecked'
+                    "
+                  />
                 </q-item-section>
                 <q-item-section>线宽 1</q-item-section>
               </q-item>
               <q-item clickable v-close-popup @click="setLineWidth(2)">
                 <q-item-section avatar>
-                  <q-icon :name="currentLine?.lineWidth === 2 ? 'radio_button_checked' : 'radio_button_unchecked'" />
+                  <q-icon
+                    :name="
+                      currentLine?.lineWidth === 2
+                        ? 'radio_button_checked'
+                        : 'radio_button_unchecked'
+                    "
+                  />
                 </q-item-section>
                 <q-item-section>线宽 2</q-item-section>
               </q-item>
               <q-item clickable v-close-popup @click="setLineWidth(3)">
                 <q-item-section avatar>
-                  <q-icon :name="currentLine?.lineWidth === 3 ? 'radio_button_checked' : 'radio_button_unchecked'" />
+                  <q-icon
+                    :name="
+                      currentLine?.lineWidth === 3
+                        ? 'radio_button_checked'
+                        : 'radio_button_unchecked'
+                    "
+                  />
                 </q-item-section>
                 <q-item-section>线宽 3</q-item-section>
               </q-item>
@@ -93,8 +127,20 @@
           <q-input v-model="jsonText" type="textarea" autogrow outlined class="json-input" />
           <div class="json-actions">
             <q-btn color="primary" dense label="应用(替换)" @click="applyJsonReplace" />
-            <q-btn color="secondary" dense label="追加(新增)" @click="applyJsonAppend" class="q-ml-sm" />
-            <q-btn color="grey" dense label="刷新JSON" @click="updateJsonTextFromGraph" class="q-ml-sm" />
+            <q-btn
+              color="secondary"
+              dense
+              label="追加(新增)"
+              @click="applyJsonAppend"
+              class="q-ml-sm"
+            />
+            <q-btn
+              color="grey"
+              dense
+              label="刷新JSON"
+              @click="updateJsonTextFromGraph"
+              class="q-ml-sm"
+            />
           </div>
         </div>
       </transition>
@@ -107,10 +153,17 @@ import { onMounted, ref } from 'vue';
 import RelationGraph, {
   type RGJsonData,
   type RGOptions,
-  type RelationGraphComponent
+  type RelationGraphComponent,
+  type RGUserEvent,
+  type RGLink,
+  type RGNode,
+  type RGLine,
+  type RGEventTargetType,
+  type RGPosition,
 } from 'relation-graph-vue3';
 import RelationGraphToolBar from '../components/RelationGraphToolBar.vue';
 import { useQuasar } from 'quasar';
+import type { QMenu } from 'quasar';
 
 const $q = useQuasar();
 
@@ -121,7 +174,7 @@ const graphOptions: RGOptions = {
   allowShowDownloadButton: true,
   defaultJunctionPoint: 'border',
   // 禁用自动布局，优先保留JSON中的x、y位置
-  allowAutoLayoutIfSupport: false
+  allowAutoLayoutIfSupport: false,
 };
 
 const graphRef = ref<RelationGraphComponent>();
@@ -133,9 +186,9 @@ const showJsonPane = ref(true);
 const jsonText = ref('');
 
 // 右键菜单状态
-const linkMenuRef = ref<any>();
-const currentLink = ref<any | null>(null);
-const currentLine = ref<any | null>(null);
+const linkMenuRef = ref<QMenu | null>(null);
+const currentLink = ref<RGLink | null>(null);
+const currentLine = ref<RGLine | null>(null);
 
 onMounted(() => {
   void showGraph();
@@ -149,15 +202,15 @@ const showGraph = async () => {
       { id: 'b', text: '女主', color: '#43a2f1', fontColor: 'yellow', x: 120, y: -40 },
       { id: 'c', text: '反派', nodeShape: 1, width: 80, height: 60, x: -100, y: 100 },
       { id: 'd', text: '配角1', nodeShape: 0, width: 100, height: 100, x: 220, y: 120 },
-      { id: 'e', text: '配角2', nodeShape: 0, width: 150, height: 150, x: -200, y: -80 }
+      { id: 'e', text: '配角2', nodeShape: 0, width: 150, height: 150, x: -200, y: -80 },
     ],
     lines: [
       { from: 'a', to: 'b', text: '恋人关系', color: '#43a2f1' },
       { from: 'a', to: 'c', text: '敌对关系' },
       { from: 'a', to: 'd', text: '朋友关系' },
       { from: 'a', to: 'e', text: '师徒关系' },
-      { from: 'b', to: 'e', text: '闺蜜关系', color: '#67C23A' }
-    ]
+      { from: 'b', to: 'e', text: '闺蜜关系', color: '#67C23A' },
+    ],
   };
 
   const graphInstance = graphRef.value?.getInstance();
@@ -180,17 +233,17 @@ function scheduleUpdateFromGraph() {
   }, 120);
 }
 
-function onNodeDragStart(_node?: any, _e?: any) {
+function onNodeDragStart(_node?: RGNode, _e?: RGUserEvent) {
   // 拖拽开始可选择做记录，这里暂不处理
 }
 
 // 拖拽中：轻量实时同步（节流），不触发大刷新
-function onNodeDragging(_node?: any, _newX?: number, _newY?: number, _e?: any) {
+function onNodeDragging(_node?: RGNode, _newX?: number, _newY?: number, _e?: RGUserEvent) {
   scheduleUpdateFromGraph();
 }
 
 // 拖拽结束后：再做一次最终同步
-function onNodeDragEnd(_node?: any, _e?: any) {
+function onNodeDragEnd(_node?: RGNode, _e?: RGUserEvent) {
   void updateJsonTextFromGraph();
 }
 
@@ -198,7 +251,7 @@ function onNodeDragEnd(_node?: any, _e?: any) {
 const lastLineClickId = ref<string>('');
 const lastLineClickAt = ref<number>(0);
 
-function onLineClick(line: any, _link: any, _e: any) {
+function onLineClick(line: RGLine, _link: RGLink, _e: RGUserEvent) {
   const now = Date.now();
   const id: string = line?.id ?? `${line?.from ?? ''}->${line?.to ?? ''}`;
   const isSame = lastLineClickId.value === id;
@@ -216,10 +269,10 @@ function onLineClick(line: any, _link: any, _e: any) {
       title: '编辑连线标记',
       prompt: {
         model: String(line?.text ?? ''),
-        type: 'text'
+        type: 'text',
       },
       cancel: true,
-      persistent: true
+      persistent: true,
     }).onOk((newText: string) => {
       const graphInstance = graphRef.value?.getInstance();
       if (!graphInstance) return;
@@ -237,45 +290,50 @@ function onLineClick(line: any, _link: any, _e: any) {
 }
 
 // ---- 右键菜单回调（仅在连线上触发） ----
-function onContextmenu(e: MouseEvent | TouchEvent, objectType: 'canvas' | 'node' | 'link', object: any) {
+function onContextmenu(
+  e: RGUserEvent,
+  objectType: RGEventTargetType,
+  object: RGNode | RGLink | undefined,
+) {
   if (objectType !== 'link' || !object) return;
-  currentLink.value = object;
-  currentLine.value = Array.isArray(object?.relations) ? object.relations[0] : null;
+  currentLink.value = object as RGLink;
+  currentLine.value = Array.isArray((object as RGLink)?.relations)
+    ? (object as RGLink).relations[0]
+    : null;
   // 展示菜单到鼠标位置
-  // @ts-ignore
-  linkMenuRef.value?.show?.(e);
+  linkMenuRef.value?.show?.(e as unknown as Event);
 }
 
 // ---- 菜单操作 ----
-function isDashed(line: any | null) {
+function isDashed(line: RGLine | null) {
   if (!line) return false;
   return !!(line.dashType && line.dashType !== 0);
 }
 
-function toggleDashed() {
+async function toggleDashed() {
   const line = currentLine.value;
   if (!line) return;
   line.dashType = isDashed(line) ? 0 : 1; // 0/undefined 实线；1 虚线
-  applyLineChange();
+  await applyLineChange();
 }
 
-function toggleStartArrow() {
+async function toggleStartArrow() {
   const line = currentLine.value;
   if (!line) return;
   line.isHideArrow = false;
   line.showStartArrow = !line.showStartArrow;
-  applyLineChange();
+  await applyLineChange()
 }
 
-function toggleEndArrow() {
+async function toggleEndArrow() {
   const line = currentLine.value;
   if (!line) return;
   line.isHideArrow = false;
   line.showEndArrow = !line.showEndArrow;
-  applyLineChange();
+  await applyLineChange();
 }
 
-function toggleHideAllArrows() {
+async function toggleHideAllArrows() {
   const line = currentLine.value;
   if (!line) return;
   line.isHideArrow = !line.isHideArrow;
@@ -283,14 +341,14 @@ function toggleHideAllArrows() {
     line.showStartArrow = false;
     line.showEndArrow = false;
   }
-  applyLineChange();
+  await applyLineChange();
 }
 
-function setLineWidth(width: number) {
+async function setLineWidth(width: number) {
   const line = currentLine.value;
   if (!line) return;
   line.lineWidth = width;
-  applyLineChange();
+  await applyLineChange();
 }
 
 async function applyLineChange() {
@@ -341,16 +399,27 @@ async function applyJsonAppend() {
       throw new Error('JSON结构无效，需要包含nodes[]与lines[]');
     }
     // 过滤已存在的节点与连线，避免重复
-    const existingNodeIds = new Set(graphInstance.getNodes().map((n: any) => n.id));
-    const nodesToAdd = parsed.nodes.filter((n) => n && n.id && !existingNodeIds.has(n.id));
+    const existingNodeIds = new Set(graphInstance.getNodes().map((n: RGNode) => n.id));
+
+    const nodesToAdd = parsed.nodes.filter(
+      (n) =>
+        n && (n as { id?: string }).id && !existingNodeIds.has((n as { id: string }).id as string),
+    );
 
     const existingLines = graphInstance.getLines();
-    const lineKey = (l: any) => `${l.from}__${l.to}__${l.text ?? ''}`;
-    const existingLineKeys = new Set(existingLines.map((l: any) => lineKey(l)));
-    const linesToAdd = parsed.lines.filter((l) => l && l.from && l.to && !existingLineKeys.has(lineKey(l)));
+    type LineLike = { from: string; to: string; text?: string };
+    const lineKey = (l: LineLike) => `${l.from}__${l.to}__${l.text ?? ''}`;
+    const existingLineKeys = new Set(existingLines.map((l) => lineKey(l)));
+    const linesToAdd = parsed.lines.filter(
+      (l) =>
+        l &&
+        (l as LineLike).from &&
+        (l as LineLike).to &&
+        !existingLineKeys.has(lineKey(l as LineLike)),
+    );
 
-    if (nodesToAdd.length) graphInstance.addNodes(nodesToAdd);
-    if (linesToAdd.length) graphInstance.addLines(linesToAdd);
+    if (nodesToAdd.length) graphInstance.addNodes(nodesToAdd as unknown as any[]);
+    if (linesToAdd.length) graphInstance.addLines(linesToAdd as unknown as any[]);
     // 不调用重布局，仅在必要时才刷新
     // void graphInstance.refresh?.();
     await updateJsonTextFromGraph();
@@ -407,7 +476,9 @@ async function applyJsonAppend() {
 }
 
 .json-input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
   max-height: calc(100vh - 120px);
   overflow: auto;
 }
@@ -438,7 +509,11 @@ async function applyJsonAppend() {
 /* 右侧 JSON 面板的进入/离开动画 */
 .json-slide-enter-active,
 .json-slide-leave-active {
-  transition: flex-basis 220ms ease, width 220ms ease, padding 220ms ease, opacity 180ms ease;
+  transition:
+    flex-basis 220ms ease,
+    width 220ms ease,
+    padding 220ms ease,
+    opacity 180ms ease;
 }
 
 .json-slide-enter-from,
