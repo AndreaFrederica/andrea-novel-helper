@@ -13,6 +13,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/RolesTreeView.vue'),
   },
 
+  {
+    path: '/relation-graph',
+    component: () => import('pages/RelationGraphPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

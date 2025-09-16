@@ -1,0 +1,329 @@
+<template>
+  <div class="relation-graph-container">
+    <div class="graph-and-json">
+      <div class="graph-pane">
+        <div style="height: calc(100vh)">
+          <RelationGraph
+            ref="graphRef"
+            :options="graphOptions"
+            :on-line-click="onLineClick"
+            :on-node-drag-start="onNodeDragStart"
+            :on-node-dragging="onNodeDragging"
+            :on-node-drag-end="onNodeDragEnd"
+          >
+            <template #tool-bar>
+              <RelationGraphToolBar />
+            </template>
+          </RelationGraph>
+
+          <!-- JSON 面板开关按钮（固定在右上角） -->
+          <div class="json-toggle-btn">
+            <q-btn
+              dense
+              round
+              color="grey-7"
+              :icon="showJsonPane ? 'keyboard_double_arrow_right' : 'code'"
+              @click="showJsonPane = !showJsonPane"
+            >
+              <q-tooltip>{{ showJsonPane ? '隐藏JSON面板' : '显示JSON面板' }}</q-tooltip>
+            </q-btn>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧JSON面板，可开关显示（带过渡动画） -->
+      <transition name="json-slide">
+        <div class="json-pane" v-show="showJsonPane">
+          <div class="json-pane-header">JSON（双向同步）</div>
+          <q-input v-model="jsonText" type="textarea" autogrow outlined class="json-input" />
+          <div class="json-actions">
+            <q-btn color="primary" dense label="应用(替换)" @click="applyJsonReplace" />
+            <q-btn color="secondary" dense label="追加(新增)" @click="applyJsonAppend" class="q-ml-sm" />
+            <q-btn color="grey" dense label="刷新JSON" @click="updateJsonTextFromGraph" class="q-ml-sm" />
+          </div>
+        </div>
+      </transition>
+    </div>
+  </div>
+</template>
+
+<script lang="ts" setup>
+import { onMounted, ref } from 'vue';
+import RelationGraph, {
+  type RGJsonData,
+  type RGOptions,
+  type RelationGraphComponent
+} from 'relation-graph-vue3';
+import RelationGraphToolBar from '../components/RelationGraphToolBar.vue';
+import { useQuasar } from 'quasar';
+
+const $q = useQuasar();
+
+const graphOptions: RGOptions = {
+  debug: true,
+  allowSwitchLineShape: true,
+  allowSwitchJunctionPoint: true,
+  allowShowDownloadButton: true,
+  defaultJunctionPoint: 'border',
+  // 禁用自动布局，优先保留JSON中的x、y位置
+  allowAutoLayoutIfSupport: false
+};
+
+const graphRef = ref<RelationGraphComponent>();
+
+// JSON面板显示/隐藏
+const showJsonPane = ref(true);
+
+// 实时JSON字符串
+const jsonText = ref('');
+
+onMounted(() => {
+  void showGraph();
+});
+
+const showGraph = async () => {
+  const __graph_json_data: RGJsonData = {
+    rootId: 'a',
+    nodes: [
+      { id: 'a', text: '主角', borderColor: 'yellow', x: 0, y: 0 },
+      { id: 'b', text: '女主', color: '#43a2f1', fontColor: 'yellow', x: 120, y: -40 },
+      { id: 'c', text: '反派', nodeShape: 1, width: 80, height: 60, x: -100, y: 100 },
+      { id: 'd', text: '配角1', nodeShape: 0, width: 100, height: 100, x: 220, y: 120 },
+      { id: 'e', text: '配角2', nodeShape: 0, width: 150, height: 150, x: -200, y: -80 }
+    ],
+    lines: [
+      { from: 'a', to: 'b', text: '恋人关系', color: '#43a2f1' },
+      { from: 'a', to: 'c', text: '敌对关系' },
+      { from: 'a', to: 'd', text: '朋友关系' },
+      { from: 'a', to: 'e', text: '师徒关系' },
+      { from: 'b', to: 'e', text: '闺蜜关系', color: '#67C23A' }
+    ]
+  };
+
+  const graphInstance = graphRef.value?.getInstance();
+  if (graphInstance) {
+    await graphInstance.setJsonData(__graph_json_data, false);
+    await graphInstance.moveToCenter();
+    await graphInstance.zoomToFit();
+    await updateJsonTextFromGraph();
+  }
+};
+
+// 拖拽中节流更新：避免频繁JSON重算导致卡顿
+let draggingUpdateTimer: number | undefined;
+function scheduleUpdateFromGraph() {
+  if (draggingUpdateTimer) return;
+  draggingUpdateTimer = window.setTimeout(async () => {
+    draggingUpdateTimer = undefined;
+    await updateJsonTextFromGraph();
+  }, 120);
+}
+
+function onNodeDragStart(_node?: any, _e?: any) {
+  // 拖拽开始可选择做记录，这里暂不处理
+}
+
+// 拖拽中：轻量实时同步（节流），不触发大刷新
+function onNodeDragging(_node?: any, _newX?: number, _newY?: number, _e?: any) {
+  scheduleUpdateFromGraph();
+}
+
+// 拖拽结束后：再做一次最终同步
+function onNodeDragEnd(_node?: any, _e?: any) {
+  void updateJsonTextFromGraph();
+}
+
+// ---- 处理连线双击以编辑文本 ----
+const lastLineClickId = ref<string>('');
+const lastLineClickAt = ref<number>(0);
+
+function onLineClick(line: any, _link: any, _e: any) {
+  const now = Date.now();
+  const id: string = line?.id ?? `${line?.from ?? ''}->${line?.to ?? ''}`;
+  const isSame = lastLineClickId.value === id;
+  const within = now - lastLineClickAt.value < 300; // 300ms 内判定为双击
+
+  lastLineClickId.value = id;
+  lastLineClickAt.value = now;
+
+  if (isSame && within) {
+    // 重置点击状态，避免三击触发
+    lastLineClickId.value = '';
+    lastLineClickAt.value = 0;
+
+    $q.dialog({
+      title: '编辑连线标记',
+      prompt: {
+        model: String(line?.text ?? ''),
+        type: 'text'
+      },
+      cancel: true,
+      persistent: true
+    }).onOk((newText: string) => {
+      const graphInstance = graphRef.value?.getInstance();
+      if (!graphInstance) return;
+      // 直接修改行对象文本并刷新
+      line.text = newText;
+      try {
+        // 避免大刷新，这里仅最小化刷新或依赖内部响应
+        // void graphInstance.refresh();
+        void updateJsonTextFromGraph();
+      } catch (err) {
+        console.warn('图刷新失败，但文本已更新到对象上。', err);
+      }
+    });
+  }
+}
+
+// 更新右侧JSON文本（从图实例读取）
+async function updateJsonTextFromGraph() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+  try {
+    const data = graphInstance.getGraphJsonData();
+    jsonText.value = JSON.stringify(data, null, 2);
+  } catch (err) {
+    $q.notify({ type: 'negative', message: '获取图数据失败：' + String(err) });
+  }
+}
+
+// 应用JSON（替换整图数据）
+async function applyJsonReplace() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+  try {
+    const parsed = JSON.parse(jsonText.value) as RGJsonData;
+    if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.lines)) {
+      throw new Error('JSON结构无效，需要包含nodes[]与lines[]');
+    }
+    await graphInstance.setJsonData(parsed, false);
+    await graphInstance.zoomToFit();
+    await updateJsonTextFromGraph();
+    $q.notify({ type: 'positive', message: '已应用JSON（替换）' });
+  } catch (err) {
+    $q.notify({ type: 'negative', message: '应用失败：' + String(err) });
+  }
+}
+
+// 追加JSON（仅新增nodes/lines，保留现有）
+async function applyJsonAppend() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+  try {
+    const parsed = JSON.parse(jsonText.value) as RGJsonData;
+    if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.lines)) {
+      throw new Error('JSON结构无效，需要包含nodes[]与lines[]');
+    }
+    // 过滤已存在的节点与连线，避免重复
+    const existingNodeIds = new Set(graphInstance.getNodes().map((n: any) => n.id));
+    const nodesToAdd = parsed.nodes.filter((n) => n && n.id && !existingNodeIds.has(n.id));
+
+    const existingLines = graphInstance.getLines();
+    const lineKey = (l: any) => `${l.from}__${l.to}__${l.text ?? ''}`;
+    const existingLineKeys = new Set(existingLines.map((l: any) => lineKey(l)));
+    const linesToAdd = parsed.lines.filter((l) => l && l.from && l.to && !existingLineKeys.has(lineKey(l)));
+
+    if (nodesToAdd.length) graphInstance.addNodes(nodesToAdd);
+    if (linesToAdd.length) graphInstance.addLines(linesToAdd);
+    // 不调用重布局，仅在必要时才刷新
+    // void graphInstance.refresh?.();
+    await updateJsonTextFromGraph();
+    $q.notify({ type: 'positive', message: '已追加JSON（新增）' });
+  } catch (err) {
+    $q.notify({ type: 'negative', message: '追加失败：' + String(err) });
+  }
+}
+</script>
+
+<style lang="scss" scoped>
+.relation-graph-container {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.graph-and-json {
+  display: flex;
+  height: 100%;
+}
+
+.graph-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.json-toggle-btn {
+  position: absolute;
+  z-index: 40;
+  top: 10px;
+  right: 10px;
+}
+
+.json-pane {
+  width: 420px;
+  padding: 10px;
+  border-left: 1px solid #efefef;
+  background: #fafafa;
+  overflow: hidden; // 动画期间避免内容外溢
+}
+
+.body--dark .json-pane {
+  background: #1f1f1f;
+  border-color: #333;
+}
+.json-pane-header {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.json-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+}
+
+.json-actions {
+  margin-top: 8px;
+}
+
+:deep(.relation-graph) {
+  .my-node-template {
+    transform: translateX(-60px) translateY(-60px) !important;
+    cursor: default;
+  }
+}
+
+.c-node-menu-item {
+  line-height: 30px;
+  padding-left: 10px;
+  cursor: pointer;
+  color: #444444;
+  font-size: 14px;
+  border-top: #efefef solid 1px;
+}
+
+.c-node-menu-item:hover {
+  background-color: rgba(66, 187, 66, 0.2);
+}
++/* 右侧 JSON 面板的进入/离开动画 */
+.json-slide-enter-active,
+.json-slide-leave-active {
+  transition: width 220ms ease, padding 220ms ease, opacity 180ms ease;
+}
+
+.json-slide-enter-from,
+.json-slide-leave-to {
+  width: 0;
+  padding: 0;
+  opacity: 0;
+}
+
+.json-slide-enter-to,
+.json-slide-leave-from {
+  width: 420px;
+  padding: 10px;
+  opacity: 1;
+}
+</style>

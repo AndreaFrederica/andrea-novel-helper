@@ -73,3 +73,5 @@ BuildNovelHelper.nsi
 
 node_modules/webview
 node_modules/webview/**
+
+notes/**

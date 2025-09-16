@@ -196,7 +196,7 @@ import { useQuasar } from 'quasar';
 const $q = useQuasar();
 const isDark = computed(() => $q.dark.isActive);
 
-import RoleCard from 'components/RoleCard.vue';
+import RoleCard from '../components/RoleCard.vue';
 import type { RoleCardModel } from '../../types/role';
 
 type RoleWithId = RoleCardModel & { id: string };
