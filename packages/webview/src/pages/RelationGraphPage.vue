@@ -10,6 +10,7 @@
             :on-node-drag-start="onNodeDragStart"
             :on-node-dragging="onNodeDragging"
             :on-node-drag-end="onNodeDragEnd"
+            :on-contextmenu="onContextmenu"
           >
             <template #tool-bar>
               <RelationGraphToolBar />
@@ -28,12 +29,66 @@
               <q-tooltip>{{ showJsonPane ? '隐藏JSON面板' : '显示JSON面板' }}</q-tooltip>
             </q-btn>
           </div>
+
+          <!-- 连线右键菜单 -->
+          <q-menu ref="linkMenuRef" :separate-close-popup="false">
+            <q-list dense style="min-width: 200px">
+              <q-item clickable v-close-popup @click="toggleDashed">
+                <q-item-section avatar>
+                  <q-icon :name="isDashed(currentLine) ? 'check_box' : 'check_box_outline_blank'" />
+                </q-item-section>
+                <q-item-section>{{ isDashed(currentLine) ? '切换为实线' : '切换为虚线' }}</q-item-section>
+              </q-item>
+
+              <q-item clickable v-close-popup @click="toggleStartArrow">
+                <q-item-section avatar>
+                  <q-icon :name="currentLine?.showStartArrow && !currentLine?.isHideArrow ? 'check_box' : 'check_box_outline_blank'" />
+                </q-item-section>
+                <q-item-section>起点箭头</q-item-section>
+              </q-item>
+
+              <q-item clickable v-close-popup @click="toggleEndArrow">
+                <q-item-section avatar>
+                  <q-icon :name="currentLine?.showEndArrow && !currentLine?.isHideArrow ? 'check_box' : 'check_box_outline_blank'" />
+                </q-item-section>
+                <q-item-section>终点箭头</q-item-section>
+              </q-item>
+
+              <q-item clickable v-close-popup @click="toggleHideAllArrows">
+                <q-item-section avatar>
+                  <q-icon :name="currentLine?.isHideArrow ? 'check_box' : 'check_box_outline_blank'" />
+                </q-item-section>
+                <q-item-section>隐藏全部箭头</q-item-section>
+              </q-item>
+
+              <q-separator />
+
+              <q-item clickable v-close-popup @click="setLineWidth(1)">
+                <q-item-section avatar>
+                  <q-icon :name="currentLine?.lineWidth === 1 ? 'radio_button_checked' : 'radio_button_unchecked'" />
+                </q-item-section>
+                <q-item-section>线宽 1</q-item-section>
+              </q-item>
+              <q-item clickable v-close-popup @click="setLineWidth(2)">
+                <q-item-section avatar>
+                  <q-icon :name="currentLine?.lineWidth === 2 ? 'radio_button_checked' : 'radio_button_unchecked'" />
+                </q-item-section>
+                <q-item-section>线宽 2</q-item-section>
+              </q-item>
+              <q-item clickable v-close-popup @click="setLineWidth(3)">
+                <q-item-section avatar>
+                  <q-icon :name="currentLine?.lineWidth === 3 ? 'radio_button_checked' : 'radio_button_unchecked'" />
+                </q-item-section>
+                <q-item-section>线宽 3</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
         </div>
       </div>
 
       <!-- 右侧JSON面板，可开关显示（带过渡动画） -->
       <transition name="json-slide">
-        <div class="json-pane" v-show="showJsonPane">
+        <div class="json-pane" v-if="showJsonPane">
           <div class="json-pane-header">JSON（双向同步）</div>
           <q-input v-model="jsonText" type="textarea" autogrow outlined class="json-input" />
           <div class="json-actions">
@@ -77,6 +132,11 @@ const showJsonPane = ref(true);
 // 实时JSON字符串
 const jsonText = ref('');
 
+// 右键菜单状态
+const linkMenuRef = ref<any>();
+const currentLink = ref<any | null>(null);
+const currentLine = ref<any | null>(null);
+
 onMounted(() => {
   void showGraph();
 });
@@ -102,9 +162,10 @@ const showGraph = async () => {
 
   const graphInstance = graphRef.value?.getInstance();
   if (graphInstance) {
-    await graphInstance.setJsonData(__graph_json_data, false);
-    await graphInstance.moveToCenter();
-    await graphInstance.zoomToFit();
+    // setJsonData 与 moveToCenter 非 Promise；zoomToFit 返回 Promise
+    graphInstance.setJsonData(__graph_json_data, false);
+    graphInstance.moveToCenter?.();
+    await graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
   }
 };
@@ -175,6 +236,71 @@ function onLineClick(line: any, _link: any, _e: any) {
   }
 }
 
+// ---- 右键菜单回调（仅在连线上触发） ----
+function onContextmenu(e: MouseEvent | TouchEvent, objectType: 'canvas' | 'node' | 'link', object: any) {
+  if (objectType !== 'link' || !object) return;
+  currentLink.value = object;
+  currentLine.value = Array.isArray(object?.relations) ? object.relations[0] : null;
+  // 展示菜单到鼠标位置
+  // @ts-ignore
+  linkMenuRef.value?.show?.(e);
+}
+
+// ---- 菜单操作 ----
+function isDashed(line: any | null) {
+  if (!line) return false;
+  return !!(line.dashType && line.dashType !== 0);
+}
+
+function toggleDashed() {
+  const line = currentLine.value;
+  if (!line) return;
+  line.dashType = isDashed(line) ? 0 : 1; // 0/undefined 实线；1 虚线
+  applyLineChange();
+}
+
+function toggleStartArrow() {
+  const line = currentLine.value;
+  if (!line) return;
+  line.isHideArrow = false;
+  line.showStartArrow = !line.showStartArrow;
+  applyLineChange();
+}
+
+function toggleEndArrow() {
+  const line = currentLine.value;
+  if (!line) return;
+  line.isHideArrow = false;
+  line.showEndArrow = !line.showEndArrow;
+  applyLineChange();
+}
+
+function toggleHideAllArrows() {
+  const line = currentLine.value;
+  if (!line) return;
+  line.isHideArrow = !line.isHideArrow;
+  if (line.isHideArrow) {
+    line.showStartArrow = false;
+    line.showEndArrow = false;
+  }
+  applyLineChange();
+}
+
+function setLineWidth(width: number) {
+  const line = currentLine.value;
+  if (!line) return;
+  line.lineWidth = width;
+  applyLineChange();
+}
+
+async function applyLineChange() {
+  try {
+    await updateJsonTextFromGraph();
+  } catch (e) {
+    console.warn('更新JSON失败', e);
+  }
+}
+
 // 更新右侧JSON文本（从图实例读取）
 async function updateJsonTextFromGraph() {
   const graphInstance = graphRef.value?.getInstance();
@@ -196,8 +322,8 @@ async function applyJsonReplace() {
     if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.lines)) {
       throw new Error('JSON结构无效，需要包含nodes[]与lines[]');
     }
-    await graphInstance.setJsonData(parsed, false);
-    await graphInstance.zoomToFit();
+    graphInstance.setJsonData(parsed, false);
+    await graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
     $q.notify({ type: 'positive', message: '已应用JSON（替换）' });
   } catch (err) {
@@ -261,6 +387,8 @@ async function applyJsonAppend() {
 }
 
 .json-pane {
+  /* 固定侧栏宽度，作为 flex 子项以固定主轴尺寸 */
+  flex: 0 0 420px;
   width: 420px;
   padding: 10px;
   border-left: 1px solid #efefef;
@@ -307,14 +435,15 @@ async function applyJsonAppend() {
 .c-node-menu-item:hover {
   background-color: rgba(66, 187, 66, 0.2);
 }
-+/* 右侧 JSON 面板的进入/离开动画 */
+/* 右侧 JSON 面板的进入/离开动画 */
 .json-slide-enter-active,
 .json-slide-leave-active {
-  transition: width 220ms ease, padding 220ms ease, opacity 180ms ease;
+  transition: flex-basis 220ms ease, width 220ms ease, padding 220ms ease, opacity 180ms ease;
 }
 
 .json-slide-enter-from,
 .json-slide-leave-to {
+  flex-basis: 0;
   width: 0;
   padding: 0;
   opacity: 0;
@@ -322,6 +451,7 @@ async function applyJsonAppend() {
 
 .json-slide-enter-to,
 .json-slide-leave-from {
+  flex-basis: 420px;
   width: 420px;
   padding: 10px;
   opacity: 1;
