@@ -18,6 +18,62 @@
           </div>
           <div class="filter-content">
             <div class="filter-section">
+              <div class="section-title">按属性过滤</div>
+              <div class="attr-filters">
+                <div class="attr-row">
+                  <div class="attr-label">性别</div>
+                  <q-option-group
+                    v-model="checkedSex"
+                    :options="[{ label: '全部', value: '' }, { label: '男性', value: 'male' }, { label: '女性', value: 'female' }]"
+                    type="radio"
+                    dense
+                    @update:model-value="doFilter"
+                  />
+                </div>
+                <div class="attr-row">
+                  <div class="attr-label">正负角色</div>
+                  <q-option-group
+                    v-model="checkedIsGoodman"
+                    :options="[{ label: '全部', value: '' }, { label: '正面角色', value: 'true' }, { label: '负面角色', value: 'false' }]"
+                    type="radio"
+                    dense
+                    @update:model-value="doFilter"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="filter-section">
+              <div class="section-title">关系类型过滤</div>
+              <div class="rel-list">
+                <q-option-group
+                  v-model="relCheckList"
+                  :options="allRelType.map(t => ({ label: t, value: t }))"
+                  type="checkbox"
+                  dense
+                  @update:model-value="doFilter"
+                />
+              </div>
+              <div class="filter-actions" style="margin-top: 8px;">
+                <q-btn
+                  dense
+                  size="sm"
+                  color="primary"
+                  label="全选"
+                  @click="selectAllRelations"
+                  class="action-btn"
+                />
+                <q-btn
+                  dense
+                  size="sm"
+                  color="grey"
+                  label="全不选"
+                  @click="deselectAllRelations"
+                  class="action-btn"
+                />
+              </div>
+            </div>
+            <div class="filter-section">
               <div class="section-title">显示/隐藏节点</div>
               <div class="node-list">
                 <div
@@ -353,6 +409,12 @@ const contextMenuPosition = ref({ x: 0, y: 0 });
 const graphWrapperRef = ref<HTMLElement | null>(null);
 const menuTarget = computed(() => graphWrapperRef.value ?? true);
 
+// 示例中的属性过滤状态
+const checkedSex = ref<string>('');
+const checkedIsGoodman = ref<string>('');
+const relCheckList = ref<string[]>([]);
+const allRelType = ref<string[]>([]);
+
 onMounted(() => {
   // 禁用画布区域的默认右键菜单
   // const wrapper = graphWrapperRef.value;
@@ -369,18 +431,60 @@ const showGraph = async () => {
   const __graph_json_data: RGJsonData = {
     rootId: 'a',
     nodes: [
-      { id: 'a', text: '主角', borderColor: 'yellow', x: 0, y: 0 },
-      { id: 'b', text: '女主', color: '#43a2f1', fontColor: 'yellow', x: 120, y: -40 },
-      { id: 'c', text: '反派', nodeShape: 1, width: 80, height: 60, x: -100, y: 100 },
-      { id: 'd', text: '配角1', nodeShape: 0, width: 100, height: 100, x: 220, y: 120 },
-      { id: 'e', text: '配角2', nodeShape: 0, width: 150, height: 150, x: -200, y: -80 },
+      { 
+        id: 'a', 
+        text: '主角', 
+        borderColor: 'yellow', 
+        x: 0, 
+        y: 0,
+        data: { sexType: 'male', isGoodMan: true }
+      },
+      { 
+        id: 'b', 
+        text: '女主', 
+        color: '#43a2f1', 
+        fontColor: 'yellow', 
+        x: 120, 
+        y: -40,
+        data: { sexType: 'female', isGoodMan: true }
+      },
+      { 
+        id: 'c', 
+        text: '反派', 
+        nodeShape: 1, 
+        width: 80, 
+        height: 60, 
+        x: -100, 
+        y: 100,
+        data: { sexType: 'male', isGoodMan: false }
+      },
+      { 
+        id: 'd', 
+        text: '配角1', 
+        nodeShape: 0, 
+        width: 100, 
+        height: 100, 
+        x: 220, 
+        y: 120,
+        data: { sexType: 'female', isGoodMan: true }
+      },
+      { 
+        id: 'e', 
+        text: '配角2', 
+        nodeShape: 0, 
+        width: 150, 
+        height: 150, 
+        x: -200, 
+        y: -80,
+        data: { sexType: 'male', isGoodMan: true }
+      },
     ],
     lines: [
-      { from: 'a', to: 'b', text: '恋人关系', color: '#43a2f1' },
-      { from: 'a', to: 'c', text: '敌对关系' },
-      { from: 'a', to: 'd', text: '朋友关系' },
-      { from: 'a', to: 'e', text: '师徒关系' },
-      { from: 'b', to: 'e', text: '闺蜜关系', color: '#67C23A' },
+      { from: 'a', to: 'b', text: '恋人关系', color: '#43a2f1', data: { type: '恋人关系' } },
+      { from: 'a', to: 'c', text: '敌对关系', data: { type: '敌对关系' } },
+      { from: 'a', to: 'd', text: '朋友关系', data: { type: '朋友关系' } },
+      { from: 'a', to: 'e', text: '师徒关系', data: { type: '师徒关系' } },
+      { from: 'b', to: 'e', text: '闺蜜关系', color: '#67C23A', data: { type: '朋友关系' } },
     ],
   };
 
@@ -598,6 +702,9 @@ async function openContextMenu(
 // ---- 长按触发（移动端/触屏）：默认打开画布菜单 ----
 const longPressThreshold = 550; // ms
 let longPressTimer: any = null;
+// 改为更具体的类型（可能为 window.setTimeout 返回的 number）
+// 但保留 null 以便清除
+// longPressTimer 的类型在不同环境下可能为 number，保持宽松类型以兼容运行时
 
 function onTouchStart(ev: TouchEvent) {
   const pt = getClientPointFromEvent(ev);
@@ -910,9 +1017,37 @@ function updateNodesList() {
   try {
     const nodes = graphInstance.getNodes();
     allNodes.value = [...nodes];
+    // 收集关系类型，供关系过滤 UI 使用
+    try {
+      const links = graphInstance.getLinks();
+      const types = new Set<string>();
+      links.forEach((lk: RGLink) => {
+        const rels = lk.relations ?? [];
+        rels.forEach((r: RGLine) => {
+          const t = (r.data as Record<string, unknown>)?.['type'];
+          if (typeof t === 'string' && t) types.add(t);
+        });
+      });
+      allRelType.value = Array.from(types);
+      // 如果 relCheckList 还未初始化，则默认选中所有类型
+      if (!relCheckList.value || relCheckList.value.length === 0) relCheckList.value = Array.from(types);
+    } catch (err) {
+      // ignore
+    }
   } catch (err) {
     console.warn('获取节点列表失败:', err);
   }
+}
+
+// 关系过滤的全选和全不选功能
+async function selectAllRelations() {
+  relCheckList.value = [...allRelType.value];
+  await doFilter();
+}
+
+async function deselectAllRelations() {
+  relCheckList.value = [];
+  await doFilter();
 }
 
 async function toggleNodeVisibility(nodeId: string, visible: boolean) {
@@ -921,60 +1056,81 @@ async function toggleNodeVisibility(nodeId: string, visible: boolean) {
   } else {
     hiddenNodeIds.value.add(nodeId);
   }
-  await applyNodeFilter();
+  await doFilter();
 }
 
 async function showAllNodes() {
   hiddenNodeIds.value.clear();
-  await applyNodeFilter();
+  await doFilter();
 }
 
 async function hideAllNodes() {
   allNodes.value.forEach(node => {
     hiddenNodeIds.value.add(node.id);
   });
-  await applyNodeFilter();
+  await doFilter();
 }
 
 async function applyNodeFilter() {
+  // 保留 applyNodeFilter 作为兼容入口，实际委托给 doFilter
+  await doFilter();
+}
+
+// 来自示例的过滤逻辑：按节点属性设置 opacity，并按关系类型隐藏连线
+async function doFilter() {
   const graphInstance = graphRef.value?.getInstance();
   if (!graphInstance) return;
 
   try {
-    // 获取所有节点和连线
-    const allGraphNodes = graphInstance.getNodes();
-    const allGraphLines = graphInstance.getLines();
+    const _all_nodes = graphInstance.getNodes();
+    const _all_links = graphInstance.getLinks();
 
-    // 设置节点的显示/隐藏状态
-    allGraphNodes.forEach(node => {
-      const shouldHide = hiddenNodeIds.value.has(node.id);
-      // 使用 relation-graph 的内置属性来控制节点显示
-      (node as any).isHide = shouldHide;
+    _all_nodes.forEach((thisNode: RGNode) => {
+      let _isDim = false;
+      const data = thisNode.data as Record<string, unknown> | undefined;
+
+      if (checkedSex.value !== '') {
+        const sex = (data?.['sexType'] as string) ?? '';
+        if (sex !== checkedSex.value) _isDim = true;
+      }
+
+      if (checkedIsGoodman.value !== '') {
+        const isGood = String(data?.['isGoodMan'] ?? '') === 'true' || String(data?.['isGoodMan'] ?? '') === 'false' ? String(data?.['isGoodMan']) : String(data?.['isGoodMan']);
+        if (isGood !== checkedIsGoodman.value) _isDim = true;
+      }
+
+      // respect manual hide via checkbox
+      if (hiddenNodeIds.value.has(thisNode.id)) _isDim = true;
+
+      // 将可视化效果设置为半透明以示被过滤
+      (thisNode as unknown as RGNode).opacity = _isDim ? 0.15 : 1;
     });
 
-    // 隐藏与隐藏节点相关的连线
-    allGraphLines.forEach(line => {
-      const fromHidden = hiddenNodeIds.value.has(line.from);
-      const toHidden = hiddenNodeIds.value.has(line.to);
-      // 如果连线的任一端点被隐藏，则隐藏该连线
-      (line as any).isHide = fromHidden || toHidden;
+    _all_links.forEach((thisLink: RGLink) => {
+      const rels = thisLink.relations ?? [];
+      rels.forEach((thisLine: RGLine) => {
+        const t = (thisLine.data as Record<string, unknown>)?.['type'] as string | undefined;
+        const allowed = !t || relCheckList.value.indexOf(t) !== -1;
+        // 如果任一端节点被手动隐藏，也隐藏该连线的子项
+        const fromHidden = hiddenNodeIds.value.has(thisLine.from);
+        const toHidden = hiddenNodeIds.value.has(thisLine.to);
+        const shouldHide = !allowed || fromHidden || toHidden;
+        thisLine.isHide = shouldHide;
+      });
+      // 如果 link 下所有 relations 都被隐藏，则隐藏 link 本身
+      try {
+        const allHidden = (thisLink.relations ?? []).every((r: RGLine) => !!r.isHide);
+        (thisLink as any).isHide = allHidden;
+      } catch {
+        // ignore
+      }
     });
 
-    // 刷新图形显示
-    await graphInstance.refresh?.();
-
-    $q.notify({
-      type: 'positive',
-      message: `已更新节点显示状态`,
-      position: 'top',
-    });
+    // 更新图形（优先使用轻量更新 dataUpdated，如果没有再用 refresh）
+    graphInstance.dataUpdated?.();
+    await Promise.resolve();
   } catch (err) {
-    console.warn('应用节点过滤失败:', err);
-    $q.notify({
-      type: 'negative',
-      message: '应用过滤失败: ' + String(err),
-      position: 'top',
-    });
+    console.warn('doFilter 失败', err);
   }
 }
 </script>
