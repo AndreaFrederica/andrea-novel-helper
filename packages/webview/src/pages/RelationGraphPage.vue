@@ -130,7 +130,7 @@
 
               <q-separator />
 
-              <q-item clickable v-close-popup @click="deleteCurrentNode">
+              <q-item clickable v-close-popup @click="deleteCurrentLink">
                 <q-item-section avatar>
                   <q-icon name="delete" color="negative" />
                 </q-item-section>
@@ -324,9 +324,9 @@ const showGraph = async () => {
 let draggingUpdateTimer: number | undefined;
 function scheduleUpdateFromGraph() {
   if (draggingUpdateTimer) return;
-  draggingUpdateTimer = window.setTimeout(async () => {
+  draggingUpdateTimer = window.setTimeout(() => {
     draggingUpdateTimer = undefined;
-    await updateJsonTextFromGraph();
+    void updateJsonTextFromGraph();
   }, 120);
 }
 
@@ -716,6 +716,30 @@ async function setLineWidth(width: number) {
   await applyLineChange();
 }
 
+function deleteCurrentLink() {
+  const link = currentLink.value;
+  if (!link) return;
+  
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+  
+  try {
+    graphInstance.removeLinkById(link.seeks_id || `${link.from}-${link.to}`);
+    void updateJsonTextFromGraph();
+    $q.notify({ 
+      type: 'positive', 
+      message: '已删除连线',
+      position: 'top'
+    });
+  } catch (err) {
+    $q.notify({ 
+      type: 'negative', 
+      message: '删除连线失败: ' + String(err),
+      position: 'top'
+    });
+  }
+}
+
 async function applyLineChange() {
   try {
     await updateJsonTextFromGraph();
@@ -731,6 +755,8 @@ async function updateJsonTextFromGraph() {
   try {
     const data = graphInstance.getGraphJsonData();
     jsonText.value = JSON.stringify(data, null, 2);
+    // 保证函数包含 await，以符合 async 定义并消除编译/lint 警告（该 await 无副作用，仅做微任务调度）
+    await Promise.resolve();
   } catch (err) {
     $q.notify({ type: 'negative', message: '获取图数据失败：' + String(err) });
   }
