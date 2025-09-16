@@ -24,7 +24,7 @@
                   <div class="attr-label">性别</div>
                   <q-option-group
                     v-model="checkedSex"
-                    :options="[{ label: '全部', value: '' }, { label: '男性', value: 'male' }, { label: '女性', value: 'female' }]"
+                    :options="[{ label: '全部', value: '' }, { label: '男性', value: 'male' }, { label: '女性', value: 'female' }, { label: '其他', value: 'other' }]"
                     type="radio"
                     dense
                     @update:model-value="doFilter"
@@ -34,7 +34,7 @@
                   <div class="attr-label">正负角色</div>
                   <q-option-group
                     v-model="checkedIsGoodman"
-                    :options="[{ label: '全部', value: '' }, { label: '正面角色', value: 'true' }, { label: '负面角色', value: 'false' }]"
+                    :options="[{ label: '全部', value: '' }, { label: '正面角色', value: 'true' }, { label: '负面角色', value: 'false' }, { label: '其他', value: 'other' }]"
                     type="radio"
                     dense
                     @update:model-value="doFilter"
@@ -210,6 +210,15 @@
                   />
                 </q-item-section>
                 <q-item-section>隐藏全部箭头</q-item-section>
+              </q-item>
+
+              <q-separator />
+
+              <q-item clickable v-close-popup @click="changeRelationType">
+                <q-item-section avatar>
+                  <q-icon name="category" color="primary" />
+                </q-item-section>
+                <q-item-section>调整关系类型</q-item-section>
               </q-item>
 
               <q-separator />
@@ -431,50 +440,50 @@ const showGraph = async () => {
   const __graph_json_data: RGJsonData = {
     rootId: 'a',
     nodes: [
-      { 
-        id: 'a', 
-        text: '主角', 
-        borderColor: 'yellow', 
-        x: 0, 
+      {
+        id: 'a',
+        text: '主角',
+        borderColor: 'yellow',
+        x: 0,
         y: 0,
         data: { sexType: 'male', isGoodMan: true }
       },
-      { 
-        id: 'b', 
-        text: '女主', 
-        color: '#43a2f1', 
-        fontColor: 'yellow', 
-        x: 120, 
+      {
+        id: 'b',
+        text: '女主',
+        color: '#43a2f1',
+        fontColor: 'yellow',
+        x: 120,
         y: -40,
         data: { sexType: 'female', isGoodMan: true }
       },
-      { 
-        id: 'c', 
-        text: '反派', 
-        nodeShape: 1, 
-        width: 80, 
-        height: 60, 
-        x: -100, 
+      {
+        id: 'c',
+        text: '反派',
+        nodeShape: 1,
+        width: 80,
+        height: 60,
+        x: -100,
         y: 100,
         data: { sexType: 'male', isGoodMan: false }
       },
-      { 
-        id: 'd', 
-        text: '配角1', 
-        nodeShape: 0, 
-        width: 100, 
-        height: 100, 
-        x: 220, 
+      {
+        id: 'd',
+        text: '配角1',
+        nodeShape: 0,
+        width: 100,
+        height: 100,
+        x: 220,
         y: 120,
         data: { sexType: 'female', isGoodMan: true }
       },
-      { 
-        id: 'e', 
-        text: '配角2', 
-        nodeShape: 0, 
-        width: 150, 
-        height: 150, 
-        x: -200, 
+      {
+        id: 'e',
+        text: '配角2',
+        nodeShape: 0,
+        width: 150,
+        height: 150,
+        x: -200,
         y: -80,
         data: { sexType: 'male', isGoodMan: true }
       },
@@ -485,6 +494,8 @@ const showGraph = async () => {
       { from: 'a', to: 'd', text: '朋友关系', data: { type: '朋友关系' } },
       { from: 'a', to: 'e', text: '师徒关系', data: { type: '师徒关系' } },
       { from: 'b', to: 'e', text: '闺蜜关系', color: '#67C23A', data: { type: '朋友关系' } },
+      { from: 'c', to: 'd', text: '其他关系', data: { type: '其他关系' } },
+      { from: 'c', to: 'd', text: '其他关系', data: { type: '其他关系' } },
     ],
   };
 
@@ -542,29 +553,47 @@ function onLineClick(line: RGLine, _link: RGLink, _e: RGUserEvent) {
     lastLineClickId.value = '';
     lastLineClickAt.value = 0;
 
+    const currentType = (line.data as Record<string, unknown>)?.['type'] as string || '其他关系';
+
     $q.dialog({
-      title: '编辑连线标记',
-      prompt: {
-        model: String(line?.text ?? ''),
-        type: 'text',
+      title: '编辑连线关系',
+      message: '请选择关系类型：',
+      options: {
+        type: 'radio',
+        model: currentType,
+        items: [
+          { label: '恋人关系', value: '恋人关系' },
+          { label: '朋友关系', value: '朋友关系' },
+          { label: '敌对关系', value: '敌对关系' },
+          { label: '师徒关系', value: '师徒关系' },
+          { label: '亲属关系', value: '亲属关系' },
+          { label: '同事关系', value: '同事关系' },
+          { label: '其他关系', value: '其他关系' }
+        ]
       },
       cancel: true,
       persistent: true,
-    }).onOk((newText: string) => {
+    }).onOk((newType: string) => {
       const graphInstance = graphRef.value?.getInstance();
       if (!graphInstance) return;
 
-      // 直接修改行对象文本并刷新
-      line.text = newText;
+      // 同时更新连线的显示文本和关系类型数据，保持一致
+      line.text = newType;
+      if (!line.data) {
+        line.data = {};
+      }
+      (line.data as Record<string, unknown>)['type'] = newType;
+
       try {
         void updateJsonTextFromGraph();
+        updateNodesList(); // 更新关系类型列表
         $q.notify({
           type: 'positive',
-          message: '连线标记已更新',
+          message: `关系已更新为: ${newType}`,
           position: 'top',
         });
       } catch (err) {
-        console.warn('图刷新失败，但文本已更新到对象上。', err);
+        console.warn('图刷新失败，但关系已更新。', err);
       }
     });
   }
@@ -695,7 +724,7 @@ async function openContextMenu(
 
   await nextTick();
   canvasMenuRef.value?.hide?.();
-  canvasMenuRef.value?.show(eventForMenu); // ✅ 用事件坐标定位
+  canvasMenuRef?.value?.show(eventForMenu); // ✅ 用事件坐标定位
 }
 
 
@@ -796,6 +825,10 @@ function addNewNode() {
     text: '新节点',
     x: contextMenuPosition.value.x - 300, // 相对于画布的位置
     y: contextMenuPosition.value.y - 100,
+    data: {
+      sexType: 'other', // 默认性别为其他
+      isGoodMan: 'other'  // 默认为其他角色
+    }
   };
 
   try {
@@ -985,6 +1018,19 @@ async function applyJsonAppend() {
         n && (n as { id?: string }).id && !existingNodeIds.has((n as { id: string }).id as string),
     );
 
+    // 为新添加的节点设置默认过滤属性
+    nodesToAdd.forEach((node: any) => {
+      if (!node.data) {
+        node.data = {};
+      }
+      if (!node.data.sexType) {
+        node.data.sexType = 'other'; // 默认性别为其他
+      }
+      if (node.data.isGoodMan === undefined) {
+        node.data.isGoodMan = 'other'; // 默认为其他角色
+      }
+    });
+
     const existingLines = graphInstance.getLines();
     type LineLike = { from: string; to: string; text?: string };
     const lineKey = (l: LineLike) => `${l.from}__${l.to}__${l.text ?? ''}`;
@@ -996,6 +1042,20 @@ async function applyJsonAppend() {
         (l as LineLike).to &&
         !existingLineKeys.has(lineKey(l as LineLike)),
     );
+
+    // 为新添加的连线设置默认类型属性
+    linesToAdd.forEach((line: any) => {
+      if (!line.data) {
+        line.data = {};
+      }
+      if (!line.data.type) {
+        line.data.type = '其他关系'; // 默认关系类型为其他关系
+      }
+      // 确保连线的显示文本与关系类型一致
+      if (!line.text || line.text === '') {
+        line.text = line.data.type;
+      }
+    });
 
     if (nodesToAdd.length) graphInstance.addNodes(nodesToAdd as unknown as any[]);
     if (linesToAdd.length) graphInstance.addLines(linesToAdd as unknown as any[]);
@@ -1095,7 +1155,17 @@ async function doFilter() {
       }
 
       if (checkedIsGoodman.value !== '') {
-        const isGood = String(data?.['isGoodMan'] ?? '') === 'true' || String(data?.['isGoodMan'] ?? '') === 'false' ? String(data?.['isGoodMan']) : String(data?.['isGoodMan']);
+        const isGoodValue = data?.['isGoodMan'];
+        let isGood: string;
+
+        if (isGoodValue === true || isGoodValue === 'true') {
+          isGood = 'true';
+        } else if (isGoodValue === false || isGoodValue === 'false') {
+          isGood = 'false';
+        } else {
+          isGood = 'other';
+        }
+
         if (isGood !== checkedIsGoodman.value) _isDim = true;
       }
 
@@ -1133,6 +1203,56 @@ async function doFilter() {
     console.warn('doFilter 失败', err);
   }
 }
+
+// 调整关系类型功能
+function changeRelationType() {
+  const line = currentLine.value;
+  if (!line) return;
+
+  const currentType = (line.data as Record<string, unknown>)?.['type'] as string || '其他关系';
+
+  $q.dialog({
+    title: '调整关系类型',
+    message: '请选择新的关系类型：',
+    options: {
+      type: 'radio',
+      model: currentType,
+      items: [
+        { label: '恋人关系', value: '恋人关系' },
+        { label: '朋友关系', value: '朋友关系' },
+        { label: '敌对关系', value: '敌对关系' },
+        { label: '师徒关系', value: '师徒关系' },
+        { label: '亲属关系', value: '亲属关系' },
+        { label: '同事关系', value: '同事关系' },
+        { label: '其他关系', value: '其他关系' }
+      ]
+    },
+    cancel: true,
+    persistent: true,
+  }).onOk((newType: string) => {
+    if (!line.data) {
+      line.data = {};
+    }
+    (line.data as Record<string, unknown>)['type'] = newType;
+
+    // 同时更新连线的显示文本以保持一致
+    line.text = newType;
+
+    try {
+      void updateJsonTextFromGraph();
+      updateNodesList(); // 更新关系类型列表
+      $q.notify({
+        type: 'positive',
+        message: `关系类型已更新为: ${newType}`,
+        position: 'top',
+      });
+    } catch (err) {
+      console.warn('图刷新失败，但关系类型已更新。', err);
+    }
+  });
+}
+
+
 </script>
 
 <style lang="scss" scoped>
