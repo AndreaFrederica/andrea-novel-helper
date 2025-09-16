@@ -2,7 +2,13 @@
   <div class="relation-graph-container">
     <div class="graph-and-json">
       <div class="graph-pane">
-        <div style="height: calc(100vh)">
+        <div
+          ref="graphWrapperRef"
+          style="height: calc(100vh)"
+          @touchstart="onTouchStart"
+          @touchend="onTouchEnd"
+          @touchmove="onTouchMove"
+        >
           <RelationGraph
             ref="graphRef"
             :options="graphOptions"
@@ -31,7 +37,13 @@
           </div>
 
           <!-- 连线右键菜单 -->
-          <q-menu ref="linkMenuRef" :separate-close-popup="false">
+          <q-menu
+            ref="linkMenuRef"
+            touch-position
+            context-menu
+
+            v-model="showLinkMenu"
+          >
             <q-list dense style="min-width: 200px">
               <q-item clickable v-close-popup @click="toggleDashed">
                 <q-item-section avatar>
@@ -115,6 +127,74 @@
                 </q-item-section>
                 <q-item-section>线宽 3</q-item-section>
               </q-item>
+
+              <q-separator />
+
+              <q-item clickable v-close-popup @click="deleteCurrentNode">
+                <q-item-section avatar>
+                  <q-icon name="delete" color="negative" />
+                </q-item-section>
+                <q-item-section>删除连线</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+
+          <!-- 节点右键菜单 -->
+          <q-menu
+            ref="nodeMenuRef"
+            touch-position
+            context-menu
+
+            v-model="showNodeMenu"
+          >
+            <q-list dense style="min-width: 200px">
+              <q-item clickable v-close-popup @click="editNodeText">
+                <q-item-section avatar>
+                  <q-icon name="edit" color="primary" />
+                </q-item-section>
+                <q-item-section>编辑节点</q-item-section>
+              </q-item>
+
+              <q-separator />
+
+              <q-item clickable v-close-popup @click="deleteCurrentNode">
+                <q-item-section avatar>
+                  <q-icon name="delete" color="negative" />
+                </q-item-section>
+                <q-item-section>删除节点</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+
+          <!-- 画布右键菜单 -->
+          <q-menu
+            ref="canvasMenuRef"
+            touch-position
+            context-menu
+
+            v-model="showCanvasMenu"
+          >
+            <q-list dense style="min-width: 200px">
+              <q-item clickable v-close-popup @click="addNewNode">
+                <q-item-section avatar>
+                  <q-icon name="add_circle" color="positive" />
+                </q-item-section>
+                <q-item-section>添加节点</q-item-section>
+              </q-item>
+
+              <q-item clickable v-close-popup @click="centerGraph">
+                <q-item-section avatar>
+                  <q-icon name="center_focus_strong" color="primary" />
+                </q-item-section>
+                <q-item-section>居中显示</q-item-section>
+              </q-item>
+
+              <q-item clickable v-close-popup @click="fitToScreen">
+                <q-item-section avatar>
+                  <q-icon name="fit_screen" color="primary" />
+                </q-item-section>
+                <q-item-section>适应屏幕</q-item-section>
+              </q-item>
             </q-list>
           </q-menu>
         </div>
@@ -149,7 +229,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, nextTick, computed } from 'vue';
 import RelationGraph, {
   type RGJsonData,
   type RGOptions,
@@ -187,10 +267,27 @@ const jsonText = ref('');
 
 // 右键菜单状态
 const linkMenuRef = ref<QMenu | null>(null);
+const nodeMenuRef = ref<QMenu | null>(null);
+const canvasMenuRef = ref<QMenu | null>(null);
+const showLinkMenu = ref(false);
+const showNodeMenu = ref(false);
+const showCanvasMenu = ref(false);
 const currentLink = ref<RGLink | null>(null);
 const currentLine = ref<RGLine | null>(null);
+const currentNode = ref<RGNode | null>(null);
+const contextMenuPosition = ref({ x: 0, y: 0 });
+const graphWrapperRef = ref<HTMLElement | null>(null);
+const menuTarget = computed(() => graphWrapperRef.value ?? true);
 
 onMounted(() => {
+  // 禁用画布区域的默认右键菜单
+  // const wrapper = graphWrapperRef.value;
+  // if (wrapper) {
+  //   wrapper.addEventListener('contextmenu', (e) => {
+  //     e.preventDefault();
+  //     return false;
+  //   });
+  // }
   void showGraph();
 });
 
@@ -216,9 +313,9 @@ const showGraph = async () => {
   const graphInstance = graphRef.value?.getInstance();
   if (graphInstance) {
     // setJsonData 与 moveToCenter 非 Promise；zoomToFit 返回 Promise
-    graphInstance.setJsonData(__graph_json_data, false);
+    await graphInstance.setJsonData(__graph_json_data, false);
     graphInstance.moveToCenter?.();
-    await graphInstance.zoomToFit?.();
+    graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
   }
 };
@@ -276,12 +373,16 @@ function onLineClick(line: RGLine, _link: RGLink, _e: RGUserEvent) {
     }).onOk((newText: string) => {
       const graphInstance = graphRef.value?.getInstance();
       if (!graphInstance) return;
+
       // 直接修改行对象文本并刷新
       line.text = newText;
       try {
-        // 避免大刷新，这里仅最小化刷新或依赖内部响应
-        // void graphInstance.refresh();
         void updateJsonTextFromGraph();
+        $q.notify({
+          type: 'positive',
+          message: '连线标记已更新',
+          position: 'top',
+        });
       } catch (err) {
         console.warn('图刷新失败，但文本已更新到对象上。', err);
       }
@@ -289,19 +390,283 @@ function onLineClick(line: RGLine, _link: RGLink, _e: RGUserEvent) {
   }
 }
 
-// ---- 右键菜单回调（仅在连线上触发） ----
-function onContextmenu(
+// ---- 工具：从事件提取屏幕坐标 ----
+function getClientPointFromEvent(ev: any): { x: number; y: number } {
+  const t = ev?.touches?.[0] || ev?.changedTouches?.[0];
+  const cx = ev?.clientX ?? ev?.pageX ?? t?.clientX ?? t?.pageX ?? 0;
+  const cy = ev?.clientY ?? ev?.pageY ?? t?.clientY ?? t?.pageY ?? 0;
+  return { x: Number(cx) || 0, y: Number(cy) || 0 };
+}
+
+function resolvePointerEvent(ev: any): Event | null {
+  const candidate = ev?.evt ?? ev?.event ?? ev?.originalEvent ?? ev;
+  if (!candidate) {
+    return null;
+  }
+
+  if (candidate instanceof Event) {
+    return candidate;
+  }
+
+  if (
+    typeof candidate === 'object' &&
+    ('clientX' in candidate || 'touches' in candidate || 'changedTouches' in candidate)
+  ) {
+    return candidate as Event;
+  }
+
+  return null;
+}
+
+function buildSyntheticContextEvent(x: number, y: number): Event {
+  if (typeof window !== 'undefined' && typeof window.MouseEvent === 'function') {
+    return new window.MouseEvent('contextmenu', {
+      clientX: x,
+      clientY: y,
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+  }
+
+  return {
+    type: 'contextmenu',
+    clientX: x,
+    clientY: y,
+    preventDefault() {},
+    stopPropagation() {},
+  } as unknown as Event;
+}
+// relation-graph 的右键回调：拿原生事件传进去
+async function onContextmenu(
   e: RGUserEvent,
   objectType: RGEventTargetType,
-  object: RGNode | RGLink | undefined,
+  object?: RGNode | RGLink,
 ) {
-  if (objectType !== 'link' || !object) return;
-  currentLink.value = object as RGLink;
-  currentLine.value = Array.isArray((object as RGLink)?.relations)
-    ? (object as RGLink).relations[0]
-    : null;
-  // 展示菜单到鼠标位置
-  linkMenuRef.value?.show?.(e as unknown as Event);
+  console.log('onContextmenu triggered:', e, objectType, object);
+
+  // 检查事件对象结构
+  const native = resolvePointerEvent(e);
+  console.log('Resolved native event:', native);
+
+  if (!native) {
+    console.error('无法获取原生事件');
+    return;
+  }
+
+  // 将原生事件传给统一的 openContextMenu 实现进行处理
+  await openContextMenu(native as any, objectType || 'canvas', object ?? null);
+}
+
+// ✅ 仅调用 menuRef.show(evt) 进行定位；不再依赖 v-model / :target
+// 依赖你上面已定义的工具函数：resolvePointerEvent / getClientPointFromEvent / buildSyntheticContextEvent
+async function openContextMenu(
+  ev: MouseEvent | TouchEvent | PointerEvent,
+  type: RGEventTargetType | 'canvas',
+  payload?: RGNode | RGLink | null
+) {
+  // 统一原生事件（relation-graph 可能把原生事件挂在 e.evt / e.event 上）
+  const native = (resolvePointerEvent(ev) as MouseEvent | TouchEvent | PointerEvent | null) ?? null;
+
+  // 阻止浏览器默认菜单 & 事件冒泡
+  (native ?? ev as any).preventDefault?.();
+  (native ?? ev as any).stopPropagation?.();
+
+  // 取坐标（用于后续“在鼠标处添加节点”等功能）
+  const { x, y } = getClientPointFromEvent(native ?? ev);
+  contextMenuPosition.value = { x, y };
+
+  // 保证传给 QMenu.show 的是“可用的原生事件”
+  const eventForMenu: Event =
+    native && (native instanceof Event || typeof (native as any).type === 'string')
+      ? (native as Event)
+      : buildSyntheticContextEvent(x, y);
+
+  // 先设置当前上下文对象
+  if (type === 'link' && payload) {
+    currentLink.value = payload as RGLink;
+    // relation-graph 的连线对象里通常有 relations 数组，取第一个 line 以便修改样式/箭头
+    const rels = (currentLink.value as any)?.relations;
+    currentLine.value = Array.isArray(rels) ? (rels[0] ?? null) : (payload as unknown as RGLine ?? null);
+    currentNode.value = null;
+
+    await nextTick();
+    // 不需要操控 v-model；交给 Quasar 自己管理开合
+    linkMenuRef.value?.hide?.(); // 保守：确保上一次已关闭
+    linkMenuRef.value?.show(eventForMenu); // ✅ 用事件坐标定位
+    return;
+  }
+
+  if (type === 'node' && payload) {
+    currentNode.value = payload as RGNode;
+    currentLink.value = null;
+    currentLine.value = null;
+
+    await nextTick();
+    nodeMenuRef.value?.hide?.();
+    nodeMenuRef.value?.show(eventForMenu); // ✅ 用事件坐标定位
+    return;
+  }
+
+  // 默认：画布菜单
+  currentNode.value = null;
+  currentLink.value = null;
+  currentLine.value = null;
+
+  await nextTick();
+  canvasMenuRef.value?.hide?.();
+  canvasMenuRef.value?.show(eventForMenu); // ✅ 用事件坐标定位
+}
+
+
+// ---- 长按触发（移动端/触屏）：默认打开画布菜单 ----
+const longPressThreshold = 550; // ms
+let longPressTimer: any = null;
+
+function onTouchStart(ev: TouchEvent) {
+  const pt = getClientPointFromEvent(ev);
+  clearTimeout(longPressTimer);
+  longPressTimer = setTimeout(() => {
+    const syntheticEvt = buildSyntheticContextEvent(pt.x, pt.y);
+    // cast to MouseEvent to satisfy the expected parameter type and call without awaiting
+    void openContextMenu(syntheticEvt as unknown as MouseEvent, 'canvas');
+  }, longPressThreshold);
+}
+
+function onTouchMove(_ev: TouchEvent) {
+  // 若位移过大则取消长按
+  // 这里简单取消，以免误触
+  clearTimeout(longPressTimer);
+}
+
+function onTouchEnd(_ev: TouchEvent) {
+  clearTimeout(longPressTimer);
+}
+
+// ---- 节点菜单操作 ----
+function editNodeText() {
+  const node = currentNode.value;
+  if (!node) return;
+
+  $q.dialog({
+    title: '编辑节点文本',
+    prompt: {
+      model: String(node.text ?? ''),
+      type: 'text',
+    },
+    cancel: true,
+    persistent: true,
+  }).onOk((newText: string) => {
+    const graphInstance = graphRef.value?.getInstance();
+    if (!graphInstance) return;
+
+    // 直接修改节点文本并刷新
+    node.text = newText;
+    try {
+      void updateJsonTextFromGraph();
+      $q.notify({
+        type: 'positive',
+        message: '节点文本已更新',
+        position: 'top',
+      });
+    } catch (err) {
+      console.warn('图刷新失败，但文本已更新到对象上。', err);
+    }
+  });
+}
+
+function deleteCurrentNode() {
+  const node = currentNode.value;
+  if (!node) return;
+
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    graphInstance.removeNodeById(node.id);
+    void updateJsonTextFromGraph();
+    $q.notify({
+      type: 'positive',
+      message: `已删除节点: ${node.text || node.id}`,
+      position: 'top',
+    });
+  } catch (err) {
+    $q.notify({
+      type: 'negative',
+      message: '删除节点失败: ' + String(err),
+      position: 'top',
+    });
+  }
+}
+
+// ---- 画布菜单操作 ----
+function addNewNode() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  const newNodeId = 'node_' + Date.now();
+  const newNode = {
+    id: newNodeId,
+    text: '新节点',
+    x: contextMenuPosition.value.x - 300, // 相对于画布的位置
+    y: contextMenuPosition.value.y - 100,
+  };
+
+  try {
+    graphInstance.addNodes([newNode]);
+    void updateJsonTextFromGraph();
+    $q.notify({
+      type: 'positive',
+      message: '已添加新节点',
+      position: 'top',
+    });
+  } catch (err) {
+    $q.notify({
+      type: 'negative',
+      message: '添加节点失败: ' + String(err),
+      position: 'top',
+    });
+  }
+}
+
+function centerGraph() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    graphInstance.moveToCenter?.();
+    $q.notify({
+      type: 'positive',
+      message: '已居中显示',
+      position: 'top',
+    });
+  } catch (err) {
+    $q.notify({
+      type: 'negative',
+      message: '居中显示失败: ' + String(err),
+      position: 'top',
+    });
+  }
+}
+
+function fitToScreen() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    graphInstance.zoomToFit?.();
+    $q.notify({
+      type: 'positive',
+      message: '已适应屏幕',
+      position: 'top',
+    });
+  } catch (err) {
+    $q.notify({
+      type: 'negative',
+      message: '适应屏幕失败: ' + String(err),
+      position: 'top',
+    });
+  }
 }
 
 // ---- 菜单操作 ----
@@ -322,7 +687,7 @@ async function toggleStartArrow() {
   if (!line) return;
   line.isHideArrow = false;
   line.showStartArrow = !line.showStartArrow;
-  await applyLineChange()
+  await applyLineChange();
 }
 
 async function toggleEndArrow() {
@@ -380,8 +745,8 @@ async function applyJsonReplace() {
     if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.lines)) {
       throw new Error('JSON结构无效，需要包含nodes[]与lines[]');
     }
-    graphInstance.setJsonData(parsed, false);
-    await graphInstance.zoomToFit?.();
+    await graphInstance.setJsonData(parsed, false);
+    graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
     $q.notify({ type: 'positive', message: '已应用JSON（替换）' });
   } catch (err) {

@@ -82,14 +82,14 @@
 
 <script lang="ts" setup>
 import { computed, inject, ref } from 'vue';
-import type { RGNode, RelationGraphInstance2, RGOptions } from 'relation-graph-vue3';
+import type { RGNode, RelationGraphInstance, RGOptions } from 'relation-graph-vue3';
 import { graphKey } from 'relation-graph-vue3';
 import { Notify } from 'quasar';
 
 // 定义graph的类型
 interface GraphContext {
   options?: RGOptions;
-  instance?: RelationGraphInstance2;
+  instance?: RelationGraphInstance;
 }
 
 const newNodeIdIndex = ref(1);
@@ -115,19 +115,19 @@ const onSave = () => {
   });
 };
 
-const refresh = () => {
+const refresh =  async() => {
   const graphInstance = relationGraph.value;
   if (graphInstance) {
-    graphInstance.refresh();
+    await graphInstance.refresh?.();
   }
 };
 
 const zoomToFit = async () => {
   const graphInstance = relationGraph.value;
   if (graphInstance) {
-    await graphInstance.setZoom(100);
-    graphInstance.focusRootNode();
-    await graphInstance.zoomToFit();
+    graphInstance.setZoom?.(100);
+    await graphInstance.focusRootNode?.();
+    graphInstance.zoomToFit?.();
   }
 };
 
