@@ -24,7 +24,7 @@
                   <div class="attr-label">性别</div>
                   <q-option-group
                     v-model="checkedSex"
-                    :options="[{ label: '全部', value: '' }, { label: '男性', value: 'male' }, { label: '女性', value: 'female' }, { label: '其他', value: 'other' }]"
+                    :options="[{ label: '全部', value: '' }, { label: '男性', value: 'male' }, { label: '女性', value: 'female' }, { label: '无', value: 'none' }, { label: '其他', value: 'other' }]"
                     type="radio"
                     dense
                     @update:model-value="doFilter"
@@ -760,31 +760,82 @@ function editNodeText() {
   const node = currentNode.value;
   if (!node) return;
 
+  const currentSex = (node.data as Record<string, unknown>)?.['sexType'] as string || 'other';
+
   $q.dialog({
-    title: '编辑节点文本',
+    title: '编辑节点',
+    message: '请编辑节点信息：',
+    html: true,
     prompt: {
       model: String(node.text ?? ''),
       type: 'text',
+      label: '节点名称'
+    },
+    options: {
+      type: 'radio',
+      model: currentSex,
+      label: '性别',
+      items: [
+        { label: '男性', value: 'male' },
+        { label: '女性', value: 'female' },
+        { label: '无', value: 'none' },
+        { label: '其他', value: 'other' },
+        { label: '自定义...', value: 'custom' }
+      ]
     },
     cancel: true,
     persistent: true,
-  }).onOk((newText: string) => {
+  }).onOk((result: { prompt: string, options: string }) => {
+    const newText = result.prompt;
+    const selectedSex = result.options;
+
+    if (selectedSex === 'custom') {
+      // 显示自定义性别输入对话框
+      $q.dialog({
+        title: '自定义性别',
+        message: '请输入自定义性别：',
+        prompt: {
+          model: '',
+          type: 'text',
+          placeholder: '例如：跨性别者'
+        },
+        cancel: true,
+        persistent: true,
+      }).onOk((customSex: string) => {
+        if (customSex && customSex.trim()) {
+          updateNodeInfo(newText, customSex.trim());
+        } else {
+          updateNodeInfo(newText, selectedSex);
+        }
+      });
+    } else {
+      updateNodeInfo(newText, selectedSex);
+    }
+  });
+
+  function updateNodeInfo(newText: string, newSex: string) {
     const graphInstance = graphRef.value?.getInstance();
     if (!graphInstance) return;
 
-    // 直接修改节点文本并刷新
+    // 更新节点文本和性别
     node.text = newText;
+    if (!node.data) {
+      node.data = {};
+    }
+    (node.data as Record<string, unknown>)['sexType'] = newSex;
+
     try {
       void updateJsonTextFromGraph();
+      updateNodesList(); // 更新节点列表
       $q.notify({
         type: 'positive',
-        message: '节点文本已更新',
+        message: `节点信息已更新：${newText}（${newSex}）`,
         position: 'top',
       });
     } catch (err) {
-      console.warn('图刷新失败，但文本已更新到对象上。', err);
+      console.warn('图刷新失败，但信息已更新到对象上。', err);
     }
-  });
+  }
 }
 
 function deleteCurrentNode() {
@@ -1151,7 +1202,12 @@ async function doFilter() {
 
       if (checkedSex.value !== '') {
         const sex = (data?.['sexType'] as string) ?? '';
-        if (sex !== checkedSex.value) _isDim = true;
+        // 处理'无'选项：当选择'无'时，匹配空字符串、undefined或'none'
+        if (checkedSex.value === 'none') {
+          if (sex !== '' && sex !== 'none' && sex !== undefined) _isDim = true;
+        } else {
+          if (sex !== checkedSex.value) _isDim = true;
+        }
       }
 
       if (checkedIsGoodman.value !== '') {
@@ -1213,7 +1269,7 @@ function changeRelationType() {
 
   $q.dialog({
     title: '调整关系类型',
-    message: '请选择新的关系类型：',
+    message: '请选择关系类型或输入自定义类型：',
     options: {
       type: 'radio',
       model: currentType,
@@ -1224,19 +1280,46 @@ function changeRelationType() {
         { label: '师徒关系', value: '师徒关系' },
         { label: '亲属关系', value: '亲属关系' },
         { label: '同事关系', value: '同事关系' },
-        { label: '其他关系', value: '其他关系' }
+        { label: '其他关系', value: '其他关系' },
+        { label: '自定义...', value: 'custom' }
       ]
     },
     cancel: true,
     persistent: true,
-  }).onOk((newType: string) => {
+  }).onOk((selectedType: string) => {
+    if (selectedType === 'custom') {
+      // 显示自定义输入对话框
+      $q.dialog({
+        title: '自定义关系类型',
+        message: '请输入自定义关系类型：',
+        prompt: {
+          model: '',
+          type: 'text',
+          placeholder: '例如：师兄弟关系'
+        },
+        cancel: true,
+        persistent: true,
+      }).onOk((customType: string) => {
+        if (customType && customType.trim()) {
+          updateRelationType(customType.trim());
+        }
+      });
+    } else {
+      updateRelationType(selectedType);
+    }
+  });
+
+  function updateRelationType(newType: string) {
     if (!line.data) {
       line.data = {};
     }
     (line.data as Record<string, unknown>)['type'] = newType;
 
-    // 同时更新连线的显示文本以保持一致
-    line.text = newType;
+    // 设置连线显示文本为"字面值\n（关系类型）"格式
+    // 如果已有字面值，保持字面值；否则使用关系类型作为字面值
+    const currentText = line.text || newType;
+    const literalValue = currentText.includes('\n') ? currentText.split('\n')[0] : currentText;
+    line.text = `${literalValue}\n（${newType}）`;
 
     try {
       void updateJsonTextFromGraph();
@@ -1249,7 +1332,7 @@ function changeRelationType() {
     } catch (err) {
       console.warn('图刷新失败，但关系类型已更新。', err);
     }
-  });
+  }
 }
 
 
