@@ -1,6 +1,60 @@
 <template>
   <div class="relation-graph-container">
     <div class="graph-and-json">
+      <!-- 左侧过滤面板，可开关显示（带过渡动画） -->
+      <transition name="filter-slide">
+        <div class="filter-pane" v-if="showFilterPane">
+          <div class="filter-pane-header">
+            <span>节点过滤</span>
+            <q-btn
+              dense
+              round
+              flat
+              size="sm"
+              icon="close"
+              @click="showFilterPane = false"
+              class="close-btn"
+            />
+          </div>
+          <div class="filter-content">
+            <div class="filter-section">
+              <div class="section-title">显示/隐藏节点</div>
+              <div class="node-list">
+                <div
+                  v-for="node in allNodes"
+                  :key="node.id"
+                  class="node-item"
+                  :class="{ 'node-hidden': hiddenNodeIds.has(node.id) }"
+                >
+                  <q-checkbox
+                    :model-value="!hiddenNodeIds.has(node.id)"
+                    @update:model-value="toggleNodeVisibility(node.id, $event)"
+                    :label="node.text || node.id"
+                    dense
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="filter-actions">
+              <q-btn
+                dense
+                color="primary"
+                label="全部显示"
+                @click="showAllNodes"
+                class="action-btn"
+              />
+              <q-btn
+                dense
+                color="grey"
+                label="全部隐藏"
+                @click="hideAllNodes"
+                class="action-btn"
+              />
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <div class="graph-pane">
         <div
           ref="graphWrapperRef"
@@ -22,6 +76,19 @@
               <RelationGraphToolBar />
             </template>
           </RelationGraph>
+
+          <!-- 过滤面板开关按钮（固定在左上角） -->
+          <div class="filter-toggle-btn">
+            <q-btn
+              dense
+              round
+              color="grey-7"
+              :icon="showFilterPane ? 'keyboard_double_arrow_left' : 'filter_list'"
+              @click="showFilterPane = !showFilterPane"
+            >
+              <q-tooltip>{{ showFilterPane ? '隐藏过滤面板' : '显示过滤面板' }}</q-tooltip>
+            </q-btn>
+          </div>
 
           <!-- JSON 面板开关按钮（固定在右上角） -->
           <div class="json-toggle-btn">
@@ -259,8 +326,15 @@ const graphOptions: RGOptions = {
 
 const graphRef = ref<RelationGraphComponent>();
 
+// 过滤面板显示/隐藏
+const showFilterPane = ref(true);
+
 // JSON面板显示/隐藏
 const showJsonPane = ref(true);
+
+// 节点过滤相关状态
+const allNodes = ref<RGNode[]>([]);
+const hiddenNodeIds = ref<Set<string>>(new Set());
 
 // 实时JSON字符串
 const jsonText = ref('');
@@ -317,6 +391,8 @@ const showGraph = async () => {
     graphInstance.moveToCenter?.();
     graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
+    // 更新节点列表用于过滤面板
+    updateNodesList();
   }
 };
 
@@ -585,6 +661,9 @@ function deleteCurrentNode() {
   try {
     graphInstance.removeNodeById(node.id);
     void updateJsonTextFromGraph();
+    updateNodesList(); // 更新节点列表
+    // 从隐藏列表中移除已删除的节点
+    hiddenNodeIds.value.delete(node.id);
     $q.notify({
       type: 'positive',
       message: `已删除节点: ${node.text || node.id}`,
@@ -615,6 +694,7 @@ function addNewNode() {
   try {
     graphInstance.addNodes([newNode]);
     void updateJsonTextFromGraph();
+    updateNodesList(); // 更新节点列表
     $q.notify({
       type: 'positive',
       message: '已添加新节点',
@@ -719,21 +799,21 @@ async function setLineWidth(width: number) {
 function deleteCurrentLink() {
   const link = currentLink.value;
   if (!link) return;
-  
+
   const graphInstance = graphRef.value?.getInstance();
   if (!graphInstance) return;
-  
+
   try {
     graphInstance.removeLinkById(link.seeks_id || `${link.from}-${link.to}`);
     void updateJsonTextFromGraph();
-    $q.notify({ 
-      type: 'positive', 
+    $q.notify({
+      type: 'positive',
       message: '已删除连线',
       position: 'top'
     });
   } catch (err) {
-    $q.notify({ 
-      type: 'negative', 
+    $q.notify({
+      type: 'negative',
       message: '删除连线失败: ' + String(err),
       position: 'top'
     });
@@ -774,6 +854,7 @@ async function applyJsonReplace() {
     await graphInstance.setJsonData(parsed, false);
     graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
+    updateNodesList(); // 更新节点列表
     $q.notify({ type: 'positive', message: '已应用JSON（替换）' });
   } catch (err) {
     $q.notify({ type: 'negative', message: '应用失败：' + String(err) });
@@ -814,9 +895,86 @@ async function applyJsonAppend() {
     // 不调用重布局，仅在必要时才刷新
     // void graphInstance.refresh?.();
     await updateJsonTextFromGraph();
+    updateNodesList(); // 更新节点列表
     $q.notify({ type: 'positive', message: '已追加JSON（新增）' });
   } catch (err) {
     $q.notify({ type: 'negative', message: '追加失败：' + String(err) });
+  }
+}
+
+// ---- 节点过滤相关函数 ----
+function updateNodesList() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    const nodes = graphInstance.getNodes();
+    allNodes.value = [...nodes];
+  } catch (err) {
+    console.warn('获取节点列表失败:', err);
+  }
+}
+
+async function toggleNodeVisibility(nodeId: string, visible: boolean) {
+  if (visible) {
+    hiddenNodeIds.value.delete(nodeId);
+  } else {
+    hiddenNodeIds.value.add(nodeId);
+  }
+  await applyNodeFilter();
+}
+
+async function showAllNodes() {
+  hiddenNodeIds.value.clear();
+  await applyNodeFilter();
+}
+
+async function hideAllNodes() {
+  allNodes.value.forEach(node => {
+    hiddenNodeIds.value.add(node.id);
+  });
+  await applyNodeFilter();
+}
+
+async function applyNodeFilter() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    // 获取所有节点和连线
+    const allGraphNodes = graphInstance.getNodes();
+    const allGraphLines = graphInstance.getLines();
+
+    // 设置节点的显示/隐藏状态
+    allGraphNodes.forEach(node => {
+      const shouldHide = hiddenNodeIds.value.has(node.id);
+      // 使用 relation-graph 的内置属性来控制节点显示
+      (node as any).isHide = shouldHide;
+    });
+
+    // 隐藏与隐藏节点相关的连线
+    allGraphLines.forEach(line => {
+      const fromHidden = hiddenNodeIds.value.has(line.from);
+      const toHidden = hiddenNodeIds.value.has(line.to);
+      // 如果连线的任一端点被隐藏，则隐藏该连线
+      (line as any).isHide = fromHidden || toHidden;
+    });
+
+    // 刷新图形显示
+    await graphInstance.refresh?.();
+
+    $q.notify({
+      type: 'positive',
+      message: `已更新节点显示状态`,
+      position: 'top',
+    });
+  } catch (err) {
+    console.warn('应用节点过滤失败:', err);
+    $q.notify({
+      type: 'negative',
+      message: '应用过滤失败: ' + String(err),
+      position: 'top',
+    });
   }
 }
 </script>
@@ -845,6 +1003,67 @@ async function applyJsonAppend() {
   top: 10px;
   right: 10px;
 }
+
+/* 过滤面板开关按钮（固定在左上角） */
+.filter-toggle-btn {
+  position: absolute;
+  z-index: 9999;
+  bottom: 12px;
+  left: 12px;
+}
+
+/* 过滤面板样式 */
+.filter-pane {
+  /* 作为左侧固定面板占据空间（与 JSON 面板对称） */
+  flex: 0 0 320px;
+  width: 320px;
+  padding: 16px;
+  border-right: 1px solid #efefef;
+  background: #fafafa;
+  box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
+}
+
+.body--dark .filter-pane {
+  background: #1f1f1f;
+  border-color: #333;
+}
+
+.filter-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.filter-content {
+  height: calc(100vh - 120px);
+  overflow: auto;
+}
+
+.node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.node-item {
+  display: flex;
+  align-items: center;
+}
+
+.node-hidden {
+  opacity: 0.5;
+}
+
+.filter-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+/* keep toggle button above everything (handled above) */
 
 .json-pane {
   /* 固定侧栏宽度，作为 flex 子项以固定主轴尺寸 */
@@ -897,6 +1116,32 @@ async function applyJsonAppend() {
 .c-node-menu-item:hover {
   background-color: rgba(66, 187, 66, 0.2);
 }
+/* 左侧过滤面板的进入/离开动画 */
+.filter-slide-enter-active,
+.filter-slide-leave-active {
+  transition:
+    flex-basis 250ms ease,
+    width 250ms ease,
+    padding 250ms ease,
+    opacity 200ms ease;
+}
+
+.filter-slide-enter-from,
+.filter-slide-leave-to {
+  flex-basis: 0;
+  width: 0;
+  padding: 0;
+  opacity: 0;
+}
+
+.filter-slide-enter-to,
+.filter-slide-leave-from {
+  flex-basis: 320px;
+  width: 320px;
+  padding: 16px;
+  opacity: 1;
+}
+
 /* 右侧 JSON 面板的进入/离开动画 */
 .json-slide-enter-active,
 .json-slide-leave-active {
