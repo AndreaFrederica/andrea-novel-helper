@@ -221,6 +221,20 @@
                 <q-item-section>调整关系类型</q-item-section>
               </q-item>
 
+              <q-item clickable v-close-popup @click="changeRelationLiteral">
+                <q-item-section avatar>
+                  <q-icon name="edit" color="primary" />
+                </q-item-section>
+                <q-item-section>更改关系字面值</q-item-section>
+              </q-item>
+
+              <q-item clickable v-close-popup @click="changeLineColor">
+                <q-item-section avatar>
+                  <q-icon name="palette" color="primary" />
+                </q-item-section>
+                <q-item-section>更改连线颜色</q-item-section>
+              </q-item>
+
               <q-separator />
 
               <q-item clickable v-close-popup @click="setLineWidth(1)">
@@ -508,6 +522,134 @@ const showGraph = async () => {
     await updateJsonTextFromGraph();
     // 更新节点列表用于过滤面板
     updateNodesList();
+  }
+}
+
+// 更改连线颜色功能
+function changeLineColor() {
+  const line = currentLine.value;
+  if (!line) return;
+
+  // 获取当前颜色
+  const currentColor = line.color || '#666666';
+
+  // 预定义颜色选项
+  const colorOptions = [
+    { label: '默认灰色', value: '#666666', color: '#666666' },
+    { label: '红色', value: '#ff4444', color: '#ff4444' },
+    { label: '蓝色', value: '#4444ff', color: '#4444ff' },
+    { label: '绿色', value: '#44ff44', color: '#44ff44' },
+    { label: '橙色', value: '#ff8844', color: '#ff8844' },
+    { label: '紫色', value: '#8844ff', color: '#8844ff' },
+    { label: '粉色', value: '#ff44aa', color: '#ff44aa' },
+    { label: '青色', value: '#44aaff', color: '#44aaff' },
+    { label: '黄色', value: '#ffaa44', color: '#ffaa44' },
+    { label: '深红', value: '#aa0000', color: '#aa0000' },
+    { label: '深蓝', value: '#0000aa', color: '#0000aa' },
+    { label: '深绿', value: '#00aa00', color: '#00aa00' },
+    { label: '自定义...', value: 'custom', color: '#000000' }
+  ];
+
+  $q.dialog({
+    title: '更改连线颜色',
+    message: '请选择连线颜色：',
+    options: {
+      type: 'radio',
+      model: currentColor,
+      items: colorOptions.map(option => ({
+        label: option.label,
+        value: option.value,
+        color: option.color
+      }))
+    },
+    cancel: true,
+    persistent: true,
+  }).onOk((selectedColor: string) => {
+    if (selectedColor === 'custom') {
+      // 显示自定义颜色输入对话框
+      $q.dialog({
+        title: '自定义连线颜色',
+        message: '请输入颜色值（支持十六进制如 #ff0000 或颜色名如 red）：',
+        prompt: {
+          model: currentColor,
+          type: 'text',
+          placeholder: '例如：#ff0000 或 red'
+        },
+        cancel: true,
+        persistent: true,
+      }).onOk((customColor: string) => {
+        if (customColor && customColor.trim()) {
+          updateLineColor(customColor.trim());
+        }
+      });
+    } else {
+      updateLineColor(selectedColor);
+    }
+  });
+
+  function updateLineColor(newColor: string) {
+    // 设置连线颜色
+    line.color = newColor;
+
+    try {
+      void updateJsonTextFromGraph();
+      $q.notify({
+        type: 'positive',
+        message: `连线颜色已更新为: ${newColor}`,
+        position: 'top',
+      });
+    } catch (err) {
+      console.warn('图刷新失败，但连线颜色已更新。', err);
+    }
+  }
+}
+
+// 更改关系字面值功能
+function changeRelationLiteral() {
+  const line = currentLine.value;
+  if (!line) return;
+
+  // 获取当前字面值（如果文本包含换行，取第一行作为字面值）
+  const currentText = line.text || '';
+  const currentLiteral = currentText.includes('\n') ? currentText.split('\n')[0] : currentText;
+
+  $q.dialog({
+    title: '更改关系字面值',
+    message: '请输入新的关系字面值：',
+    prompt: {
+      model: currentLiteral,
+      type: 'text',
+      placeholder: '例如：深爱、仇恨、师父等'
+    },
+    cancel: true,
+    persistent: true,
+  }).onOk((newLiteral: string) => {
+    if (newLiteral !== null && newLiteral !== undefined) {
+      updateRelationLiteral(newLiteral.trim());
+    }
+  });
+
+  function updateRelationLiteral(newLiteral: string) {
+    // 获取当前关系类型
+    const currentType = (line.data as Record<string, unknown>)?.['type'] as string || '其他关系';
+    
+    // 设置新的显示文本
+    if (newLiteral) {
+      line.text = `${newLiteral}\n（${currentType}）`;
+    } else {
+      line.text = `（${currentType}）`;
+    }
+
+    try {
+      void updateJsonTextFromGraph();
+      $q.notify({
+        type: 'positive',
+        message: newLiteral ? `关系字面值已更新为: ${newLiteral}` : '关系字面值已清空',
+        position: 'top',
+      });
+    } catch (err) {
+      console.warn('图刷新失败，但关系字面值已更新。', err);
+    }
   }
 };
 
