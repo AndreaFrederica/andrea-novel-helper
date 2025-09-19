@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { createClient, WebDAVClient } from 'webdav';
-import { SidecarDataMap, SidecarData, isTrackedSidecarData } from '../types/sidecarTypes';
+import { SidecarDataMap, SidecarData, isTrackedSidecarData, isUntrackedSidecarData } from '../types/sidecarTypes';
 
 // 时间容差常量（毫秒）
 const TIME_TOLERANCE = 15000;
@@ -109,6 +109,7 @@ class SyncWorker {
         metadataMap?: SidecarDataMap;
         enableSidecar?: boolean;
         sidecarSuffix?: string;
+        skipDatabaseAccess?: boolean;
     }): Promise<SyncResponse> {
         // 验证和修正URL格式
         let correctedUrl = this.validateAndCorrectWebDAVUrl(data.url);
@@ -127,6 +128,9 @@ class SyncWorker {
         const enableSidecar = data.enableSidecar !== undefined ? data.enableSidecar : true;
         const sidecarSuffix = data.sidecarSuffix || '.anhmeta.json';
         const metadataMap = data.metadataMap || {};
+        const skipDatabaseAccess = data.skipDatabaseAccess !== undefined ? data.skipDatabaseAccess : true;
+
+        console.log(`[SyncWorker] 侧车配置: enableSidecar=${enableSidecar}, skipDatabaseAccess=${skipDatabaseAccess}`);
 
         let localFiles = await this.walkLocal(data.localPath, data.incremental ? data.lastSyncTime : undefined);
         let remoteFiles = await this.walkRemote(data.remotePath);
@@ -148,6 +152,12 @@ class SyncWorker {
             data.remotePath,
             metadataMap
         );
+
+        // 检查并补充缺失的远端侧车文件
+        if (enableSidecar && sidecarSuffix) {
+            await this.ensureMissingSidecarFiles(remoteFiles, data.remotePath, sidecarSuffix, metadataMap);
+        }
+
         const results = [];
 
         for (const action of actions) {
@@ -165,36 +175,54 @@ class SyncWorker {
                             try {
                                 const sidecarPath = `${fullRemotePath}${sidecarSuffix}`;
                                 
-                                // 根据数据类型决定侧车内容
-                                let sidecarContent: any;
-                                if (isTrackedSidecarData(sidecarData)) {
-                                    // 已追踪文件：包含完整的追踪信息
-                                    sidecarContent = {
-                                        ...sidecarData,
-                                        syncedAt: Date.now(),
-                                        syncVersion: '1.0'
-                                    };
-                                } else {
-                                    // 未追踪文件：仅包含基础文件系统信息
-                                    sidecarContent = {
-                                        ...sidecarData,
-                                        syncedAt: Date.now(),
-                                        syncVersion: '1.0'
-                                    };
+                                // 检查远端是否已存在侧车文件，避免重复上传
+                                let shouldUploadSidecar = true;
+                                try {
+                                    const existingSidecar = await this.webdavClient!.stat(sidecarPath);
+                                    if (existingSidecar) {
+                                        // 侧车文件已存在，检查是否需要更新
+                                        // 如果原文件被更新，则侧车文件也需要更新
+                                        shouldUploadSidecar = true; // 暂时总是更新，后续可优化
+                                    }
+                                } catch (e) {
+                                    // 侧车文件不存在，需要上传
+                                    shouldUploadSidecar = true;
                                 }
                                 
-                                const json = JSON.stringify(sidecarContent, null, 2);
-                                const buf = Buffer.from(json, 'utf8');
-                                const finalContent = this.encryptContent(buf);
-                                await this.webdavClient!.putFileContents(sidecarPath, finalContent);
-                                
-                                console.debug(`[SyncWorker] 成功上传侧车文件: ${sidecarPath} (${sidecarData.source})`);
+                                if (shouldUploadSidecar) {
+                                    // 根据数据类型决定侧车内容
+                                    let sidecarContent: any;
+                                    if (isTrackedSidecarData(sidecarData)) {
+                                        // 已追踪文件：包含完整的追踪信息
+                                        sidecarContent = {
+                                            ...sidecarData,
+                                            syncedAt: Date.now(),
+                                            syncVersion: '1.0'
+                                        };
+                                    } else {
+                                        // 未追踪文件：仅包含基础文件系统信息
+                                        sidecarContent = {
+                                            ...sidecarData,
+                                            syncedAt: Date.now(),
+                                            syncVersion: '1.0'
+                                        };
+                                    }
+                                    
+                                    const json = JSON.stringify(sidecarContent, null, 2);
+                                    const buf = Buffer.from(json, 'utf8');
+                                    const finalContent = this.encryptContent(buf);
+                                    await this.webdavClient!.putFileContents(sidecarPath, finalContent);
+                                    
+                                    console.log(`[SyncWorker] ✓ 成功上传侧车文件: ${sidecarPath} (${sidecarData.source})`);
+                                } else {
+                                    console.log(`[SyncWorker] ⊘ 跳过侧车文件上传（已存在且无需更新）: ${sidecarPath}`);
+                                }
                             } catch (e) {
                                 console.warn('[SyncWorker] 上传侧车文件失败，忽略错误:', e);
                             }
                         } else {
-                            console.debug(`[SyncWorker] 未找到文件的侧车数据: ${action.localPath}`);
-                        }
+                                console.log(`[SyncWorker] ⊘ 未找到文件的侧车数据: ${action.localPath}`);
+                            }
                     }
                 } else if (action.type === 'download') {
                     await this.downloadFile(fullRemotePath, fullLocalPath);
@@ -404,7 +432,7 @@ class SyncWorker {
      * 与walkRemote不同，这个方法会返回所有文件和目录信息
      */
     private async walkRemoteForTreeView(remotePath: string): Promise<Array<{ path: string; mtime: number; size: number; type: string }>> {
-        console.log('[SyncWorker] walkRemoteForTreeView 开始:', { remotePath });
+        // console.log('[SyncWorker] walkRemoteForTreeView 开始:', { remotePath });
         if (!this.webdavClient) {
             throw new Error('WebDAV client not initialized');
         }
@@ -415,37 +443,37 @@ class SyncWorker {
         
         // 标准化远程路径，确保以/结尾
         const normalizedRemotePath = remotePath.endsWith('/') ? remotePath : remotePath + '/';
-        console.log('[SyncWorker] walkRemoteForTreeView 标准化路径:', { normalizedRemotePath });
+        // console.log('[SyncWorker] walkRemoteForTreeView 标准化路径:', { normalizedRemotePath });
 
         const walk = async (currentPath: string, depth: number = 0) => {
             // 检查递归深度限制
             if (depth > maxDepth) {
-                console.warn('[SyncWorker] walkRemoteForTreeView 达到最大递归深度，跳过:', { currentPath, depth });
+                // console.warn('[SyncWorker] walkRemoteForTreeView 达到最大递归深度，跳过:', { currentPath, depth });
                 return;
             }
 
             // 检查是否已访问过此路径（防止循环引用）
             const normalizedCurrentPath = currentPath.replace(/\/+$/, '') || '/';
             if (visitedPaths.has(normalizedCurrentPath)) {
-                console.warn('[SyncWorker] walkRemoteForTreeView 检测到循环引用，跳过:', { currentPath });
+                // console.warn('[SyncWorker] walkRemoteForTreeView 检测到循环引用，跳过:', { currentPath });
                 return;
             }
             visitedPaths.add(normalizedCurrentPath);
 
             try {
-                console.log('[SyncWorker] walkRemoteForTreeView 获取目录内容:', { currentPath, depth });
+                // console.log('[SyncWorker] walkRemoteForTreeView 获取目录内容:', { currentPath, depth });
                 const response = await this.webdavClient!.getDirectoryContents(currentPath);
                 // 处理可能的ResponseDataDetailed类型
                 const entries = Array.isArray(response) ? response : response.data;
-                console.log('[SyncWorker] walkRemoteForTreeView 目录内容获取成功，条目数:', entries.length);
+                // console.log('[SyncWorker] walkRemoteForTreeView 目录内容获取成功，条目数:', entries.length);
                 
                 for (const entry of entries) {
-                    console.log('[SyncWorker] walkRemoteForTreeView 处理条目:', {
-                        filename: entry.filename,
-                        type: entry.type,
-                        lastmod: entry.lastmod,
-                        size: entry.size
-                    });
+                    // console.log('[SyncWorker] walkRemoteForTreeView 处理条目:', {
+                    //     filename: entry.filename,
+                    //     type: entry.type,
+                    //     lastmod: entry.lastmod,
+                    //     size: entry.size
+                    // });
                     
                     // 计算相对于基础路径的相对路径
                     let relativePath = entry.filename;
@@ -469,12 +497,12 @@ class SyncWorker {
                         size: entry.size || 0
                     };
                     
-                    console.log('[SyncWorker] walkRemoteForTreeView 添加条目:', {
-                        path: fileInfo.path,
-                        type: fileInfo.type,
-                        mtime: fileInfo.mtime,
-                        size: fileInfo.size
-                    });
+                    // console.log('[SyncWorker] walkRemoteForTreeView 添加条目:', {
+                    //     path: fileInfo.path,
+                    //     type: fileInfo.type,
+                    //     mtime: fileInfo.mtime,
+                    //     size: fileInfo.size
+                    // });
                     
                     files.push(fileInfo);
                     
@@ -493,8 +521,8 @@ class SyncWorker {
         };
         
         await walk(remotePath);
-        console.log('[SyncWorker] walkRemoteForTreeView 完成，总条目数:', files.length);
-        console.log('[SyncWorker] walkRemoteForTreeView 条目列表:', files.map(f => `${f.path} (${f.type})`));
+        // console.log('[SyncWorker] walkRemoteForTreeView 完成，总条目数:', files.length);
+        // console.log('[SyncWorker] walkRemoteForTreeView 条目列表:', files.map(f => `${f.path} (${f.type})`));
         return files;
     }
 
@@ -1079,6 +1107,102 @@ class SyncWorker {
         } catch (error) {
             // 解密失败，可能不是加密内容或密钥错误，返回原内容
             return encryptedContent;
+        }
+    }
+
+    /**
+     * 检查并补充缺失的远端侧车文件
+     */
+    private async ensureMissingSidecarFiles(
+        remoteFiles: Array<{ path: string; mtime: number; size: number }>,
+        remoteBasePath: string,
+        sidecarSuffix: string,
+        metadataMap: SidecarDataMap
+    ): Promise<void> {
+        if (!this.webdavClient) {
+            throw new Error('WebDAV client not initialized');
+        }
+
+        // 获取所有远端侧车文件的路径
+        const remoteSidecarPaths = new Set<string>();
+        const allRemoteFiles = await this.walkRemote(remoteBasePath);
+        
+        for (const file of allRemoteFiles) {
+            if (file.path.endsWith(sidecarSuffix)) {
+                // 从侧车文件路径推导出原文件路径
+                const originalPath = file.path.slice(0, -sidecarSuffix.length);
+                remoteSidecarPaths.add(originalPath);
+            }
+        }
+
+        // 检查每个远端文件是否有对应的侧车文件
+        for (const remoteFile of remoteFiles) {
+            if (!remoteSidecarPaths.has(remoteFile.path)) {
+                // 该远端文件缺少侧车文件，需要补充
+                await this.createMissingSidecarFile(remoteFile.path, remoteBasePath, sidecarSuffix, metadataMap);
+            }
+        }
+    }
+
+    /**
+     * 为缺失侧车文件的远端文件创建侧车数据
+     */
+    private async createMissingSidecarFile(
+        remoteFilePath: string,
+        remoteBasePath: string,
+        sidecarSuffix: string,
+        metadataMap: SidecarDataMap
+    ): Promise<void> {
+        if (!this.webdavClient) {
+            throw new Error('WebDAV client not initialized');
+        }
+
+        try {
+            // 构建侧车文件的远程路径
+            const fullRemotePath = `${remoteBasePath}/${remoteFilePath}`.replace(/\/+/g, '/');
+            const sidecarRemotePath = fullRemotePath + sidecarSuffix;
+
+            // 检查metadataMap中是否有该文件的数据
+            const sidecarData = metadataMap[remoteFilePath];
+            
+            let sidecarContent: any;
+            
+            if (sidecarData && isTrackedSidecarData(sidecarData)) {
+                // 已追踪文件：使用完整的侧车数据
+                sidecarContent = {
+                    ...sidecarData,
+                    syncedAt: new Date().toISOString(),
+                    version: '1.0'
+                };
+            } else if (sidecarData && isUntrackedSidecarData(sidecarData)) {
+                // 未追踪文件：使用完整的文件系统侧车数据
+                sidecarContent = {
+                    ...sidecarData,
+                    syncedAt: new Date().toISOString(),
+                    version: '1.0'
+                };
+            } else {
+                // 没有侧车数据：创建最基础的侧车数据
+                sidecarContent = {
+                    filePath: remoteFilePath,
+                    syncedAt: new Date().toISOString(),
+                    version: '1.0',
+                    isTracked: false,
+                    note: 'File not tracked by file tracking system'
+                };
+            }
+
+            // 上传侧车文件
+            const sidecarBuffer = Buffer.from(JSON.stringify(sidecarContent, null, 2), 'utf-8');
+            const encryptedContent = this.encryptContent(sidecarBuffer);
+            
+            await this.webdavClient.putFileContents(sidecarRemotePath, encryptedContent);
+            
+            console.log(`[SyncWorker] ✓ 已为远端文件 ${remoteFilePath} 补充侧车文件`);
+            
+        } catch (error) {
+            console.warn(`[SyncWorker] ⚠ 为远端文件 ${remoteFilePath} 创建侧车文件失败:`, error);
+            // 不抛出错误，避免影响主同步流程
         }
     }
 }

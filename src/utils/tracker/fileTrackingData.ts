@@ -1557,7 +1557,7 @@ export class FileTrackingDataManager {
         for (const u of Object.values(this.database.pathToUuid)) {
             if (!this.database.files[u]) { this.ensureShardLoaded(u); }
         }
-        console.log('[FileTracking] 惰性补全加载完成');
+        // console.log('[FileTracking] 惰性补全加载完成'); // 默认不打印详细日志
     }
     private writeIndex(): void {
         try {

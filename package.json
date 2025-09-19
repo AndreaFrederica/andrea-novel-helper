@@ -1919,6 +1919,21 @@
           "default": false,
           "markdownDescription": "同步完成后是否在输出日志中显示文件差异表。启用后可以查看本次同步涉及的所有文件变更详情。"
         },
+        "AndreaNovelHelper.webdav.sync.enableMetadataSidecar": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否启用侧车文件元数据功能。启用后会为每个文件创建包含详细元数据的侧车文件，提供更丰富的同步信息。"
+        },
+        "AndreaNovelHelper.webdav.sync.metadataSidecarSuffix": {
+          "type": "string",
+          "default": ".anhmeta.json",
+          "markdownDescription": "侧车文件的后缀名。默认为 .anhmeta.json，用于存储文件的元数据信息。"
+        },
+        "AndreaNovelHelper.webdav.sync.skipDatabaseAccess": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "跳过数据库访问以提升同步速度。启用后侧车数据将不会从文件追踪数据库获取完整信息，显著提升同步性能。"
+        },
         "AndreaNovelHelper.webdav.sync.autoSync.enabled": {
           "type": "boolean",
           "default": false,

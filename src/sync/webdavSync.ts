@@ -5,6 +5,7 @@ import { WebDAVAccountManager, WebDAVAccount } from './accountManager';
 import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
 import { WebDAVSyncStatusManager } from './webdavSyncStatusManager';
 import { getAllTrackedFilesAsync } from '../utils/tracker/globalFileTracking';
+import { getFileTracker } from '../utils/tracker/globalFileTracking';
 import { SidecarDataMap, createTrackedSidecarData, createUntrackedSidecarData } from '../types/sidecarTypes';
 import * as fs from 'fs';
 
@@ -213,19 +214,33 @@ export class WebDAVSyncService {
                 const enableSmartComparison = config.get<boolean>('enableSmartComparison', true);
                 const enableSidecar = config.get<boolean>('enableMetadataSidecar', true);
                 const sidecarSuffix = config.get<string>('metadataSidecarSuffix', '.anhmeta.json');
+                const skipDatabaseAccess = config.get<boolean>('skipDatabaseAccess', true);
 
                 // 构建侧车数据映射（键为工作区内相对路径，posix风格）
                 let metadataMap: SidecarDataMap = {};
                 try {
-                    // 1. 首先添加已追踪文件的完整数据
-                    const trackedFiles = await getAllTrackedFilesAsync();
-                    for (const m of trackedFiles) {
-                        const rel = toPosix(path.relative(root, m.filePath));
-                        if (!rel || rel.startsWith('..')) continue; // 只收录工作区内文件
-                        metadataMap[rel] = createTrackedSidecarData(m, rel);
+                    console.log(`[WebDAV] 开始构建侧车数据映射，跳过数据库访问: ${skipDatabaseAccess}`);
+                    
+                    if (!skipDatabaseAccess) {
+                        // 等待数据库完全加载
+                        this.syncStatusManager.updateProgress(5, 100, '等待数据库读取完成...');
+                        await this.waitForDatabaseLoaded();
+                        
+                        // 1. 首先添加已追踪文件的完整数据
+                        const trackedFiles = await getAllTrackedFilesAsync();
+                        console.log(`[WebDAV] 获取到 ${trackedFiles.length} 个已追踪文件`);
+                        
+                        for (const m of trackedFiles) {
+                            const rel = toPosix(path.relative(root, m.filePath));
+                            if (!rel || rel.startsWith('..')) continue; // 只收录工作区内文件
+                            metadataMap[rel] = createTrackedSidecarData(m, rel);
+                            console.log(`[WebDAV] 添加已追踪文件到映射: ${rel} (UUID: ${m.uuid})`);
+                        }
+                    } else {
+                        console.log(`[WebDAV] 跳过数据库访问，仅使用文件系统信息构建侧车数据`);
                     }
 
-                    // 2. 然后扫描工作区中的所有文件，为未追踪文件创建基础侧车数据
+                    // 2. 然后扫描工作区中的所有文件，为文件创建侧车数据
                     const scanDirectory = (dirPath: string) => {
                         try {
                             const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -233,7 +248,7 @@ export class WebDAVSyncService {
                                 const fullPath = path.join(dirPath, entry.name);
                                 const rel = toPosix(path.relative(root, fullPath));
                                 
-                                // 跳过已存在的追踪文件、超出工作区的文件、隐藏文件和特殊目录
+                                // 跳过已存在的文件、超出工作区的文件、隐藏文件和特殊目录
                                 if (!rel || rel.startsWith('..') || metadataMap[rel] || 
                                     entry.name.startsWith('.') || entry.name === 'node_modules') {
                                     continue;
@@ -244,7 +259,7 @@ export class WebDAVSyncService {
                                     const fileName = path.basename(fullPath);
                                     const fileExtension = path.extname(fullPath).toLowerCase();
                                     
-                                    // 为未追踪文件创建基础侧车数据
+                                    // 为文件创建侧车数据
                                     metadataMap[rel] = createUntrackedSidecarData(
                                         rel,
                                         fileName,
@@ -254,6 +269,7 @@ export class WebDAVSyncService {
                                         stats.isDirectory(),
                                         stats.birthtimeMs || stats.ctimeMs
                                     );
+                                    console.log(`[WebDAV] 添加文件到映射: ${rel}`);
 
                                     // 递归扫描子目录
                                     if (stats.isDirectory()) {
@@ -271,6 +287,9 @@ export class WebDAVSyncService {
 
                     // 开始扫描工作区根目录
                     scanDirectory(root);
+                    
+                    console.log(`[WebDAV] 侧车数据映射构建完成，总计 ${Object.keys(metadataMap).length} 个文件`);
+                    console.log(`[WebDAV] 映射中的文件路径:`, Object.keys(metadataMap));
                 } catch (e) {
                     console.warn('[WebDAV] 构建侧车数据映射失败，继续同步流程:', e);
                     metadataMap = {};
@@ -294,7 +313,8 @@ export class WebDAVSyncService {
                     // 侧车元数据支持
                     metadataMap: metadataMap,
                     enableSidecar: enableSidecar,
-                    sidecarSuffix: sidecarSuffix
+                    sidecarSuffix: sidecarSuffix,
+                    skipDatabaseAccess: skipDatabaseAccess
                 });
 
                 const successCount = result.results.filter((r: any) => r.success).length;
@@ -481,6 +501,60 @@ export class WebDAVSyncService {
             console.error(`[WebDAV-Sync] getDirectoryFileList: 获取失败`, error);
             throw new Error(`获取目录文件列表失败: ${error}`);
         }
+    }
+
+    /**
+     * 等待数据库完全加载
+     */
+    private async waitForDatabaseLoaded(): Promise<void> {
+        const tracker = getFileTracker();
+        if (!tracker) {
+            console.warn('[WebDAV] 文件追踪器未初始化，跳过数据库等待');
+            return;
+        }
+
+        const dataManager = tracker.getDataManager();
+        if (!dataManager) {
+            console.warn('[WebDAV] 数据管理器未初始化，跳过数据库等待');
+            return;
+        }
+
+        // 检查是否需要等待分片加载
+        const database = (dataManager as any).database;
+        if (!database) {
+            return;
+        }
+
+        const totalFiles = Object.keys(database.pathToUuid || {}).length;
+        const loadedFiles = Object.keys(database.files || {}).length;
+
+        if (totalFiles === 0) {
+            // 没有文件需要加载
+            return;
+        }
+
+        if (loadedFiles >= totalFiles) {
+            // 已经全部加载
+            return;
+        }
+
+        // 等待分片加载完成
+        const maxWaitTime = 10000; // 最大等待10秒
+        const checkInterval = 100; // 每100ms检查一次
+        let waitTime = 0;
+
+        while (waitTime < maxWaitTime) {
+            const currentLoaded = Object.keys(database.files || {}).length;
+            if (currentLoaded >= totalFiles) {
+                console.log(`[WebDAV] 数据库加载完成: ${currentLoaded}/${totalFiles} 文件`);
+                return;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, checkInterval));
+            waitTime += checkInterval;
+        }
+
+        console.warn(`[WebDAV] 数据库加载超时，当前已加载: ${Object.keys(database.files || {}).length}/${totalFiles} 文件`);
     }
 
     /**
