@@ -4,6 +4,9 @@ import { Worker } from 'worker_threads';
 import { WebDAVAccountManager, WebDAVAccount } from './accountManager';
 import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
 import { WebDAVSyncStatusManager } from './webdavSyncStatusManager';
+import { getAllTrackedFilesAsync } from '../utils/tracker/globalFileTracking';
+import { SidecarDataMap, createTrackedSidecarData, createUntrackedSidecarData } from '../types/sidecarTypes';
+import * as fs from 'fs';
 
 export type SyncDirection = 'two-way' | 'push' | 'pull';
 
@@ -208,6 +211,70 @@ export class WebDAVSyncService {
                 const syncStrategy = config.get<'timestamp' | 'size' | 'both' | 'content'>('strategy', 'timestamp');
                 const timeTolerance = config.get<number>('timeTolerance', 15000);
                 const enableSmartComparison = config.get<boolean>('enableSmartComparison', true);
+                const enableSidecar = config.get<boolean>('enableMetadataSidecar', true);
+                const sidecarSuffix = config.get<string>('metadataSidecarSuffix', '.anhmeta.json');
+
+                // 构建侧车数据映射（键为工作区内相对路径，posix风格）
+                let metadataMap: SidecarDataMap = {};
+                try {
+                    // 1. 首先添加已追踪文件的完整数据
+                    const trackedFiles = await getAllTrackedFilesAsync();
+                    for (const m of trackedFiles) {
+                        const rel = toPosix(path.relative(root, m.filePath));
+                        if (!rel || rel.startsWith('..')) continue; // 只收录工作区内文件
+                        metadataMap[rel] = createTrackedSidecarData(m, rel);
+                    }
+
+                    // 2. 然后扫描工作区中的所有文件，为未追踪文件创建基础侧车数据
+                    const scanDirectory = (dirPath: string) => {
+                        try {
+                            const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+                            for (const entry of entries) {
+                                const fullPath = path.join(dirPath, entry.name);
+                                const rel = toPosix(path.relative(root, fullPath));
+                                
+                                // 跳过已存在的追踪文件、超出工作区的文件、隐藏文件和特殊目录
+                                if (!rel || rel.startsWith('..') || metadataMap[rel] || 
+                                    entry.name.startsWith('.') || entry.name === 'node_modules') {
+                                    continue;
+                                }
+
+                                try {
+                                    const stats = fs.statSync(fullPath);
+                                    const fileName = path.basename(fullPath);
+                                    const fileExtension = path.extname(fullPath).toLowerCase();
+                                    
+                                    // 为未追踪文件创建基础侧车数据
+                                    metadataMap[rel] = createUntrackedSidecarData(
+                                        rel,
+                                        fileName,
+                                        fileExtension,
+                                        stats.size,
+                                        stats.mtimeMs,
+                                        stats.isDirectory(),
+                                        stats.birthtimeMs || stats.ctimeMs
+                                    );
+
+                                    // 递归扫描子目录
+                                    if (stats.isDirectory()) {
+                                        scanDirectory(fullPath);
+                                    }
+                                } catch (statError) {
+                                    // 忽略无法访问的文件
+                                    console.debug(`[WebDAV] 无法获取文件信息: ${fullPath}`, statError);
+                                }
+                            }
+                        } catch (readError) {
+                            console.debug(`[WebDAV] 无法读取目录: ${dirPath}`, readError);
+                        }
+                    };
+
+                    // 开始扫描工作区根目录
+                    scanDirectory(root);
+                } catch (e) {
+                    console.warn('[WebDAV] 构建侧车数据映射失败，继续同步流程:', e);
+                    metadataMap = {};
+                }
 
                 // 更新同步状态
                 this.syncStatusManager.updateProgress(10, 100, '正在同步文件...');
@@ -223,7 +290,11 @@ export class WebDAVSyncService {
                     lastSyncTime: lastSyncTime,
                     syncStrategy: syncStrategy,
                     timeTolerance: timeTolerance,
-                    enableSmartComparison: enableSmartComparison
+                    enableSmartComparison: enableSmartComparison,
+                    // 侧车元数据支持
+                    metadataMap: metadataMap,
+                    enableSidecar: enableSidecar,
+                    sidecarSuffix: sidecarSuffix
                 });
 
                 const successCount = result.results.filter((r: any) => r.success).length;

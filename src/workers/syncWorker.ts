@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { createClient, WebDAVClient } from 'webdav';
+import { SidecarDataMap, SidecarData, isTrackedSidecarData } from '../types/sidecarTypes';
 
 // 时间容差常量（毫秒）
 const TIME_TOLERANCE = 15000;
@@ -105,6 +106,9 @@ class SyncWorker {
         syncStrategy?: 'timestamp' | 'size' | 'both' | 'content';
         timeTolerance?: number;
         enableSmartComparison?: boolean;
+        metadataMap?: SidecarDataMap;
+        enableSidecar?: boolean;
+        sidecarSuffix?: string;
     }): Promise<SyncResponse> {
         // 验证和修正URL格式
         let correctedUrl = this.validateAndCorrectWebDAVUrl(data.url);
@@ -119,8 +123,19 @@ class SyncWorker {
         // 确保远程项目文件夹存在
         await this.ensureRemoteDirectory(data.remotePath);
 
-        const localFiles = await this.walkLocal(data.localPath, data.incremental ? data.lastSyncTime : undefined);
-        const remoteFiles = await this.walkRemote(data.remotePath);
+        // 侧车配置
+        const enableSidecar = data.enableSidecar !== undefined ? data.enableSidecar : true;
+        const sidecarSuffix = data.sidecarSuffix || '.anhmeta.json';
+        const metadataMap = data.metadataMap || {};
+
+        let localFiles = await this.walkLocal(data.localPath, data.incremental ? data.lastSyncTime : undefined);
+        let remoteFiles = await this.walkRemote(data.remotePath);
+
+        // 过滤掉侧车文件
+        if (enableSidecar && sidecarSuffix) {
+            localFiles = localFiles.filter(f => !f.path.endsWith(sidecarSuffix));
+            remoteFiles = remoteFiles.filter(f => !f.path.endsWith(sidecarSuffix));
+        }
 
         const actions = await this.calculateSyncActions(
             localFiles, 
@@ -130,7 +145,8 @@ class SyncWorker {
             data.timeTolerance || TIME_TOLERANCE,
             data.enableSmartComparison !== undefined ? data.enableSmartComparison : true,
             data.localPath,
-            data.remotePath
+            data.remotePath,
+            metadataMap
         );
         const results = [];
 
@@ -141,8 +157,48 @@ class SyncWorker {
                 
                 if (action.type === 'upload') {
                     await this.uploadFile(fullLocalPath, fullRemotePath);
+
+                    // 上传侧车元数据（如果启用）
+                    if (enableSidecar) {
+                        const sidecarData = metadataMap[action.localPath];
+                        if (sidecarData) {
+                            try {
+                                const sidecarPath = `${fullRemotePath}${sidecarSuffix}`;
+                                
+                                // 根据数据类型决定侧车内容
+                                let sidecarContent: any;
+                                if (isTrackedSidecarData(sidecarData)) {
+                                    // 已追踪文件：包含完整的追踪信息
+                                    sidecarContent = {
+                                        ...sidecarData,
+                                        syncedAt: Date.now(),
+                                        syncVersion: '1.0'
+                                    };
+                                } else {
+                                    // 未追踪文件：仅包含基础文件系统信息
+                                    sidecarContent = {
+                                        ...sidecarData,
+                                        syncedAt: Date.now(),
+                                        syncVersion: '1.0'
+                                    };
+                                }
+                                
+                                const json = JSON.stringify(sidecarContent, null, 2);
+                                const buf = Buffer.from(json, 'utf8');
+                                const finalContent = this.encryptContent(buf);
+                                await this.webdavClient!.putFileContents(sidecarPath, finalContent);
+                                
+                                console.debug(`[SyncWorker] 成功上传侧车文件: ${sidecarPath} (${sidecarData.source})`);
+                            } catch (e) {
+                                console.warn('[SyncWorker] 上传侧车文件失败，忽略错误:', e);
+                            }
+                        } else {
+                            console.debug(`[SyncWorker] 未找到文件的侧车数据: ${action.localPath}`);
+                        }
+                    }
                 } else if (action.type === 'download') {
                     await this.downloadFile(fullRemotePath, fullLocalPath);
+                    // 暂不下载sidecar
                 }
                 results.push({ success: true, action });
             } catch (error) {
@@ -450,7 +506,8 @@ class SyncWorker {
         timeTolerance: number = TIME_TOLERANCE,
         enableSmartComparison: boolean = true,
         localBasePath: string,
-        remoteBasePath: string
+        remoteBasePath: string,
+        metadataMap?: SidecarDataMap
     ) {
         const actions: Array<{ type: 'upload' | 'download'; localPath: string; remotePath: string }> = [];
         const localMap = new Map(localFiles.map(f => [f.path, f]));
@@ -481,7 +538,8 @@ class SyncWorker {
                     syncStrategy, 
                     enableSmartComparison,
                     fullLocalPath,
-                    fullRemotePath
+                    fullRemotePath,
+                    metadataMap
                 );
                 
                 if (needsSync === 'upload' && (direction === 'upload' || direction === 'two-way')) {
@@ -556,29 +614,46 @@ class SyncWorker {
         strategy: 'timestamp' | 'size' | 'both' | 'content' = 'timestamp',
         enableSmartComparison: boolean = true,
         localPath?: string,
-        remotePath?: string
+        remotePath?: string,
+        metadataMap?: SidecarDataMap
     ): Promise<'upload' | 'download' | null> {
+        // 尝试从metadataMap获取更精确的时间信息
+        let effectiveLocalMtime = localFile.mtime;
+        let effectiveRemoteMtime = remoteFile.mtime;
+        
+        if (metadataMap && localFile.path) {
+            const metadata = metadataMap[localFile.path];
+            if (metadata && typeof metadata.mtime === 'number') {
+                effectiveLocalMtime = metadata.mtime;
+                console.log(`[SyncWorker] 使用侧车时间信息: ${localFile.path}, 文件系统时间: ${localFile.mtime}, 侧车时间: ${metadata.mtime}`);
+            }
+        }
+        
+        // 创建使用有效时间的文件对象
+        const effectiveLocalFile = { ...localFile, mtime: effectiveLocalMtime };
+        const effectiveRemoteFile = { ...remoteFile, mtime: effectiveRemoteMtime };
+        
         switch (strategy) {
             case 'size':
                 // 仅基于文件大小比较
-                if (localFile.size === remoteFile.size) {
+                if (effectiveLocalFile.size === effectiveRemoteFile.size) {
                     return null; // 大小相同，不需要同步
                 }
                 // 大小不同，选择修改时间更新的文件
-                return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                 
             case 'timestamp':
                 // 基于时间戳比较，同时确保文件大小一致
-                const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                const timeDiff = Math.abs(effectiveLocalFile.mtime - effectiveRemoteFile.mtime);
                 if (timeDiff <= timeTolerance) {
                     // 时间差在容差范围内，但还需检查文件大小是否一致
-                    if (localFile.size !== remoteFile.size) {
+                    if (effectiveLocalFile.size !== effectiveRemoteFile.size) {
                         // 大小不一致，选择修改时间更新的文件
-                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                        return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                     }
                     return null; // 时间和大小都匹配，不需要同步
                 }
-                return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                 
             case 'content':
                 // 基于内容哈希比较
@@ -592,25 +667,25 @@ class SyncWorker {
                         }
                         
                         // 内容不同，选择修改时间更新的文件
-                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                        return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                     } catch (error) {
                         console.warn('无法计算文件哈希，回退到时间戳比较:', error);
                         // 回退到时间戳比较
-                        const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                        const timeDiff = Math.abs(effectiveLocalFile.mtime - effectiveRemoteFile.mtime);
                         if (timeDiff <= timeTolerance) {
                             return null;
                         }
-                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                        return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                     }
                 } else {
                     // 没有提供文件路径，回退到大小+时间戳比较
-                    if (localFile.size === remoteFile.size) {
-                        const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                    if (effectiveLocalFile.size === effectiveRemoteFile.size) {
+                        const timeDiff = Math.abs(effectiveLocalFile.mtime - effectiveRemoteFile.mtime);
                         if (timeDiff <= timeTolerance) {
                             return null;
                         }
                     }
-                    return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                 }
                 
             case 'both':
@@ -618,13 +693,13 @@ class SyncWorker {
                 // 智能比较算法：结合大小和时间戳
                 if (enableSmartComparison) {
                     // 首先比较文件大小
-                    if (localFile.size !== remoteFile.size) {
+                    if (effectiveLocalFile.size !== effectiveRemoteFile.size) {
                         // 大小不同，选择修改时间更新的文件
-                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                        return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                     }
                     
                     // 大小相同，比较修改时间（考虑容差）
-                    const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                    const timeDiff = Math.abs(effectiveLocalFile.mtime - effectiveRemoteFile.mtime);
                     
                     if (timeDiff <= timeTolerance) {
                         // 时间差在容差范围内，认为文件相同，不需要同步
@@ -632,15 +707,15 @@ class SyncWorker {
                     }
                     
                     // 时间差超过容差，选择更新的文件
-                    return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                 } else {
                     // 简单的both策略：大小或时间戳任一不同就同步
-                    if (localFile.size !== remoteFile.size) {
-                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                    if (effectiveLocalFile.size !== effectiveRemoteFile.size) {
+                        return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                     }
-                    const timeDiff = Math.abs(localFile.mtime - remoteFile.mtime);
+                    const timeDiff = Math.abs(effectiveLocalFile.mtime - effectiveRemoteFile.mtime);
                     if (timeDiff > timeTolerance) {
-                        return localFile.mtime > remoteFile.mtime ? 'upload' : 'download';
+                        return effectiveLocalFile.mtime > effectiveRemoteFile.mtime ? 'upload' : 'download';
                     }
                     return null;
                 }
