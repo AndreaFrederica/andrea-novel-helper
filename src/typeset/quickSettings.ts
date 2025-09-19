@@ -1039,6 +1039,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: `${wheelZoom ? '$(check)' : '$(circle-slash)'} 切换：Ctrl+滚轮快速缩放字体`, cmd: 'andrea.toggleMouseWheelZoom' },
 
                 { label: `${compact ? '$(check)' : '$(circle-slash)'} 切换：状态栏显示（当前 ${compact ? '简略' : '详细'}）`, cmd: 'andrea.toggleStatusBarCompact' },
+                { label: `${vscode.workspace.getConfiguration('AndreaNovelHelper.autoGit').get('compactStatus', false) ? '$(check)' : '$(circle-slash)'} 切换：ANH:Sync 简洁模式（仅显示 ANH:Sync）`, cmd: 'andrea.toggleAutoGitCompact' },
                 { label: '$(paintcan) 立即排版全文', cmd: 'andrea.formatDocument' },
 
                 { label: '$(keyboard) [仅需执行一次｜智能回车失效时使用] 一键注入：Enter → Andrea（覆盖 MAIO）', cmd: 'andrea.injectEnterKeybindings' },

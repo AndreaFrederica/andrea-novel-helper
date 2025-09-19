@@ -66,6 +66,8 @@ import { registerWebDAVPanel } from './Provider/view/webdavPanel';
 import { registerWebDAVTreeView } from './Provider/view/webdavTreeView';
 import { registerCommentsTreeView } from './Provider/view/commentsTreeView';
 import { WebDAVFileSystemProvider } from './Provider/fileSystem/webdavFileSystemProvider';
+import { AutoGitService } from './sync/autoGitService';
+import { registerAutoGitTreeView } from './Provider/view/autoGitTreeView';
 import { initI18n } from './utils/i18n';
 import { ProjectConfigManager } from './projectConfig/projectConfigManager';
 import { ProjectConfigLinter } from './projectConfig/projectConfigLinter';
@@ -1016,6 +1018,90 @@ export async function activate(context: vscode.ExtensionContext) {
         // 注册WebDAV面板和TreeView
         registerWebDAVPanel(context);
         const webdavTreeProvider = registerWebDAVTreeView(context);
+        
+        // 注册AutoGit面板和TreeView
+        const autoGitTreeProvider = registerAutoGitTreeView(context);
+        
+        // 初始化AutoGit服务
+        let autoGitService: AutoGitService | undefined;
+        if (wsRoot) {
+            autoGitService = new AutoGitService(context, wsRoot);
+            // 将WebDAV同步服务传递给AutoGit服务
+            const webdavSyncService = new WebDAVSyncService(context);
+            autoGitService.setWebDAVSyncService(webdavSyncService);
+            
+            // 启动AutoGit服务
+            autoGitService.start().catch(error => {
+                log('AutoGit服务启动失败:', error);
+            });
+            
+            // 注册AutoGit相关命令
+            context.subscriptions.push(
+                vscode.commands.registerCommand('andrea.autoGit.showStatus', async () => {
+                    if (autoGitService) {
+                        const status = await autoGitService.getStatus();
+                        const statusText = [
+                            `AutoGit状态: ${status.enabled ? '已启用' : '已禁用'}`,
+                            `监听器运行: ${status.monitorRunning ? '是' : '否'}`,
+                            `最后检查: ${status.lastCheck ? status.lastCheck.toLocaleString() : '未检查'}`,
+                            status.gitStatus ? `Git状态: ${status.gitStatus.hasChanges ? '有变更' : '无变更'}` : '',
+                            status.lastCommit ? `最后提交: ${status.lastCommit.message} (${status.lastCommit.date.toLocaleString()})` : ''
+                        ].filter(Boolean).join('\n');
+                        
+                        vscode.window.showInformationMessage(statusText, { modal: true });
+                    }
+                }),
+                vscode.commands.registerCommand('andrea.autoGit.manualCommit', async () => {
+                    if (autoGitService) {
+                        await autoGitService.manualCommit();
+                    }
+                }),
+                vscode.commands.registerCommand('andrea.autoGit.manualSync', async () => {
+                    if (autoGitService) {
+                        await autoGitService.manualSync();
+                    }
+                }),
+                vscode.commands.registerCommand('andrea.autoGit.toggleEnabled', async () => {
+                    const config = vscode.workspace.getConfiguration('AndreaNovelHelper.autoGit');
+                    const currentEnabled = config.get('enabled', false);
+                    await config.update('enabled', !currentEnabled, vscode.ConfigurationTarget.Workspace);
+                    vscode.window.showInformationMessage(`AutoGit已${!currentEnabled ? '启用' : '禁用'}`);
+                }),
+                vscode.commands.registerCommand('andrea.toggleAutoGitCompact', async () => {
+                    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.autoGit');
+                    const cur = cfg.get<boolean>('compactStatus', false);
+                    await cfg.update('compactStatus', !cur, vscode.ConfigurationTarget.Workspace);
+                    vscode.window.showInformationMessage(`ANH:Sync 简洁模式已${!cur ? '启用' : '禁用'}`);
+                }),
+                vscode.commands.registerCommand('andrea.autoGit.setupRemote', async () => {
+                    const remoteUrl = await vscode.window.showInputBox({
+                        prompt: '请输入Git远程仓库地址',
+                        placeHolder: 'https://github.com/username/repository.git',
+                        validateInput: (value) => {
+                            if (!value) {
+                                return '请输入远程仓库地址';
+                            }
+                            // 简单的URL验证
+                            if (!value.match(/^https?:\/\/.+\.git$/) && !value.match(/^git@.+:.+\.git$/)) {
+                                return '请输入有效的Git仓库地址（如：https://github.com/user/repo.git）';
+                            }
+                            return null;
+                        }
+                    });
+
+                    if (remoteUrl && autoGitService) {
+                        try {
+                            await autoGitService.setupRemoteRepository(remoteUrl);
+                            vscode.window.showInformationMessage('远程仓库设置成功！');
+                            // 刷新TreeView
+                            autoGitTreeProvider.refresh();
+                        } catch (error) {
+                            vscode.window.showErrorMessage(`设置远程仓库失败: ${error}`);
+                        }
+                    }
+                })
+            );
+        }
         
         // 注册WebDAV文件系统提供器
         const webdavFileSystemProvider = new WebDAVFileSystemProvider(context);

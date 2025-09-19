@@ -1951,6 +1951,57 @@
           "enum": ["bidirectional", "upload", "download"],
           "default": "bidirectional",
           "markdownDescription": "定时同步的方法。bidirectional: 双向同步（默认），upload: 仅上传本地文件到服务器，download: 仅从服务器下载文件到本地。"
+        },
+        "AndreaNovelHelper.autoGit.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否启用AutoGit功能。启用后将自动检测Git仓库变更并执行自动提交和同步。"
+        },
+        "AndreaNovelHelper.autoGit.checkIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 10,
+          "maximum": 300,
+          "markdownDescription": "检查Git HEAD变更的时间间隔（秒）。范围：10-300秒。"
+        },
+        "AndreaNovelHelper.autoGit.commitMessageTemplate": {
+          "type": "string",
+          "default": "Auto commit: {timestamp}",
+          "markdownDescription": "自动提交的消息模板。可使用变量：{timestamp}（时间戳）、{files}（变更文件数）、{branch}（分支名）。"
+        },
+        "AndreaNovelHelper.autoGit.autoPull": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "检测到远程变更时是否自动拉取。启用后会在检测到远程HEAD变更时自动执行git pull。"
+        },
+        "AndreaNovelHelper.autoGit.autoPush": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "本地提交后是否自动推送到远程仓库。启用后会在自动提交后执行git push。"
+        },
+        "AndreaNovelHelper.autoGit.includeUntracked": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否包含未跟踪的文件。启用后会自动添加新文件到Git暂存区。"
+        },
+        "AndreaNovelHelper.autoGit.compactStatus": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "markdownDescription": "ANH:Sync 状态栏简洁模式：开启时仅显示 'ANH:Sync'，不显示具体的 Git/WebDAV 状态。"
+        },
+        "AndreaNovelHelper.autoGit.excludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "*.tmp",
+            "*.log",
+            ".DS_Store",
+            "Thumbs.db"
+          ],
+          "markdownDescription": "自动提交时排除的文件模式列表。支持通配符匹配。"
         }
       }
     },
@@ -2003,6 +2054,11 @@
           "id": "andrea.webdavFiles",
           "name": "WebDAV 文件",
           "icon": "cloud-download"
+        },
+        {
+          "id": "andrea.autoGitPanel",
+          "name": "AutoGit 管理",
+          "icon": "git-branch"
         }
       ]
     },
