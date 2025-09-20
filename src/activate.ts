@@ -73,6 +73,8 @@ import { ProjectConfigManager } from './projectConfig/projectConfigManager';
 import { ProjectConfigLinter } from './projectConfig/projectConfigLinter';
 import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
 import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
+import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
+import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -80,6 +82,10 @@ let gitCommandRegistered = false;
 // 全局变量存储lint系统实例
 let projectConfigLinter: ProjectConfigLinter | undefined;
 let projectConfigDecorator: ProjectConfigDecorator | undefined;
+
+// 智能标签组锁定管理器
+let smartTabGroupLockManager: SmartTabGroupLockManager | undefined;
+let smartTabGroupLockStatusBar: SmartTabGroupLockStatusBar | undefined;
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -1133,6 +1139,13 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(
         );
 
+        // 初始化智能标签组锁定管理器
+        smartTabGroupLockManager = new SmartTabGroupLockManager(context);
+        
+        // 初始化智能分组锁状态栏
+        smartTabGroupLockStatusBar = new SmartTabGroupLockStatusBar();
+        smartTabGroupLockStatusBar.activate(context, smartTabGroupLockManager);
+
         // 启动后异步检查（避免阻塞激活）
         setTimeout(() => {
             if (projectInitWizardRunning) { return; }
@@ -1157,6 +1170,18 @@ export function deactivate() {
     deactivateMarkdownToolbar();
     deactivateTimeStats();
     try { stopAllPreviewTTS(_previewManager); } catch { }
+    
+    // 清理智能标签组锁定管理器
+    if (smartTabGroupLockManager) {
+        smartTabGroupLockManager.dispose();
+        smartTabGroupLockManager = undefined;
+    }
+    
+    // 清理智能分组锁状态栏
+    if (smartTabGroupLockStatusBar) {
+        smartTabGroupLockStatusBar.dispose();
+        smartTabGroupLockStatusBar = undefined;
+    }
     
     // 清理lint系统资源
     if (projectConfigLinter) {

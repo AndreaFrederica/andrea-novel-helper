@@ -341,7 +341,8 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	let statusBarTimer: NodeJS.Timeout | undefined;
 	function ensureStatusBar() {
 		if (!statusBar) {
-			statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 0);
+			statusBar = vscode.window.createStatusBarItem('andrea.characterLoading', vscode.StatusBarAlignment.Left, 0);
+			statusBar.name = '角色加载';
 			statusBar.text = '$(sync~spin) 角色加载中…';
 			statusBar.tooltip = '正在异步扫描 novel-helper 角色库';
 			statusBar.show();

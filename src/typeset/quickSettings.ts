@@ -1009,6 +1009,9 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         const wrap = editorCfg.get<string>('wordWrap', 'off'); // off | on | wordWrapColumn | bounded
         const minimap = editorCfg.get<boolean>('minimap.enabled', true);
         const wheelZoom = editorCfg.get<boolean>('mouseWheelZoom', false);
+        
+        // 智能分组锁配置
+        const smartTabGroupLockEnabled = cfg.get<boolean>('AndreaNovelHelper.smartTabGroupLock.enabled', true);
 
 
         const pick = await vscode.window.showQuickPick(
@@ -1037,6 +1040,8 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: '$(search-fuzzy) 错别字识别快速设置', cmd: 'andrea.typo.quickSettings' },
                 { label: `${minimap ? '$(check)' : '$(circle-slash)'} 切换：Minimap（小地图）`, cmd: 'andrea.toggleMinimap' },
                 { label: `${wheelZoom ? '$(check)' : '$(circle-slash)'} 切换：Ctrl+滚轮快速缩放字体`, cmd: 'andrea.toggleMouseWheelZoom' },
+
+                { label: `${smartTabGroupLockEnabled ? '$(check)' : '$(circle-slash)'} 切换：智能分组锁`, cmd: 'andrea.toggleSmartTabGroupLock' },
 
                 { label: `${compact ? '$(check)' : '$(circle-slash)'} 切换：状态栏显示（当前 ${compact ? '简略' : '详细'}）`, cmd: 'andrea.toggleStatusBarCompact' },
                 { label: `${vscode.workspace.getConfiguration('AndreaNovelHelper.autoGit').get('compactStatus', false) ? '$(check)' : '$(circle-slash)'} 切换：ANH:Sync 简洁模式（仅显示 ANH:Sync）`, cmd: 'andrea.toggleAutoGitCompact' },
@@ -1156,6 +1161,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.commands.registerCommand('andrea.toggleMinimap', () => toggle('editor.minimap.enabled')),
         vscode.commands.registerCommand('andrea.toggleMouseWheelZoom', () => toggle('editor.mouseWheelZoom')),
         vscode.commands.registerCommand('andrea.toggleStatusBarCompact', () => toggle('andrea.typeset.statusBar.compact')),
+        vscode.commands.registerCommand('andrea.toggleSmartTabGroupLock', () => toggle('AndreaNovelHelper.smartTabGroupLock.enabled')),
         vscode.commands.registerCommand('andrea.quickSettings', quickSettings),
     vscode.commands.registerCommand('andrea.configureMilestones', configureMilestones),
     vscode.commands.registerCommand('andrea.manageWcignore', manageWcignore),

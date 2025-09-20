@@ -1533,8 +1533,9 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
         }
         const cfg = getConfig();
         const alignment = cfg.statusBarAlignment === 'right' ? vscode.StatusBarAlignment.Right : vscode.StatusBarAlignment.Left;
-        statusBarItem = vscode.window.createStatusBarItem(alignment, cfg.statusBarPriority);
-        statusBarItem.command = 'AndreaNovelHelper.openTimeStats';
+        statusBarItem = vscode.window.createStatusBarItem('andrea.timeStats', alignment, cfg.statusBarPriority);
+    statusBarItem.name = '时间统计';
+    statusBarItem.command = 'AndreaNovelHelper.openTimeStats';
         context.subscriptions.push(statusBarItem!);
         updateStatusBar();
     }

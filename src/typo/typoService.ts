@@ -459,7 +459,7 @@ function ensureTypoDecorationType(): vscode.TextEditorDecorationType | null {
 
 function ensureStatusItem() {
     if (statusItem) return;
-    statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    statusItem = vscode.window.createStatusBarItem('andrea.typoService', vscode.StatusBarAlignment.Left, 100);
     statusItem.name = 'Andrea Typo';
     statusItem.tooltip = '错别字识别状态';
     statusItem.command = 'andrea.typo.quickSettings';

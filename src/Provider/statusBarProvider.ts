@@ -18,17 +18,21 @@ export class StatusBarProvider {
     constructor(wordCountProvider: WordCountProvider) {
         this.wordCountProvider = wordCountProvider;
         this.statusBarItem = vscode.window.createStatusBarItem(
+            'andrea.writingStats', // 唯一ID
             vscode.StatusBarAlignment.Left, 
             100 // 优先级，数字越大越靠左
         );
+        this.statusBarItem.name = '写作统计';
         this.statusBarItem.command = 'AndreaNovelHelper.showCurrentFileStats';
         this.statusBarItem.tooltip = '点击查看详细写作统计';
         
         // 创建WebDAV同步状态栏项
         this.webdavStatusBarItem = vscode.window.createStatusBarItem(
+            'andrea.webdavSync', // 唯一ID
             vscode.StatusBarAlignment.Left,
             99 // 优先级比写作统计稍低
         );
+        this.webdavStatusBarItem.name = 'WebDAV同步';
         this.webdavStatusBarItem.command = 'andrea.webdav.syncNow';
         this.webdavStatusBarItem.tooltip = '点击开始WebDAV同步';
         

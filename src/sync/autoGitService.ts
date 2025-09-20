@@ -49,7 +49,7 @@ export class AutoGitService {
         this._outputChannel = vscode.window.createOutputChannel('ANH:AutoGit Service');
         
         // 创建状态栏项
-        this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+        this._statusBarItem = vscode.window.createStatusBarItem('andrea.autoGitSync', vscode.StatusBarAlignment.Left, 1000);
         this._statusBarItem.name = 'ANH:Sync 状态';
         this._statusBarItem.command = 'andrea.autoGit.showStatus';
         context.subscriptions.push(this._statusBarItem);

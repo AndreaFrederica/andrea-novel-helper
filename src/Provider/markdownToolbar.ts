@@ -266,7 +266,8 @@ function hideStatusBar() {
 function showStatusBarToolbar(editor: vscode.TextEditor, selection: vscode.Selection) {
     if (!statusBarItem) {
         // 保留在右下角，避免干扰其他功能
-        statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+        statusBarItem = vscode.window.createStatusBarItem('andrea.markdownToolbar', vscode.StatusBarAlignment.Right, 100);
+        statusBarItem.name = 'Markdown工具栏';
     }
 
     const selectedText = editor.document.getText(selection);

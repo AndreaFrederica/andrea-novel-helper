@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { isSupportedDoc } from './core/utils';
 
 export function registerLayoutStatusBar(context: vscode.ExtensionContext) {
-    const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    const item = vscode.window.createStatusBarItem('andrea.layoutSettings', vscode.StatusBarAlignment.Right, 100);
+    item.name = '版式设置';
     item.command = 'andrea.quickSettings';
     context.subscriptions.push(item);
 

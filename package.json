@@ -2002,6 +2002,63 @@
             "Thumbs.db"
           ],
           "markdownDescription": "自动提交时排除的文件模式列表。支持通配符匹配。"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用智能标签组锁定功能。当分屏仅包含ANH扩展提供的各种窗体（如预览面板、批注管理、双大纲等）时，自动锁定该分屏以避免新窗体在其中打开。"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.enableBuiltinTypes": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用内置智能锁定窗体类型。禁用后，只有自定义配置的窗体类型会参与智能锁定。"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.excludeRoleEditor": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "排除角色卡编辑器（andrea.roleEditor）参与智能锁定。默认排除，设为false可让角色卡编辑器参与智能锁定。"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.excludeDiffEditor": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "排除差异编辑器（vscode.diff-editor）参与智能锁定。默认排除，设为false可让差异编辑器参与智能锁定。"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.excludeNotesDiff": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "排除Notes差异编辑器（notes.diff）参与智能锁定。默认排除，设为false可让Notes差异编辑器参与智能锁定。"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.customWebviewTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "自定义参与智能锁定的WebView类型列表。例如：['my-extension.preview', 'another.webview']"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.customEditorTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "自定义参与智能锁定的编辑器类型列表。例如：['my-extension.editor', 'another.custom-editor']"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.customUriSchemes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "自定义参与智能锁定的URI方案列表。例如：['my-scheme', 'another-scheme']"
+        },
+        "AndreaNovelHelper.smartTabGroupLock.customNotebookTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "自定义参与智能锁定的笔记本类型列表。例如：['my-notebook', 'another-notebook']"
         }
       }
     },
