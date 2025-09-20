@@ -34,6 +34,7 @@ export class AutoGitService {
     private _fileWatcher?: vscode.FileSystemWatcher;
     private _autoCommitTimer?: NodeJS.Timeout;
     private _isProcessingAutoCommit: boolean = false; // 添加处理状态标志
+    private _lastAutoCommitTime: number = 0; // 添加最后提交时间记录
     private _webdavStatusManager: WebDAVSyncStatusManager;
     private _webdavStatusListener?: vscode.Disposable;
     private _webdavAutoSyncEnabled: boolean;
@@ -263,14 +264,6 @@ export class AutoGitService {
     private async _onHeadChanged(event: HeadChangeEvent): Promise<void> {
         this._log(`检测到HEAD变更: ${event.oldCommit.substring(0, 8)} -> ${event.newCommit.substring(0, 8)}`);
         
-        // 如果启用了自动拉取，检查是否需要拉取远程变更
-        if (this._config.autoPull) {
-            const hasRemoteUpdates = await this._gitUtils.checkRemoteUpdates();
-            if (hasRemoteUpdates) {
-                await this._pullChanges();
-            }
-        }
-        
         // 触发WebDAV同步
         await this._triggerWebDAVSync();
         
@@ -278,41 +271,24 @@ export class AutoGitService {
     }
 
     private async _onGitStatusChanged(status: GitStatus): Promise<void> {
-        this._log(`Git状态发生变更: 有变更=${status.hasChanges}, 远程状态=${status.remoteStatus}`);
+        this._log(`Git状态发生变更: 分支=${status.currentBranch}, 远程状态=${status.remoteStatus}, 变更=${status.hasChanges}`);
         
-        // 如果有本地变更，自动提交
-        if (status.hasChanges && this._config.enabled) {
-            // 防止重复处理
-            if (this._isProcessingAutoCommit) {
-                this._log('自动提交正在处理中，跳过此次请求');
-                return;
-            }
-
-            this._isProcessingAutoCommit = true;
-            
-            try {
-                const commitOptions: CommitOptions = {
-                    message: this._config.commitMessageTemplate,
-                    includeUntracked: this._config.includeUntracked,
-                    excludePatterns: this._config.excludePatterns
-                };
-
-                const commitSuccess = await this._gitUtils.autoCommit(commitOptions);
-                
-                if (commitSuccess) {
-                    this._log('自动提交成功');
-                    if (this._config.autoPush) {
-                        await this._pushChanges();
-                    }
-                } else {
-                    this._log('自动提交失败或没有符合条件的文件');
-                }
-            } finally {
-                this._isProcessingAutoCommit = false;
-            }
+        // 如果启用了自动拉取，检查是否需要拉取远程变更
+        if (this._config.autoPull && (status.remoteStatus === 'behind' || status.remoteStatus === 'diverged')) {
+            this._log(`检测到远程有新提交，准备执行自动拉取`);
+            await this._pullChanges();
         }
         
-        this._updateStatusBar();
+        // 如果有本地变更且启用了自动提交，触发自动提交调度（但不要在处理中重复调度）
+        if (this._config.enabled && status.hasChanges && !this._isProcessingAutoCommit) {
+            this._scheduleAutoCommit();
+        }
+        
+        // 如果本地领先且启用了自动推送，执行推送
+        if (this._config.autoPush && status.aheadCount > 0 && !status.hasChanges) {
+            await this._pushChanges();
+        }
+        
         this._fireStatusChanged();
     }
 
@@ -573,6 +549,14 @@ export class AutoGitService {
             return;
         }
 
+        // 检查冷却时间（最少间隔30秒）
+        const now = Date.now();
+        const cooldownPeriod = 30000; // 30秒冷却时间
+        if (now - this._lastAutoCommitTime < cooldownPeriod) {
+            this._log(`自动提交冷却中，跳过调度（剩余${Math.ceil((cooldownPeriod - (now - this._lastAutoCommitTime)) / 1000)}秒）`);
+            return;
+        }
+
         // 清除之前的定时器
         if (this._autoCommitTimer) {
             clearTimeout(this._autoCommitTimer);
@@ -594,16 +578,36 @@ export class AutoGitService {
             return;
         }
 
+        this._isProcessingAutoCommit = true;
         try {
             const status = await this._gitUtils.getGitStatus();
             if (status.hasChanges) {
                 this._log('检测到文件变更，执行自动提交');
-                await this._onGitStatusChanged(status);
+                
+                // 直接执行提交，不要调用 _onGitStatusChanged 避免循环
+                const commitOptions: CommitOptions = {
+                    message: this._config.commitMessageTemplate.replace('{timestamp}', new Date().toLocaleString()),
+                    includeUntracked: this._config.includeUntracked,
+                    excludePatterns: this._config.excludePatterns
+                };
+                
+                const success = await this._gitUtils.autoCommit(commitOptions);
+                if (success) {
+                    this._log('自动提交成功');
+                    // 更新最后提交时间
+                    this._lastAutoCommitTime = Date.now();
+                    // 提交成功后触发状态更新，但不要再次调度自动提交
+                    this._fireStatusChanged();
+                } else {
+                    this._log('自动提交失败');
+                }
             } else {
                 this._log('没有文件变更，跳过自动提交');
             }
         } catch (error) {
-             this._log(`自动提交检查失败: ${error}`);
-         }
-     }
+            this._log(`自动提交检查失败: ${error}`);
+        } finally {
+            this._isProcessingAutoCommit = false;
+        }
+    }
 }

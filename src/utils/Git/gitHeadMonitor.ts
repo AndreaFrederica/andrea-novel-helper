@@ -126,6 +126,9 @@ export class GitHeadMonitor {
 
     private async _checkForChanges(): Promise<void> {
         try {
+            // 先检查远程更新（每次检查都fetch一次）
+            await this._checkRemoteUpdates();
+            
             const currentStatus = await this._gitUtils.getGitStatus();
             
             // 检查HEAD是否发生变更
@@ -141,7 +144,7 @@ export class GitHeadMonitor {
                 this._onHeadChanged.fire(changeEvent);
             }
 
-            // 检查其他状态变更
+            // 检查其他状态变更（包括远程状态变更）
             if (this._hasStatusChanged(this._lastStatus, currentStatus)) {
                 this._log(`Git状态发生变更`);
                 this._logStatusDiff(this._lastStatus, currentStatus);
@@ -151,6 +154,18 @@ export class GitHeadMonitor {
             this._lastStatus = currentStatus;
         } catch (error) {
             this._log(`检查Git变更时发生错误: ${error}`);
+        }
+    }
+
+    private async _checkRemoteUpdates(): Promise<void> {
+        try {
+            // 检查是否有远程仓库配置
+            const hasRemote = await this._gitUtils.checkRemoteUpdates();
+            if (hasRemote) {
+                this._log('已检查远程更新');
+            }
+        } catch (error) {
+            this._log(`检查远程更新时发生错误: ${error}`);
         }
     }
 
