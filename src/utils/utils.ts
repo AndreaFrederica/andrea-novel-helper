@@ -896,6 +896,11 @@ function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: strin
 		const packagePath = path.relative(novelHelperRoot, path.dirname(filePath));
 		loadRoleFile(filePath, packagePath, fileName);
 	}
+	
+	// 为新加载的角色添加 UUID（异步执行，不阻塞主流程）
+	ensureRoleUUIDs(roles, true).catch(error => {
+		console.error('[performIncrementalUpdate] 为角色添加 UUID 失败:', error);
+	});
 }
 
 

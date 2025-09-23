@@ -7,6 +7,7 @@ export type JsonValue = string | number | boolean | null | string[];
 export interface BaseFieldsCommon {
   name: string;
   type: RoleType;
+  uuid?: string; // UUID字段
   color?: string;
   priority?: number;
   description?: string;

@@ -190,8 +190,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed, onMounted, watch, reactive } from 'vue';
+import { ref, nextTick, computed, onMounted, watch, reactive, onUnmounted } from 'vue';
 import { useQuasar } from 'quasar';
+import { generateUUIDv7 } from '../utils/uuid';
 
 const $q = useQuasar();
 const isDark = computed(() => $q.dark.isActive);
@@ -372,7 +373,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     };
 
     if (now < saveEchoMuteUntil) {
-      window.setTimeout(
+      setTimeout(
         () => {
           // 静音结束再比一次，防止期间本地又有变更
           const latestSig = listSignature(roles.value);
@@ -413,15 +414,15 @@ onMounted(() => {
 });
 
 // 深度监听 roles，去抖后发送保存
-let saveTimer: number | undefined;
+const saveTimer = ref<ReturnType<typeof setTimeout> | undefined>();
 watch(
   roles,
   () => {
     if (applyingRemote) return;
-    if (saveTimer) window.clearTimeout(saveTimer);
-    saveTimer = window.setTimeout(() => {
+    if (saveTimer.value) clearTimeout(saveTimer.value);
+    saveTimer.value = setTimeout(() => {
       notifySave();
-      saveTimer = undefined;
+      saveTimer.value = undefined;
     }, 150);
   },
   { deep: true },
@@ -495,6 +496,7 @@ function addRole() {
   const newRole: RoleWithId = {
     id: genId(),
     base: {
+      uuid: generateUUIDv7(), // 自动添加 UUIDv7 作为基础字段
       name: `新角色 ${roles.value.length + 1}`,
       type: '主角',
       color: '#e0e0e0',
@@ -565,14 +567,14 @@ function findRoleIdByName(name: string): string | null {
   return r ? r.id : null;
 }
 
-const _flashTimers = new Map<string, number>();
+const _flashTimers = reactive(new Map<string, ReturnType<typeof setTimeout>>());
 function flashRoleCard(id: string) {
   const el = roleRefs.get(id);
   if (!el) return;
   el.classList.add('flash-target');
   const old = _flashTimers.get(id);
-  if (old) window.clearTimeout(old);
-  const t = window.setTimeout(() => el.classList.remove('flash-target'), 1500);
+  if (old) clearTimeout(old);
+  const t = setTimeout(() => el.classList.remove('flash-target'), 1500);
   _flashTimers.set(id, t);
 }
 
@@ -594,6 +596,18 @@ function flushPendingDefs() {
   pendingDefs.value = [];
   for (const nm of uniq) focusRoleByName(nm);
 }
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (saveTimer.value) {
+    clearTimeout(saveTimer.value);
+  }
+  // 清理所有flash定时器
+  for (const timerId of _flashTimers.values()) {
+    clearTimeout(timerId);
+  }
+  _flashTimers.clear();
+});
 </script>
 
 <style scoped>

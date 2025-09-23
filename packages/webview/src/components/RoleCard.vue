@@ -85,6 +85,23 @@
           />
         </div>
 
+        <!-- UUID字段 -->
+        <div class="col-12 col-md-6">
+          <q-input
+            v-model="draft.base.uuid"
+            label="UUID (uuid)"
+            dense
+            filled
+            readonly
+            :debounce="150"
+            @update:model-value="commit(['base.uuid'])"
+          >
+            <template #append>
+              <q-btn dense flat icon="content_copy" @click="copyUUID" />
+            </template>
+          </q-input>
+        </div>
+
         <div class="col-12 col-md-6">
           <div class="row items-center q-col-gutter-sm">
             <div class="col">
@@ -785,7 +802,7 @@ function toEntry(k: string, v: JsonValue, bucket: 'extended' | 'custom'): ExtraE
 }
 
 /** 基础键黑名单：不应进入 扩展/自定义 列表 */
-const BASE_KEYS_BLOCKLIST = new Set(['aliases', 'fixes', 'regex', 'regexFlags', 'affiliation']);
+const BASE_KEYS_BLOCKLIST = new Set(['aliases', 'fixes', 'regex', 'regexFlags', 'affiliation', 'uuid']);
 
 const mergedEntries = reactive<ExtraEntry[]>([]);
 function reloadExtras() {
@@ -930,6 +947,25 @@ function appendExtra() {
 /** 工具：深拷贝 */
 function cloneRole(r: RoleCardModel): RoleCardModel {
   return JSON.parse(JSON.stringify(r ?? { base: { name: '', type: '主角' } }));
+}
+
+/** 复制UUID到剪贴板 */
+function copyUUID() {
+  if (draft.base.uuid) {
+    navigator.clipboard.writeText(draft.base.uuid).then(() => {
+      $q.notify({
+        message: 'UUID已复制到剪贴板',
+        type: 'positive',
+        position: 'top'
+      });
+    }).catch(() => {
+      $q.notify({
+        message: '复制失败',
+        type: 'negative',
+        position: 'top'
+      });
+    });
+  }
 }
 </script>
 

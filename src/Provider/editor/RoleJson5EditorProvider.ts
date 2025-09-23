@@ -16,6 +16,7 @@ export type JsonValue = string | number | boolean | null | string[];
 export interface BaseFieldsCommon {
     name: string;
     type: RoleType;
+    uuid?: string; // 角色唯一标识符 (UUID v7)
     color?: string;
     priority?: number;
     description?: string;
@@ -35,6 +36,7 @@ export type RoleCardModelWithId = RoleCardModel & { id?: string };
 export interface Role {
     name: string;
     type: BuiltinType | string;
+    uuid?: string; // 角色唯一标识符 (UUID v7)
     affiliation?: string;
     aliases?: string[];
     description?: string;
@@ -61,7 +63,7 @@ const HIDDEN_BACKEND_KEYS = new Set(['packagePath', 'sourcePath']);
 
 // 基础键（动态键不允许覆盖）
 const BASE_KEYS = new Set([
-    'name', 'type', 'affiliation', 'description', 'aliases', 'color', 'regex', 'regexFlags', 'priority', 'fixes',
+    'name', 'type', 'uuid', 'affiliation', 'description', 'aliases', 'color', 'regex', 'regexFlags', 'priority', 'fixes',
     'wordSegmentFilter',
     ...Array.from(HIDDEN_BACKEND_KEYS),
     'id', // 仅内存
@@ -132,6 +134,7 @@ function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
     const base: BaseFieldsCommon = {
         name: role.name,
         type: role.type,
+        uuid: role.uuid,
         color: role.color,
         priority: role.priority,
         description: role.description,

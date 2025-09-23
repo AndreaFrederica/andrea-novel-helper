@@ -375,7 +375,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref, nextTick, computed } from 'vue';
+import { onMounted, ref, nextTick, computed, onUnmounted } from 'vue';
 import RelationGraph, {
   type RGJsonData,
   type RGOptions,
@@ -588,6 +588,8 @@ function changeLineColor() {
   });
 
   function updateLineColor(newColor: string) {
+    if (!line) return;
+    
     // 设置连线颜色
     line.color = newColor;
 
@@ -617,7 +619,7 @@ function changeRelationLiteral() {
     title: '更改关系字面值',
     message: '请输入新的关系字面值：',
     prompt: {
-      model: currentLiteral,
+      model: currentLiteral || '',
       type: 'text',
       placeholder: '例如：深爱、仇恨、师父等'
     },
@@ -630,6 +632,8 @@ function changeRelationLiteral() {
   });
 
   function updateRelationLiteral(newLiteral: string) {
+    if (!line) return;
+    
     // 获取当前关系类型
     const currentType = (line.data as Record<string, unknown>)?.['type'] as string || '其他关系';
     
@@ -654,11 +658,11 @@ function changeRelationLiteral() {
 };
 
 // 拖拽中节流更新：避免频繁JSON重算导致卡顿
-let draggingUpdateTimer: number | undefined;
+const draggingUpdateTimer = ref<ReturnType<typeof setTimeout> | undefined>();
 function scheduleUpdateFromGraph() {
-  if (draggingUpdateTimer) return;
-  draggingUpdateTimer = window.setTimeout(() => {
-    draggingUpdateTimer = undefined;
+  if (draggingUpdateTimer.value) return;
+  draggingUpdateTimer.value = setTimeout(() => {
+    draggingUpdateTimer.value = undefined;
     void updateJsonTextFromGraph();
   }, 120);
 }
@@ -770,16 +774,17 @@ function resolvePointerEvent(ev: any): Event | null {
 }
 
 function buildSyntheticContextEvent(x: number, y: number): Event {
-  if (typeof window !== 'undefined' && typeof window.MouseEvent === 'function') {
-    return new window.MouseEvent('contextmenu', {
+  // 在浏览器环境中创建MouseEvent
+  if (typeof MouseEvent === 'function') {
+    return new MouseEvent('contextmenu', {
       clientX: x,
       clientY: y,
       bubbles: true,
       cancelable: true,
-      view: window,
     });
   }
 
+  // 降级方案：返回基础事件对象
   return {
     type: 'contextmenu',
     clientX: x,
@@ -872,15 +877,14 @@ async function openContextMenu(
 
 // ---- 长按触发（移动端/触屏）：默认打开画布菜单 ----
 const longPressThreshold = 550; // ms
-let longPressTimer: any = null;
-// 改为更具体的类型（可能为 window.setTimeout 返回的 number）
-// 但保留 null 以便清除
-// longPressTimer 的类型在不同环境下可能为 number，保持宽松类型以兼容运行时
+const longPressTimer = ref<ReturnType<typeof setTimeout> | undefined>();
 
 function onTouchStart(ev: TouchEvent) {
   const pt = getClientPointFromEvent(ev);
-  clearTimeout(longPressTimer);
-  longPressTimer = setTimeout(() => {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value);
+  }
+  longPressTimer.value = setTimeout(() => {
     const syntheticEvt = buildSyntheticContextEvent(pt.x, pt.y);
     // cast to MouseEvent to satisfy the expected parameter type and call without awaiting
     void openContextMenu(syntheticEvt as unknown as MouseEvent, 'canvas');
@@ -890,11 +894,15 @@ function onTouchStart(ev: TouchEvent) {
 function onTouchMove(_ev: TouchEvent) {
   // 若位移过大则取消长按
   // 这里简单取消，以免误触
-  clearTimeout(longPressTimer);
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value);
+  }
 }
 
 function onTouchEnd(_ev: TouchEvent) {
-  clearTimeout(longPressTimer);
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value);
+  }
 }
 
 // ---- 节点菜单操作 ----
@@ -916,7 +924,6 @@ function editNodeText() {
     options: {
       type: 'radio',
       model: currentSex,
-      label: '性别',
       items: [
         { label: '男性', value: 'male' },
         { label: '女性', value: 'female' },
@@ -956,6 +963,8 @@ function editNodeText() {
   });
 
   function updateNodeInfo(newText: string, newSex: string) {
+    if (!node) return;
+    
     const graphInstance = graphRef.value?.getInstance();
     if (!graphInstance) return;
 
@@ -1137,7 +1146,9 @@ function deleteCurrentLink() {
   if (!graphInstance) return;
 
   try {
-    graphInstance.removeLinkById(link.seeks_id || `${link.from}-${link.to}`);
+    // 使用 seeks_id 删除连线，如果没有则使用 fromNode 和 toNode 的 seeks_id
+    const linkId = link.seeks_id || `${link.fromNode?.seeks_id}-${link.toNode?.seeks_id}`;
+    graphInstance.removeLinkById(linkId);
     void updateJsonTextFromGraph();
     $q.notify({
       type: 'positive',
@@ -1452,6 +1463,8 @@ function changeRelationType() {
   });
 
   function updateRelationType(newType: string) {
+    if (!line) return;
+    
     if (!line.data) {
       line.data = {};
     }
@@ -1476,6 +1489,16 @@ function changeRelationType() {
     }
   }
 }
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  if (draggingUpdateTimer.value) {
+    clearTimeout(draggingUpdateTimer.value);
+  }
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value);
+  }
+});
 
 
 </script>

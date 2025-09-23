@@ -25,7 +25,7 @@
       <q-btn
         dense
         round
-        :color="options?.creatingNodePlot ? 'positive' : 'grey-6'"
+        color="grey-6"
         icon="add_circle"
         @click="startAddNode($event)"
         class="toolbar-btn"
@@ -36,7 +36,7 @@
       <q-btn
         dense
         round
-        :color="options?.creatingNodePlot ? 'positive' : 'grey-6'"
+        color="grey-6"
         icon="add_circle_outline"
         @click="startAddNode($event)"
         class="toolbar-btn"
@@ -47,7 +47,7 @@
       <q-btn
         dense
         round
-        :color="options?.creatingLinePlot ? 'positive' : 'grey-6'"
+        color="grey-6"
         icon="timeline"
         @click="startAddLine($event)"
         class="toolbar-btn"
@@ -82,7 +82,7 @@
 
 <script lang="ts" setup>
 import { computed, inject, ref } from 'vue';
-import type { RGNode, RelationGraphInstance, RGOptions } from 'relation-graph-vue3';
+import type { RGNode, RelationGraphInstance, RGOptions, RGPosition } from 'relation-graph-vue3';
 import { graphKey } from 'relation-graph-vue3';
 import { Notify } from 'quasar';
 
@@ -211,13 +211,13 @@ const startAddLine = (e: MouseEvent | Event) => {
         color: '#8080ff',
         text: '新连线'
       },
-      onCreateLine: (from: RGNode, to: RGNode) => {
+      onCreateLine: (from: RGNode, to: RGNode | RGPosition) => {
         console.log('New line created:', from, to);
-        if (from?.id && to?.id) {
+        if (from?.id && (to as RGNode)?.id) {
           const newLineId = newLineIdIndex.value++;
           const newLine = {
-            from: from.id,
-            to: to.id,
+              from: from.id,
+              to: (to as RGNode).id,
             lineWidth: 3,
             color: '#8080ff',
             text: '新连线 ' + newLineId
