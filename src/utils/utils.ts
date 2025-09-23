@@ -11,6 +11,8 @@ import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles, sensitiveSourc
 import { globalFileCache } from '../context/fileCache';
 import { parseMarkdownRoles } from './Parser/markdownParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
+import { generateUUIDv7, generateRoleNameHash } from './uuidUtils';
+import { ensureRoleUUIDs } from './roleUuidManager';
 
 export interface TextStats {
 	cjkChars: number;  // 中文字符
@@ -440,8 +442,14 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 				ensureStatusBar();
 			}
 			updateStatusBar(true);
+			
+			// 为角色添加 UUID（异步执行，不阻塞主流程）
+			ensureRoleUUIDs(roles, true).catch(error => {
+				console.error('[loadRoles] 为角色添加 UUID 失败:', error);
+			});
+			
 			generateCSpellDictionary();
-			// 触发“全量完成”事件（供最终一次装饰/自动机重建）
+			// 触发"全量完成"事件（供最终一次装饰/自动机重建）
 			_onDidFinishRoles.fire();
 		}
 	}
@@ -718,6 +726,7 @@ function loadTXTRoleFile(content: string, filePath: string, packagePath: string,
 		const role: Role = {
 			name: line,
 			type: defaultType,
+			uuid: generateRoleNameHash(line), // 为txt角色生成基于名称的UUID哈希
 			packagePath: packagePath,
 			sourcePath: filePath
 		};

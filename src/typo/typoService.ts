@@ -323,6 +323,42 @@ const flushTimers = new Map<string, NodeJS.Timeout>();
 const applyQueues = new Map<string, Promise<void>>(); // per-doc serial apply queue
 const scanningDocs = new Set<string>();
 
+// 全局中止控制器管理
+const activeAbortControllers = new Set<AbortController>();
+let globalAbortController: AbortController | null = null;
+
+function createAbortController(): AbortController {
+    const controller = new AbortController();
+    activeAbortControllers.add(controller);
+    return controller;
+}
+
+function removeAbortController(controller: AbortController) {
+    activeAbortControllers.delete(controller);
+}
+
+function abortAllRequests() {
+    // 中止所有活动的请求
+    for (const controller of activeAbortControllers) {
+        try {
+            controller.abort();
+        } catch { /* ignore */ }
+    }
+    activeAbortControllers.clear();
+    
+    // 清除所有扫描定时器
+    for (const timer of scanTimers.values()) {
+        clearTimeout(timer);
+    }
+    scanTimers.clear();
+    
+    // 清除扫描状态
+    scanningDocs.clear();
+    updateStatusBar();
+    
+    vscode.window.showInformationMessage('已强制停止所有错别字扫描请求');
+}
+
 /**
  * 文档装饰器管理器 - 统一管理所有装饰请求，进行去重和批量应用
  */
@@ -625,6 +661,29 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
                 resetParagraphsSync(docKey);
             }
             await scheduleScan(editor.document, { force: true });
+        }),
+        vscode.commands.registerCommand('andrea.typo.rescanCurrentFile', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { vscode.window.showInformationMessage('没有活动编辑器'); return; }
+            const docKey = editor.document.uri.toString();
+            
+            // 先清除当前文件的装饰和诊断，避免新旧装饰叠加
+            diagnosticCollection.delete(editor.document.uri);
+            clearDocDecorations(editor.document);
+            
+            // 只清除当前文件的段落缓存，不影响其他文件
+            try {
+                await resetParagraphs(docKey, editor.document);
+            } catch {
+                // 如果异步失败，使用同步版本作为后备
+                resetParagraphsSync(docKey);
+            }
+            await scheduleScan(editor.document, { force: true });
+            
+            vscode.window.showInformationMessage('已重新扫描当前文件的错别字');
+        }),
+        vscode.commands.registerCommand('andrea.typo.stopAllRequests', () => {
+            abortAllRequests();
         })
     );
 

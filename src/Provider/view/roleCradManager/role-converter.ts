@@ -18,6 +18,7 @@ export type JsonValue = string | number | boolean | null | string[];
 export interface BaseFieldsCommon {
     name: string;
     type: RoleType;
+    uuid?: string; // 角色唯一标识符 (UUID v7)
     color?: string;
     priority?: number;
     description?: string;
@@ -43,6 +44,7 @@ export type RoleCardModelWithId = RoleCardModel & { id?: string };
 export interface Role {
     name: string;
     type: BuiltinType | string;
+    uuid?: string;               // 角色唯一标识符 (UUID v7)
     affiliation?: string;
     aliases?: string[];
     description?: string;
@@ -65,7 +67,7 @@ export type RoleFlat = RoleWithId & Record<string, JsonValue>;
 // 后端专用/基础键：不能被动态键覆盖，也不应出现在 extended/custom
 const BACKEND_ONLY_KEYS = new Set(['wordSegmentFilter', 'packagePath', 'sourcePath']);
 const BASE_KEYS = new Set([
-    'id', 'name', 'type', 'description', 'color', 'affiliation', 'aliases',
+    'id', 'name', 'type', 'uuid', 'description', 'color', 'affiliation', 'aliases',
     'regex', 'regexFlags', 'priority', 'fixes', 'fixs',
     ...BACKEND_ONLY_KEYS,
 ]);
@@ -171,6 +173,7 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
     const base: BaseFieldsCommon = {
         name: role.name,
         type: role.type,
+        uuid: role.uuid,
         color: role.color,
         priority: role.priority,
         description: role.description,
@@ -235,6 +238,7 @@ export function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: R
     const setIf = <K extends keyof RoleFlat>(key: K, val: unknown) => {
         if (!isEmptyish(val)) {(out as any)[key] = val;}
     };
+    setIf('uuid', base.uuid);
     setIf('affiliation', base.affiliation);
     setIf('aliases', toStringArray(base.aliases));
     setIf('description', base.description);

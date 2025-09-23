@@ -577,6 +577,16 @@
         "category": "Andrea Novel Helper"
       },
       {
+        "command": "andrea.typo.rescanCurrentFile",
+        "title": "重新扫描当前文件错别字",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.typo.stopAllRequests",
+        "title": "强制停止所有错别字扫描请求",
+        "category": "Andrea Novel Helper"
+      },
+      {
         "command": "andrea.webdav.manageAccounts",
         "title": "WebDAV 账户管理"
       },

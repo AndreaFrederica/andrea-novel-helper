@@ -7,6 +7,8 @@ export interface Role {
 	name: string;
 	/** 角色类型：主角、配角、联动角色、正则表达式等 */
 	type: '主角' | '配角' | '联动角色' | '敏感词' | '词汇' | '正则表达式' | string;
+	/** 角色唯一标识符 (UUID v7) */
+	uuid?: string;
 	/** 从属标签，如所属阵营、组织等 */
 	affiliation?: string;
 	/** 可选别名数组 */

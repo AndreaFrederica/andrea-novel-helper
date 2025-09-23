@@ -15,6 +15,7 @@ export const FIELD_ALIASES: { [key: string]: string } = {
     'name': '名称',
     'description': '描述',
     'type': '类型',
+    'uuid': 'UUID',
     'color': '颜色',
     'affiliation': '从属',
     'alias': '别名',
@@ -279,6 +280,9 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
             break;
         case 'type':
             role.type = stripMarkdown(processedContent);
+            break;
+        case 'uuid':
+            role.uuid = stripMarkdown(processedContent);
             break;
         case 'color': {
             // 提取和验证颜色格式
