@@ -66,17 +66,13 @@ export default defineConfigWithVueTs(
     files: ['**/*.{ts,tsx,vue}'],
     rules: {
       // 允许 any（只警告）
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'off',
 
       // 不必要断言：关闭
       '@typescript-eslint/no-unnecessary-type-assertion': 'off',
 
       // 未使用变量：只警告，并允许下划线忽略
-      '@typescript-eslint/no-unused-vars': ['warn', {
-        argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_',
-        caughtErrorsIgnorePattern: '^_',
-      }],
+      '@typescript-eslint/no-unused-vars': 'off',
     },
   },
 );

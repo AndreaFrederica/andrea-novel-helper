@@ -54,6 +54,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "andrea.relationshipJson5Editor",
+        "displayName": "角色关系 JSON5 编辑器",
+        "selector": [
+          {
+            "filenamePattern": "**/*relationship*.json5"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "configurationDefaults": {

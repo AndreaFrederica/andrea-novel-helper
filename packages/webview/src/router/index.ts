@@ -33,5 +33,21 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     history: createHistory(process.env.VUE_ROUTER_BASE),
   });
 
+  // 处理VS Code注入的初始路由
+  Router.beforeEach((to, from, next) => {
+    // 只在首次导航时检查初始路由
+    if (from.name === undefined) {
+      const globalWindow = window as unknown as Record<string, unknown>;
+      if (globalWindow.__vscode_initial_route__) {
+        const initialRoute = globalWindow.__vscode_initial_route__ as string;
+        if (initialRoute !== to.path) {
+          next(initialRoute);
+          return;
+        }
+      }
+    }
+    next();
+  });
+
   return Router;
 });
