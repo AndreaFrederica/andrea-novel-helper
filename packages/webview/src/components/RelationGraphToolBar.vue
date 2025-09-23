@@ -154,13 +154,21 @@ const startAddNode = (e: MouseEvent | Event) => {
       },
       onCreateNode: (x: number, y: number) => {
         console.log('New node created at:', x, y);
-        const newId = newNodeIdIndex.value++;
+        
+        // 获取当前图中所有节点的数字ID，找到最大值
+        const currentData = relationGraph.value?.getGraphJsonData();
+        const existingIds = currentData?.nodes?.map(node => parseInt(node.id)).filter(id => !isNaN(id)) || [];
+        const nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+        
         const newNode = {
-          id: 'newNode-' + newId,
-          text: '新节点 ' + newId,
+          id: nextId.toString(),
+          text: '新节点 ' + nextId,
           color: '#5da0f8',
           x: x - 50,
-          y: y - 50
+          y: y - 50,
+          data: {
+            roleUuid: undefined // 新创建的节点暂时没有关联角色
+          }
         };
         console.log('Adding node:', newNode);
         relationGraph.value?.addNodes([newNode]);

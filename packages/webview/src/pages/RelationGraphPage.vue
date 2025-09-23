@@ -438,7 +438,268 @@ const checkedIsGoodman = ref<string>('');
 const relCheckList = ref<string[]>([]);
 const allRelType = ref<string[]>([]);
 
+// VSCode通信相关变量和函数
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// 使用ref创建安全的VSCode通信接口
+const vscodeApi = ref<{
+  postMessage: (message: any) => void;
+  addEventListener: (type: string, listener: (event: MessageEvent) => void) => void;
+  removeEventListener: (type: string, listener: (event: MessageEvent) => void) => void;
+} | null>(null);
+
+// 初始化VSCode API - 完全不依赖window
+function initVSCodeApi() {
+  // 尝试获取VSCode webview API
+  const vscode = (globalThis as any).acquireVsCodeApi?.();
+  
+  if (vscode) {
+    // 使用VSCode原生API
+    vscodeApi.value = {
+      postMessage: (message: any) => {
+        vscode.postMessage(message);
+      },
+      addEventListener: (type: string, listener: (event: MessageEvent) => void) => {
+        // VSCode webview使用全局事件监听
+        globalThis.addEventListener?.(type, listener as EventListener);
+      },
+      removeEventListener: (type: string, listener: (event: MessageEvent) => void) => {
+        globalThis.removeEventListener?.(type, listener as EventListener);
+      }
+    };
+  } else {
+    // 降级方案：使用globalThis而不是window
+    const global = globalThis as any;
+    if (global.parent?.postMessage) {
+      vscodeApi.value = {
+        postMessage: (message: any) => {
+          global.parent.postMessage(message, '*');
+        },
+        addEventListener: (type: string, listener: (event: MessageEvent) => void) => {
+          global.addEventListener?.(type, listener as EventListener);
+        },
+        removeEventListener: (type: string, listener: (event: MessageEvent) => void) => {
+          global.removeEventListener?.(type, listener as EventListener);
+        }
+      };
+    }
+  }
+}
+
+// 处理来自VSCode的消息
+function handleVSCodeMessage(event: MessageEvent) {
+  const message = event.data;
+  console.log('收到VSCode消息:', message);
+  
+  switch (message.type) {
+    case 'relationshipData':
+      // 接收到关系数据，更新图表
+      console.log('收到关系数据:', message.data);
+      if (message.data) {
+        void loadRelationshipData(message.data);
+      } else {
+        console.log('关系数据为空，显示空图表');
+        // 如果没有数据，显示空图表
+        void loadRelationshipData({ nodes: [], lines: [] });
+      }
+      break;
+    case 'saveSuccess':
+      $q.notify({
+        type: 'positive',
+        message: '关系图数据已保存',
+        position: 'top',
+      });
+      break;
+    case 'saveError':
+      $q.notify({
+        type: 'negative',
+        message: '保存失败: ' + (message.error || '未知错误'),
+        position: 'top',
+      });
+      break;
+    default:
+      console.log('收到未知消息类型:', message.type);
+  }
+}
+
+// 向VSCode请求关系数据
+function requestRelationshipData() {
+  console.log('请求关系数据...');
+  if (vscodeApi.value?.postMessage) {
+    vscodeApi.value.postMessage({
+      type: 'requestRelationshipData'
+    });
+    console.log('已发送requestRelationshipData消息');
+  } else {
+    console.log('无法发送消息：VSCode API不可用');
+  }
+}
+
+// 加载关系数据到图表
+async function loadRelationshipData(data: RGJsonData) {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    // 确保数据格式正确
+    if (!data.nodes) data.nodes = [];
+    if (!data.lines) data.lines = [];
+    
+    // 为节点设置默认属性
+    data.nodes.forEach((node: any) => {
+      if (!node.data) {
+        node.data = {};
+      }
+      if (!node.data.sexType) {
+        node.data.sexType = 'other';
+      }
+      if (node.data.isGoodMan === undefined) {
+        node.data.isGoodMan = 'other';
+      }
+    });
+
+    // 为连线设置默认属性
+    data.lines.forEach((line: any) => {
+      if (!line.data) {
+        line.data = {};
+      }
+      if (!line.data.type) {
+        line.data.type = '其他关系';
+      }
+      if (!line.text || line.text === '') {
+        line.text = line.data.type;
+      }
+    });
+
+    // 手动添加节点和连线，避免自动布局
+    graphInstance.addNodes(data.nodes);
+    graphInstance.addLines(data.lines);
+    // rootNode 属性可能不存在于当前版本的 relation-graph-vue3 中
+    // if (data.rootId) {
+    //   graphInstance.rootNode = graphInstance.getNodeById(data.rootId);
+    // }
+    // 不调用 doLayout()，直接移动到中心和缩放适应
+    graphInstance.moveToCenter?.();
+    graphInstance.zoomToFit?.();
+    await updateJsonTextFromGraph();
+    updateNodesList();
+    
+    $q.notify({
+      type: 'positive',
+      message: '关系数据已加载',
+      position: 'top',
+    });
+  } catch (err) {
+    console.error('加载关系数据失败:', err);
+    $q.notify({
+      type: 'negative',
+      message: '加载关系数据失败: ' + String(err),
+      position: 'top',
+    });
+  }
+}
+
+// 深度清理对象，移除所有不可序列化的属性
+function deepCleanObject(obj: any, visited = new WeakSet()): any {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  
+  // 防止循环引用
+  if (visited.has(obj)) {
+    return null;
+  }
+  visited.add(obj);
+  
+  // 过滤不可序列化的对象类型
+  if (obj instanceof HTMLElement || 
+      obj instanceof Node || 
+      obj instanceof Window ||
+      obj instanceof Document ||
+      typeof obj === 'function') {
+    return null;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => deepCleanObject(item, visited)).filter(item => item !== null);
+  }
+  
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    // 跳过不需要的属性
+    if (key.startsWith('_') || 
+        key.startsWith('$') ||
+        key === 'seeks_id' ||
+        key === 'fromNode' ||
+        key === 'toNode' ||
+        key === 'relations' ||
+        key === 'el' ||
+        key === 'dom' ||
+        key === 'element' ||
+        typeof value === 'function') {
+      continue;
+    }
+    
+    const cleanedValue = deepCleanObject(value, visited);
+    if (cleanedValue !== null) {
+      cleaned[key] = cleanedValue;
+    }
+  }
+  
+  return cleaned;
+}
+
+// 保存关系数据到VSCode
+function saveRelationshipData() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    const rawData = graphInstance.getGraphJsonData();
+    console.log('原始数据:', rawData);
+    
+    // 使用深度清理函数
+    const cleanData = deepCleanObject(rawData);
+    console.log('清理后数据:', cleanData);
+    
+    if (vscodeApi.value?.postMessage) {
+      vscodeApi.value.postMessage({
+        type: 'saveRelationshipData',
+        data: cleanData
+      });
+      
+      $q.notify({
+        type: 'positive',
+        message: '数据保存成功',
+        position: 'top',
+      });
+    }
+  } catch (err) {
+    console.error('保存关系数据失败:', err);
+    $q.notify({
+      type: 'negative',
+      message: '保存失败: ' + String(err),
+      position: 'top',
+    });
+  }
+}
+
+// 延迟保存功能（防抖）
+function scheduleSave() {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  
+  saveTimeout = setTimeout(() => {
+    saveRelationshipData();
+    saveTimeout = null;
+  }, 2000); // 2秒后自动保存
+}
+
 onMounted(() => {
+  // 初始化VSCode API
+  initVSCodeApi();
+  
   // 禁用画布区域的默认右键菜单
   // const wrapper = graphWrapperRef.value;
   // if (wrapper) {
@@ -447,76 +708,96 @@ onMounted(() => {
   //     return false;
   //   });
   // }
-  void showGraph();
+  
+  // 设置VSCode消息监听器
+  if (vscodeApi.value?.addEventListener) {
+    vscodeApi.value.addEventListener('message', handleVSCodeMessage);
+  }
+  
+  // 只请求后端数据，不加载测试数据
+  requestRelationshipData();
+  
+  // 注释掉开发模式的测试数据加载
+  // 如果需要在开发环境中测试，可以通过其他方式加载测试数据
+  // if (!window.parent || window.parent === window) {
+  //   console.log('开发模式：显示示例数据');
+  //   void showGraph();
+  // }
 });
 
 const showGraph = async () => {
   const __graph_json_data: RGJsonData = {
-    rootId: 'a',
+    rootId: '1',
     nodes: [
       {
-        id: 'a',
+        id: '1',
         text: '主角',
         borderColor: 'yellow',
         x: 0,
         y: 0,
-        data: { sexType: 'male', isGoodMan: true }
+        data: { sexType: 'male', isGoodMan: true, roleUuid: 'role-uuid-a' }
       },
       {
-        id: 'b',
+        id: '2',
         text: '女主',
         color: '#43a2f1',
         fontColor: 'yellow',
         x: 120,
         y: -40,
-        data: { sexType: 'female', isGoodMan: true }
+        data: { sexType: 'female', isGoodMan: true, roleUuid: 'role-uuid-b' }
       },
       {
-        id: 'c',
+        id: '3',
         text: '反派',
         nodeShape: 1,
         width: 80,
         height: 60,
         x: -100,
         y: 100,
-        data: { sexType: 'male', isGoodMan: false }
+        data: { sexType: 'male', isGoodMan: false, roleUuid: 'role-uuid-c' }
       },
       {
-        id: 'd',
+        id: '4',
         text: '配角1',
         nodeShape: 0,
         width: 100,
         height: 100,
         x: 220,
         y: 120,
-        data: { sexType: 'female', isGoodMan: true }
+        data: { sexType: 'female', isGoodMan: true, roleUuid: 'role-uuid-d' }
       },
       {
-        id: 'e',
+        id: '5',
         text: '配角2',
         nodeShape: 0,
         width: 150,
         height: 150,
         x: -200,
         y: -80,
-        data: { sexType: 'male', isGoodMan: true }
+        data: { sexType: 'male', isGoodMan: true, roleUuid: 'role-uuid-e' }
       },
     ],
     lines: [
-      { from: 'a', to: 'b', text: '恋人关系', color: '#43a2f1', data: { type: '恋人关系' } },
-      { from: 'a', to: 'c', text: '敌对关系', data: { type: '敌对关系' } },
-      { from: 'a', to: 'd', text: '朋友关系', data: { type: '朋友关系' } },
-      { from: 'a', to: 'e', text: '师徒关系', data: { type: '师徒关系' } },
-      { from: 'b', to: 'e', text: '闺蜜关系', color: '#67C23A', data: { type: '朋友关系' } },
-      { from: 'c', to: 'd', text: '其他关系', data: { type: '其他关系' } },
-      { from: 'c', to: 'd', text: '其他关系', data: { type: '其他关系' } },
+      { from: '1', to: '2', text: '恋人关系', color: '#43a2f1', data: { type: '恋人关系' } },
+      { from: '1', to: '3', text: '敌对关系', data: { type: '敌对关系' } },
+      { from: '1', to: '4', text: '朋友关系', data: { type: '朋友关系' } },
+      { from: '1', to: '5', text: '师徒关系', data: { type: '师徒关系' } },
+      { from: '2', to: '5', text: '闺蜜关系', color: '#67C23A', data: { type: '朋友关系' } },
+      { from: '3', to: '4', text: '其他关系', data: { type: '其他关系' } },
+      { from: '3', to: '4', text: '其他关系', data: { type: '其他关系' } },
     ],
   };
 
   const graphInstance = graphRef.value?.getInstance();
   if (graphInstance) {
-    // setJsonData 与 moveToCenter 非 Promise；zoomToFit 返回 Promise
-    await graphInstance.setJsonData(__graph_json_data, false);
+    // 手动添加节点和连线，避免自动布局
+    graphInstance.addNodes(__graph_json_data.nodes);
+    graphInstance.addLines(__graph_json_data.lines);
+    // rootNode 属性可能不存在于当前版本的 relation-graph-vue3 中
+    // if (__graph_json_data.rootId) {
+    //   graphInstance.rootNode = graphInstance.getNodeById(__graph_json_data.rootId);
+    // }
+    // 不调用 doLayout()，直接移动到中心和缩放适应
     graphInstance.moveToCenter?.();
     graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
@@ -589,7 +870,7 @@ function changeLineColor() {
 
   function updateLineColor(newColor: string) {
     if (!line) return;
-    
+
     // 设置连线颜色
     line.color = newColor;
 
@@ -633,10 +914,10 @@ function changeRelationLiteral() {
 
   function updateRelationLiteral(newLiteral: string) {
     if (!line) return;
-    
+
     // 获取当前关系类型
     const currentType = (line.data as Record<string, unknown>)?.['type'] as string || '其他关系';
-    
+
     // 设置新的显示文本
     if (newLiteral) {
       line.text = `${newLiteral}\n（${currentType}）`;
@@ -679,6 +960,8 @@ function onNodeDragging(_node?: RGNode, _newX?: number, _newY?: number, _e?: RGU
 // 拖拽结束后：再做一次最终同步
 function onNodeDragEnd(_node?: RGNode, _e?: RGUserEvent) {
   void updateJsonTextFromGraph();
+  // 拖拽结束后自动保存
+  scheduleSave();
 }
 
 // ---- 处理连线双击以编辑文本 ----
@@ -733,6 +1016,8 @@ function onLineClick(line: RGLine, _link: RGLink, _e: RGUserEvent) {
       try {
         void updateJsonTextFromGraph();
         updateNodesList(); // 更新关系类型列表
+        // 连线关系修改后自动保存
+        scheduleSave();
         $q.notify({
           type: 'positive',
           message: `关系已更新为: ${newType}`,
@@ -847,7 +1132,7 @@ async function openContextMenu(
     currentNode.value = null;
 
     await nextTick();
-    // 不需要操控 v-model；交给 Quasar 自己管理开合
+    // 不需要操控 v-model；handed Quasar 自己管理开合
     linkMenuRef.value?.hide?.(); // 保守：确保上一次已关闭
     linkMenuRef.value?.show(eventForMenu); // ✅ 用事件坐标定位
     return;
@@ -964,7 +1249,7 @@ function editNodeText() {
 
   function updateNodeInfo(newText: string, newSex: string) {
     if (!node) return;
-    
+
     const graphInstance = graphRef.value?.getInstance();
     if (!graphInstance) return;
 
@@ -1021,15 +1306,20 @@ function addNewNode() {
   const graphInstance = graphRef.value?.getInstance();
   if (!graphInstance) return;
 
-  const newNodeId = 'node_' + Date.now();
+  // 获取当前所有节点，生成下一个数字ID
+  const currentData = graphInstance.getGraphJsonData();
+  const existingIds = currentData.nodes.map(node => parseInt(node.id)).filter(id => !isNaN(id));
+  const nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+
   const newNode = {
-    id: newNodeId,
+    id: nextId.toString(),
     text: '新节点',
     x: contextMenuPosition.value.x - 300, // 相对于画布的位置
     y: contextMenuPosition.value.y - 100,
     data: {
       sexType: 'other', // 默认性别为其他
-      isGoodMan: 'other'  // 默认为其他角色
+      isGoodMan: 'other',  // 默认为其他角色
+      roleUuid: undefined // 新创建的节点暂时没有关联角色
     }
   };
 
@@ -1179,6 +1469,8 @@ async function updateJsonTextFromGraph() {
   try {
     const data = graphInstance.getGraphJsonData();
     jsonText.value = JSON.stringify(data, null, 2);
+    // 触发自动保存
+    scheduleSave();
     // 保证函数包含 await，以符合 async 定义并消除编译/lint 警告（该 await 无副作用，仅做微任务调度）
     await Promise.resolve();
   } catch (err) {
@@ -1195,7 +1487,14 @@ async function applyJsonReplace() {
     if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.lines)) {
       throw new Error('JSON结构无效，需要包含nodes[]与lines[]');
     }
-    await graphInstance.setJsonData(parsed, false);
+    // 手动添加节点和连线，避免自动布局
+    graphInstance.addNodes(parsed.nodes);
+    graphInstance.addLines(parsed.lines);
+    // rootNode 属性可能不存在于当前版本的 relation-graph-vue3 中
+    // if (parsed.rootId) {
+    //   graphInstance.rootNode = graphInstance.getNodeById(parsed.rootId);
+    // }
+    // 不调用 doLayout()，直接缩放适应
     graphInstance.zoomToFit?.();
     await updateJsonTextFromGraph();
     updateNodesList(); // 更新节点列表
@@ -1464,7 +1763,7 @@ function changeRelationType() {
 
   function updateRelationType(newType: string) {
     if (!line) return;
-    
+
     if (!line.data) {
       line.data = {};
     }
@@ -1479,6 +1778,8 @@ function changeRelationType() {
     try {
       void updateJsonTextFromGraph();
       updateNodesList(); // 更新关系类型列表
+      // 关系类型修改后自动保存
+      scheduleSave();
       $q.notify({
         type: 'positive',
         message: `关系类型已更新为: ${newType}`,
@@ -1490,13 +1791,21 @@ function changeRelationType() {
   }
 }
 
-// 组件卸载时清理定时器
+// 组件卸载时清理定时器和事件监听器
 onUnmounted(() => {
   if (draggingUpdateTimer.value) {
     clearTimeout(draggingUpdateTimer.value);
   }
   if (longPressTimer.value) {
     clearTimeout(longPressTimer.value);
+  }
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  
+  // 移除VSCode消息监听器
+  if (vscodeApi.value?.removeEventListener) {
+    vscodeApi.value.removeEventListener('message', handleVSCodeMessage);
   }
 });
 
@@ -1602,8 +1911,7 @@ onUnmounted(() => {
 .body--dark .json-pane {
   background: #1f1f1f;
   border-color: #333;
-}
-.json-pane-header {
+}.json-pane-header {
   font-size: 13px;
   color: #666;
   margin-bottom: 8px;
@@ -1692,3 +2000,6 @@ onUnmounted(() => {
   opacity: 1;
 }
 </style>
+
+
+
