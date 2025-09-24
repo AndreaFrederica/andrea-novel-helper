@@ -101,47 +101,47 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
         const autoSaveMode = this.getAutoSaveMode(document);
         console.log(`[scheduleWrite] Auto save mode: ${autoSaveMode}`);
 
+        // 设置静音时间，防止文档变更触发updateWebview
+        const muteTime = Date.now() + (autoSaveMode === 'off' ? 1500 : 800);
+        console.log(`[scheduleWrite] Set refresh mute until: ${muteTime}`);
+        this.refreshMuteUntil.set(key, muteTime);
+
+        const fullRange = new vscode.Range(
+            document.positionAt(0),
+            document.positionAt(document.getText().length)
+        );
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(document.uri, fullRange, text);
+        
         if (autoSaveMode === 'off') {
-            // 手动保存模式：缓存文本，等待用户保存
-            console.log(`[scheduleWrite] Caching text for manual save (${text.length} chars)`);
+            // 手动保存模式：立即应用编辑以触发未保存状态，同时缓存文本
+            console.log(`[scheduleWrite] Applying edit for manual save to trigger dirty state (${text.length} chars)`);
             this.pendingText.set(key, text);
         } else {
             // 自动保存模式：直接应用编辑
             console.log(`[scheduleWrite] Applying edit for autosave (${text.length} chars)`);
-            
-            // 设置静音时间，防止文档变更触发updateWebview
-            const muteTime = Date.now() + 800; // 自动保存用较短的静音时间
-            console.log(`[scheduleWrite] Set refresh mute until: ${muteTime} (for autosave)`);
-            this.refreshMuteUntil.set(key, muteTime);
-
-            const fullRange = new vscode.Range(
-                document.positionAt(0),
-                document.positionAt(document.getText().length)
-            );
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(document.uri, fullRange, text);
-            
-            const applyEditPromise = vscode.workspace.applyEdit(edit);
-            applyEditPromise.then(success => {
-                if (success) {
-                    console.log(`[scheduleWrite] WorkspaceEdit applied successfully`);
-                } else {
-                    console.error(`[scheduleWrite] WorkspaceEdit failed`);
-                }
-                // 清理静音设置
-                setTimeout(() => {
-                    console.log(`[scheduleWrite] Clearing refresh mute for ${key}`);
-                    this.refreshMuteUntil.delete(key);
-                }, 100);
-            }, (error: any) => {
-                console.error(`[scheduleWrite] WorkspaceEdit error:`, error);
-                // 清理静音设置
-                setTimeout(() => {
-                    console.log(`[scheduleWrite] Clearing refresh mute for ${key} (error)`);
-                    this.refreshMuteUntil.delete(key);
-                }, 100);
-            });
         }
+        
+        const applyEditPromise = vscode.workspace.applyEdit(edit);
+        applyEditPromise.then(success => {
+            if (success) {
+                console.log(`[scheduleWrite] WorkspaceEdit applied successfully`);
+            } else {
+                console.error(`[scheduleWrite] WorkspaceEdit failed`);
+            }
+            // 清理静音设置
+            setTimeout(() => {
+                console.log(`[scheduleWrite] Clearing refresh mute for ${key}`);
+                this.refreshMuteUntil.delete(key);
+            }, 100);
+        }, (error: any) => {
+            console.error(`[scheduleWrite] WorkspaceEdit error:`, error);
+            // 清理静音设置
+            setTimeout(() => {
+                console.log(`[scheduleWrite] Clearing refresh mute for ${key} (error)`);
+                this.refreshMuteUntil.delete(key);
+            }, 100);
+        });
 
         // 清理旧的保存定时器
         const existingTimer = this.saveTimers.get(key);

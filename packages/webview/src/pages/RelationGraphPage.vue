@@ -372,6 +372,13 @@
       </transition>
     </div>
   </div>
+
+  <!-- 节点编辑对话框 -->
+  <NodeEditDialog
+    v-model="showEditDialog"
+    :initial-data="editDialogData"
+    @submit="handleNodeEditSubmit"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -388,6 +395,7 @@ import RelationGraph, {
   type RGPosition,
 } from 'relation-graph-vue3';
 import RelationGraphToolBar from '../components/RelationGraphToolBar.vue';
+import NodeEditDialog from '../components/NodeEditDialog.vue';
 import { useQuasar } from 'quasar';
 import type { QMenu } from 'quasar';
 
@@ -401,6 +409,16 @@ const graphOptions: RGOptions = {
   defaultJunctionPoint: 'border',
   // 禁用自动布局，优先保留JSON中的x、y位置
   allowAutoLayoutIfSupport: false,
+  // 确保节点文本显示
+  defaultNodeShape: 0,
+  defaultNodeBorderWidth: 1,
+  defaultNodeColor: '#f0f0f0',
+  defaultNodeFontColor: '#333333',
+  defaultShowLineLabel: true,
+  defaultLineColor: '#666666',
+  // 节点文本显示配置
+  // nodeTextPosition: 'center', // 文本在节点中心显示
+  // showNodeText: true, // 确保显示节点文本
 };
 
 const graphRef = ref<RelationGraphComponent>();
@@ -431,6 +449,16 @@ const currentNode = ref<RGNode | null>(null);
 const contextMenuPosition = ref({ x: 0, y: 0 });
 const graphWrapperRef = ref<HTMLElement | null>(null);
 const menuTarget = computed(() => graphWrapperRef.value ?? true);
+
+// 节点编辑对话框状态
+const showEditDialog = ref(false);
+const editDialogData = ref({
+  text: '',
+  sexType: 'other',
+  shape: 'circle',
+  size: 60,
+  roleUuid: ''
+});
 
 // 示例中的属性过滤状态
 const checkedSex = ref<string>('');
@@ -1195,82 +1223,140 @@ function editNodeText() {
   const node = currentNode.value;
   if (!node) return;
 
-  const currentSex = (node.data as Record<string, unknown>)?.['sexType'] as string || 'other';
+  const nodeData = (node.data as Record<string, unknown>) || {};
+  const currentSex = nodeData['sexType'] as string || 'other';
+  const currentShape = nodeData['shape'] as string || 'circle';
+  const currentSize = nodeData['size'] as number || 60;
+  const currentRoleUuid = nodeData['roleUuid'] as string || '';
 
-  $q.dialog({
-    title: '编辑节点',
-    message: '请编辑节点信息：',
-    html: true,
-    prompt: {
-      model: String(node.text ?? ''),
-      type: 'text',
-      label: '节点名称'
-    },
-    options: {
-      type: 'radio',
-      model: currentSex,
-      items: [
-        { label: '男性', value: 'male' },
-        { label: '女性', value: 'female' },
-        { label: '无', value: 'none' },
-        { label: '其他', value: 'other' },
-        { label: '自定义...', value: 'custom' }
-      ]
-    },
-    cancel: true,
-    persistent: true,
-  }).onOk((result: { prompt: string, options: string }) => {
-    const newText = result.prompt;
-    const selectedSex = result.options;
+  // 设置对话框数据并显示
+  editDialogData.value = {
+    text: String(node.text ?? ''),
+    sexType: currentSex,
+    shape: currentShape,
+    size: currentSize,
+    roleUuid: currentRoleUuid
+  };
+  
+  showEditDialog.value = true;
+}
 
-    if (selectedSex === 'custom') {
-      // 显示自定义性别输入对话框
-      $q.dialog({
-        title: '自定义性别',
-        message: '请输入自定义性别：',
-        prompt: {
-          model: '',
-          type: 'text',
-          placeholder: '例如：跨性别者'
-        },
-        cancel: true,
-        persistent: true,
-      }).onOk((customSex: string) => {
-        if (customSex && customSex.trim()) {
-          updateNodeInfo(newText, customSex.trim());
-        } else {
-          updateNodeInfo(newText, selectedSex);
-        }
-      });
-    } else {
-      updateNodeInfo(newText, selectedSex);
-    }
-  });
+// 处理节点编辑提交
+function handleNodeEditSubmit(newData: {
+  text: string;
+  sexType: string;
+  shape: string;
+  size: number;
+  roleUuid: string;
+}) {
+  const node = currentNode.value;
+  if (!node) return;
+  
+  updateNodeInfo(node, newData);
+}
 
-  function updateNodeInfo(newText: string, newSex: string) {
-    if (!node) return;
+// 更新节点信息
+function updateNodeInfo(node: any, newData: {
+  text: string;
+  sexType: string;
+  shape: string;
+  size: number;
+  roleUuid: string;
+}) {
+  if (!node) return;
 
-    const graphInstance = graphRef.value?.getInstance();
-    if (!graphInstance) return;
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
 
-    // 更新节点文本和性别
-    node.text = newText;
+  try {
+    // 更新节点属性
+    node.text = newData.text;
+    
+    // 确保 data 对象存在
     if (!node.data) {
       node.data = {};
     }
-    (node.data as Record<string, unknown>)['sexType'] = newSex;
-
-    try {
-      void updateJsonTextFromGraph();
-      updateNodesList(); // 更新节点列表
-      $q.notify({
-        type: 'positive',
-        message: `节点信息已更新：${newText}（${newSex}）`,
-        position: 'top',
-      });
-    } catch (err) {
-      console.warn('图刷新失败，但信息已更新到对象上。', err);
+    
+    const nodeData = node.data as Record<string, unknown>;
+    nodeData['sexType'] = newData.sexType;
+    nodeData['shape'] = newData.shape;
+    nodeData['size'] = newData.size;
+    
+    // 只有当 roleUuid 不为空时才设置
+    if (newData.roleUuid) {
+      nodeData['roleUuid'] = newData.roleUuid;
+    } else {
+      delete nodeData['roleUuid'];
     }
+
+    // 应用节点样式更新
+    applyNodeStyle(node, newData.shape, newData.size);
+
+    // 强制刷新图形显示
+    void graphInstance.refresh();
+    
+    // 更新JSON和节点列表
+    void updateJsonTextFromGraph();
+    updateNodesList();
+    
+    $q.notify({
+      type: 'positive',
+      message: `节点信息已更新：${newData.text}`,
+      position: 'top',
+    });
+  } catch (err) {
+    console.error('更新节点信息失败:', err);
+    $q.notify({
+      type: 'negative',
+      message: '更新节点信息失败: ' + String(err),
+      position: 'top',
+    });
+  }
+}
+
+// 应用节点样式
+function applyNodeStyle(node: any, shape: string, size: number) {
+  if (!node) return;
+
+  // 设置节点的视觉属性
+  node.width = size;
+  node.height = size;
+  
+  // 确保节点文本显示
+  if (!node.fontColor) {
+    node.fontColor = '#333333';
+  }
+  if (!node.fontSize) {
+    node.fontSize = 12;
+  }
+  
+  // 根据形状设置不同的样式
+  switch (shape) {
+    case 'circle':
+      node.nodeShape = 0; // 圆形
+      node.borderRadius = size / 2;
+      break;
+    case 'rect':
+      node.nodeShape = 1; // 矩形
+      node.borderRadius = 4;
+      break;
+    case 'diamond':
+      node.nodeShape = 2; // 菱形
+      node.borderRadius = 0;
+      break;
+    case 'ellipse':
+      node.nodeShape = 0; // 椭圆使用圆形，通过宽高比实现
+      node.borderRadius = size / 2;
+      node.width = size * 1.5; // 椭圆宽度更大
+      break;
+    default:
+      node.nodeShape = 0; // 默认圆形
+      node.borderRadius = size / 2;
+  }
+  
+  // 确保节点有默认颜色
+  if (!node.color) {
+    node.color = '#f0f0f0';
   }
 }
 
