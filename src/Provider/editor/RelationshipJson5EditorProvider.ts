@@ -8,6 +8,7 @@ import {
     RGLine
 } from './relationship-types';
 import { buildHtml } from '../utils/html-builder';
+import { roles } from '../../activate';
 
 /* =========================
    规则与工具
@@ -284,6 +285,36 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
             try {
                 if (msg.type === 'requestRelationshipData') {
                     await updateWebview();
+                } else if (msg.type === 'requestRoleList') {
+                    // 处理角色列表请求
+                    // 过滤敏感词类型的角色
+                    const filteredRoles = roles.filter((role: any) => role.type !== '敏感词');
+                    
+                    // 按包来源分类
+                    const rolesByPackage = new Map<string, any[]>();
+                    for (const role of filteredRoles) {
+                        const packagePath = role.packagePath || '默认包';
+                        if (!rolesByPackage.has(packagePath)) {
+                            rolesByPackage.set(packagePath, []);
+                        }
+                        rolesByPackage.get(packagePath)!.push(role);
+                    }
+                    
+                    // 转换为前端需要的格式
+                    const roleList = Array.from(rolesByPackage.entries()).map(([packagePath, packageRoles]) => ({
+                        packagePath,
+                        roles: packageRoles.map((role: any) => ({
+                            uuid: role.uuid,
+                            name: role.name,
+                            type: role.type,
+                            affiliation: role.affiliation,
+                            color: role.color,
+                            description: role.description
+                        }))
+                    }));
+                    
+                    console.log('[RelationshipJson5EditorProvider] Sending role list:', roleList.length, 'packages');
+                    webviewPanel.webview.postMessage({ type: 'roleList', data: roleList });
                 } else if (msg.type === 'saveRelationshipData') {
                     // 接收前端的RGJsonData格式数据
                     const rgData: RGJsonData = msg.data || { nodes: [], lines: [] };
