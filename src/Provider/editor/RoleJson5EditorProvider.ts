@@ -485,7 +485,7 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                     // 从 hoverRangesMap 反查命中角色
                     const hit = (hoverRangesMap.get(key) || []).find(h => h.range.contains(pos));
                     const r = hit?.role as Role | undefined;
-                    if (r?.sourcePath && r.sourcePath.toLowerCase().endsWith('.json5')) {
+                    if (r?.sourcePath && (r.sourcePath.toLowerCase().endsWith('.json5') || r.sourcePath.toLowerCase().endsWith('.ojson5'))) {
                         name = r.name;
                         // 用 fsPath 更稳（Windows 也 OK）
                         filePath = vscode.Uri.file(r.sourcePath).fsPath;

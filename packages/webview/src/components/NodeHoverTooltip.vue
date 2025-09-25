@@ -3,8 +3,8 @@
     v-if="visible"
     class="node-hover-tooltip"
     :style="{
-      left: `${position.x + 10}px`,
-      top: `${position.y + 10}px`,
+      left: `${position.x + (followMouse ? 10 : 0)}px`,
+      top: `${position.y + (followMouse ? 10 : 0)}px`,
       position: 'fixed',
       zIndex: 9999
     }"
@@ -12,29 +12,22 @@
     @mouseleave="$emit('tooltip-hover', false)"
   >
     <div class="tooltip-header">
-      <div class="role-name">{{ nodeData?.text || '未知节点' }}</div>
+      <div class="role-name">{{ roleInfo?.name || nodeData?.text || '未知节点' }}</div>
       <div 
-        v-if="nodeData?.color" 
+        v-if="(roleInfo?.color || nodeData?.color)" 
         class="color-swatch" 
-        :style="{ backgroundColor: nodeData.color }"
+        :style="{ backgroundColor: roleInfo?.color || nodeData?.color }"
       ></div>
     </div>
     
     <div class="tooltip-content">
-      <!-- 角色基本信息 -->
+      <!-- 角色基本信息（来自后端role，完整展示） -->
       <div v-if="roleInfo" class="role-section">
         <div class="section-title">角色信息</div>
-        <div v-if="roleInfo.description" class="info-item">
-          <strong>描述：</strong>{{ roleInfo.description }}
-        </div>
-        <div v-if="roleInfo.type" class="info-item">
-          <strong>类型：</strong>{{ roleInfo.type }}
-        </div>
-        <div v-if="roleInfo.affiliation" class="info-item">
-          <strong>阵营：</strong>{{ roleInfo.affiliation }}
-        </div>
-        <div v-if="roleInfo.aliases && roleInfo.aliases.length > 0" class="info-item">
-          <strong>别名：</strong>{{ roleInfo.aliases.join(', ') }}
+        <div v-for="(value, key) in roleBaseEntries" :key="key" class="info-item">
+          <strong>{{ baseLabel(key) }}：</strong>
+          <span v-if="Array.isArray(value)">{{ (value as any[]).join(', ') }}</span>
+          <span v-else>{{ value }}</span>
         </div>
       </div>
 
@@ -48,14 +41,22 @@
           <strong>角色性质：</strong>{{ formatGoodMan(nodeData.data.isGoodMan) }}
         </div>
         <div v-if="nodeData.data.roleUuid" class="info-item">
-          <strong>关联角色：</strong>{{ nodeData.data.roleUuid }}
+          <strong>关联角色UUID：</strong>{{ nodeData.data.roleUuid }}
         </div>
       </div>
 
-      <!-- 扩展字段 -->
+      <!-- 扩展字段（后端role.extended） -->
       <div v-if="roleInfo && roleInfo.extended && Object.keys(roleInfo.extended).length > 0" class="extended-section">
         <div class="section-title">扩展信息</div>
         <div v-for="(value, key) in roleInfo.extended" :key="key" class="info-item">
+          <strong>{{ key }}：</strong>{{ value }}
+        </div>
+      </div>
+
+      <!-- 自定义字段（后端role.custom） -->
+      <div v-if="roleInfo && roleInfo.custom && Object.keys(roleInfo.custom).length > 0" class="custom-section">
+        <div class="section-title">自定义信息</div>
+        <div v-for="(value, key) in roleInfo.custom" :key="key" class="info-item">
           <strong>{{ key }}：</strong>{{ value }}
         </div>
       </div>
@@ -91,16 +92,24 @@
             </div>
           </div>
 
-          <!-- 显示关联角色的详细信息 -->
+          <!-- 显示关联角色的详细信息（完整） -->
           <div v-if="getRelatedRoleInfo(relatedItem.node)" class="related-role-info">
-            <div v-if="getRelatedRoleInfo(relatedItem.node).description" class="related-info-item">
-              <strong>描述：</strong>{{ getRelatedRoleInfo(relatedItem.node).description }}
+            <div class="related-info-item" v-for="(value, key) in getRelatedRoleInfo(relatedItem.node)?.base" :key="key">
+              <strong>{{ baseLabel(key) }}：</strong>
+              <span v-if="Array.isArray(value)">{{ (value as any[]).join(', ') }}</span>
+              <span v-else>{{ value }}</span>
             </div>
-            <div v-if="getRelatedRoleInfo(relatedItem.node).type" class="related-info-item">
-              <strong>类型：</strong>{{ getRelatedRoleInfo(relatedItem.node).type }}
+            <div v-if="getRelatedRoleInfo(relatedItem.node)?.extended && Object.keys(getRelatedRoleInfo(relatedItem.node)!.extended!).length > 0" class="related-info-item">
+              <div class="section-title">扩展</div>
+              <div v-for="(v, k) in getRelatedRoleInfo(relatedItem.node)!.extended" :key="k">
+                <strong>{{ k }}：</strong>{{ v }}
+              </div>
             </div>
-            <div v-if="getRelatedRoleInfo(relatedItem.node).affiliation" class="related-info-item">
-              <strong>阵营：</strong>{{ getRelatedRoleInfo(relatedItem.node).affiliation }}
+            <div v-if="getRelatedRoleInfo(relatedItem.node)?.custom && Object.keys(getRelatedRoleInfo(relatedItem.node)!.custom!).length > 0" class="related-info-item">
+              <div class="section-title">自定义</div>
+              <div v-for="(v, k) in getRelatedRoleInfo(relatedItem.node)!.custom" :key="k">
+                <strong>{{ k }}：</strong>{{ v }}
+              </div>
             </div>
           </div>
         </div>
@@ -110,7 +119,7 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import type { RGNode } from 'relation-graph-vue3';
 
 // 扩展节点数据类型，包含关联节点信息
@@ -129,72 +138,131 @@ interface Props {
   nodeData: ExtendedNodeData | null;
   position: { x: number; y: number };
   roleList?: any[];
+  followMouse?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   visible: false,
   nodeData: null,
   position: () => ({ x: 0, y: 0 }),
-  roleList: () => []
+  roleList: () => [],
+  followMouse: true,
 });
 
 // 定义emits
-const emit = defineEmits<{
-  'tooltip-hover': [isHovering: boolean]
-}>();
+const emit = defineEmits<{ 'tooltip-hover': [isHovering: boolean] }>();
 
-// 根据roleUuid查找角色信息
-const roleInfo = computed(() => {
-  if (!props.nodeData?.data?.roleUuid || !props.roleList.length) {
-    return null;
+// 统一查找与规范化 role 结构（兼容后端返回的不同结构）
+type RoleLike = { uuid?: string } & Record<string, unknown>;
+function findRoleByUuid(list: any[], uuid?: string | null): RoleLike | null {
+  if (!uuid || !Array.isArray(list)) return null;
+  for (const item of list) {
+    if (item && Array.isArray((item as any).roles)) {
+      // package 分组
+      const hit = (item as any).roles.find((r: any) => r?.uuid === uuid);
+      if (hit) return hit as RoleLike;
+    } else if ((item as any)?.uuid === uuid) {
+      return item as RoleLike;
+    }
   }
-  
-  return props.roleList.find(role => role.uuid === props.nodeData?.data?.roleUuid) || null;
+  return null;
+}
+
+type NormalizedRole = {
+  uuid?: string;
+  base: Record<string, any>;
+  extended?: Record<string, any>;
+  custom?: Record<string, any>;
+};
+
+function normalizeRole(role: any): NormalizedRole {
+  if (!role) return { base: {} };
+  // 带有 base/extended/custom 的结构
+  if (role.base || role.extended || role.custom) {
+    return {
+      uuid: role.base?.uuid ?? role.uuid,
+      base: role.base ?? {},
+      extended: role.extended ?? {},
+      custom: role.custom ?? {},
+    };
+  }
+  // 扁平结构：从已知字段组装 base
+  const knownKeys = ['name', 'type', 'affiliation', 'aliases', 'color', 'priority', 'description', 'uuid'];
+  const base: Record<string, any> = {};
+  for (const k of knownKeys) {
+    if (role[k] !== undefined) base[k] = role[k];
+  }
+  return {
+    uuid: role.uuid,
+    base,
+    extended: role.extended ?? {},
+    custom: role.custom ?? {},
+  };
+}
+
+const roleInfo = computed(() => {
+  const uuid = props.nodeData?.data?.roleUuid || null;
+  const raw = findRoleByUuid(props.roleList, uuid);
+  const norm = normalizeRole(raw);
+  // 组合需要展示的平面字段
+  return {
+    name: norm.base?.name,
+    description: norm.base?.description,
+    type: norm.base?.type,
+    affiliation: norm.base?.affiliation,
+    aliases: norm.base?.aliases,
+    color: norm.base?.color,
+    extended: norm.extended,
+    custom: norm.custom,
+    base: norm.base,
+  } as Record<string, any> | null;
 });
 
-// 计算tooltip位置样式
-// const tooltipStyle = computed(() => {
-//   const offset = 10; // 偏移量，避免遮挡鼠标
-//   const style = {
-//     left: `${props.position.x + offset}px`,
-//     top: `${props.position.y + offset}px`,
-//     position: 'fixed',
-//     zIndex: 9999
-//   };
-//   return style;
-// });
+// 基本字段展示（包含所有 base 字段）
+const roleBaseEntries = computed<Record<string, any>>(() => {
+  const base = (roleInfo.value?.base ?? {}) as Record<string, any>;
+  return base;
+});
+
+function baseLabel(key: string): string {
+  const map: Record<string, string> = {
+    name: '名称',
+    type: '类型',
+    affiliation: '阵营',
+    aliases: '别名',
+    color: '颜色',
+    uuid: 'UUID',
+    description: '描述',
+    priority: '优先级'
+  };
+  return map[key] || key;
+}
 
 // 格式化性别显示
-const formatSexType = (sexType: string) => {
+function formatSexType(sexType: string) {
   const sexMap: Record<string, string> = {
-    'male': '男性',
-    'female': '女性',
-    'other': '其他',
-    '男': '男性',
-    '女': '女性'
+    male: '男性',
+    female: '女性',
+    other: '其他',
+    男: '男性',
+    女: '女性'
   };
   return sexMap[sexType] || sexType;
-};
+}
 
 // 格式化角色性质显示
-const formatGoodMan = (isGoodMan: boolean | string) => {
-  if (typeof isGoodMan === 'boolean') {
-    return isGoodMan ? '正面角色' : '反面角色';
-  }
-  if (isGoodMan === 'other') {
-    return '中性角色';
-  }
+function formatGoodMan(isGoodMan: boolean | string) {
+  if (typeof isGoodMan === 'boolean') return isGoodMan ? '正面角色' : '反面角色';
+  if (isGoodMan === 'other') return '中性角色';
   return String(isGoodMan);
-};
+}
 
-// 根据关联节点获取角色信息
-const getRelatedRoleInfo = (node: any) => {
-  if (!node?.data?.roleUuid || !props.roleList.length) {
-    return null;
-  }
-  
-  return props.roleList.find(role => role.uuid === node.data.roleUuid) || null;
-};
+// 根据关联节点获取角色信息（规范化）
+function getRelatedRoleInfo(node: any): NormalizedRole | null {
+  const uuid = node?.data?.roleUuid || null;
+  const raw = findRoleByUuid(props.roleList, uuid);
+  return raw ? normalizeRole(raw) : null;
+}
 </script>
 
 <style scoped>
@@ -245,69 +313,43 @@ const getRelatedRoleInfo = (node: any) => {
 .role-section,
 .node-section,
 .extended-section,
+.custom-section,
 .position-section,
 .related-nodes-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .section-title {
   font-weight: bold;
-  color: #ffffff;
-  font-size: 12px;
-  margin-bottom: 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #eeeeee;
+  margin-bottom: 4px;
 }
 
-.info-item {
-  font-size: 12px;
-  color: #cccccc;
-  word-wrap: break-word;
-}
-
-.info-item strong {
-  color: #ffffff;
-  font-weight: 500;
-}
-
-/* 关联节点样式 */
-.related-nodes-section {
-  border-top: 1px solid #555;
-  padding-top: 8px;
-  margin-top: 4px;
+.info-item,
+.related-info-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
 }
 
 .related-node-item {
-  background: rgba(60, 60, 60, 0.5);
-  border-radius: 4px;
-  padding: 8px;
-  margin-bottom: 6px;
-  border-left: 3px solid #007acc;
-}
-
-.related-node-item:last-child {
-  margin-bottom: 0;
+  border-top: 1px dashed #555;
+  padding-top: 6px;
+  margin-top: 6px;
 }
 
 .related-node-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.related-node-name {
-  font-weight: bold;
-  color: #ffffff;
-  font-size: 12px;
 }
 
 .related-color-swatch {
   width: 12px;
   height: 12px;
-  border-radius: 2px;
+  border-radius: 3px;
   border: 1px solid #666;
   flex-shrink: 0;
 }
@@ -315,56 +357,12 @@ const getRelatedRoleInfo = (node: any) => {
 .relationships {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 4px;
+  gap: 4px 8px;
 }
 
 .relationship-item {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  background: rgba(0, 122, 204, 0.2);
+  background: rgba(255, 255, 255, 0.06);
   padding: 2px 6px;
-  border-radius: 3px;
-  font-size: 11px;
-}
-
-.relationship-type {
-  color: #87ceeb;
-  font-weight: 500;
-}
-
-.relationship-direction {
-  color: #ffffff;
-  font-weight: bold;
-}
-
-.related-role-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.related-info-item {
-  font-size: 11px;
-  color: #bbbbbb;
-  word-wrap: break-word;
-}
-
-.related-info-item strong {
-  color: #dddddd;
-  font-weight: 500;
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .node-hover-tooltip {
-    max-width: 280px;
-    font-size: 12px;
-  }
-  
-  .role-name {
-    font-size: 13px;
-  }
+  border-radius: 4px;
 }
 </style>

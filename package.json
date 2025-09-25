@@ -51,6 +51,9 @@
         "selector": [
           {
             "filenamePattern": "**/*.json5"
+          },
+          {
+            "filenamePattern": "**/*.ojson5"
           }
         ],
         "priority": "default"
@@ -61,6 +64,9 @@
         "selector": [
           {
             "filenamePattern": "**/*relationship*.json5"
+          },
+          {
+            "filenamePattern": "**/*.rjson5"
           }
         ],
         "priority": "default"

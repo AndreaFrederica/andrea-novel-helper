@@ -144,7 +144,7 @@
             :on-contextmenu="onContextmenu"
           >
             <template #tool-bar>
-              <RelationGraphToolBar />
+              <RelationGraphToolBar @hover-mode-changed="(followMouse: boolean) => onHoverModeChanged(followMouse)" />
             </template>
           </RelationGraph>
 
@@ -402,12 +402,13 @@
     :node-data="hoverNodeData"
     :position="hoverPosition"
     :role-list="roleList"
+    :follow-mouse="hoverFollowMouse"
     @tooltip-hover="handleTooltipHover"
   />
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref, nextTick, computed, onUnmounted } from 'vue';
+import { onMounted, ref, nextTick, computed, onUnmounted, watch } from 'vue';
 import RelationGraph, {
   type RGJsonData,
   type RGOptions,
@@ -567,6 +568,18 @@ const hoverNodeData = ref<ExtendedNodeData | null>(null);
 const hoverPosition = ref({ x: 0, y: 0 });
 const isHoveringTooltip = ref(false);
 
+// 从localStorage读取hover模式设置，默认为true（跟随鼠标）
+const getStoredHoverFollowMouse = (): boolean => {
+  try {
+    const stored = localStorage.getItem('hoverFollowMouse');
+    return stored !== null ? JSON.parse(stored) : true;
+  } catch {
+    return true;
+  }
+};
+
+const hoverFollowMouse = ref(getStoredHoverFollowMouse()); // hover模式：true=跟随鼠标，false=固定在节点位置
+
 // hover 相关的定时器和状态
 const hoverTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const hoverDelay = ref(500); // 悬停延迟时间（毫秒）
@@ -708,6 +721,12 @@ function requestRoleList() {
   } else {
     console.log('无法发送消息：VSCode API不可用');
   }
+}
+
+// 处理hover模式变化
+function onHoverModeChanged(followMouse: boolean) {
+  hoverFollowMouse.value = followMouse;
+  console.log('Hover模式已切换:', followMouse ? '跟随鼠标' : '固定在节点位置');
 }
 
 // 加载关系数据到图表
@@ -942,6 +961,16 @@ onMounted(() => {
   //   void showGraph();
   // }
 });
+
+// 监听hoverFollowMouse变化并保存到localStorage
+watch(hoverFollowMouse, (newValue) => {
+  try {
+    localStorage.setItem('hoverFollowMouse', JSON.stringify(newValue));
+    console.log('💾 Hover模式已保存:', newValue ? '跟随鼠标' : '固定在节点');
+  } catch (error) {
+    console.warn('保存hover模式设置失败:', error);
+  }
+}, { immediate: false });
 
 const showGraph = async () => {
   const __graph_json_data: RGJsonData = {
@@ -2124,8 +2153,8 @@ function changeRelationType() {
 
 // Hover 相关函数
 const handleMouseMove = (event: MouseEvent) => {
-  // 只有在tooltip显示时才更新位置
-  if (showHoverTooltip.value) {
+  // 只有在tooltip显示且跟随鼠标模式时才更新位置
+  if (showHoverTooltip.value && hoverFollowMouse.value) {
     const target = event.target as HTMLElement;
     
     // 检查是否仍在节点上
@@ -2252,9 +2281,11 @@ const handleMouseOver = (event: MouseEvent) => {
 
 const handleMouseOut = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
+  const relatedTarget = event.relatedTarget as HTMLElement;
   
   console.log('🐭 Mouse out event:', {
     target: target,
+    relatedTarget: relatedTarget,
     tagName: target.tagName,
     className: target.className,
     hasRelNodeClass: target.classList.contains('rel-node'),
@@ -2265,6 +2296,19 @@ const handleMouseOut = (event: MouseEvent) => {
   
   // 检查是否离开了节点元素 - 修正类名检测
   if (target.classList.contains('rel-node') || target.classList.contains('rel-node-peel') || target.closest('.rel-node') || target.closest('.rel-node-peel')) {
+    
+    // 检查relatedTarget是否仍在同一个节点内
+    // 如果relatedTarget也在节点内，说明只是在节点内部移动，不应该隐藏tooltip
+    if (relatedTarget && (
+      relatedTarget.classList.contains('rel-node') || 
+      relatedTarget.classList.contains('rel-node-peel') || 
+      relatedTarget.closest('.rel-node') || 
+      relatedTarget.closest('.rel-node-peel')
+    )) {
+      console.log('🔄 Mouse moving within node, not hiding tooltip');
+      return; // 不隐藏tooltip
+    }
+    
     console.log('🚪 Leaving node element, clearing timer and scheduling hide');
     
     // 清除定时器
@@ -2341,10 +2385,53 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
     ...nodeData,
     relatedNodes: relatedNodes
   } as ExtendedNodeData;
-  hoverPosition.value = {
-    x: event.clientX + 10,
-    y: event.clientY - 10
-  };
+  
+  // 根据hover模式设置位置
+  if (hoverFollowMouse.value) {
+    // 跟随鼠标模式
+    hoverPosition.value = {
+      x: event.clientX + 10,
+      y: event.clientY - 10
+    };
+  } else {
+    // 固定在节点位置模式：以节点圆心为基准定位
+    const safeEscapeSelector = (id: string) => {
+      try {
+        const escapeFn = (globalThis as any)?.CSS?.escape;
+        return typeof escapeFn === 'function' ? escapeFn(id) : id;
+      } catch {
+        return id;
+      }
+    };
+
+    const escaped = safeEscapeSelector(nodeId);
+    const selectors = [
+      `[data-node-id="${escaped}"]`,
+      `[data-id="${escaped}"]`,
+      `#${escaped}`
+    ];
+    let nodeElement = document.querySelector(selectors.join(', ')) as HTMLElement | null;
+    if (!nodeElement) {
+      // 从事件目标开始向上查找匹配的节点元素
+      let cur: HTMLElement | null = event.target as HTMLElement;
+      while (cur && cur !== document.body) {
+        const vid = cur.getAttribute?.('data-node-id') || cur.getAttribute?.('data-id') || cur.id;
+        if (vid === nodeId) { nodeElement = cur; break; }
+        cur = cur.parentElement;
+      }
+    }
+
+    if (nodeElement) {
+      const rect = nodeElement.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      hoverPosition.value = { x: centerX, y: centerY };
+    } else {
+      // 回退到鼠标位置
+      hoverPosition.value = { x: event.clientX, y: event.clientY };
+    }
+  }
+  
   showHoverTooltip.value = true;
   
   console.log('✅ Hover tooltip shown:', {

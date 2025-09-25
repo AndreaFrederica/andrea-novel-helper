@@ -76,6 +76,17 @@
       >
         <q-tooltip>刷新</q-tooltip>
       </q-btn>
+
+      <q-btn
+        dense
+        round
+        :color="hoverFollowMouse ? 'positive' : 'grey-6'"
+        :icon="hoverFollowMouse ? 'mouse' : 'place'"
+        @click="() => toggleHoverMode()"
+        class="toolbar-btn"
+      >
+        <q-tooltip>{{ hoverFollowMouse ? 'Hover跟随鼠标' : 'Hover固定在节点' }}</q-tooltip>
+      </q-btn>
     </div>
   </div>
 </template>
@@ -95,6 +106,14 @@ interface GraphContext {
 const newNodeIdIndex = ref(1);
 const newLineIdIndex = ref(1);
 const graph = inject<GraphContext>(graphKey);
+
+// Hover模式状态
+const hoverFollowMouse = ref(true); // 默认跟随鼠标
+
+// 定义事件发射器
+const emit = defineEmits<{
+  'hover-mode-changed': [followMouse: boolean]
+}>();
 
 const options = computed(() => {
   return graph?.options;
@@ -257,6 +276,18 @@ const startAddLine = (e: MouseEvent | Event) => {
       position: 'top'
     });
   }
+};
+
+// 切换hover模式
+const toggleHoverMode = () => {
+  hoverFollowMouse.value = !hoverFollowMouse.value;
+  emit('hover-mode-changed', hoverFollowMouse.value);
+  
+  Notify.create({
+    type: 'info',
+    message: hoverFollowMouse.value ? 'Hover现在跟随鼠标' : 'Hover现在固定在节点位置',
+    position: 'top'
+  });
 };
 </script>
 
