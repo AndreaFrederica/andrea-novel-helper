@@ -23,6 +23,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/RelationshipEditorPage.vue'),
   },
 
+  {
+    path: '/editor-settings',
+    component: () => import('pages/EditorSettingsPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

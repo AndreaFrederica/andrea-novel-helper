@@ -349,6 +349,147 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
                         console.error('[RelationshipJson5EditorProvider] Failed to execute AndreaNovelHelper.openRoleSource command:', error);
                         vscode.window.showErrorMessage(`跳转到角色定义失败: ${error}`);
                     }
+                } else if (msg.type === 'getRoleFilePath') {
+                    // 处理获取角色文件路径的请求
+                    const roleUuid = msg.roleUuid;
+                    console.log('[RelationshipJson5EditorProvider] Received getRoleFilePath request for roleUuid:', roleUuid);
+                    
+                    if (!roleUuid) {
+                        console.warn('[RelationshipJson5EditorProvider] No roleUuid provided for getRoleFilePath');
+                        webviewPanel.webview.postMessage({ 
+                            type: 'roleFilePathError', 
+                            error: 'No roleUuid provided' 
+                        });
+                        return;
+                    }
+                    
+                    // 查找对应的角色
+                    const targetRole = roles.find((role: any) => role.uuid === roleUuid);
+                    if (!targetRole) {
+                        console.warn('[RelationshipJson5EditorProvider] Role not found for uuid:', roleUuid);
+                        webviewPanel.webview.postMessage({ 
+                            type: 'roleFilePathError', 
+                            error: `未找到UUID为 ${roleUuid} 的角色定义` 
+                        });
+                        return;
+                    }
+                    
+                    if (!targetRole.sourcePath) {
+                        console.warn('[RelationshipJson5EditorProvider] Role has no sourcePath:', targetRole.name);
+                        webviewPanel.webview.postMessage({ 
+                            type: 'roleFilePathError', 
+                            error: `角色 "${targetRole.name}" 没有源文件路径信息` 
+                        });
+                        return;
+                    }
+                    
+                    console.log('[RelationshipJson5EditorProvider] Found role file path:', targetRole.sourcePath);
+                    
+                    // 返回角色文件路径信息
+                    webviewPanel.webview.postMessage({ 
+                        type: 'roleFilePath', 
+                        filePath: targetRole.sourcePath,
+                        roleName: targetRole.name,
+                        roleUuid: targetRole.uuid
+                    });
+                } else if (msg.type === 'loadFileContent') {
+                    // 处理加载文件内容的请求
+                    const filePath = msg.filePath;
+                    console.log('[RelationshipJson5EditorProvider] Received loadFileContent request for:', filePath);
+                    
+                    if (!filePath) {
+                        console.warn('[RelationshipJson5EditorProvider] No filePath provided for loadFileContent');
+                        webviewPanel.webview.postMessage({ 
+                            type: 'fileContentError', 
+                            error: 'No filePath provided' 
+                        });
+                        return;
+                    }
+                    
+                    try {
+                        // 读取文件内容
+                        const fileUri = vscode.Uri.file(filePath);
+                        const document = await vscode.workspace.openTextDocument(fileUri);
+                        const content = document.getText();
+                        
+                        console.log('[RelationshipJson5EditorProvider] Successfully loaded file content, length:', content.length);
+                        
+                        // 返回文件内容
+                        webviewPanel.webview.postMessage({ 
+                            type: 'fileContent', 
+                            filePath: filePath,
+                            content: content
+                        });
+                    } catch (error) {
+                        console.error('[RelationshipJson5EditorProvider] Failed to load file content:', error);
+                        webviewPanel.webview.postMessage({ 
+                            type: 'fileContentError', 
+                            error: `加载文件失败: ${error instanceof Error ? error.message : String(error)}` 
+                        });
+                    }
+                } else if (msg.type === 'saveFileContent') {
+                    // 处理保存文件内容的请求
+                    const { filePath, content } = msg;
+                    console.log('[RelationshipJson5EditorProvider] Received saveFileContent request for:', filePath);
+                    
+                    if (!filePath || content === undefined) {
+                        console.warn('[RelationshipJson5EditorProvider] Missing filePath or content for saveFileContent');
+                        webviewPanel.webview.postMessage({ 
+                            type: 'fileSaveError', 
+                            error: 'Missing filePath or content' 
+                        });
+                        return;
+                    }
+                    
+                    try {
+                        // 保存文件内容
+                        const fileUri = vscode.Uri.file(filePath);
+                        const edit = new vscode.WorkspaceEdit();
+                        
+                        // 检查文件是否存在
+                        try {
+                            const document = await vscode.workspace.openTextDocument(fileUri);
+                            // 文件存在，替换全部内容
+                            const fullRange = new vscode.Range(
+                                document.positionAt(0),
+                                document.positionAt(document.getText().length)
+                            );
+                            edit.replace(fileUri, fullRange, content);
+                        } catch {
+                            // 文件不存在，创建新文件
+                            edit.createFile(fileUri, { ignoreIfExists: true });
+                            edit.insert(fileUri, new vscode.Position(0, 0), content);
+                        }
+                        
+                        // 应用编辑
+                        const success = await vscode.workspace.applyEdit(edit);
+                        
+                        if (success) {
+                            console.log('[RelationshipJson5EditorProvider] Successfully saved file content');
+                            
+                            // 保存文档
+                            try {
+                                const document = await vscode.workspace.openTextDocument(fileUri);
+                                await document.save();
+                            } catch (saveError) {
+                                console.warn('[RelationshipJson5EditorProvider] Failed to save document:', saveError);
+                            }
+                            
+                            // 返回保存成功消息
+                            webviewPanel.webview.postMessage({ 
+                                type: 'fileSaveSuccess', 
+                                filePath: filePath
+                            });
+                        } else {
+                            throw new Error('Failed to apply workspace edit');
+                        }
+                    } catch (error) {
+                        console.error('[RelationshipJson5EditorProvider] Failed to save file content:', error);
+                        webviewPanel.webview.postMessage({ 
+                            type: 'fileSaveError', 
+                            error: `保存文件失败: ${error instanceof Error ? error.message : String(error)}` 
+                        });
+                    }
                 } else if (msg.type === 'saveRelationshipData') {
                     // 接收前端的RGJsonData格式数据
                     const rgData: RGJsonData = msg.data || { nodes: [], lines: [] };

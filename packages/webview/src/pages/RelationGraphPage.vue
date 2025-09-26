@@ -107,7 +107,7 @@
                 class="action-btn"
               />
             </div>
-            
+
             <!-- 自动布局控制设置 -->
             <div class="filter-section">
               <div class="section-title">布局设置</div>
@@ -172,6 +172,19 @@
               @click="showJsonPane = !showJsonPane"
             >
               <q-tooltip>{{ showJsonPane ? '隐藏JSON面板' : '显示JSON面板' }}</q-tooltip>
+            </q-btn>
+          </div>
+
+          <!-- 编辑器设置按钮（固定在右上角，JSON按钮下方） -->
+          <div class="settings-toggle-btn">
+            <q-btn
+              dense
+              round
+              color="grey-7"
+              icon="settings"
+              @click="openEditorSettings"
+            >
+              <q-tooltip>编辑器设置</q-tooltip>
             </q-btn>
           </div>
 
@@ -317,9 +330,9 @@
                 <q-item-section>编辑节点</q-item-section>
               </q-item>
 
-              <q-item 
-                clickable 
-                v-close-popup 
+              <q-item
+                clickable
+                v-close-popup
                 @click="jumpToRoleDefinition"
                 :disable="!canJumpToRoleDefinition"
               >
@@ -327,6 +340,26 @@
                   <q-icon name="launch" color="accent" />
                 </q-item-section>
                 <q-item-section>跳转到角色定义</q-item-section>
+              </q-item>
+
+              <q-item
+                clickable
+                v-close-popup
+                @click="editRoleInEditor"
+                :disable="true"
+              >
+                <q-item-section avatar>
+                  <q-icon name="edit_note" color="grey" />
+                </q-item-section>
+                <q-item-section>
+                  <div>编辑角色</div>
+                  <div class="text-caption text-grey-6">功能开发中，请使用"跳转到角色定义"</div>
+                </q-item-section>
+                <q-tooltip class="bg-grey-8">
+                  此功能正在开发中，暂时不可用。<br/>
+                  请使用上方的"跳转到角色定义"功能进行编辑。
+                </q-tooltip>
+                <!-- TODO: 实现右键编辑角色功能 -->
               </q-item>
 
               <q-separator />
@@ -418,6 +451,20 @@
     :follow-mouse="hoverFollowMouse"
     @tooltip-hover="handleTooltipHover"
   />
+
+  <!-- 通用编辑器模态框 -->
+  <UniversalEditorModal
+    v-model="showEditorModal"
+    :file-path="editorFilePath"
+    :file-type="editorFileType"
+    :title="editorTitle"
+    @file-saved="onFileSaved"
+  />
+
+  <!-- 编辑器设置对话框 -->
+  <q-dialog v-model="showSettings">
+    <EditorSettingsDialog @close="showSettings = false" />
+  </q-dialog>
 </template>
 
 <script lang="ts" setup>
@@ -436,7 +483,10 @@ import RelationGraph, {
 import RelationGraphToolBar from '../components/RelationGraphToolBar.vue';
 import NodeEditDialog from '../components/NodeEditDialog.vue';
 import NodeHoverTooltip from '../components/NodeHoverTooltip.vue';
+import UniversalEditorModal from '../components/UniversalEditorModal.vue';
+import EditorSettingsDialog from '../components/EditorSettingsDialog.vue';
 import { useQuasar } from 'quasar';
+import { useRouter } from 'vue-router';
 import type { QMenu } from 'quasar';
 
 // 扩展节点数据类型，包含关联节点信息
@@ -451,6 +501,7 @@ interface ExtendedNodeData extends RGNode {
 }
 
 const $q = useQuasar();
+const router = useRouter();
 
 // 获取VSCode主题颜色的辅助函数
 function getVSCodeVar(name: string, fallback = ''): string {
@@ -460,10 +511,10 @@ function getVSCodeVar(name: string, fallback = ''): string {
 
 // 动态获取VSCode主题颜色
 function getVSCodeThemeColors() {
-  const isDark = document.body.classList.contains('vscode-dark') || 
+  const isDark = document.body.classList.contains('vscode-dark') ||
                  document.body.getAttribute('data-vscode-theme-kind')?.toLowerCase().includes('dark') ||
                  window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-  
+
   return {
     background: getVSCodeVar('--vscode-editor-background', isDark ? '#1e1e1e' : '#ffffff'),
     foreground: getVSCodeVar('--vscode-editor-foreground', isDark ? '#d4d4d4' : '#333333'),
@@ -484,12 +535,12 @@ function watchThemeChanges() {
     themeColors.value = getVSCodeThemeColors();
     updateGraphTheme();
   });
-  
+
   observer.observe(document.body, {
     attributes: true,
     attributeFilter: ['class', 'data-vscode-theme-kind']
   });
-  
+
   observer.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['style', 'class']
@@ -585,6 +636,14 @@ const canJumpToRoleDefinition = computed(() => {
   return roleUuid && roleUuid.trim() !== '';
 });
 
+// 计算属性：判断当前节点是否可以编辑角色
+const canEditRole = computed(() => {
+  if (!currentNode.value) return false;
+  const nodeData = currentNode.value.data as Record<string, unknown> || {};
+  const roleUuid = nodeData['roleUuid'] as string;
+  return roleUuid && roleUuid.trim() !== '';
+});
+
 // hover tooltip 状态
 const showHoverTooltip = ref(false);
 const hoverNodeData = ref<ExtendedNodeData | null>(null);
@@ -609,6 +668,15 @@ let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 const isActuallyEditing = ref(false);
 const lastSavedData = ref<string>('');
 
+// 编辑器模态框相关状态
+const showEditorModal = ref(false);
+const editorFilePath = ref<string>('');
+const editorFileType = ref<string>('');
+const editorTitle = ref<string>('编辑文件');
+
+// 编辑器设置对话框状态
+const showSettings = ref(false);
+
 // 标记开始编辑状态
 function markEditingStart() {
   console.log('🖊️ 开始编辑状态');
@@ -632,7 +700,7 @@ const vscodeApi = ref<{
 function initVSCodeApi() {
   // 尝试获取VSCode webview API
   const vscode = (globalThis as any).acquireVsCodeApi?.();
-  
+
   if (vscode) {
     // 使用VSCode原生API
     vscodeApi.value = {
@@ -670,7 +738,7 @@ function initVSCodeApi() {
 function handleVSCodeMessage(event: MessageEvent) {
   const message = event.data;
   console.log('收到VSCode消息:', message);
-  
+
   switch (message.type) {
     case 'relationshipData':
       // 接收到关系数据，更新图表
@@ -688,6 +756,16 @@ function handleVSCodeMessage(event: MessageEvent) {
       console.log('收到角色列表:', message.data);
       if (message.data) {
         roleList.value = message.data;
+      }
+      break;
+    case 'roleFilePath':
+      // 接收到角色文件路径，打开编辑器模态框
+      console.log('收到角色文件路径:', message.filePath);
+      if (message.filePath) {
+        editorFilePath.value = message.filePath;
+        editorFileType.value = getFileType(message.filePath);
+        editorTitle.value = `编辑角色 - ${getFileName(message.filePath)}`;
+        showEditorModal.value = true;
       }
       break;
     case 'saveSuccess':
@@ -750,7 +828,7 @@ async function loadRelationshipData(data: RGJsonData) {
     // 确保数据格式正确
     if (!data.nodes) data.nodes = [];
     if (!data.lines) data.lines = [];
-    
+
     // 为节点设置默认属性
     data.nodes.forEach((node: any) => {
       if (!node.data) {
@@ -794,18 +872,18 @@ async function loadRelationshipData(data: RGJsonData) {
     // 不调用 doLayout()，直接移动到中心和缩放适应
     graphInstance.moveToCenter?.();
     graphInstance.zoomToFit?.();
-    
+
     // 应用VSCode主题
     updateGraphTheme();
-    
+
     await updateJsonTextFromGraph();
     updateNodesList();
-    
+
     // 设置初始数据快照，用于后续比较
     const cleanData = deepCleanObject(data);
     lastSavedData.value = JSON.stringify(cleanData);
     console.log('📊 设置初始数据快照');
-    
+
     $q.notify({
       type: 'positive',
       message: '关系数据已加载',
@@ -826,30 +904,30 @@ function deepCleanObject(obj: any, visited = new WeakSet()): any {
   if (obj === null || typeof obj !== 'object') {
     return obj;
   }
-  
+
   // 防止循环引用
   if (visited.has(obj)) {
     return null;
   }
   visited.add(obj);
-  
+
   // 过滤不可序列化的对象类型
-  if (obj instanceof HTMLElement || 
-      obj instanceof Node || 
+  if (obj instanceof HTMLElement ||
+      obj instanceof Node ||
       obj instanceof Window ||
       obj instanceof Document ||
       typeof obj === 'function') {
     return null;
   }
-  
+
   if (Array.isArray(obj)) {
     return obj.map(item => deepCleanObject(item, visited)).filter(item => item !== null);
   }
-  
+
   const cleaned: any = {};
   for (const [key, value] of Object.entries(obj)) {
     // 跳过不需要的属性
-    if (key.startsWith('_') || 
+    if (key.startsWith('_') ||
         key.startsWith('$') ||
         key === 'seeks_id' ||
         key === 'fromNode' ||
@@ -861,13 +939,13 @@ function deepCleanObject(obj: any, visited = new WeakSet()): any {
         typeof value === 'function') {
       continue;
     }
-    
+
     const cleanedValue = deepCleanObject(value, visited);
     if (cleanedValue !== null) {
       cleaned[key] = cleanedValue;
     }
   }
-  
+
   return cleaned;
 }
 
@@ -879,23 +957,23 @@ function saveRelationshipData() {
   try {
     const rawData = graphInstance.getGraphJsonData();
     console.log('原始数据:', rawData);
-    
+
     // 使用深度清理函数
     const cleanData = deepCleanObject(rawData);
     console.log('清理后数据:', cleanData);
-    
+
     // 更新最后保存的数据快照
     lastSavedData.value = JSON.stringify(cleanData);
-    
+
     if (vscodeApi.value?.postMessage) {
       vscodeApi.value.postMessage({
         type: 'saveRelationshipData',
         data: cleanData
       });
-      
+
       // 保存成功后标记编辑结束
       markEditingEnd();
-      
+
       $q.notify({
         type: 'positive',
         message: '数据保存成功',
@@ -917,13 +995,13 @@ function scheduleSave() {
   if (saveTimeout) {
     clearTimeout(saveTimeout);
   }
-  
+
   // 检查是否真的在编辑状态
   if (!isActuallyEditing.value) {
     console.log('🚫 非编辑状态，跳过自动保存');
     return;
   }
-  
+
   // 检查数据是否真的发生了变化
   const graphInstance = graphRef.value?.getInstance();
   if (graphInstance) {
@@ -933,7 +1011,7 @@ function scheduleSave() {
       return;
     }
   }
-  
+
   console.log('⏰ 安排自动保存...');
   saveTimeout = setTimeout(() => {
     saveRelationshipData();
@@ -944,10 +1022,10 @@ function scheduleSave() {
 onMounted(() => {
   // 初始化VSCode API
   initVSCodeApi();
-  
+
   // 初始化主题监听
   watchThemeChanges();
-  
+
   // 禁用画布区域的默认右键菜单
   // const wrapper = graphWrapperRef.value;
   // if (wrapper) {
@@ -956,23 +1034,23 @@ onMounted(() => {
   //     return false;
   //   });
   // }
-  
+
   // 设置VSCode消息监听器
   if (vscodeApi.value?.addEventListener) {
     vscodeApi.value.addEventListener('message', handleVSCodeMessage);
   }
-  
+
   // 只请求后端数据，不加载测试数据
   requestRelationshipData();
-  
+
   // 请求角色列表
   requestRoleList();
-  
+
   // 初始化hover事件监听器
   void nextTick(() => {
     setupHoverEventListeners();
   });
-  
+
   // 注释掉开发模式的测试数据加载
   // 如果需要在开发环境中测试，可以通过其他方式加载测试数据
   // if (!window.parent || window.parent === window) {
@@ -1055,7 +1133,7 @@ const showGraph = async () => {
         node.color = themeColors.value.nodeColor;
       }
     });
-    
+
     // 手动添加节点和连线，避免自动布局
     graphInstance.addNodes(__graph_json_data.nodes);
     graphInstance.addLines(__graph_json_data.lines);
@@ -1285,7 +1363,7 @@ function onLineClick(line: RGLine, _link: RGLink, _e: RGUserEvent) {
       persistent: true,
     }).onOk((newType: string) => {
       markEditingStart(); // 标记开始编辑
-      
+
       const graphInstance = graphRef.value?.getInstance();
       if (!graphInstance) return;
 
@@ -1318,13 +1396,13 @@ function onNodeClick(node: RGNode, _e: RGUserEvent) {
   // 检查是否按住了Ctrl键
   const event = resolvePointerEvent(_e);
   if (!event) return;
-  
+
   const isCtrlPressed = (event as MouseEvent).ctrlKey || (event as MouseEvent).metaKey;
-  
+
   if (isCtrlPressed) {
     // Ctrl+点击时跳转到角色定义
     const roleUuid = node.data?.roleUuid as string;
-    
+
     if (!roleUuid) {
       $q.notify({
         type: 'warning',
@@ -1333,7 +1411,7 @@ function onNodeClick(node: RGNode, _e: RGUserEvent) {
       });
       return;
     }
-    
+
     if (vscodeApi.value?.postMessage) {
       vscodeApi.value.postMessage({
         command: 'jumpToRoleDefinition',
@@ -1537,7 +1615,7 @@ function editNodeText() {
     roleUuid: currentRoleUuid,
     followRole: currentFollowRole
   };
-  
+
   showEditDialog.value = true;
 }
 
@@ -1548,7 +1626,7 @@ function jumpToRoleDefinition() {
 
   const nodeData = (node.data as Record<string, unknown>) || {};
   const roleUuid = nodeData['roleUuid'] as string;
-  
+
   if (!roleUuid || roleUuid.trim() === '') {
     $q.notify({
       type: 'warning',
@@ -1575,6 +1653,75 @@ function jumpToRoleDefinition() {
   }
 }
 
+// 编辑角色
+function editRoleInEditor() {
+  const node = currentNode.value;
+  if (!node) return;
+
+  const nodeData = (node.data as Record<string, unknown>) || {};
+  const roleUuid = nodeData['roleUuid'] as string;
+
+  if (!roleUuid || roleUuid.trim() === '') {
+    $q.notify({
+      type: 'warning',
+      message: '该节点未关联角色定义',
+      position: 'top'
+    });
+    return;
+  }
+
+  // 请求VSCode获取角色文件路径
+  if (vscodeApi.value?.postMessage) {
+    vscodeApi.value.postMessage({
+      type: 'getRoleFilePath',
+      roleUuid: roleUuid
+    });
+    console.log('请求角色文件路径:', roleUuid);
+  } else {
+    console.log('无法发送消息：VSCode API不可用');
+    $q.notify({
+      type: 'negative',
+      message: '无法连接到VSCode',
+      position: 'top'
+    });
+  }
+}
+
+// 打开编辑器设置页面
+function openEditorSettings() {
+  // 显示编辑器设置模态弹窗
+  showSettings.value = true;
+}
+
+// 获取文件类型
+function getFileType(filePath: string): string {
+  const extension = filePath.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'json5':
+    case 'ojson5':
+      return extension;
+    case 'md':
+      return 'md';
+    default:
+      return 'txt';
+  }
+}
+
+// 获取文件名
+function getFileName(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() || filePath;
+}
+
+// 处理文件保存事件
+function onFileSaved(filePath: string, content: string) {
+  console.log('文件已保存:', filePath);
+  $q.notify({
+    type: 'positive',
+    message: '文件保存成功',
+    position: 'top'
+  });
+}
+
 // 处理节点编辑提交
 function handleNodeEditSubmit(newData: {
   text: string;
@@ -1589,7 +1736,7 @@ function handleNodeEditSubmit(newData: {
 }) {
   const node = currentNode.value;
   if (!node) return;
-  
+
   updateNodeInfo(node, newData);
 }
 
@@ -1613,24 +1760,24 @@ function updateNodeInfo(node: any, newData: {
   try {
     // 更新节点属性
     node.text = newData.text;
-    
+
     // 确保 data 对象存在
     if (!node.data) {
       node.data = {};
     }
-    
+
     const nodeData = node.data as Record<string, unknown>;
     nodeData['sexType'] = newData.sexType;
     nodeData['shape'] = newData.shape;
     nodeData['size'] = newData.size;
-    
+
     // 设置颜色
     if (newData.color) {
       nodeData['color'] = newData.color;
     } else {
       delete nodeData['color'];
     }
-    
+
     // 设置字体颜色相关属性
     nodeData['followThemeFontColor'] = newData.followThemeFontColor;
     if (newData.followThemeFontColor) {
@@ -1642,7 +1789,7 @@ function updateNodeInfo(node: any, newData: {
     } else {
       delete nodeData['fontColor'];
     }
-    
+
     // 只有当 roleUuid 不为空时才设置
     if (newData.roleUuid) {
       nodeData['roleUuid'] = newData.roleUuid;
@@ -1655,7 +1802,7 @@ function updateNodeInfo(node: any, newData: {
 
     // 应用节点样式更新
     applyNodeStyle(node, newData.shape, newData.size, newData.color);
-    
+
     // 设置字体颜色
     if (newData.followThemeFontColor) {
       // 跟随主题色
@@ -1672,11 +1819,11 @@ function updateNodeInfo(node: any, newData: {
     if (enableAutoLayoutAfterEdit.value) {
       void graphInstance.refresh();
     }
-    
+
     // 更新JSON和节点列表
     void updateJsonTextFromGraph();
     updateNodesList();
-    
+
     $q.notify({
       type: 'positive',
       message: `节点信息已更新：${newData.text}`,
@@ -1699,19 +1846,19 @@ function applyNodeStyle(node: any, shape: string, size: number, color?: string) 
   // 设置节点的视觉属性
   node.width = size;
   node.height = size;
-  
+
   // 设置节点颜色
   if (color) {
     node.color = color;
   } else if (!node.color) {
     node.color = themeColors.value.nodeColor; // 使用主题默认颜色
   }
-  
+
   // 设置字体颜色 - 检查节点数据中的设置
   const nodeData = (node.data as Record<string, unknown>) || {};
   const followThemeFontColor = nodeData['followThemeFontColor'] as boolean ?? true;
   const customFontColor = nodeData['fontColor'] as string;
-  
+
   if (followThemeFontColor) {
     // 跟随主题色
     node.fontColor = themeColors.value.nodeFontColor;
@@ -1722,11 +1869,11 @@ function applyNodeStyle(node: any, shape: string, size: number, color?: string) 
     // 默认跟随主题色
     node.fontColor = themeColors.value.nodeFontColor;
   }
-  
+
   if (!node.fontSize) {
     node.fontSize = 12;
   }
-  
+
   // 根据形状设置不同的样式
   switch (shape) {
     case 'circle':
@@ -1978,7 +2125,7 @@ async function applyJsonReplace() {
         node.color = themeColors.value.nodeColor;
       }
     });
-    
+
     graphInstance.addNodes(parsed.nodes);
     graphInstance.addLines(parsed.lines);
     // rootNode 属性可能不存在于当前版本的 relation-graph-vue3 中
@@ -2145,7 +2292,7 @@ function doFilter() {
   if (filterDebounceTimer) {
     clearTimeout(filterDebounceTimer);
   }
-  
+
   filterDebounceTimer = setTimeout(() => {
     void doFilterImmediate();
   }, 150); // 150ms防抖延迟
@@ -2310,7 +2457,7 @@ const handleMouseMove = (event: MouseEvent) => {
   // 只有在tooltip显示时才更新位置
   if (showHoverTooltip.value) {
     const target = event.target as HTMLElement;
-    
+
     // 检查是否仍在节点上
     if (target.classList.contains('rel-node') || target.classList.contains('rel-node-peel') || target.closest('.rel-node') || target.closest('.rel-node-peel')) {
       hoverPosition.value = {
@@ -2325,7 +2472,7 @@ const handleMouseMove = (event: MouseEvent) => {
 const setupHoverEventListeners = () => {
   const graphWrapper = graphWrapperRef.value;
   // console.log('🔧 Setting up hover event listeners:', graphWrapper);
-  
+
   if (!graphWrapper) {
     // console.log('❌ Graph wrapper not found');
     return;
@@ -2335,7 +2482,7 @@ const setupHoverEventListeners = () => {
   graphWrapper.addEventListener('mouseover', handleMouseOver);
   graphWrapper.addEventListener('mouseout', handleMouseOut);
   graphWrapper.addEventListener('mousemove', handleMouseMove);
-  
+
   // console.log('✅ Hover event listeners added to graph wrapper');
 };
 
@@ -2350,7 +2497,7 @@ const removeHoverEventListeners = () => {
 
 const handleMouseOver = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
-  
+
   // console.log('🐭 Mouse over event:', {
   //   target: target,
   //   tagName: target.tagName,
@@ -2361,17 +2508,17 @@ const handleMouseOver = (event: MouseEvent) => {
   //   parentElement: target.parentElement?.className,
   //   allAttributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value }))
   // });
-  
+
   // 更通用的节点检测方式
   let nodeElement: HTMLElement | null = null;
   let nodeId: string | null = null;
-  
+
   // 方法1: 检查当前元素是否有节点ID属性
   if (target.getAttribute('data-id') || target.getAttribute('data-node-id') || target.id) {
     nodeElement = target;
     nodeId = target.getAttribute('data-id') || target.getAttribute('data-node-id') || target.id;
   }
-  
+
   // 方法2: 向上查找父元素中是否有节点ID
   if (!nodeId) {
     let current = target.parentElement;
@@ -2385,7 +2532,7 @@ const handleMouseOver = (event: MouseEvent) => {
       current = current.parentElement;
     }
   }
-  
+
   // 方法3: 检查是否在关系图容器内，并且有特定的结构特征
   if (!nodeId) {
     const graphContainer = target.closest('.relation-graph') || target.closest('[class*="graph"]');
@@ -2394,7 +2541,7 @@ const handleMouseOver = (event: MouseEvent) => {
       let current = target;
       while (current && current !== graphContainer) {
         // 检查元素是否看起来像节点（有文本内容，有一定的尺寸等）
-        if (current.textContent && current.textContent.trim() && 
+        if (current.textContent && current.textContent.trim() &&
             current.offsetWidth > 20 && current.offsetHeight > 20) {
           const possibleId = current.getAttribute('data-id') || current.getAttribute('data-node-id') || current.id;
           if (possibleId) {
@@ -2407,13 +2554,13 @@ const handleMouseOver = (event: MouseEvent) => {
       }
     }
   }
-  
+
   // console.log('🔍 Node detection result:', {
   //   nodeElement: nodeElement,
   //   nodeId: nodeId,
   //   elementAttributes: nodeElement ? Array.from(nodeElement.attributes).map(attr => ({ name: attr.name, value: attr.value })) : null
   // });
-  
+
   if (!nodeElement || !nodeId) {
     // console.log('❌ Node ID not found - element is not a node or has no valid ID');
     return;
@@ -2435,7 +2582,7 @@ const handleMouseOver = (event: MouseEvent) => {
 
 const handleMouseOut = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
-  
+
   // console.log('🐭 Mouse out event:', {
   //   target: target,
   //   tagName: target.tagName,
@@ -2445,11 +2592,11 @@ const handleMouseOut = (event: MouseEvent) => {
   //   closestRelNode: target.closest('.rel-node'),
   //   closestRelNodePeel: target.closest('.rel-node-peel')
   // });
-  
+
   // 检查是否离开了节点元素 - 修正类名检测
   if (target.classList.contains('rel-node') || target.classList.contains('rel-node-peel') || target.closest('.rel-node') || target.closest('.rel-node-peel')) {
     // console.log('🚪 Leaving node element, clearing timer and scheduling hide');
-    
+
     // 清除定时器
     if (hoverTimer.value) {
       clearTimeout(hoverTimer.value);
@@ -2473,11 +2620,11 @@ const handleMouseOut = (event: MouseEvent) => {
 
 const showNodeHover = (nodeId: string, event: MouseEvent) => {
   // console.log('🎯 showNodeHover called with:', { nodeId, event });
-  
+
   // 查找对应的节点数据
   const graphInstance = graphRef.value?.getInstance();
   // console.log('📊 Graph instance:', graphInstance);
-  
+
   if (!graphInstance) {
     // console.log('❌ Graph instance not found');
     return;
@@ -2485,7 +2632,7 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
 
   const nodeData = graphInstance.getNodeById(nodeId);
   // console.log('📝 Node data found:', nodeData);
-  
+
   if (!nodeData) {
     // console.log('❌ Node data not found for ID:', nodeId);
     return;
@@ -2495,7 +2642,7 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
   const allLines = graphInstance.getLines();
   const relatedLines = allLines.filter((line: any) => line.from === nodeId || line.to === nodeId);
   const relatedNodeIds = new Set<string>();
-  
+
   relatedLines.forEach((line: any) => {
     if (line.from !== nodeId) relatedNodeIds.add(line.from);
     if (line.to !== nodeId) relatedNodeIds.add(line.to);
@@ -2504,7 +2651,7 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
   // 获取关联节点的详细信息
   const relatedNodes = Array.from(relatedNodeIds).map(id => {
     const node = graphInstance.getNodeById(id);
-    const connectingLines = relatedLines.filter((line: any) => 
+    const connectingLines = relatedLines.filter((line: any) =>
       (line.from === nodeId && line.to === id) || (line.from === id && line.to === nodeId)
     );
     return {
@@ -2524,7 +2671,7 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
     ...nodeData,
     relatedNodes: relatedNodes
   } as ExtendedNodeData;
-  
+
   // 根据hover模式设置位置
   if (hoverFollowMouse.value) {
     // 跟随鼠标模式
@@ -2570,9 +2717,9 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
       hoverPosition.value = { x: event.clientX, y: event.clientY };
     }
   }
-  
+
   showHoverTooltip.value = true;
-  
+
   // console.log('✅ Hover tooltip shown:', {
   //   nodeData: hoverNodeData.value,
   //   position: hoverPosition.value,
@@ -2589,7 +2736,7 @@ const hideNodeHover = () => {
  // 处理tooltip的hover事件
  const handleTooltipHover = (isHovering: boolean) => {
    isHoveringTooltip.value = isHovering;
-   
+
    // 如果鼠标离开tooltip，延迟隐藏
    if (!isHovering) {
      setTimeout(() => {
@@ -2599,7 +2746,7 @@ const hideNodeHover = () => {
      }, 100);
    }
  };
- 
+
  // 组件卸载时清理定时器和事件监听器
 onUnmounted(() => {
   if (draggingUpdateTimer.value) {
@@ -2614,12 +2761,12 @@ onUnmounted(() => {
   if (hoverTimer.value) {
     clearTimeout(hoverTimer.value);
   }
-  
+
   // 移除VSCode消息监听器
   if (vscodeApi.value?.removeEventListener) {
     vscodeApi.value.removeEventListener('message', handleVSCodeMessage);
   }
-  
+
   // 移除hover事件监听器
   removeHoverEventListeners();
 });
@@ -2649,6 +2796,14 @@ onUnmounted(() => {
   position: absolute;
   z-index: 40;
   top: 10px;
+  right: 10px;
+}
+
+/* 编辑器设置按钮（固定在右上角，JSON按钮下方） */
+.settings-toggle-btn {
+  position: absolute;
+  z-index: 40;
+  top: 60px;
   right: 10px;
 }
 
