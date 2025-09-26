@@ -138,6 +138,7 @@
             ref="graphRef"
             :options="graphOptions"
             :on-line-click="onLineClick"
+            :on-node-click="onNodeClick"
             :on-node-drag-start="onNodeDragStart"
             :on-node-dragging="onNodeDragging"
             :on-node-drag-end="onNodeDragEnd"
@@ -314,6 +315,18 @@
                   <q-icon name="edit" color="primary" />
                 </q-item-section>
                 <q-item-section>编辑节点</q-item-section>
+              </q-item>
+
+              <q-item 
+                clickable 
+                v-close-popup 
+                @click="jumpToRoleDefinition"
+                :disable="!canJumpToRoleDefinition"
+              >
+                <q-item-section avatar>
+                  <q-icon name="launch" color="accent" />
+                </q-item-section>
+                <q-item-section>跳转到角色定义</q-item-section>
               </q-item>
 
               <q-separator />
@@ -555,12 +568,22 @@ const editDialogData = ref({
   shape: 'circle',
   size: 60,
   color: '',
+  fontColor: '',
+  followThemeFontColor: true,
   roleUuid: '',
   followRole: false
 });
 
 // 角色列表数据
 const roleList = ref<any[]>([]);
+
+// 计算属性：判断当前节点是否可以跳转到角色定义
+const canJumpToRoleDefinition = computed(() => {
+  if (!currentNode.value) return false;
+  const nodeData = currentNode.value.data as Record<string, unknown> || {};
+  const roleUuid = nodeData['roleUuid'] as string;
+  return roleUuid && roleUuid.trim() !== '';
+});
 
 // hover tooltip 状态
 const showHoverTooltip = ref(false);
@@ -715,7 +738,7 @@ function requestRoleList() {
 // 处理hover模式变化
 function onHoverModeChanged(followMouse: boolean) {
   hoverFollowMouse.value = followMouse;
-  console.log('Hover模式已切换:', followMouse ? '跟随鼠标' : '固定在节点位置');
+  // console.log('Hover模式已切换:', followMouse ? '跟随鼠标' : '固定在节点位置');
 }
 
 // 加载关系数据到图表
@@ -738,6 +761,13 @@ async function loadRelationshipData(data: RGJsonData) {
       }
       if (node.data.isGoodMan === undefined) {
         node.data.isGoodMan = 'other';
+      }
+      // 设置默认字体颜色和节点颜色
+      if (!node.fontColor) {
+        node.fontColor = themeColors.value.nodeFontColor;
+      }
+      if (!node.color) {
+        node.color = themeColors.value.nodeColor;
       }
     });
 
@@ -1016,6 +1046,16 @@ const showGraph = async () => {
 
   const graphInstance = graphRef.value?.getInstance();
   if (graphInstance) {
+    // 为示例节点设置默认字体颜色
+    __graph_json_data.nodes.forEach((node: any) => {
+      if (!node.fontColor) {
+        node.fontColor = themeColors.value.nodeFontColor;
+      }
+      if (!node.color) {
+        node.color = themeColors.value.nodeColor;
+      }
+    });
+    
     // 手动添加节点和连线，避免自动布局
     graphInstance.addNodes(__graph_json_data.nodes);
     graphInstance.addLines(__graph_json_data.lines);
@@ -1273,6 +1313,43 @@ function onLineClick(line: RGLine, _link: RGLink, _e: RGUserEvent) {
   }
 }
 
+// 处理节点点击事件
+function onNodeClick(node: RGNode, _e: RGUserEvent) {
+  // 检查是否按住了Ctrl键
+  const event = resolvePointerEvent(_e);
+  if (!event) return;
+  
+  const isCtrlPressed = (event as MouseEvent).ctrlKey || (event as MouseEvent).metaKey;
+  
+  if (isCtrlPressed) {
+    // Ctrl+点击时跳转到角色定义
+    const roleUuid = node.data?.roleUuid as string;
+    
+    if (!roleUuid) {
+      $q.notify({
+        type: 'warning',
+        message: '该节点没有关联的角色定义',
+        position: 'top'
+      });
+      return;
+    }
+    
+    if (vscodeApi.value?.postMessage) {
+      vscodeApi.value.postMessage({
+        command: 'jumpToRoleDefinition',
+        roleUuid: roleUuid
+      });
+    } else {
+      console.error('VS Code API 不可用');
+      $q.notify({
+        type: 'negative',
+        message: 'VS Code API 不可用，无法跳转',
+        position: 'top'
+      });
+    }
+  }
+}
+
 // ---- 工具：从事件提取屏幕坐标 ----
 function getClientPointFromEvent(ev: any): { x: number; y: number } {
   const t = ev?.touches?.[0] || ev?.changedTouches?.[0];
@@ -1443,6 +1520,8 @@ function editNodeText() {
   const currentShape = nodeData['shape'] as string || 'circle';
   const currentSize = nodeData['size'] as number || 60;
   const currentColor = nodeData['color'] as string || node.color || '';
+  const currentFontColor = nodeData['fontColor'] as string || '';
+  const currentFollowThemeFontColor = nodeData['followThemeFontColor'] as boolean ?? true;
   const currentRoleUuid = nodeData['roleUuid'] as string || '';
   const currentFollowRole = nodeData['followRole'] as boolean || false;
 
@@ -1453,11 +1532,47 @@ function editNodeText() {
     shape: currentShape,
     size: currentSize,
     color: currentColor,
+    fontColor: currentFontColor,
+    followThemeFontColor: currentFollowThemeFontColor,
     roleUuid: currentRoleUuid,
     followRole: currentFollowRole
   };
   
   showEditDialog.value = true;
+}
+
+// 跳转到角色定义
+function jumpToRoleDefinition() {
+  const node = currentNode.value;
+  if (!node) return;
+
+  const nodeData = (node.data as Record<string, unknown>) || {};
+  const roleUuid = nodeData['roleUuid'] as string;
+  
+  if (!roleUuid || roleUuid.trim() === '') {
+    $q.notify({
+      type: 'warning',
+      message: '该节点未关联角色定义',
+      position: 'top'
+    });
+    return;
+  }
+
+  // 向VSCode发送跳转请求
+  if (vscodeApi.value?.postMessage) {
+    vscodeApi.value.postMessage({
+      type: 'jumpToRoleDefinition',
+      roleUuid: roleUuid
+    });
+    console.log('发送跳转到角色定义请求:', roleUuid);
+  } else {
+    console.log('无法发送消息：VSCode API不可用');
+    $q.notify({
+      type: 'negative',
+      message: '无法连接到VSCode',
+      position: 'top'
+    });
+  }
 }
 
 // 处理节点编辑提交
@@ -1467,6 +1582,8 @@ function handleNodeEditSubmit(newData: {
   shape: string;
   size: number;
   color: string;
+  fontColor: string;
+  followThemeFontColor: boolean;
   roleUuid: string;
   followRole: boolean;
 }) {
@@ -1483,6 +1600,8 @@ function updateNodeInfo(node: any, newData: {
   shape: string;
   size: number;
   color: string;
+  fontColor: string;
+  followThemeFontColor: boolean;
   roleUuid: string;
   followRole: boolean;
 }) {
@@ -1512,6 +1631,18 @@ function updateNodeInfo(node: any, newData: {
       delete nodeData['color'];
     }
     
+    // 设置字体颜色相关属性
+    nodeData['followThemeFontColor'] = newData.followThemeFontColor;
+    if (newData.followThemeFontColor) {
+      // 跟随主题色，删除自定义字体颜色
+      delete nodeData['fontColor'];
+    } else if (newData.fontColor) {
+      // 使用自定义字体颜色
+      nodeData['fontColor'] = newData.fontColor;
+    } else {
+      delete nodeData['fontColor'];
+    }
+    
     // 只有当 roleUuid 不为空时才设置
     if (newData.roleUuid) {
       nodeData['roleUuid'] = newData.roleUuid;
@@ -1524,6 +1655,18 @@ function updateNodeInfo(node: any, newData: {
 
     // 应用节点样式更新
     applyNodeStyle(node, newData.shape, newData.size, newData.color);
+    
+    // 设置字体颜色
+    if (newData.followThemeFontColor) {
+      // 跟随主题色
+      node.fontColor = themeColors.value.nodeFontColor;
+    } else if (newData.fontColor) {
+      // 使用自定义字体颜色
+      node.fontColor = newData.fontColor;
+    } else {
+      // 默认跟随主题色
+      node.fontColor = themeColors.value.nodeFontColor;
+    }
 
     // 根据全局设置决定是否刷新图形显示
     if (enableAutoLayoutAfterEdit.value) {
@@ -1561,13 +1704,25 @@ function applyNodeStyle(node: any, shape: string, size: number, color?: string) 
   if (color) {
     node.color = color;
   } else if (!node.color) {
-    node.color = '#f0f0f0'; // 默认颜色
+    node.color = themeColors.value.nodeColor; // 使用主题默认颜色
   }
   
-  // 确保节点文本显示
-  if (!node.fontColor) {
-    node.fontColor = '#333333';
+  // 设置字体颜色 - 检查节点数据中的设置
+  const nodeData = (node.data as Record<string, unknown>) || {};
+  const followThemeFontColor = nodeData['followThemeFontColor'] as boolean ?? true;
+  const customFontColor = nodeData['fontColor'] as string;
+  
+  if (followThemeFontColor) {
+    // 跟随主题色
+    node.fontColor = themeColors.value.nodeFontColor;
+  } else if (customFontColor) {
+    // 使用自定义字体颜色
+    node.fontColor = customFontColor;
+  } else {
+    // 默认跟随主题色
+    node.fontColor = themeColors.value.nodeFontColor;
   }
+  
   if (!node.fontSize) {
     node.fontSize = 12;
   }
@@ -1639,8 +1794,11 @@ function addNewNode() {
     text: '新节点',
     x: contextMenuPosition.value.x - 300, // 相对于画布的位置
     y: contextMenuPosition.value.y - 100,
+    color: themeColors.value.nodeColor, // 使用主题节点颜色
+    fontColor: themeColors.value.nodeFontColor, // 使用主题字体颜色
     data: {
       sexType: 'other', // 默认性别为其他
+      followThemeFontColor: true, // 默认跟随主题字体颜色
       isGoodMan: 'other',  // 默认为其他角色
       roleUuid: undefined // 新创建的节点暂时没有关联角色
     }
@@ -1811,6 +1969,16 @@ async function applyJsonReplace() {
       throw new Error('JSON结构无效，需要包含nodes[]与lines[]');
     }
     // 手动添加节点和连线，避免自动布局
+    // 为节点设置默认字体颜色
+    parsed.nodes.forEach((node: any) => {
+      if (!node.fontColor) {
+        node.fontColor = themeColors.value.nodeFontColor;
+      }
+      if (!node.color) {
+        node.color = themeColors.value.nodeColor;
+      }
+    });
+    
     graphInstance.addNodes(parsed.nodes);
     graphInstance.addLines(parsed.lines);
     // rootNode 属性可能不存在于当前版本的 relation-graph-vue3 中
@@ -1854,6 +2022,13 @@ async function applyJsonAppend() {
       }
       if (node.data.isGoodMan === undefined) {
         node.data.isGoodMan = 'other'; // 默认为其他角色
+      }
+      // 设置默认字体颜色和节点颜色
+      if (!node.fontColor) {
+        node.fontColor = themeColors.value.nodeFontColor;
+      }
+      if (!node.color) {
+        node.color = themeColors.value.nodeColor;
       }
     });
 
@@ -2142,17 +2317,17 @@ const handleMouseMove = (event: MouseEvent) => {
         x: event.clientX + 10,
         y: event.clientY - 10
       };
-      console.log('📍 Updated tooltip position:', hoverPosition.value);
+      // console.log('📍 Updated tooltip position:', hoverPosition.value);
     }
   }
 };
 
 const setupHoverEventListeners = () => {
   const graphWrapper = graphWrapperRef.value;
-  console.log('🔧 Setting up hover event listeners:', graphWrapper);
+  // console.log('🔧 Setting up hover event listeners:', graphWrapper);
   
   if (!graphWrapper) {
-    console.log('❌ Graph wrapper not found');
+    // console.log('❌ Graph wrapper not found');
     return;
   }
 
@@ -2161,7 +2336,7 @@ const setupHoverEventListeners = () => {
   graphWrapper.addEventListener('mouseout', handleMouseOut);
   graphWrapper.addEventListener('mousemove', handleMouseMove);
   
-  console.log('✅ Hover event listeners added to graph wrapper');
+  // console.log('✅ Hover event listeners added to graph wrapper');
 };
 
 const removeHoverEventListeners = () => {
@@ -2176,16 +2351,16 @@ const removeHoverEventListeners = () => {
 const handleMouseOver = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
   
-  console.log('🐭 Mouse over event:', {
-    target: target,
-    tagName: target.tagName,
-    className: target.className,
-    id: target.id,
-    dataId: target.getAttribute('data-id'),
-    dataNodeId: target.getAttribute('data-node-id'),
-    parentElement: target.parentElement?.className,
-    allAttributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value }))
-  });
+  // console.log('🐭 Mouse over event:', {
+  //   target: target,
+  //   tagName: target.tagName,
+  //   className: target.className,
+  //   id: target.id,
+  //   dataId: target.getAttribute('data-id'),
+  //   dataNodeId: target.getAttribute('data-node-id'),
+  //   parentElement: target.parentElement?.className,
+  //   allAttributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value }))
+  // });
   
   // 更通用的节点检测方式
   let nodeElement: HTMLElement | null = null;
@@ -2233,27 +2408,27 @@ const handleMouseOver = (event: MouseEvent) => {
     }
   }
   
-  console.log('🔍 Node detection result:', {
-    nodeElement: nodeElement,
-    nodeId: nodeId,
-    elementAttributes: nodeElement ? Array.from(nodeElement.attributes).map(attr => ({ name: attr.name, value: attr.value })) : null
-  });
+  // console.log('🔍 Node detection result:', {
+  //   nodeElement: nodeElement,
+  //   nodeId: nodeId,
+  //   elementAttributes: nodeElement ? Array.from(nodeElement.attributes).map(attr => ({ name: attr.name, value: attr.value })) : null
+  // });
   
   if (!nodeElement || !nodeId) {
-    console.log('❌ Node ID not found - element is not a node or has no valid ID');
+    // console.log('❌ Node ID not found - element is not a node or has no valid ID');
     return;
   }
 
   // 清除之前的定时器
   if (hoverTimer.value) {
     clearTimeout(hoverTimer.value);
-    console.log('⏰ Cleared previous hover timer');
+    // console.log('⏰ Cleared previous hover timer');
   }
 
-  console.log('⏱️ Setting hover timer with delay:', hoverDelay.value);
+  // console.log('⏱️ Setting hover timer with delay:', hoverDelay.value);
   // 设置延迟显示hover
   hoverTimer.value = setTimeout(() => {
-    console.log('🚀 Executing showNodeHover for node:', nodeId);
+    // console.log('🚀 Executing showNodeHover for node:', nodeId);
     showNodeHover(nodeId, event);
   }, hoverDelay.value);
 };
@@ -2261,58 +2436,58 @@ const handleMouseOver = (event: MouseEvent) => {
 const handleMouseOut = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
   
-  console.log('🐭 Mouse out event:', {
-    target: target,
-    tagName: target.tagName,
-    className: target.className,
-    hasRelNodeClass: target.classList.contains('rel-node'),
-    hasRelNodePeelClass: target.classList.contains('rel-node-peel'),
-    closestRelNode: target.closest('.rel-node'),
-    closestRelNodePeel: target.closest('.rel-node-peel')
-  });
+  // console.log('🐭 Mouse out event:', {
+  //   target: target,
+  //   tagName: target.tagName,
+  //   className: target.className,
+  //   hasRelNodeClass: target.classList.contains('rel-node'),
+  //   hasRelNodePeelClass: target.classList.contains('rel-node-peel'),
+  //   closestRelNode: target.closest('.rel-node'),
+  //   closestRelNodePeel: target.closest('.rel-node-peel')
+  // });
   
   // 检查是否离开了节点元素 - 修正类名检测
   if (target.classList.contains('rel-node') || target.classList.contains('rel-node-peel') || target.closest('.rel-node') || target.closest('.rel-node-peel')) {
-    console.log('🚪 Leaving node element, clearing timer and scheduling hide');
+    // console.log('🚪 Leaving node element, clearing timer and scheduling hide');
     
     // 清除定时器
     if (hoverTimer.value) {
       clearTimeout(hoverTimer.value);
       hoverTimer.value = null;
-      console.log('⏰ Cleared hover timer');
+      // console.log('⏰ Cleared hover timer');
     }
 
     // 延迟隐藏hover，给用户时间移动到tooltip上
     setTimeout(() => {
       if (!isHoveringTooltip.value) {
-        console.log('🫥 Hiding tooltip after mouse out');
+        // console.log('🫥 Hiding tooltip after mouse out');
         hideNodeHover();
       } else {
-        console.log('🎯 Not hiding tooltip - user is hovering over it');
+        // console.log('🎯 Not hiding tooltip - user is hovering over it');
       }
     }, 100);
   } else {
-    console.log('❌ Not leaving a node element, ignoring');
+    // console.log('❌ Not leaving a node element, ignoring');
   }
 };
 
 const showNodeHover = (nodeId: string, event: MouseEvent) => {
-  console.log('🎯 showNodeHover called with:', { nodeId, event });
+  // console.log('🎯 showNodeHover called with:', { nodeId, event });
   
   // 查找对应的节点数据
   const graphInstance = graphRef.value?.getInstance();
-  console.log('📊 Graph instance:', graphInstance);
+  // console.log('📊 Graph instance:', graphInstance);
   
   if (!graphInstance) {
-    console.log('❌ Graph instance not found');
+    // console.log('❌ Graph instance not found');
     return;
   }
 
   const nodeData = graphInstance.getNodeById(nodeId);
-  console.log('📝 Node data found:', nodeData);
+  // console.log('📝 Node data found:', nodeData);
   
   if (!nodeData) {
-    console.log('❌ Node data not found for ID:', nodeId);
+    // console.log('❌ Node data not found for ID:', nodeId);
     return;
   }
 
@@ -2341,7 +2516,7 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
     };
   }).filter(item => item.node);
 
-  console.log('🔗 Related nodes and relationships:', relatedNodes);
+  // console.log('🔗 Related nodes and relationships:', relatedNodes);
 
   // 设置hover数据，包含关联信息
   // 创建扩展的节点数据对象
@@ -2398,11 +2573,11 @@ const showNodeHover = (nodeId: string, event: MouseEvent) => {
   
   showHoverTooltip.value = true;
   
-  console.log('✅ Hover tooltip shown:', {
-    nodeData: hoverNodeData.value,
-    position: hoverPosition.value,
-    showTooltip: showHoverTooltip.value
-  });
+  // console.log('✅ Hover tooltip shown:', {
+  //   nodeData: hoverNodeData.value,
+  //   position: hoverPosition.value,
+  //   showTooltip: showHoverTooltip.value
+  // });
 };
 
 const hideNodeHover = () => {

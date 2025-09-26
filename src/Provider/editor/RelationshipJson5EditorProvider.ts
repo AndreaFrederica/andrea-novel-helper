@@ -315,6 +315,40 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
                     
                     console.log('[RelationshipJson5EditorProvider] Sending role list:', roleList.length, 'packages');
                     webviewPanel.webview.postMessage({ type: 'roleList', data: roleList });
+                } else if (msg.type === 'jumpToRoleDefinition') {
+                    // 处理跳转到角色定义的请求
+                    const roleUuid = msg.roleUuid;
+                    console.log('[RelationshipJson5EditorProvider] Received jumpToRoleDefinition request for roleUuid:', roleUuid);
+                    
+                    if (!roleUuid) {
+                        console.warn('[RelationshipJson5EditorProvider] No roleUuid provided for jumpToRoleDefinition');
+                        return;
+                    }
+                    
+                    // 查找对应的角色
+                    const targetRole = roles.find((role: any) => role.uuid === roleUuid);
+                    if (!targetRole) {
+                        console.warn('[RelationshipJson5EditorProvider] Role not found for uuid:', roleUuid);
+                        vscode.window.showWarningMessage(`未找到UUID为 ${roleUuid} 的角色定义`);
+                        return;
+                    }
+                    
+                    console.log('[RelationshipJson5EditorProvider] Found role:', targetRole.name, 'at', targetRole.sourcePath);
+                    
+                    // 使用AndreaNovelHelper.openRoleSource命令处理跳转，支持自动选择角色卡编辑器
+                    try {
+                        if (targetRole.sourcePath) {
+                            // 调用智能跳转命令，会自动检查配置决定是否使用角色卡管理器
+                            await vscode.commands.executeCommand('AndreaNovelHelper.openRoleSource', targetRole);
+                            console.log('[RelationshipJson5EditorProvider] Successfully executed AndreaNovelHelper.openRoleSource command');
+                        } else {
+                            console.warn('[RelationshipJson5EditorProvider] Role has no sourcePath:', targetRole.name);
+                            vscode.window.showWarningMessage(`角色 "${targetRole.name}" 没有源文件路径信息`);
+                        }
+                    } catch (error) {
+                        console.error('[RelationshipJson5EditorProvider] Failed to execute AndreaNovelHelper.openRoleSource command:', error);
+                        vscode.window.showErrorMessage(`跳转到角色定义失败: ${error}`);
+                    }
                 } else if (msg.type === 'saveRelationshipData') {
                     // 接收前端的RGJsonData格式数据
                     const rgData: RGJsonData = msg.data || { nodes: [], lines: [] };

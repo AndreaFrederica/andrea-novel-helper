@@ -93,6 +93,49 @@
             </div>
           </div>
 
+          <!-- 字体颜色跟随主题 -->
+          <q-checkbox
+            v-model="formData.followThemeFontColor"
+            label="字体颜色跟随主题"
+            class="q-mt-sm"
+          />
+          <div v-if="formData.followThemeFontColor" class="text-caption text-grey-6 q-ml-lg">
+            开启后，字体颜色将自动适应VS Code主题
+          </div>
+
+          <!-- 自定义字体颜色 -->
+          <div v-if="!formData.followThemeFontColor" class="q-field q-field--outlined q-field--dense">
+            <div class="q-field__inner">
+              <div class="q-field__control">
+                <div class="q-field__control-container col relative-position row no-wrap q-anchor--skip">
+                  <q-input
+                    v-model="formData.fontColor"
+                    label="字体颜色"
+                    outlined
+                    dense
+                    placeholder="#FFFFFF 或 #FFFFFFFF"
+                    clearable
+                    :rules="[val => !val || /^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/.test(val) || '请输入有效的十六进制颜色值（支持6位或8位）']"
+                  >
+                    <template v-slot:append>
+                      <q-icon name="palette" class="cursor-pointer">
+                        <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                          <q-color
+                            v-model="formData.fontColor"
+                            format-model="hex"
+                            default-value="#FFFFFF"
+                            no-header
+                            no-footer
+                          />
+                        </q-popup-proxy>
+                      </q-icon>
+                    </template>
+                  </q-input>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 绑定角色 -->
           <q-select
             v-model="formData.roleUuid"
@@ -178,6 +221,8 @@ interface NodeEditData {
   shape: string;
   size: number;
   color: string;
+  fontColor: string;
+  followThemeFontColor: boolean;
   roleUuid: string;
   followRole: boolean;
 }
@@ -213,6 +258,8 @@ const props = withDefaults(defineProps<Props>(), {
     shape: 'circle',
     size: 60,
     color: '',
+    fontColor: '',
+    followThemeFontColor: true,
     roleUuid: '',
     followRole: false
   }),
@@ -232,6 +279,8 @@ const formData = reactive<NodeEditData>({
   shape: 'circle',
   size: 60,
   color: '',
+  fontColor: '',
+  followThemeFontColor: true,
   roleUuid: '',
   followRole: false
 });
@@ -371,6 +420,8 @@ const onSubmit = () => {
       shape: formData.shape,
       size: formData.size,
       color: formData.color,
+      fontColor: formData.fontColor,
+      followThemeFontColor: formData.followThemeFontColor,
       roleUuid: formData.roleUuid.trim(),
       followRole: formData.followRole
     });

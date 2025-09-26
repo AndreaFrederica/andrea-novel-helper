@@ -195,9 +195,9 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                             isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
                         )
                     );
-                } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(name)) {
+                } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
                     const ext = path.extname(name).toLowerCase();
-                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson'];
+                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.None
@@ -237,10 +237,10 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 );
             } else {
                 // 对于文件，分两类处理
-                if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(name)) {
+                if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
                     const ext = path.extname(name).toLowerCase();
-                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson'];
+                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.None
@@ -609,8 +609,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         
         // 如果是文件，只关注包含关键词的文件（角色相关文件）
         const fileName = path.basename(filePath);
-        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
-        const hasValidExtension = /\.(json5|txt|md|ojson|rjson)$/i.test(fileName);
+        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(fileName);
+        const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5)$/i.test(fileName);
         
         return hasKeywords && hasValidExtension;
     };
