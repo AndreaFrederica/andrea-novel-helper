@@ -57,6 +57,7 @@ import { registerTypoQuickSettings } from './typo/typoQuickSettings';
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
 import {activate as registerRelationshipEditor} from './Provider/editor/RelationshipJson5EditorProvider';
+import { registerRelationshipCommands } from './commands/relationshipCommands';
 import { activateDefLinks } from './Provider/defLinksProvider';
 import { registerOpenRoleSource } from './commands/openRoleSource';
 import { setWordCounterContext, setWordCounterGitGuard } from './utils/WordCount/asyncWordCounter';
@@ -312,6 +313,7 @@ export async function activate(context: vscode.ExtensionContext) {
         roleCardManagerActivate(context);
         registerRoleCardEditor(context);
         registerRelationshipEditor(context);
+        registerRelationshipCommands(context);
 
         registerAutoPairs(context);
         registerSmartEnter(context);
