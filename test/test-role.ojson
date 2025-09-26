@@ -1,0 +1,9 @@
+{
+  "name": "测试角色",
+  "type": "主角",
+  "description": "这是一个用于测试ojson文件类型的角色",
+  "age": 25,
+  "gender": "女",
+  "personality": ["勇敢", "聪明", "善良"],
+  "background": "来自一个普通家庭，但拥有特殊能力"
+}

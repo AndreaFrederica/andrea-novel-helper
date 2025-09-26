@@ -1,0 +1,193 @@
+{
+  "nodes": [
+    {
+      "id": "1",
+      "text": "李明轩",
+      "x": 0,
+      "y": 0,
+      "color": "#4CAF50",
+      "borderColor": "#2E7D32",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 80,
+      "height": 40,
+      "data": {
+        "sexType": "male",
+        "isGoodMan": true,
+        "roleUuid": "019976e6-51ed-73-8ba7-2f8e3dfd4401"
+      }
+    },
+    {
+      "id": "2",
+      "text": "苏雨晴",
+      "x": 150,
+      "y": 0,
+      "color": "#E91E63",
+      "borderColor": "#AD1457",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 80,
+      "height": 40,
+      "data": {
+        "sexType": "female",
+        "isGoodMan": true,
+        "roleUuid": "019976e6-51ed-73-8ba7-2f8e3dfd4402"
+      }
+    },
+    {
+      "id": "3",
+      "text": "黑影组织首领",
+      "x": 300,
+      "y": 0,
+      "color": "#424242",
+      "borderColor": "#212121",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 120,
+      "height": 40,
+      "data": {
+        "sexType": "male",
+        "isGoodMan": false,
+        "roleUuid": "019976e6-51ed-73-8ba7-2f8e3dfd4403"
+      }
+    },
+    {
+      "id": "4",
+      "text": "张小虎",
+      "x": 0,
+      "y": 100,
+      "color": "#2196F3",
+      "borderColor": "#1565C0",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 80,
+      "height": 40,
+      "data": {
+        "sexType": "male",
+        "isGoodMan": true,
+        "roleUuid": "019976e6-51ed-73-8ba7-2f8e3dfd4404"
+      }
+    },
+    {
+      "id": "5",
+      "text": "武当掌门",
+      "x": 150,
+      "y": 100,
+      "color": "#FF9800",
+      "borderColor": "#E65100",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 80,
+      "height": 40,
+      "data": {
+        "sexType": "male",
+        "isGoodMan": true,
+        "roleUuid": "019976e6-51ed-73-8ba7-2f8e3dfd4405"
+      }
+    },
+    {
+      "id": "6",
+      "text": "林婉儿",
+      "x": 300,
+      "y": 100,
+      "color": "#9C27B0",
+      "borderColor": "#6A1B9A",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 80,
+      "height": 40,
+      "data": {
+        "sexType": "female",
+        "isGoodMan": true,
+        "roleUuid": "019976e6-51ed-73-8ba7-2f8e3dfd4406"
+      }
+    }
+  ],
+  "lines": [
+    {
+      "from": "1",
+      "to": "2",
+      "text": "恋人关系",
+      "color": "#E91E63",
+      "lineWidth": 3,
+      "lineShape": 1,
+      "startArrow": false,
+      "endArrow": false,
+      "isDashed": false,
+      "data": {
+        "type": "恋人关系",
+        "description": "青梅竹马，后发展为恋人",
+        "strength": 9,
+        "tags": ["青梅竹马", "恋人", "主线"]
+      }
+    },
+    {
+      "from": "1",
+      "to": "3",
+      "text": "敌对关系",
+      "color": "#F44336",
+      "lineWidth": 4,
+      "lineShape": 1,
+      "startArrow": false,
+      "endArrow": false,
+      "isDashed": false,
+      "data": {
+        "type": "敌对关系",
+        "description": "生死仇敌",
+        "strength": 10,
+        "tags": ["敌对", "宿敌", "主线"]
+      }
+    },
+    {
+      "from": "1",
+      "to": "4",
+      "text": "朋友关系",
+      "color": "#2196F3",
+      "lineWidth": 3,
+      "lineShape": 1,
+      "startArrow": false,
+      "endArrow": false,
+      "isDashed": false,
+      "data": {
+        "type": "朋友关系",
+        "description": "生死兄弟",
+        "strength": 8,
+        "tags": ["朋友", "兄弟", "支线"]
+      }
+    },
+    {
+      "from": "5",
+      "to": "1",
+      "text": "师徒关系",
+      "color": "#FF9800",
+      "lineWidth": 3,
+      "lineShape": 1,
+      "startArrow": false,
+      "endArrow": true,
+      "isDashed": false,
+      "data": {
+        "type": "师徒关系",
+        "description": "武学师父",
+        "strength": 9,
+        "tags": ["师徒", "武学", "主线"]
+      }
+    },
+    {
+      "from": "4",
+      "to": "6",
+      "text": "暗恋关系",
+      "color": "#E91E63",
+      "lineWidth": 2,
+      "lineShape": 1,
+      "startArrow": false,
+      "endArrow": true,
+      "isDashed": true,
+      "data": {
+        "type": "恋人关系",
+        "description": "暗恋关系",
+        "strength": 6,
+        "tags": ["暗恋", "单相思", "支线"]
+      }
+    }
+  ]
+}

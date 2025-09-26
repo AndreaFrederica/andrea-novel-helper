@@ -1,0 +1,8 @@
+[
+    {
+        "from": "测试角色",
+        "to": "另一个角色",
+        "relationship": "朋友",
+        "description": "这是一个测试关系"
+    }
+]

@@ -1,0 +1,72 @@
+[
+  {
+    uuid: "rel-001",
+    fromRoleId: "张三",
+    toRoleId: "李四",
+    relationshipType: "朋友关系",
+    description: "大学同窗好友",
+    strength: 7,
+    isDirectional: false,
+    startTime: "2020-09-01",
+    endTime: "",
+    status: "active",
+    tags: ["同学", "朋友"],
+    notes: "在大学期间结识的好友，经常一起学习"
+  },
+  {
+    uuid: "rel-002", 
+    fromRoleId: "张三",
+    toRoleId: "王五",
+    relationshipType: "师生关系",
+    description: "导师与学生",
+    strength: 8,
+    isDirectional: true,
+    startTime: "2021-03-15",
+    endTime: "",
+    status: "active",
+    tags: ["师生", "学术"],
+    notes: "王五是张三的研究生导师"
+  },
+  {
+    uuid: "rel-003",
+    fromRoleId: "李四",
+    toRoleId: "赵六",
+    relationshipType: "恋人关系",
+    description: "大学恋人",
+    strength: 9,
+    isDirectional: false,
+    startTime: "2021-02-14",
+    endTime: "",
+    status: "active",
+    tags: ["恋人", "情侣"],
+    notes: "情人节开始交往的恋人"
+  },
+  {
+    uuid: "rel-004",
+    fromRoleId: "张三",
+    toRoleId: "钱七",
+    relationshipType: "敌对关系",
+    description: "学术竞争对手",
+    strength: 6,
+    isDirectional: false,
+    startTime: "2021-06-01",
+    endTime: "",
+    status: "active",
+    tags: ["竞争", "学术"],
+    notes: "在同一个研究领域存在竞争关系"
+  },
+  {
+    uuid: "rel-005",
+    fromRoleId: "王五",
+    toRoleId: "孙八",
+    relationshipType: "同事关系",
+    description: "同一研究所的同事",
+    strength: 5,
+    isDirectional: false,
+    startTime: "2019-01-01",
+    endTime: "",
+    status: "active",
+    tags: ["同事", "工作"],
+    notes: "在同一个研究所工作的同事"
+  }
+]

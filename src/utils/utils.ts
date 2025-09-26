@@ -70,8 +70,8 @@ export const typeColorMap: Record<string, string> = {
  */
 export const getSupportedLanguages = (): string[] => {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-	// 默认包含 markdown / plaintext / json5
-	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5'])!;
+	// 默认包含 markdown / plaintext / json5 / ojson / rjson
+	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5', 'ojson', 'rjson'])!;
 	return fileTypes.map((t: string): string =>
 		t === 'txt' ? 'plaintext' : t
 	);
@@ -85,6 +85,8 @@ const langToExt: Record<string, string> = {
 	plaintext: 'txt',
 	javascript: 'js',
 	typescript: 'ts',
+	ojson: 'ojson',
+	rjson: 'rjson',
 	// ……后缀名和语言id不一样的放在这里
 };
 

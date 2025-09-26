@@ -7,6 +7,7 @@ import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVoc
 import { statSync } from 'fs';
 import { loadRoles } from '../../utils/utils';
 import { updateDecorations } from '../../events/updateDecorations';
+import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 
 // 解析文件名冲突：如果同名存在，则追加 _YYYYMMDD_HHmmss 或递增索引
 function resolveFileConflict(dir: string, baseName: string, ext: string): { path: string; conflicted: boolean; } {
@@ -196,7 +197,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                     );
                 } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(name)) {
                     const ext = path.extname(name).toLowerCase();
-                    const allowed = ['.json5', '.txt', '.md'];
+                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.None
@@ -239,7 +240,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
                     const ext = path.extname(name).toLowerCase();
-                    const allowed = ['.json5', '.txt', '.md'];
+                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.None
@@ -383,13 +384,13 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
                 const shouldOpenWithManager = typeof pref === 'boolean' ? pref : !!globalDefault;
 
-                // Decide by extension: only .json5 is eligible for role manager.
+                // Decide by extension: .json5 and .ojson are eligible for role manager.
                 const ext = path.extname(fileUri.fsPath).toLowerCase();
-                if (ext === '.json5') {
+                if (ext === '.json5' || ext === '.ojson') {
                     if (shouldOpenWithManager) {
                         try {
                             // ensure it's recognized as role-related before opening with manager
-                            if (shouldUpdateRoles(fileUri)) {
+                            if (shouldUpdateRoles(fileUri.fsPath)) {
                                 await vscode.commands.executeCommand('vscode.openWith', fileUri, 'andrea.roleJson5Editor');
                                 return;
                             }
@@ -581,15 +582,12 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
-    // —— 改进的文件系统监听 —— 
+    // —— 使用全局文件追踪系统 —— 
     const helperRoot = path.join(rootFsPath, 'novel-helper');
-    // 监听 novel-helper 下所有变动
-    const watcherPattern = new vscode.RelativePattern(rootFsPath, 'novel-helper/**');
-    const watcher = vscode.workspace.createFileSystemWatcher(watcherPattern);
-
+    
     // 改进的过滤逻辑：只关注相关文件和目录
-    const shouldRefresh = (uri: vscode.Uri) => {
-        const relativePath = path.relative(helperRoot, uri.fsPath);
+    const shouldRefresh = (filePath: string) => {
+        const relativePath = path.relative(helperRoot, filePath);
         
         // 排除 outline 目录
         if (relativePath.startsWith('outline' + path.sep) || relativePath === 'outline') {
@@ -602,7 +600,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         
         // 如果是目录变化，总是刷新（用于显示结构变化）
         try {
-            if (fs.existsSync(uri.fsPath) && fs.statSync(uri.fsPath).isDirectory()) {
+            if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
                 return true;
             }
         } catch (error) {
@@ -610,40 +608,47 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         }
         
         // 如果是文件，只关注包含关键词的文件（角色相关文件）
-        const fileName = path.basename(uri.fsPath);
+        const fileName = path.basename(filePath);
         const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
-        const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
+        const hasValidExtension = /\.(json5|txt|md|ojson|rjson)$/i.test(fileName);
         
         return hasKeywords && hasValidExtension;
     };
 
     // 改进的角色数据更新判断：只有角色相关文件才触发角色数据更新
-    const shouldUpdateRoles = (uri: vscode.Uri) => {
-        const fileName = path.basename(uri.fsPath);
+    const shouldUpdateRoles = (filePath: string) => {
+        const fileName = path.basename(filePath);
         const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
-        const hasValidExtension = /\.(json5|txt|md)$/i.test(fileName);
+        const hasValidExtension = /\.(json5|txt|md|ojson|rjson)$/i.test(fileName);
         
         return hasKeywords && hasValidExtension;
     };
 
     // 统一的刷新处理函数
-    const handleFileChange = (uri: vscode.Uri, changeType: 'create' | 'delete' | 'change') => {
-        if (!shouldRefresh(uri)) {
+    const handleFileChange = (event: FileChangeEvent) => {
+        const filePath = event.filePath;
+        
+        // 只处理 novel-helper 目录下的文件
+        if (!filePath.startsWith(helperRoot)) {
+            return;
+        }
+        
+        if (!shouldRefresh(filePath)) {
             return;
         }
 
-        console.log(`包管理器：检测到文件${changeType} ${uri.fsPath}`);
+        console.log(`包管理器：检测到文件${event.type} ${filePath}`);
         provider.refresh();
         
         // 只有角色相关文件才触发角色数据更新
-        if (shouldUpdateRoles(uri)) {
+        if (shouldUpdateRoles(filePath)) {
             try {
-                if (changeType === 'delete') {
+                if (event.type === 'delete') {
                     // 文件删除：强制完整刷新
                     loadRoles(true);
                 } else {
                     // 文件创建或修改：增量更新
-                    loadRoles(false, [uri.fsPath]);
+                    loadRoles(false, [filePath]);
                 }
                 
                 // 触发装饰器更新
@@ -654,25 +659,22 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
                 }
                 
                 // 显示用户通知
-                const fileName = path.basename(uri.fsPath);
-                const changeTypeMap = {
+                const fileName = path.basename(filePath);
+                const changeTypeMap: { [key: string]: string } = {
                     'create': '创建',
                     'delete': '删除', 
-                    'change': '修改'
+                    'change': '修改',
+                    'rename': '重命名'
                 };
-                vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[changeType]}: ${fileName}`);
+                vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[event.type]}: ${fileName}`);
             } catch (error) {
                 console.error(`角色数据更新失败: ${error}`);
             }
         }
     };
 
-    // 监听文件系统事件
-    watcher.onDidCreate(uri => handleFileChange(uri, 'create'));
-    watcher.onDidDelete(uri => handleFileChange(uri, 'delete'));
-    watcher.onDidChange(uri => handleFileChange(uri, 'change'));
-
-    context.subscriptions.push(watcher);
+    // 注册全局文件追踪回调
+    registerFileChangeCallback('packageManager', handleFileChange);
 
     // 额外监听文本文档保存事件（更精确的文件内容变化检测）
     const saveWatcher = vscode.workspace.onDidSaveTextDocument((document) => {
@@ -683,12 +685,12 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             return;
         }
         
-        if (shouldRefresh(document.uri)) {
+        if (shouldRefresh(filePath)) {
             console.log(`包管理器：检测到相关文件保存 ${filePath}`);
             provider.refresh();
             
             // 只有角色相关文件才触发角色数据更新
-            if (shouldUpdateRoles(document.uri)) {
+            if (shouldUpdateRoles(filePath)) {
                 try {
                     loadRoles(false, [filePath]);
                     
@@ -706,6 +708,13 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(saveWatcher);
+
+    // 清理函数：取消注册文件追踪回调
+    context.subscriptions.push({
+        dispose: () => {
+            unregisterFileChangeCallback('packageManager');
+        }
+    });
 }
 
 interface ExtensionCustomOptions { defaultBase: string; kind: 'character' | 'sensitive' | 'vocabulary'; }

@@ -75,12 +75,19 @@ export class FileTracker {
      * 检查文件是否应该被忽略
      */
     private shouldIgnoreFile(filePath: string): boolean {
+        // 获取参考文件扩展名配置
+        const refExts = (vscode.workspace.getConfiguration('AndreaNovelHelper')
+            .get<string[]>('wordCount.referenceVisibleExtensions', []) || [])
+            .map(s => (s || '').toLowerCase());
+            
         return isFileIgnored(filePath, {
             workspaceRoot: this.config.workspaceRoot,
             respectWcignore: this.config.respectWcignore,
             includePatterns: this.config.includePatterns,
             excludePatterns: this.config.excludePatterns,
-            ignoreParser: this.ignoreParser
+            ignoreParser: this.ignoreParser,
+            ignoreReferenceFiles: true, // 启用参考文件忽略，防止生成数据库记录
+            referenceExtensions: refExts
         });
     }
 

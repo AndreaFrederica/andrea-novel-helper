@@ -11,7 +11,7 @@ import { GitGuard } from '../../utils/Git/gitGuard';
 import { getFileTracker } from '../../utils/tracker/fileTracker';
 import * as timeStatsModule from '../../timeStats';
 import { mdToPlainText } from '../../utils/md_plain';
-import { getFileByPath, updateFileWritingStats, getFileUuid } from '../../utils/tracker/globalFileTracking';
+import { getFileByPath, updateFileWritingStats, getFileUuid, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 import { getCutClipboard } from '../../utils/WordCount/wordCountCutHelper';
 import { WordCountOrderManager } from '../../utils/Order/wordCountOrder';
 
@@ -140,6 +140,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         // 初始化 GitGuard
         this.initializeGitGuard();
 
+        // 注册全局文件追踪回调
+        registerFileChangeCallback('wordCount', (event: FileChangeEvent) => {
+            this.handleFileChange(event);
+        });
+
         vscode.workspace.onDidSaveTextDocument((doc) => {
             const fsPath = doc.uri.fsPath;
             const fileName = path.basename(fsPath);
@@ -169,59 +174,6 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             this.refreshIgnoreParser(); // 简化：统一进这个方法
         });
 
-
-        // 删除事件：失效相关目录聚合缓存与文件缓存
-        vscode.workspace.onDidDeleteFiles(evt => {
-            let changed = false;
-            for (const f of evt.files) {
-                const p = f.fsPath;
-                if (this.statsCache.delete(p)) changed = true;
-                // 删除子文件缓存（目录不缓存文件以外聚合，但存在文件缓存需要移除）
-                for (const key of Array.from(this.statsCache.keys())) {
-                    if (key.startsWith(p + path.sep)) { this.statsCache.delete(key); changed = true; }
-                }
-                // 事件驱动：标记并入队父目录重算
-                this.markDirDirty(path.dirname(p));
-                this.enqueueDirRecompute(path.dirname(p));
-                // 删除自身或子目录聚合缓存
-                for (const key of Array.from(this.dirAggCache.keys())) {
-                    if (key === p || key.startsWith(p + path.sep)) { this.dirAggCache.delete(key); changed = true; }
-                }
-            }
-            if (changed) this.refreshDebounced();
-        });
-
-        // 重命名事件：迁移文件缓存并失效涉及目录聚合
-        vscode.workspace.onDidRenameFiles(evt => {
-            let changed = false;
-            for (const { oldUri, newUri } of evt.files) {
-                const oldPath = oldUri.fsPath;
-                const newPath = newUri.fsPath;
-                // 迁移文件缓存
-                const direct = this.statsCache.get(oldPath);
-                if (direct) { this.statsCache.set(newPath, direct); this.statsCache.delete(oldPath); changed = true; }
-                for (const key of Array.from(this.statsCache.keys())) {
-                    if (key.startsWith(oldPath + path.sep)) {
-                        const suffix = key.slice(oldPath.length);
-                        const newKey = newPath + suffix;
-                        const val = this.statsCache.get(key)!;
-                        this.statsCache.set(newKey, val);
-                        this.statsCache.delete(key);
-                        changed = true;
-                    }
-                }
-                // 失效旧/新路径相关目录聚合
-                this.markDirDirty(path.dirname(oldPath));
-                this.enqueueDirRecompute(path.dirname(oldPath));
-                this.markDirDirty(path.dirname(newPath));
-                this.enqueueDirRecompute(path.dirname(newPath));
-                for (const key of Array.from(this.dirAggCache.keys())) {
-                    if (key === oldPath || key.startsWith(oldPath + path.sep)) { this.dirAggCache.delete(key); changed = true; }
-                }
-            }
-            if (changed) this.refreshDebounced();
-        });
-
         // 初始化忽略解析器
         this.initIgnoreParser();
 
@@ -232,6 +184,110 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         setTimeout(() => {
             try { this.orderManager?.migrateAllFileKeys?.(); } catch { /* ignore */ }
         }, 1500);
+    }
+
+    /**
+     * 处理全局文件追踪事件
+     */
+    private handleFileChange(event: FileChangeEvent): void {
+        const filePath = event.filePath;
+        const fileName = path.basename(filePath);
+
+        wcDebug(`WordCount: File change detected - ${event.type}: ${filePath}`);
+
+        // 检查是否为支持的文件类型或参考文件类型
+        const ext = path.extname(fileName).slice(1).toLowerCase();
+        const supportedExts = getSupportedExtensions();
+        const refExts = (vscode.workspace.getConfiguration('AndreaNovelHelper')
+            .get<string[]>('wordCount.referenceVisibleExtensions', []) || [])
+            .map(s => (s || '').toLowerCase());
+        
+        const isSupported = supportedExts.includes(ext);
+        const isReference = refExts.includes(ext);
+        const isSpecial = isSpecialVisibleFile(fileName);
+        
+        if (!isSpecial && !isSupported && !isReference) {
+            wcDebug(`WordCount: Ignoring unsupported file type: ${ext} for ${filePath}`);
+            return;
+        }
+
+        wcDebug(`WordCount: Processing ${event.type} for supported file: ${filePath}`);
+
+        switch (event.type) {
+            case 'create':
+            case 'change':
+                this.invalidateCache(filePath);
+                const parent = path.dirname(filePath);
+                this.markDirDirty(parent);
+                this.enqueueDirRecompute(parent);
+                this.refreshDebounced();
+                // 对于新创建的文件，只有支持的文件类型才安排后台统计，参考文件不需要
+                if (event.type === 'create' && isSupported) {
+                    wcDebug(`WordCount: Scheduling file stats for new supported file: ${filePath}`);
+                    this.scheduleFileStat(filePath);
+                } else if (event.type === 'create' && isReference) {
+                    wcDebug(`WordCount: Reference file created, UI refresh only: ${filePath}`);
+                }
+                break;
+            case 'rename':
+                wcDebug(`WordCount: Processing file rename: ${event.oldPath} -> ${filePath}`);
+                if (event.oldPath) {
+                    // 删除旧路径的缓存
+                    this.statsCache.delete(event.oldPath);
+                    // 删除旧路径的子文件缓存（如果是目录）
+                    for (const key of Array.from(this.statsCache.keys())) {
+                        if (key.startsWith(event.oldPath + path.sep)) {
+                            this.statsCache.delete(key);
+                        }
+                    }
+                    // 删除旧路径的目录聚合缓存
+                    for (const key of Array.from(this.dirAggCache.keys())) {
+                        if (key === event.oldPath || key.startsWith(event.oldPath + path.sep)) {
+                            this.dirAggCache.delete(key);
+                        }
+                    }
+                    // 标记旧路径的父目录为脏
+                    const oldParent = path.dirname(event.oldPath);
+                    this.markDirDirty(oldParent);
+                    this.enqueueDirRecompute(oldParent);
+                }
+                // 处理新路径
+                this.invalidateCache(filePath);
+                const newParent = path.dirname(filePath);
+                this.markDirDirty(newParent);
+                this.enqueueDirRecompute(newParent);
+                this.refreshDebounced();
+                // 对于支持的文件类型，安排后台统计
+                if (isSupported) {
+                    wcDebug(`WordCount: Scheduling file stats for renamed supported file: ${filePath}`);
+                    this.scheduleFileStat(filePath);
+                } else if (isReference) {
+                    wcDebug(`WordCount: Reference file renamed, UI refresh only: ${filePath}`);
+                }
+                break;
+            case 'delete':
+                wcDebug(`WordCount: Processing file deletion: ${filePath}`);
+                // 删除文件缓存
+                if (this.statsCache.delete(filePath)) {
+                    const parentDir = path.dirname(filePath);
+                    this.markDirDirty(parentDir);
+                    this.enqueueDirRecompute(parentDir);
+                    // 删除子文件缓存（如果是目录）
+                    for (const key of Array.from(this.statsCache.keys())) {
+                        if (key.startsWith(filePath + path.sep)) {
+                            this.statsCache.delete(key);
+                        }
+                    }
+                    // 删除目录聚合缓存
+                    for (const key of Array.from(this.dirAggCache.keys())) {
+                        if (key === filePath || key.startsWith(filePath + path.sep)) {
+                            this.dirAggCache.delete(key);
+                        }
+                    }
+                    this.refreshDebounced();
+                }
+                break;
+        }
     }
 
     private isPathForced(p: string): boolean {
@@ -1260,6 +1316,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
     /** 清理资源 */
     public dispose(): void {
+        // 取消注册全局文件追踪回调
+        unregisterFileChangeCallback('wordCount');
+        
         if (this.gitGuard) {
             this.gitGuard.dispose();
         }

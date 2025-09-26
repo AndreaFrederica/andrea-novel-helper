@@ -408,7 +408,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref, nextTick, computed, onUnmounted, watch } from 'vue';
+import { onMounted, ref, nextTick, computed, onUnmounted } from 'vue';
 import RelationGraph, {
   type RGJsonData,
   type RGOptions,
@@ -567,18 +567,7 @@ const showHoverTooltip = ref(false);
 const hoverNodeData = ref<ExtendedNodeData | null>(null);
 const hoverPosition = ref({ x: 0, y: 0 });
 const isHoveringTooltip = ref(false);
-
-// 从localStorage读取hover模式设置，默认为true（跟随鼠标）
-const getStoredHoverFollowMouse = (): boolean => {
-  try {
-    const stored = localStorage.getItem('hoverFollowMouse');
-    return stored !== null ? JSON.parse(stored) : true;
-  } catch {
-    return true;
-  }
-};
-
-const hoverFollowMouse = ref(getStoredHoverFollowMouse()); // hover模式：true=跟随鼠标，false=固定在节点位置
+const hoverFollowMouse = ref(true); // hover模式：true=跟随鼠标，false=固定在节点位置
 
 // hover 相关的定时器和状态
 const hoverTimer = ref<ReturnType<typeof setTimeout> | null>(null);
@@ -961,16 +950,6 @@ onMounted(() => {
   //   void showGraph();
   // }
 });
-
-// 监听hoverFollowMouse变化并保存到localStorage
-watch(hoverFollowMouse, (newValue) => {
-  try {
-    localStorage.setItem('hoverFollowMouse', JSON.stringify(newValue));
-    console.log('💾 Hover模式已保存:', newValue ? '跟随鼠标' : '固定在节点');
-  } catch (error) {
-    console.warn('保存hover模式设置失败:', error);
-  }
-}, { immediate: false });
 
 const showGraph = async () => {
   const __graph_json_data: RGJsonData = {
@@ -2153,8 +2132,8 @@ function changeRelationType() {
 
 // Hover 相关函数
 const handleMouseMove = (event: MouseEvent) => {
-  // 只有在tooltip显示且跟随鼠标模式时才更新位置
-  if (showHoverTooltip.value && hoverFollowMouse.value) {
+  // 只有在tooltip显示时才更新位置
+  if (showHoverTooltip.value) {
     const target = event.target as HTMLElement;
     
     // 检查是否仍在节点上
@@ -2281,11 +2260,9 @@ const handleMouseOver = (event: MouseEvent) => {
 
 const handleMouseOut = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
-  const relatedTarget = event.relatedTarget as HTMLElement;
   
   console.log('🐭 Mouse out event:', {
     target: target,
-    relatedTarget: relatedTarget,
     tagName: target.tagName,
     className: target.className,
     hasRelNodeClass: target.classList.contains('rel-node'),
@@ -2296,19 +2273,6 @@ const handleMouseOut = (event: MouseEvent) => {
   
   // 检查是否离开了节点元素 - 修正类名检测
   if (target.classList.contains('rel-node') || target.classList.contains('rel-node-peel') || target.closest('.rel-node') || target.closest('.rel-node-peel')) {
-    
-    // 检查relatedTarget是否仍在同一个节点内
-    // 如果relatedTarget也在节点内，说明只是在节点内部移动，不应该隐藏tooltip
-    if (relatedTarget && (
-      relatedTarget.classList.contains('rel-node') || 
-      relatedTarget.classList.contains('rel-node-peel') || 
-      relatedTarget.closest('.rel-node') || 
-      relatedTarget.closest('.rel-node-peel')
-    )) {
-      console.log('🔄 Mouse moving within node, not hiding tooltip');
-      return; // 不隐藏tooltip
-    }
-    
     console.log('🚪 Leaving node element, clearing timer and scheduling hide');
     
     // 清除定时器

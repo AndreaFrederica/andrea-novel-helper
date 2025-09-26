@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { FileChangeEvent, initializeFileTracker, disposeFileTracker, getFileTracker } from './fileTracker';
-export { getFileTracker } from './fileTracker';
+export { getFileTracker, FileChangeEvent } from './fileTracker';
 import { FileMetadata } from './fileTrackingData';
 
 /**

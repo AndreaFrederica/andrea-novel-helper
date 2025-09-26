@@ -1,0 +1,57 @@
+{
+  "nodes": [
+    {
+      "id": "test1",
+      "text": "测试角色A",
+      "x": 100,
+      "y": 50,
+      "color": "#4CAF50",
+      "borderColor": "#2E7D32",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 80,
+      "height": 40,
+      "data": {
+        "sexType": "male",
+        "isGoodMan": true,
+        "roleUuid": "test-uuid-001"
+      }
+    },
+    {
+      "id": "test2",
+      "text": "测试角色B",
+      "x": 250,
+      "y": 50,
+      "color": "#E91E63",
+      "borderColor": "#AD1457",
+      "fontColor": "#FFFFFF",
+      "nodeShape": 0,
+      "width": 80,
+      "height": 40,
+      "data": {
+        "sexType": "female",
+        "isGoodMan": true,
+        "roleUuid": "test-uuid-002"
+      }
+    }
+  ],
+  "lines": [
+    {
+      "from": "test1",
+      "to": "test2",
+      "text": "测试关系",
+      "color": "#2196F3",
+      "lineWidth": 3,
+      "lineShape": 1,
+      "startArrow": false,
+      "endArrow": false,
+      "isDashed": false,
+      "data": {
+        "type": "朋友关系",
+        "description": "测试用的关系",
+        "strength": 7,
+        "tags": ["测试", "朋友"]
+      }
+    }
+  ]
+}

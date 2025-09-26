@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "id": "node1",
+      "name": "角色A",
+      "type": "主角",
+      "x": 100,
+      "y": 100,
+      "color": "#ff6b6b"
+    },
+    {
+      "id": "node2", 
+      "name": "角色B",
+      "type": "配角",
+      "x": 300,
+      "y": 200,
+      "color": "#4ecdc4"
+    }
+  ],
+  "lines": [
+    {
+      "id": "line1",
+      "from": "node1",
+      "to": "node2",
+      "label": "朋友",
+      "type": "friendship"
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  rootId: "1",
+  nodes: [
+    {
+      id: "1",
+      text: "张三",
+      roleUuid: "role-001",
+      x: 100,
+      y: 100,
+      color: "#4CAF50",
+      borderColor: "#2E7D32",
+      fontColor: "#FFFFFF",
+      nodeShape: 0,
+      width: 80,
+      height: 40,
+      data: {
+        sexType: "male",
+        isGoodMan: true,
+        age: 25,
+        occupation: "学生"
+      }
+    },
+    {
+      id: "2", 
+      text: "李四",
+      roleUuid: "role-002",
+      x: 300,
+      y: 100,
+      color: "#2196F3",
+      borderColor: "#1565C0",
+      fontColor: "#FFFFFF",
+      nodeShape: 0,
+      width: 80,
+      height: 40,
+      data: {
+        sexType: "male",
+        isGoodMan: true,
+        age: 24,
+        occupation: "学生"
+      }
+    },
+    {
+      id: "3",
+      text: "王五",
+      roleUuid: "role-003", 
+      x: 200,
+      y: 200,
+      color: "#FF9800",
+      borderColor: "#E65100",
+      fontColor: "#FFFFFF",
+      nodeShape: 0,
+      width: 80,
+      height: 40,
+      data: {
+        sexType: "male",
+        isGoodMan: true,
+        age: 35,
+        occupation: "教授"
+      }
+    },
+    {
+      id: "4",
+      text: "赵六",
+      roleUuid: "role-004",
+      x: 400,
+      y: 200,
+      color: "#E91E63",
+      borderColor: "#AD1457",
+      fontColor: "#FFFFFF",
+      nodeShape: 0,
+      width: 80,
+      height: 40,
+      data: {
+        sexType: "female",
+        isGoodMan: true,
+        age: 23,
+        occupation: "学生"
+      }
+    }
+  ],
+  lines: [
+    {
+      from: "1",
+      to: "2",
+      text: "大学同窗好友",
+      color: "#4CAF50",
+      lineWidth: 7,
+      lineShape: 0,
+      startArrow: false,
+      endArrow: false,
+      isDashed: false,
+      data: {
+        type: "朋友关系",
+        strength: 7,
+        status: "active",
+        tags: ["同学", "朋友"],
+        notes: "在大学期间结识的好友，经常一起学习",
+        startTime: "2020-09-01",
+        endTime: "",
+        uuid: "rel-001"
+      }
+    },
+    {
+      from: "1",
+      to: "3",
+      text: "导师与学生",
+      color: "#FF9800",
+      lineWidth: 8,
+      lineShape: 0,
+      startArrow: false,
+      endArrow: true,
+      isDashed: false,
+      data: {
+        type: "师生关系",
+        strength: 8,
+        status: "active",
+        tags: ["师生", "学术"],
+        notes: "王五是张三的研究生导师",
+        startTime: "2021-03-15",
+        endTime: "",
+        uuid: "rel-002"
+      }
+    },
+    {
+      from: "2",
+      to: "4",
+      text: "大学恋人",
+      color: "#E91E63",
+      lineWidth: 9,
+      lineShape: 0,
+      startArrow: false,
+      endArrow: false,
+      isDashed: false,
+      data: {
+        type: "恋人关系",
+        strength: 9,
+        status: "active",
+        tags: ["恋人", "情侣"],
+        notes: "情人节开始交往的恋人",
+        startTime: "2021-02-14",
+        endTime: "",
+        uuid: "rel-003"
+      }
+    }
+  ]
+}

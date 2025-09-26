@@ -9,6 +9,8 @@ export interface IgnoreConfig {
     excludePatterns?: string[];
     ignoreParser?: CombinedIgnoreParser | null;
     allowedLanguages?: string[]; // 允许的语言类型（文件扩展名，无点）
+    ignoreReferenceFiles?: boolean; // 是否忽略参考文件（防止生成数据库记录）
+    referenceExtensions?: string[]; // 参考文件扩展名列表
 }
 
 /**
@@ -16,8 +18,18 @@ export interface IgnoreConfig {
  * @param filePath 文件路径
  * @param config 忽略配置
  * @param config.allowedLanguages 允许的文件扩展名（不带点），未提供时使用默认值 ['md', 'txt', 'json', 'json5']
+ * @param config.ignoreReferenceFiles 是否忽略参考文件（防止生成数据库记录），默认为 false
  */
 export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
+    // 检查是否为参考文件（如果启用了忽略参考文件选项）
+    if (config.ignoreReferenceFiles) {
+        const ext = path.extname(filePath).slice(1).toLowerCase();
+        const refExts = config.referenceExtensions || [];
+        if (refExts.includes(ext)) {
+            return true; // 参考文件被忽略，不生成数据库记录
+        }
+    }
+    
     // 语言类型过滤（默认：仅允许 md, txt, json, json5）
     const ext = path.extname(filePath).slice(1).toLowerCase();
     const allowed = getAllowedFileTypes(config.allowedLanguages);

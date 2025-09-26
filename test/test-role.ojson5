@@ -1,0 +1,13 @@
+[
+  {
+    "name": "测试角色",
+    "type": "主角",
+    "description": "这是一个测试角色",
+    "color": "#ff6b6b",
+    "affiliation": "测试组织",
+    "aliases": ["测试", "角色"],
+    "age": 25,
+    "gender": "男",
+    "occupation": "测试员"
+  }
+]
