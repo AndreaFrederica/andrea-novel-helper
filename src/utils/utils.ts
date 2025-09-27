@@ -12,7 +12,9 @@ import { globalFileCache } from '../context/fileCache';
 import { parseMarkdownRoles } from './Parser/markdownParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 import { generateUUIDv7, generateRoleNameHash } from './uuidUtils';
-import { ensureRoleUUIDs } from './roleUuidManager';
+import { ensureRoleUUIDs, fixInvalidRoleUUIDs } from './roleUuidManager';
+import { loadRelationships, updateRelationships } from './relationshipLoader';
+import { enhanceAllRolesWithRelationships } from './roleRelationshipEnhancer';
 
 export interface TextStats {
 	cjkChars: number;  // 中文字符
@@ -330,6 +332,16 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	if (changedFiles && changedFiles.length > 0) {
 		console.log(`loadRoles: 增量更新 ${changedFiles.length} 个文件`);
 		performIncrementalUpdate(changedFiles, novelHelperRoot);
+		
+		// 增量更新关系表
+		updateRelationships(changedFiles, novelHelperRoot).then(() => {
+			// 关系表更新完成后，为所有角色添加关系属性
+			const enhanceResult = enhanceAllRolesWithRelationships(roles);
+			console.log(`[loadRoles] 增量更新关系属性增强完成: 总角色 ${enhanceResult.totalRoles}, 增强角色 ${enhanceResult.enhancedRoles}, 总关系属性 ${enhanceResult.totalRelationshipProperties}`);
+		}).catch(error => {
+			console.error('[loadRoles] 增量更新关系表失败:', error);
+		});
+		
 		_onDidChangeRoles.fire();
 		generateCSpellDictionary();
 		return;
@@ -450,6 +462,18 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 				console.error('[loadRoles] 为角色添加 UUID 失败:', error);
 			});
 			
+			// 加载关系表（在角色加载完成后）
+		loadRelationships(novelHelperRoot).then(() => {
+			// 关系表加载完成后，为所有角色添加关系属性
+			const enhanceResult = enhanceAllRolesWithRelationships(roles);
+			console.log(`[loadRoles] 关系属性增强完成: 总角色 ${enhanceResult.totalRoles}, 增强角色 ${enhanceResult.enhancedRoles}, 总关系属性 ${enhanceResult.totalRelationshipProperties}`);
+			
+			// 触发角色变更事件，通知UI更新
+			_onDidChangeRoles.fire();
+		}).catch(error => {
+			console.error('[loadRoles] 加载关系表失败:', error);
+		});
+			
 			generateCSpellDictionary();
 			// 触发"全量完成"事件（供最终一次装饰/自动机重建）
 			_onDidFinishRoles.fire();
@@ -500,6 +524,18 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
 function isRoleFile(fileName: string, fileFullPath?: string): boolean {
 	const lowerName = fileName.toLowerCase();
 	const debugPrefix = `[isRoleFile] name="${fileName}" path="${fileFullPath || ''}"`;
+	
+	// ojson5 文件一定是角色文件
+	if (lowerName.endsWith('.ojson5')) {
+		console.log(`${debugPrefix} ojson5Extension -> true`);
+		return true;
+	}
+	
+	// rjson5 文件一定是关系文件，不是角色文件
+	if (lowerName.endsWith('.rjson5')) {
+		console.log(`${debugPrefix} rjson5Extension -> false`);
+		return false;
+	}
 	
 	// 正则表达式文件只支持JSON5格式
 	if (lowerName.includes('regex-patterns') || lowerName.includes('regex')) {
@@ -582,12 +618,15 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 		}
 		
 		const fileType = getFileType(fileName);
-		
-		if (fileName.endsWith('.json5')) {
+
+		// JSON5-like role/relationship files: .json5, .ojson5, .rjson5
+		const lower = fileName.toLowerCase();
+		if (lower.endsWith('.json5') || lower.endsWith('.ojson5') || lower.endsWith('.rjson5')) {
+			// .rjson5 are relationship files; loadJSON5RoleFile will handle object shapes and decide
 			loadJSON5RoleFile(content, filePath, packagePath, fileType);
-		} else if (fileName.endsWith('.txt')) {
+		} else if (lower.endsWith('.txt')) {
 			loadTXTRoleFile(content, filePath, packagePath, fileType);
-		} else if (fileName.endsWith('.md')) {
+		} else if (lower.endsWith('.md')) {
 			loadMarkdownRoleFile(content, filePath, packagePath, fileType);
 		}
 		// 记录敏感词库源文件（按解析出的角色类型判定）
@@ -669,6 +708,11 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 		}
 		
 		console.log(`loadJSON5RoleFile: 从 ${filePath} 加载了 ${rolesArray.length} 个角色`);
+
+		// 异步校验并修复（如果 UUID 格式不合法则替换为 UUID v7 并写回文件）
+		void fixInvalidRoleUUIDs(rolesArray, true).catch(err => {
+			console.error('[loadJSON5RoleFile] fixInvalidRoleUUIDs 失败:', err);
+		});
 	} catch (error) {
 		// 提供更详细的错误信息
 		if (error instanceof SyntaxError) {
@@ -700,6 +744,11 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 			}
 		}
 		console.log(`loadMarkdownRoleFile: 从 ${filePath} 加载了 ${markdownRoles.length} 个角色`);
+
+		// 异步校验并修复 UUID
+		void fixInvalidRoleUUIDs(markdownRoles, true).catch(err => {
+			console.error('[loadMarkdownRoleFile] fixInvalidRoleUUIDs 失败:', err);
+		});
 	} catch (error) {
 		console.error(`loadMarkdownRoleFile: 解析 Markdown 文件失败 ${filePath}: ${error}`);
 		throw new Error(`解析 Markdown 文件失败: ${error}`);
@@ -902,6 +951,11 @@ function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: strin
 	// 为新加载的角色添加 UUID（异步执行，不阻塞主流程）
 	ensureRoleUUIDs(roles, true).catch(error => {
 		console.error('[performIncrementalUpdate] 为角色添加 UUID 失败:', error);
+	});
+
+	// 修复可能存在的无效 UUID（异步）
+	void fixInvalidRoleUUIDs(roles, true).catch(error => {
+		console.error('[performIncrementalUpdate] 修复无效 UUID 失败:', error);
 	});
 }
 

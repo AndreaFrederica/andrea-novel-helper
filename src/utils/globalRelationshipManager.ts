@@ -98,6 +98,72 @@ export class GlobalRelationshipManager {
     }
 
     /**
+     * 通过角色UUID获取该角色的所有关系
+     * @param roleUuid 角色UUID
+     * @returns 该角色相关的所有关系，如果UUID不存在则返回空数组
+     */
+    getRelationshipsByRoleUuid(roleUuid: string): RoleRelationship[] {
+        const roleName = this.getRoleNameByUuid(roleUuid);
+        if (!roleName) {
+            console.warn(`未找到UUID对应的角色名称: ${roleUuid}`);
+            return [];
+        }
+        return this.getRelationshipsByRole(roleName);
+    }
+
+    /**
+     * 通过角色UUID获取该角色作为源角色的关系
+     * @param roleUuid 角色UUID
+     * @returns 该角色作为源角色的所有关系
+     */
+    getRelationshipsBySourceUuid(roleUuid: string): RoleRelationship[] {
+        const relationships: RoleRelationship[] = [];
+        
+        for (const relationship of this.relationships.values()) {
+            if (relationship.metadata?.sourceRoleUuid === roleUuid) {
+                relationships.push(relationship);
+            }
+        }
+        
+        return relationships;
+    }
+
+    /**
+     * 通过角色UUID获取该角色作为目标角色的关系
+     * @param roleUuid 角色UUID
+     * @returns 该角色作为目标角色的所有关系
+     */
+    getRelationshipsByTargetUuid(roleUuid: string): RoleRelationship[] {
+        const relationships: RoleRelationship[] = [];
+        
+        for (const relationship of this.relationships.values()) {
+            if (relationship.metadata?.targetRoleUuid === roleUuid) {
+                relationships.push(relationship);
+            }
+        }
+        
+        return relationships;
+    }
+
+    /**
+     * 通过角色UUID获取该角色的所有关系（包括作为源角色和目标角色）
+     * @param roleUuid 角色UUID
+     * @returns 该角色相关的所有关系
+     */
+    getAllRelationshipsByUuid(roleUuid: string): RoleRelationship[] {
+        const relationships: RoleRelationship[] = [];
+        
+        for (const relationship of this.relationships.values()) {
+            if (relationship.metadata?.sourceRoleUuid === roleUuid || 
+                relationship.metadata?.targetRoleUuid === roleUuid) {
+                relationships.push(relationship);
+            }
+        }
+        
+        return relationships;
+    }
+
+    /**
      * 获取两个角色之间的关系
      * @param role1 角色1
      * @param role2 角色2

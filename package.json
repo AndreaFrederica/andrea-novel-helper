@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -20,7 +20,6 @@
   "activationEvents": [
     "onLanguage:markdown",
     "onLanguage:plaintext",
-    "onLanguage:json5",
     "onFileSystem:andrea-outline",
     "onStartupFinished"
   ],
@@ -139,12 +138,12 @@
         },
         {
           "id": "AndreaCommentsSidebar",
-          "title": "小说助手:批注管理",
+          "title": "%sidebar.comments.title%",
           "icon": "$(comment-discussion)"
         },
         {
           "id": "AndreaWebDAVSidebar",
-          "title": "小说助手:WebDAV 管理",
+          "title": "%sidebar.webdav.title%",
           "icon": "$(cloud)"
         }
       ]
@@ -231,7 +230,7 @@
       },
       {
         "command": "andrea.comments.open",
-        "title": "打开批注面板",
+        "title": "%command.comments.open.title%",
         "icon": {
           "light": "images/comments_light.svg",
           "dark": "images/comments_dark.svg"
@@ -239,19 +238,19 @@
       },
       {
         "command": "andrea.comments.add",
-        "title": "添加批注（选区）"
+        "title": "%command.comments.add.title%"
       },
       {
         "command": "andrea.comments.resolve",
-        "title": "将批注标记为已解决"
+        "title": "%command.comments.resolve.title%"
       },
       {
         "command": "andrea.comments.reopen",
-        "title": "重新打开批注"
+        "title": "%command.comments.reopen.title%"
       },
       {
         "command": "andrea.commentsExplorer.toggleStatus",
-        "title": "切换批注状态",
+        "title": "%command.commentsExplorer.toggleStatus.title%",
         "icon": {
           "light": "$(check)",
           "dark": "$(check)"
@@ -259,7 +258,7 @@
       },
       {
         "command": "andrea.commentsExplorer.openComment",
-        "title": "跳转到批注",
+        "title": "%command.commentsExplorer.openComment.title%",
         "icon": {
           "light": "$(go-to-file)",
           "dark": "$(go-to-file)"
@@ -267,7 +266,7 @@
       },
       {
         "command": "andrea.commentsExplorer.refresh",
-        "title": "刷新批注列表",
+        "title": "%command.commentsExplorer.refresh.title%",
         "icon": {
           "light": "$(refresh)",
           "dark": "$(refresh)"
@@ -275,7 +274,7 @@
       },
       {
         "command": "andrea.commentsExplorer.search",
-        "title": "搜索批注",
+        "title": "%command.commentsExplorer.search.title%",
         "icon": {
           "light": "$(search)",
           "dark": "$(search)"
@@ -283,7 +282,7 @@
       },
       {
         "command": "andrea.commentsExplorer.filterByStatus",
-        "title": "按状态过滤",
+        "title": "%command.commentsExplorer.filterByStatus.title%",
         "icon": {
           "light": "$(filter)",
           "dark": "$(filter)"
@@ -291,7 +290,7 @@
       },
       {
         "command": "andrea.commentsExplorer.clearFilter",
-        "title": "清除过滤",
+        "title": "%command.commentsExplorer.clearFilter.title%",
         "icon": {
           "light": "$(clear-all)",
           "dark": "$(clear-all)"
@@ -299,7 +298,7 @@
       },
       {
         "command": "andrea.commentsExplorer.exportComments",
-        "title": "导出批注",
+        "title": "%command.commentsExplorer.exportComments.title%",
         "icon": {
           "light": "$(export)",
           "dark": "$(export)"
@@ -307,7 +306,7 @@
       },
       {
         "command": "andrea.commentsExplorer.exportToMarkdown",
-        "title": "导出为Markdown",
+        "title": "%command.commentsExplorer.exportToMarkdown.title%",
         "icon": {
           "light": "$(markdown)",
           "dark": "$(markdown)"
@@ -315,7 +314,7 @@
       },
       {
         "command": "andrea.commentsExplorer.exportToJson",
-        "title": "导出为JSON",
+        "title": "%command.commentsExplorer.exportToJson.title%",
         "icon": {
           "light": "$(json)",
           "dark": "$(json)"
@@ -396,6 +395,14 @@
       {
         "command": "AndreaNovelHelper.createVocabulary",
         "title": "%command.createVocabulary.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.createRoleFile",
+        "title": "%command.createRoleFile.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.createRelationshipFile",
+        "title": "%command.createRelationshipFile.title%"
       },
       {
         "command": "AndreaNovelHelper.createSubPackage",
@@ -604,43 +611,43 @@
       },
       {
         "command": "andrea.webdav.manageAccounts",
-        "title": "WebDAV 账户管理"
+        "title": "%command.webdav.manageAccounts.title%"
       },
       {
         "command": "andrea.webdav.syncNow",
-        "title": "WebDAV 立即同步"
+        "title": "%command.webdav.syncNow.title%"
       },
       {
         "command": "andrea.webdav.openPanel",
-        "title": "打开WebDAV管理面板"
+        "title": "%command.webdav.openPanel.title%"
       },
       {
         "command": "andrea.webdav.refreshFiles",
-        "title": "刷新WebDAV文件列表"
+        "title": "%command.webdav.refreshFiles.title%"
       },
       {
         "command": "andrea.webdav.openFile",
-        "title": "打开WebDAV文件"
+        "title": "%command.webdav.openFile.title%"
       },
       {
         "command": "andrea.webdav.uploadFile",
-        "title": "上传文件到WebDAV"
+        "title": "%command.webdav.uploadFile.title%"
       },
       {
         "command": "andrea.webdav.deleteFile",
-        "title": "删除WebDAV文件"
+        "title": "%command.webdav.deleteFile.title%"
       },
       {
         "command": "andrea.webdav.createFolder",
-        "title": "创建WebDAV文件夹"
+        "title": "%command.webdav.createFolder.title%"
       },
       {
         "command": "andrea.webdav.renameFile",
-        "title": "重命名WebDAV文件"
+        "title": "%command.webdav.renameFile.title%"
       },
       {
         "command": "andrea.webdav.copyFile",
-        "title": "复制WebDAV文件"
+        "title": "%command.webdav.copyFile.title%"
       }
     ],
     "walkthroughs": [
@@ -756,8 +763,18 @@
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createRegexPatterns",
+          "command": "AndreaNovelHelper.createRoleFile",
           "group": "0_create@4"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createRelationshipFile",
+          "group": "0_create@5"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createRegexPatterns",
+          "group": "0_create@6"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
@@ -2122,7 +2139,7 @@
       "AndreaCommentsSidebar": [
         {
           "id": "andrea.commentsExplorer",
-          "name": "批注管理",
+          "name": "%view.comments.explorer.name%",
           "icon": "comment-discussion"
         }
       ],
@@ -2130,12 +2147,12 @@
         {
           "id": "andrea.webdavPanel",
           "type": "webview",
-          "name": "WebDAV 管理",
+          "name": "%view.webdav.panel.name%",
           "icon": "cloud"
         },
         {
           "id": "andrea.webdavFiles",
-          "name": "WebDAV 文件",
+          "name": "%view.webdav.files.name%",
           "icon": "cloud-download"
         },
         {

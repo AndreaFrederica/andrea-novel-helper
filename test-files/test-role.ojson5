@@ -1,0 +1,17 @@
+{
+  // 测试角色文件 - ojson5 格式
+  "roles": [
+    {
+      "name": "测试角色A",
+      "type": "主角",
+      "description": "这是一个测试角色",
+      "uuid": "test-role-a-uuid"
+    },
+    {
+      "name": "测试角色B", 
+      "type": "配角",
+      "description": "这是另一个测试角色",
+      "uuid": "test-role-b-uuid"
+    }
+  ]
+}

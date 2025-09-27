@@ -1,0 +1,19 @@
+{
+  // 测试关系文件 - rjson5 格式
+  "relationships": [
+    {
+      "from": "test-role-a-uuid",
+      "to": "test-role-b-uuid", 
+      "type": "朋友",
+      "description": "测试关系A和B是朋友",
+      "strength": 0.8
+    },
+    {
+      "from": "test-role-b-uuid",
+      "to": "test-role-a-uuid",
+      "type": "同事", 
+      "description": "测试关系B和A是同事",
+      "strength": 0.6
+    }
+  ]
+}

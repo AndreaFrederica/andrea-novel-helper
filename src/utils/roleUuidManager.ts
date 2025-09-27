@@ -10,6 +10,7 @@ import JSON5 from 'json5';
 import { Role } from '../extension';
 import { generateUUIDv7, generateRoleNameHash, isValidUUID } from './uuidUtils';
 import { readTextFileDetectEncoding } from './utils';
+import { globalFileCache } from '../context/fileCache';
 import { parseMarkdownRoles, FIELD_ALIASES } from './Parser/markdownParser';
 
 /**
@@ -78,7 +79,8 @@ async function updateRoleFile(filePath: string, rolesWithUuid: Role[]): Promise<
 
     const fileName = path.basename(filePath).toLowerCase();
     
-    if (fileName.endsWith('.json5')) {
+    if (fileName.endsWith('.json5') || fileName.endsWith('.ojson5') || fileName.endsWith('.rjson5')) {
+        // .ojson5/.rjson5 视为 JSON5-like 文件，尝试以 JSON5 更新
         await updateJSON5File(filePath, rolesWithUuid);
     } else if (fileName.endsWith('.md')) {
         await updateMarkdownFile(filePath, rolesWithUuid);
@@ -96,11 +98,21 @@ async function updateRoleFile(filePath: string, rolesWithUuid: Role[]): Promise<
 async function updateJSON5File(filePath: string, rolesWithUuid: Role[]): Promise<void> {
     try {
         const content = await readTextFileDetectEncoding(filePath);
-        const data = JSON5.parse(content);
-        
+        if (!content || content.trim() === '') {
+            console.warn(`[RoleUuidManager] 跳过空文件（无法解析）: ${filePath}`);
+            return;
+        }
+        let data: any;
+        try {
+            data = JSON5.parse(content);
+        } catch (parseErr) {
+            console.error(`[RoleUuidManager] 解析 JSON5 失败，跳过更新: ${filePath}`, parseErr);
+            return;
+        }
+
         let rolesArray: Role[] = [];
         let isArrayFormat = false;
-        
+
         // 确定数据格式
         if (Array.isArray(data)) {
             rolesArray = data;
@@ -118,17 +130,26 @@ async function updateJSON5File(filePath: string, rolesWithUuid: Role[]): Promise
                 })) as Role[];
             }
         }
-        
-        // 更新角色的 UUID
-        const roleMap = new Map(rolesWithUuid.map(r => [r.name, r.uuid]));
-        
+
+        // 构建 name -> uuid 映射
+        const roleMap = new Map<string | undefined, string | undefined>(rolesWithUuid.map(r => [r.name, r.uuid]));
+
+        // 记录是否有实际变更
+        let changed = false;
         for (const role of rolesArray) {
-            if (roleMap.has(role.name) && !role.uuid) {
-                role.uuid = roleMap.get(role.name);
+            if (!role || typeof role !== 'object') { continue; }
+            if (!role.name) { continue; }
+            if (roleMap.has(role.name)) {
+                const newUuid = roleMap.get(role.name);
+                // 只有当磁盘上的值与目标值不同才修改
+                if (newUuid && role.uuid !== newUuid) {
+                    role.uuid = newUuid;
+                    changed = true;
+                }
             }
         }
-        
-        // 重新构建数据结构
+
+        // 重建数据结构，但保持原始的结构形态
         let updatedData: any;
         if (isArrayFormat) {
             updatedData = rolesArray;
@@ -137,19 +158,26 @@ async function updateJSON5File(filePath: string, rolesWithUuid: Role[]): Promise
         } else if (data.characters) {
             updatedData = { ...data, characters: rolesArray };
         } else {
-            // 对象格式，重新构建
             updatedData = {};
             for (const role of rolesArray) {
-                const { name, ...roleData } = role;
+                const { name, ...roleData } = role as any;
                 updatedData[name] = roleData;
             }
         }
-        
-        // 写回文件
-        const updatedContent = JSON5.stringify(updatedData, null, 2);
-        await fs.promises.writeFile(filePath, updatedContent, 'utf8');
-        
-        console.log(`[RoleUuidManager] 已更新 JSON5 文件: ${filePath}`);
+
+        // 若无变化则跳过写入，避免触发文件变更事件回环
+        const originalNormalized = JSON5.stringify(data, null, 2);
+        const updatedNormalized = JSON5.stringify(updatedData, null, 2);
+        if (!changed && originalNormalized === updatedNormalized) {
+            console.log(`[RoleUuidManager] JSON5 内容无变化，跳过写入: ${filePath}`);
+            return;
+        }
+
+    // 写回文件（添加结尾换行以保持风格一致），写入后刷新全局缓存
+    const updatedContent = updatedNormalized + '\n';
+    await fs.promises.writeFile(filePath, updatedContent, 'utf8');
+    try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
+    console.log(`[RoleUuidManager] 已更新 JSON5 文件: ${filePath}`);
     } catch (error) {
         throw new Error(`更新 JSON5 文件失败: ${error}`);
     }
@@ -219,11 +247,11 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
             insertUuidAtLine(updatedLines, insertUuidAfterLine, currentRoleLevel + 1, roleUuidMap.get(currentRoleName)!);
         }
         
-        // 写回文件
-        const updatedContent = updatedLines.join('\n');
-        await fs.promises.writeFile(filePath, updatedContent, 'utf8');
-        
-        console.log(`[RoleUuidManager] 已更新 Markdown 文件: ${filePath}`);
+    // 写回文件，并刷新全局缓存
+    const updatedContent = updatedLines.join('\n');
+    await fs.promises.writeFile(filePath, updatedContent, 'utf8');
+    try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
+    console.log(`[RoleUuidManager] 已更新 Markdown 文件: ${filePath}`);
     } catch (error) {
         throw new Error(`更新 Markdown 文件失败: ${error}`);
     }

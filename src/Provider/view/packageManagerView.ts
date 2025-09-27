@@ -6,6 +6,7 @@ import * as path from 'path';
 import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
 import { loadRoles } from '../../utils/utils';
+import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 
@@ -195,19 +196,23 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                             isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
                         )
                     );
-                } else if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
+                } else {
                     const ext = path.extname(name).toLowerCase();
-                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5'];
-                    const fileNode = new PackageNode(
-                        vscode.Uri.file(full),
-                        vscode.TreeItemCollapsibleState.None
-                    );
-                    if (!allowed.includes(ext)) {
-                        fileNode.label += ' (格式错误)';
-                        fileNode.iconPath = new vscode.ThemeIcon('error');
-                        fileNode.contextValue = 'resourceFileError';
+                    const isRoleOrRelationshipFile = ext === '.ojson5' || ext === '.rjson5' || ext === '.ojson' || ext === '.rjson';
+                    
+                    if (isRoleOrRelationshipFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
+                        const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5'];
+                        const fileNode = new PackageNode(
+                            vscode.Uri.file(full),
+                            vscode.TreeItemCollapsibleState.None
+                        );
+                        if (!allowed.includes(ext)) {
+                            fileNode.label += ' (格式错误)';
+                            fileNode.iconPath = new vscode.ThemeIcon('error');
+                            fileNode.contextValue = 'resourceFileError';
+                         }
+                         nodes.push(fileNode);
                     }
-                    nodes.push(fileNode);
                 }
                 return nodes;
             }, []);
@@ -237,9 +242,11 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 );
             } else {
                 // 对于文件，分两类处理
-                if (/character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
+                const ext = path.extname(name).toLowerCase();
+                const isRoleOrRelationshipFile = ext === '.ojson5' || ext === '.rjson5' || ext === '.ojson' || ext === '.rjson';
+                
+                if (isRoleOrRelationshipFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
-                    const ext = path.extname(name).toLowerCase();
                     const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
@@ -518,6 +525,18 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
+    // 新增：创建 ojson5 和 rjson5 文件的命令
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.createRoleFile', async (node: PackageNode) => {
+            const file = await createRoleFile(node.resourceUri.fsPath);
+            if (file) provider.refresh();
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.createRelationshipFile', async (node: PackageNode) => {
+            const file = await createRelationshipFile(node.resourceUri.fsPath);
+            if (file) provider.refresh();
+        })
+    );
+
     // Command: create sub-package
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.createSubPackage', async (node: PackageNode) => {
@@ -607,21 +626,35 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             // 文件可能已被删除，仍需要刷新
         }
         
-        // 如果是文件，只关注包含关键词的文件（角色相关文件）
+        // 如果是文件，优先按扩展名判断：任意 .ojson5/.rjson5/.ojson/.rjson 均视为角色/关系文件，
+        // 否则使用关键词 + 扩展名组合判断（旧逻辑，兼容其他资源类型）
         const fileName = path.basename(filePath);
+        const ext = path.extname(fileName).toLowerCase();
+        // 仅允许 .ojson5 和 .rjson5 在无关键词时也被识别为角色/关系文件
+        const autoExts = new Set(['.ojson5', '.rjson5']);
+
+        if (autoExts.has(ext)) {
+            return true;
+        }
+
         const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(fileName);
         const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5)$/i.test(fileName);
-        
+
         return hasKeywords && hasValidExtension;
     };
 
-    // 改进的角色数据更新判断：只有角色相关文件才触发角色数据更新
+    // 改进的角色数据更新判断：任意角色/关系扩展名均触发角色数据更新（即使文件名无关键词）
     const shouldUpdateRoles = (filePath: string) => {
-        const fileName = path.basename(filePath);
-        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
-        const hasValidExtension = /\.(json5|txt|md|ojson|rjson)$/i.test(fileName);
-        
-        return hasKeywords && hasValidExtension;
+    const fileName = path.basename(filePath);
+    const ext = path.extname(fileName).toLowerCase();
+    const autoExts = new Set(['.ojson5', '.rjson5']);
+
+    if (autoExts.has(ext)) return true;
+
+    const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
+    const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5)$/i.test(fileName);
+
+    return hasKeywords && hasValidExtension;
     };
 
     // 统一的刷新处理函数
@@ -917,37 +950,134 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
 async function executeOpenAction(action: string, uri: vscode.Uri): Promise<void> {
     try {
         switch (action) {
-            case 'vscode':
-                // 在当前编辑器中打开
-                await vscode.window.showTextDocument(uri);
+            case 'role-manager':
+                await vscode.commands.executeCommand('AndreaNovelHelper.openWithRoleManager', uri);
                 break;
-                
-            case 'vscode-new':
-                // 在新窗口中打开
-                try {
-                    await vscode.commands.executeCommand('vscode.openWith', uri, 'default', vscode.ViewColumn.Beside);
-                } catch {
-                    // 如果上面的命令失败，使用普通的新窗口打开
-                    await vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside });
-                }
+            case 'text-editor':
+                const doc = await vscode.workspace.openTextDocument(uri);
+                await vscode.window.showTextDocument(doc, { preview: false });
                 break;
-                
             case 'system-default':
-                // 系统默认程序
                 await vscode.env.openExternal(uri);
                 break;
-                
             case 'explorer':
-                // 在文件资源管理器中显示
                 await vscode.commands.executeCommand('revealFileInOS', uri);
                 break;
-                
             default:
-                // 默认用 VS Code 打开
-                await vscode.window.showTextDocument(uri);
-                break;
+                vscode.window.showErrorMessage(`未知的打开方式: ${action}`);
         }
     } catch (error) {
         vscode.window.showErrorMessage(`打开文件失败: ${error}`);
     }
+}
+
+/** 创建角色文件 (.ojson5) */
+async function createRoleFile(dir: string): Promise<string | undefined> {
+    const name = await vscode.window.showInputBox({ 
+        prompt: '输入角色文件名称',
+        placeHolder: '例如: main-characters'
+    });
+    if (!name) return;
+
+    const fileName = name.endsWith('.ojson5') ? name : `${name}.ojson5`;
+    const filePath = path.join(dir, fileName);
+    
+    if (fs.existsSync(filePath)) {
+        vscode.window.showErrorMessage(`文件 ${fileName} 已存在`);
+        return;
+    }
+
+    // 生成角色文件初始内容
+    const initialContent = generateRoleFileTemplate();
+    
+    fs.writeFileSync(filePath, initialContent, 'utf8');
+    
+    // 自动打开新文件
+    try {
+        const doc = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (err) {
+        console.warn('自动打开新文件失败: ', err);
+    }
+    
+    vscode.window.showInformationMessage(`角色文件 ${fileName} 创建成功`);
+    return filePath;
+}
+
+/** 创建关系文件 (.rjson5) */
+async function createRelationshipFile(dir: string): Promise<string | undefined> {
+    const name = await vscode.window.showInputBox({ 
+        prompt: '输入关系文件名称',
+        placeHolder: '例如: character-relationships'
+    });
+    if (!name) return;
+
+    const fileName = name.endsWith('.rjson5') ? name : `${name}.rjson5`;
+    const filePath = path.join(dir, fileName);
+    
+    if (fs.existsSync(filePath)) {
+        vscode.window.showErrorMessage(`文件 ${fileName} 已存在`);
+        return;
+    }
+
+    // 生成关系文件初始内容
+    const initialContent = generateRelationshipFileTemplate();
+    
+    fs.writeFileSync(filePath, initialContent, 'utf8');
+    
+    // 自动打开新文件
+    try {
+        const doc = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (err) {
+        console.warn('自动打开新文件失败: ', err);
+    }
+    
+    vscode.window.showInformationMessage(`关系文件 ${fileName} 创建成功`);
+    return filePath;
+}
+
+/** 生成角色文件模板 */
+function generateRoleFileTemplate(): string {
+    const id = generateUUIDv7();
+    return `[
+    // === 示例角色（可删除或修改）===
+    {
+        uuid: "${id}",
+        name: "示例角色",
+        type: "主角",
+        affiliation: "示例阵营",
+        aliases: ["示例"],
+        color: "#FFA500",
+        description: "这是一个示例角色，用于说明角色文件格式。",
+        age: 25,
+        gender: "未知",
+        occupation: "示例职业"
+    }
+]`;
+}
+
+/** 生成关系文件模板 */
+function generateRelationshipFileTemplate(): string {
+    const src = generateUUIDv7();
+    const tgt = generateUUIDv7();
+    return `{
+    // === 角色关系配置文件 ===
+    "relationships": [
+        // 示例关系（可删除或修改）
+        {
+            "sourceRoleUuid": "${src}",
+            "targetRoleUuid": "${tgt}", 
+            "relationshipType": "朋友",
+            "description": "从小一起长大的好朋友",
+            "strength": 8,
+            "isPublic": true,
+            "tags": ["友情", "童年"],
+            "metadata": {
+                "startChapter": 1,
+                "developmentStage": "稳定期"
+            }
+        }
+    ]
+}`;
 }
