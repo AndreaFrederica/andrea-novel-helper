@@ -1,5 +1,8 @@
 import { RoleRelationship, GraphData, GraphRoleNode, GraphRelationshipLine } from '../types/relationshipTypes';
 import { globalRelationshipManager } from './globalRelationshipManager';
+import * as fs from 'fs';
+import * as path from 'path';
+import JSON5 from 'json5';
 
 /**
  * 节点角色解析器类
@@ -79,20 +82,7 @@ export class NodeRoleParser {
    * @param typeString 类型字符串
    * @returns 关系类型字符串
    */
-  private mapRelationshipType(typeString: string): string {
-    const typeMap: Record<string, string> = {
-      '恋人关系': '恋人关系',
-      '朋友关系': '朋友关系',
-      '敌对关系': '敌对关系',
-      '师徒关系': '师徒关系',
-      '家庭关系': '家庭关系',
-      '同事关系': '同事关系',
-      '竞争关系': '竞争关系',
-      '合作关系': '合作关系'
-    };
 
-    return typeMap[typeString] || '未知';
-  }
 
   /**
    * 从文件解析关系数据
@@ -100,27 +90,40 @@ export class NodeRoleParser {
    * @returns 解析出的关系数组
    */
   public async parseFromFile(filePath: string): Promise<RoleRelationship[]> {
+    // 使用静态导入的模块，避免任何动态 import
     try {
-      const fs = require('fs');
-      const path = require('path');
-      
-      // 构建完整路径
       const fullPath = path.resolve(filePath);
       console.log(`正在解析文件: ${fullPath}`);
-      
+
       const content = fs.readFileSync(fullPath, 'utf-8');
       let graphData: GraphData;
 
       try {
-        // 尝试使用JSON5解析
-        const JSON5 = require('json5');
-        graphData = JSON5.parse(content);
-      } catch {
-        // 回退到标准JSON解析
-        graphData = JSON.parse(content);
+        // 优先使用 JSON5 解析以兼容 rjson5 / ojson5
+        graphData = (JSON5 as any).parse(content);
+      } catch (json5Err) {
+        try {
+          // 回退到标准 JSON 解析
+          graphData = JSON.parse(content);
+        } catch (jsonErr) {
+          // 两者都失败，抛出带详细信息的错误
+          const err: any = new Error(
+            `JSON5 parse failed: ${String(json5Err) || ''}; JSON parse failed: ${String(jsonErr) || ''}`
+          );
+          throw err;
+        }
       }
 
-      return this.parseGraphData(graphData);
+      const relationships = this.parseGraphData(graphData);
+
+      // 为每个关系添加源文件信息
+      for (const relationship of relationships) {
+        if (relationship.metadata) {
+          relationship.metadata.sourceFile = fullPath;
+        }
+      }
+
+      return relationships;
     } catch (error) {
       console.error(`解析文件失败: ${filePath}`, error);
       throw error;

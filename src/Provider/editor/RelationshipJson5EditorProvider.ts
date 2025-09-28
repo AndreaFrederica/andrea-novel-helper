@@ -97,6 +97,9 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
         return vscode.workspace.getConfiguration('files', document.uri).get<string>('autoSave') ?? 'off';
     }
 
+    // 当前JSON数据的缓存，用于比较变化
+    private readonly currentJsonData = new Map<string, string>();
+
     private scheduleWrite(document: vscode.TextDocument, text: string): void {
         const key = document.uri.toString();
         const autoSaveMode = this.getAutoSaveMode(document);
@@ -151,6 +154,50 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
             clearTimeout(existingTimer);
             this.saveTimers.delete(key);
         }
+    }
+
+    /**
+     * 实时同步JSON数据变化到文档，触发VSCode的dirty状态
+     */
+    private syncJsonDataChange(document: vscode.TextDocument, rgData: RGJsonData): void {
+        const key = document.uri.toString();
+        const newJsonText = JSON5.stringify(rgData, null, 2) + '\n';
+        
+        // 检查数据是否真的发生了变化
+        const currentData = this.currentJsonData.get(key);
+        if (currentData === newJsonText) {
+            console.log(`[syncJsonDataChange] No change detected, skipping sync`);
+            return;
+        }
+        
+        console.log(`[syncJsonDataChange] JSON data changed, syncing to document`);
+        this.currentJsonData.set(key, newJsonText);
+        
+        // 立即应用到文档以触发dirty状态
+        const fullRange = new vscode.Range(
+            document.positionAt(0),
+            document.positionAt(document.getText().length)
+        );
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(document.uri, fullRange, newJsonText);
+        
+        // 设置短暂的静音时间，防止触发updateWebview
+        const muteTime = Date.now() + 300;
+        this.refreshMuteUntil.set(key, muteTime);
+        
+        // 应用编辑
+        vscode.workspace.applyEdit(edit).then(success => {
+            if (success) {
+                console.log(`[syncJsonDataChange] Document synced successfully, dirty state should be visible`);
+            } else {
+                console.error(`[syncJsonDataChange] Failed to sync document`);
+            }
+            
+            // 清理静音设置
+            setTimeout(() => {
+                this.refreshMuteUntil.delete(key);
+            }, 50);
+        });
     }
 
     async resolveCustomTextEditor(
@@ -508,6 +555,18 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
                     // 立即 ACK，若 autosave=off，提示已排队等待用户保存
                     const queued = this.getAutoSaveMode(document) === 'off';
                     webviewPanel.webview.postMessage({ type: 'saveAck', ok: true, queued });
+                } else if (msg.type === 'dataChanged') {
+                    // 新增：处理实时数据变化通知
+                    const rgData: RGJsonData = msg.data || { nodes: [], lines: [] };
+                    
+                    console.log('[RelationshipJson5EditorProvider] Received dataChanged notification');
+                    console.log('[RelationshipJson5EditorProvider] Data change - nodes:', rgData.nodes.length, 'lines:', rgData.lines.length);
+                    
+                    // 实时同步数据变化到文档，触发dirty状态
+                    this.syncJsonDataChange(document, rgData);
+                    
+                    // 发送确认消息
+                    webviewPanel.webview.postMessage({ type: 'dataChangeAck', ok: true });
                 }
             } catch (e) {
                 console.error('[RelationshipJson5Editor] message error:', e);
@@ -519,6 +578,7 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
         webviewPanel.onDidDispose(() => {
             this.panelsByDoc.delete(key);
             this.pendingText.delete(key);
+            this.currentJsonData.delete(key); // 清理JSON数据缓存
             const timer = this.saveTimers.get(key);
             if (timer) {
                 clearTimeout(timer);

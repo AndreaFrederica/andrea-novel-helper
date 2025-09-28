@@ -210,6 +210,11 @@ export async function updateRelationships(changedFiles: string[], novelHelperRoo
     // 重新构建角色UUID映射（因为角色可能有变化）
     buildRoleUuidMapping();
     
+    // 清理变更文件对应的旧关系数据
+    for (const filePath of relationshipFiles) {
+        clearRelationshipsFromFile(filePath);
+    }
+    
     for (const filePath of relationshipFiles) {
         const fileName = path.basename(filePath);
         const relativePath = path.relative(novelHelperRoot, path.dirname(filePath));
@@ -222,4 +227,44 @@ export async function updateRelationships(changedFiles: string[], novelHelperRoo
     }
     
     console.log(`updateRelationships: 增量更新完成`);
+
+    // 不在此处弹窗：通知交由调用方（例如 loadRoles 的增量分支）决定何时向用户展示。
+}
+
+/**
+ * 清理来自特定文件的关系数据
+ * @param filePath 文件路径
+ */
+function clearRelationshipsFromFile(filePath: string): void {
+    console.log(`clearRelationshipsFromFile: 清理文件 ${filePath} 的关系数据`);
+    
+    // 获取所有关系
+    const allRelationships = globalRelationshipManager.getAllRelationships();
+    const relationshipsToRemove: string[] = [];
+    
+    // 找出来自该文件的关系
+    for (const relationship of allRelationships) {
+        if (relationship.metadata?.sourceFile === filePath) {
+            // 生成关系ID用于删除
+            const relationshipId = generateRelationshipId(relationship);
+            relationshipsToRemove.push(relationshipId);
+        }
+    }
+    
+    // 删除这些关系
+    for (const relationshipId of relationshipsToRemove) {
+        globalRelationshipManager.removeRelationship(relationshipId);
+    }
+    
+    console.log(`clearRelationshipsFromFile: 已清理 ${relationshipsToRemove.length} 个关系`);
+}
+
+/**
+ * 生成关系ID（与globalRelationshipManager中的逻辑保持一致）
+ * @param relationship 关系对象
+ * @returns 唯一的关系ID
+ */
+function generateRelationshipId(relationship: any): string {
+    const key = `${relationship.sourceRole}-${relationship.targetRole}-${relationship.type}-${relationship.literalValue}`;
+    return Buffer.from(key).toString('base64').replace(/[+/=]/g, '');
 }

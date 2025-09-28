@@ -468,7 +468,7 @@
 </template>
 
 <script lang="ts" setup>
-import { onMounted, ref, nextTick, computed, onUnmounted } from 'vue';
+import { onMounted, ref, nextTick, computed, onUnmounted, watch } from 'vue';
 import RelationGraph, {
   type RGJsonData,
   type RGOptions,
@@ -689,6 +689,24 @@ function markEditingEnd() {
   isActuallyEditing.value = false;
 }
 
+// 🔧 新增：统一的节点文本同步函数
+function syncNodeTextData(node: any) {
+  if (!node) return;
+
+  if (!node.data) {
+    node.data = {};
+  }
+
+  // 确保 text 和 data.text 保持一致，优先使用 node.text（显示文本）
+  if (node.text !== node.data.text) {
+    console.log(`🔄 同步节点 ${node.id} 的文本数据`, {
+      nodeText: node.text,
+      dataText: node.data.text
+    });
+    node.data.text = node.text;
+  }
+}
+
 // 使用ref创建安全的VSCode通信接口
 const vscodeApi = ref<{
   postMessage: (message: any) => void;
@@ -834,6 +852,21 @@ async function loadRelationshipData(data: RGJsonData) {
       if (!node.data) {
         node.data = {};
       }
+
+      // 🔧 修复：确保 text 和 data.text 同步
+      if (node.text && !node.data.text) {
+        node.data.text = node.text;
+      } else if (node.data.text && !node.text) {
+        node.text = node.data.text;
+      } else if (node.text && node.data.text && node.text !== node.data.text) {
+        // 如果两者都存在但不一致，优先使用 node.text（显示文本）
+        console.warn(`节点 ${node.id} 的 text 和 data.text 不一致，已自动修复`, {
+          nodeText: node.text,
+          dataText: node.data.text
+        });
+        node.data.text = node.text;
+      }
+
       if (!node.data.sexType) {
         node.data.sexType = 'other';
       }
@@ -884,6 +917,24 @@ async function loadRelationshipData(data: RGJsonData) {
     lastSavedData.value = JSON.stringify(cleanData);
     console.log('📊 设置初始数据快照');
 
+    // 自动检查并同步跟随角色的节点属性
+    if (roleList.value.length > 0) {
+      // 延迟执行，确保角色列表已加载
+      setTimeout(() => {
+        batchSyncFollowRoleNodes();
+      }, 500);
+    } else {
+      // 如果角色列表还没加载，监听角色列表变化
+      const unwatch = watch(roleList, (newRoleList) => {
+        if (newRoleList.length > 0) {
+          setTimeout(() => {
+            batchSyncFollowRoleNodes();
+          }, 100);
+          unwatch(); // 只执行一次
+        }
+      });
+    }
+
     $q.notify({
       type: 'positive',
       message: '关系数据已加载',
@@ -916,6 +967,9 @@ function deepCleanObject(obj: any, visited = new WeakSet()): any {
       obj instanceof Node ||
       obj instanceof Window ||
       obj instanceof Document ||
+      obj instanceof Event ||
+      obj instanceof MouseEvent ||
+      obj instanceof KeyboardEvent ||
       typeof obj === 'function') {
     return null;
   }
@@ -926,7 +980,7 @@ function deepCleanObject(obj: any, visited = new WeakSet()): any {
 
   const cleaned: any = {};
   for (const [key, value] of Object.entries(obj)) {
-    // 跳过不需要的属性
+    // 跳过不需要的属性和不可序列化的属性
     if (key.startsWith('_') ||
         key.startsWith('$') ||
         key === 'seeks_id' ||
@@ -936,6 +990,24 @@ function deepCleanObject(obj: any, visited = new WeakSet()): any {
         key === 'el' ||
         key === 'dom' ||
         key === 'element' ||
+        key === 'instance' ||
+        key === 'component' ||
+        key === 'ref' ||
+        key === 'parent' ||
+        key === 'children' ||
+        key === 'ctx' ||
+        key === 'proxy' ||
+        key === 'setupState' ||
+        key === 'exposed' ||
+        key === 'exposeProxy' ||
+        key === 'withProxy' ||
+        key === 'renderContext' ||
+        key === 'emit' ||
+        key === 'emitted' ||
+        key === 'propsDefaults' ||
+        key === 'inheritAttrs' ||
+        key === 'isCE' ||
+        key === 'ceReload' ||
         typeof value === 'function') {
       continue;
     }
@@ -1425,6 +1497,56 @@ function onNodeClick(node: RGNode, _e: RGUserEvent) {
         position: 'top'
       });
     }
+  } else {
+    // 普通点击时，如果节点设置了跟随角色，自动同步角色属性
+    const nodeData = node.data as Record<string, unknown>;
+    const followRole = nodeData?.followRole as boolean;
+    const roleUuid = nodeData?.roleUuid as string;
+
+    if (followRole && roleUuid) {
+      // 检查是否需要更新
+      const role = roleList.value.find(r => r.uuid === roleUuid);
+      if (role) {
+        const needsUpdate =
+          node.text !== role.name ||
+          (role.color && node.color !== role.color) ||
+          (role.extendedFields?.gender && nodeData['sexType'] !== role.extendedFields.gender) ||
+          (role.customFields?.gender && nodeData['sexType'] !== role.customFields.gender);
+
+        if (needsUpdate) {
+          // 显示警告提示，告知用户内容已被自动更新
+          $q.dialog({
+            title: '自动同步纠错',
+            message: `检测到节点 "${node.text}" 的属性与角色信息不一致，已自动更新。\n\n更新内容包括：节点名称、颜色、性别等属性。`,
+            ok: {
+              label: '确定',
+              color: 'primary'
+            }
+          });
+        }
+      }
+
+      syncNodeWithRoleData(node, roleUuid);
+
+      // 只在启用自动布局时才刷新，避免不必要的布局变化
+      if (enableAutoLayoutAfterEdit.value) {
+        const graphInstance = graphRef.value?.getInstance();
+        if (graphInstance) {
+          void graphInstance.refresh();
+        }
+      }
+
+      // 延迟更新JSON数据，确保节点更新完成
+      setTimeout(() => {
+        void updateJsonTextFromGraph();
+      }, 100);
+
+      $q.notify({
+        type: 'positive',
+        message: `已同步角色属性到节点: ${node.text}`,
+        position: 'top'
+      });
+    }
   }
 }
 
@@ -1758,7 +1880,7 @@ function updateNodeInfo(node: any, newData: {
   if (!graphInstance) return;
 
   try {
-    // 更新节点属性
+    // 更新节点属性 - 同时更新 node.text 和 node.data.text
     node.text = newData.text;
 
     // 确保 data 对象存在
@@ -1767,6 +1889,13 @@ function updateNodeInfo(node: any, newData: {
     }
 
     const nodeData = node.data as Record<string, unknown>;
+
+    // 同步 data.text，确保与 node.text 一致
+    nodeData['text'] = newData.text;
+
+    // 🔧 应用统一同步函数
+    syncNodeTextData(node);
+
     nodeData['sexType'] = newData.sexType;
     nodeData['shape'] = newData.shape;
     nodeData['size'] = newData.size;
@@ -1799,6 +1928,38 @@ function updateNodeInfo(node: any, newData: {
 
     // 设置跟随角色属性
     nodeData['followRole'] = newData.followRole;
+
+    // 如果启用了跟随角色功能，自动同步角色属性
+    if (newData.followRole && newData.roleUuid) {
+      // 检查是否需要更新
+      const role = roleList.value.find(r => r.uuid === newData.roleUuid);
+      if (role) {
+        const needsUpdate =
+          node.text !== role.name ||
+          (role.color && node.color !== role.color) ||
+          (role.extendedFields?.gender && nodeData['sexType'] !== role.extendedFields.gender) ||
+          (role.customFields?.gender && nodeData['sexType'] !== role.customFields.gender);
+
+        if (needsUpdate) {
+          // 显示警告提示，告知用户内容已被自动更新
+          $q.dialog({
+            title: '自动同步纠错',
+            message: `检测到节点 "${node.text}" 的属性与角色信息不一致，已自动更新。\n\n更新内容包括：节点名称、颜色、性别等属性。`,
+            ok: {
+              label: '确定',
+              color: 'primary'
+            }
+          });
+        }
+      }
+
+      syncNodeWithRoleData(node, newData.roleUuid);
+
+      // 只在启用自动布局时才刷新，避免不必要的布局变化
+      if (enableAutoLayoutAfterEdit.value) {
+        void graphInstance.refresh();
+      }
+    }
 
     // 应用节点样式更新
     applyNodeStyle(node, newData.shape, newData.size, newData.color);
@@ -2009,6 +2170,148 @@ function fitToScreen() {
   }
 }
 
+// 批量同步所有跟随角色的节点属性
+function batchSyncFollowRoleNodes() {
+  const graphInstance = graphRef.value?.getInstance();
+  if (!graphInstance) return;
+
+  try {
+    const currentData = graphInstance.getGraphJsonData();
+    let syncCount = 0;
+    let updateCount = 0;
+
+    currentData.nodes.forEach((node: any) => {
+      const nodeData = node.data as Record<string, unknown>;
+      const followRole = nodeData?.followRole as boolean;
+      const roleUuid = nodeData?.roleUuid as string;
+
+      if (followRole && roleUuid) {
+        const role = roleList.value.find(r => r.uuid === roleUuid);
+        if (role) {
+          // 检查是否需要更新
+          const needsUpdate =
+            node.text !== role.name ||
+            (role.color && node.color !== role.color) ||
+            (role.extendedFields?.gender && nodeData['sexType'] !== role.extendedFields.gender) ||
+            (role.customFields?.gender && nodeData['sexType'] !== role.customFields.gender);
+
+          if (needsUpdate) {
+            syncNodeWithRoleData(node, roleUuid);
+            updateCount++;
+          }
+          syncCount++;
+        }
+      }
+    });
+
+    if (updateCount > 0) {
+      // 只在启用自动布局时才刷新，避免不必要的布局变化
+      if (enableAutoLayoutAfterEdit.value) {
+        void graphInstance.refresh();
+      }
+
+      // 延迟更新JSON数据，确保所有节点更新完成
+      setTimeout(() => {
+        void updateJsonTextFromGraph();
+      }, 100);
+
+      // 显示警告提示，告知用户内容已被自动更新
+      $q.dialog({
+        title: '自动同步纠错',
+        message: `检测到 ${updateCount} 个节点的属性与角色信息不一致，已自动更新。\n\n更新内容包括：节点名称、颜色、性别等属性。`,
+        ok: {
+          label: '确定',
+          color: 'primary'
+        },
+        cancel: false,
+        persistent: true
+      });
+
+      $q.notify({
+        type: 'positive',
+        message: `已检查 ${syncCount} 个跟随角色的节点，更新了 ${updateCount} 个节点的属性`,
+        position: 'top'
+      });
+    } else if (syncCount > 0) {
+      $q.notify({
+        type: 'info',
+        message: `已检查 ${syncCount} 个跟随角色的节点，所有属性都是最新的`,
+        position: 'top'
+      });
+    } else {
+      console.log('没有找到需要同步的跟随角色节点');
+    }
+  } catch (err) {
+    console.error('批量同步节点属性失败:', err);
+    $q.notify({
+      type: 'negative',
+      message: '批量同步失败: ' + String(err),
+      position: 'top'
+    });
+  }
+}
+
+// 同步节点与角色数据
+function syncNodeWithRoleData(node: any, roleUuid: string) {
+  if (!node || !roleUuid) return;
+
+  // 查找对应的角色数据
+  const role = roleList.value.find(r => r.uuid === roleUuid);
+  if (!role) {
+    console.warn('未找到对应的角色数据:', roleUuid);
+    return;
+  }
+
+  try {
+    // 同步节点名称 - 同时更新 node.text 和 node.data.text
+    node.text = role.name;
+
+    // 确保 data 对象存在
+    if (!node.data) {
+      node.data = {};
+    }
+
+    const nodeData = node.data as Record<string, unknown>;
+
+    // 同步 data.text，确保与 node.text 一致
+    nodeData['text'] = role.name;
+
+    // 🔧 应用统一同步函数
+    syncNodeTextData(node);
+
+    // 同步节点颜色
+    if (role.color) {
+      nodeData['color'] = role.color;
+      node.color = role.color;
+    }
+
+    // 同步性别信息
+    if (role.extendedFields?.gender) {
+      nodeData['sexType'] = role.extendedFields.gender;
+    } else if (role.customFields?.gender) {
+      nodeData['sexType'] = role.customFields.gender;
+    }
+
+    // 强制触发图形实例的内部数据更新
+    const graphInstance = graphRef.value?.getInstance();
+    if (graphInstance) {
+      // 直接修改节点对象后，强制刷新以确保内部数据同步
+      void graphInstance.refresh();
+    }
+
+    console.log('节点属性已同步:', {
+      nodeId: node.id,
+      roleName: role.name,
+      roleColor: role.color,
+      nodeText: node.text,
+      nodeDataText: nodeData['text'],
+      nodeColor: node.color
+    });
+  } catch (err) {
+    console.error('同步节点与角色数据失败:', err);
+  }
+}
+
 // ---- 菜单操作 ----
 function isDashed(line: RGLine | null) {
   if (!line) return false;
@@ -2095,13 +2398,27 @@ async function updateJsonTextFromGraph() {
   const graphInstance = graphRef.value?.getInstance();
   if (!graphInstance) return;
   try {
-    const data = graphInstance.getGraphJsonData();
-    jsonText.value = JSON.stringify(data, null, 2);
+    const rawData = graphInstance.getGraphJsonData();
+
+    // 使用深度清理函数处理数据，确保可以被序列化
+    const cleanData = deepCleanObject(rawData);
+
+    jsonText.value = JSON.stringify(cleanData, null, 2);
+
+    // 实时向后端发送数据变化通知，触发VS Code dirty状态
+    if (vscodeApi.value?.postMessage) {
+      vscodeApi.value.postMessage({
+        type: 'dataChanged',
+        data: cleanData  // 使用清理后的数据
+      });
+    }
+
     // 触发自动保存
     scheduleSave();
     // 保证函数包含 await，以符合 async 定义并消除编译/lint 警告（该 await 无副作用，仅做微任务调度）
     await Promise.resolve();
   } catch (err) {
+    console.error('获取图数据失败:', err);
     $q.notify({ type: 'negative', message: '获取图数据失败：' + String(err) });
   }
 }
@@ -2987,6 +3304,3 @@ onUnmounted(() => {
   opacity: 1;
 }
 </style>
-
-
-

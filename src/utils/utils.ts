@@ -14,7 +14,7 @@ import { generateCSpellDictionary } from './generateCSpellDictionary';
 import { generateUUIDv7, generateRoleNameHash } from './uuidUtils';
 import { ensureRoleUUIDs, fixInvalidRoleUUIDs } from './roleUuidManager';
 import { loadRelationships, updateRelationships } from './relationshipLoader';
-import { enhanceAllRolesWithRelationships } from './roleRelationshipEnhancer';
+import { enhanceAllRolesWithRelationships, clearRelationshipProperties } from './roleRelationshipEnhancer';
 
 export interface TextStats {
 	cjkChars: number;  // 中文字符
@@ -335,9 +335,28 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		
 		// 增量更新关系表
 		updateRelationships(changedFiles, novelHelperRoot).then(() => {
-			// 关系表更新完成后，为所有角色添加关系属性
+			// 关系表更新完成后，先清理所有角色的旧关系属性
+			clearRelationshipProperties(roles);
+			// 然后为所有角色添加新的关系属性
 			const enhanceResult = enhanceAllRolesWithRelationships(roles);
 			console.log(`[loadRoles] 增量更新关系属性增强完成: 总角色 ${enhanceResult.totalRoles}, 增强角色 ${enhanceResult.enhancedRoles}, 总关系属性 ${enhanceResult.totalRelationshipProperties}`);
+
+			// 仅在由文件变动触发的增量更新时显示通知（初次全量加载不弹）
+			try {
+				const relFiles = (changedFiles || []).filter(f => {
+					const n = f.toLowerCase();
+					return n.endsWith('.rjson5') || n.endsWith('.json5') && /relationship|relation|connections|links|关系|关联|连接|联系/.test(path.basename(n));
+				});
+				if (relFiles.length > 0) {
+					const MAX_SHOW = 5;
+					const names = relFiles.map(f => path.basename(f));
+					const shown = names.slice(0, MAX_SHOW).join(', ');
+					const more = names.length > MAX_SHOW ? ` 等 ${names.length - MAX_SHOW} 个文件` : '';
+					vscode.window.showInformationMessage(`检测到关系文件变动: ${shown}${more}`);
+				}
+			} catch (e) {
+				console.error('[loadRoles] 显示关系变动提示失败', e);
+			}
 		}).catch(error => {
 			console.error('[loadRoles] 增量更新关系表失败:', error);
 		});
@@ -622,7 +641,11 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 		// JSON5-like role/relationship files: .json5, .ojson5, .rjson5
 		const lower = fileName.toLowerCase();
 		if (lower.endsWith('.json5') || lower.endsWith('.ojson5') || lower.endsWith('.rjson5')) {
-			// .rjson5 are relationship files; loadJSON5RoleFile will handle object shapes and decide
+			// .rjson5 文件应该只通过关系文件加载器处理，不应该在这里处理
+			if (lower.endsWith('.rjson5')) {
+				console.warn(`loadRoleFile: .rjson5 文件 ${fileName} 应该通过关系文件加载器处理，跳过角色文件加载`);
+				return;
+			}
 			loadJSON5RoleFile(content, filePath, packagePath, fileType);
 		} else if (lower.endsWith('.txt')) {
 			loadTXTRoleFile(content, filePath, packagePath, fileType);
@@ -940,7 +963,9 @@ function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: strin
 		}
 		
 		const fileName = path.basename(filePath);
+		// 只处理角色文件，关系文件由 updateRelationships 处理
 		if (!isRoleFile(fileName, filePath)) {
+			console.log(`performIncrementalUpdate: 跳过非角色文件 ${fileName}`);
 			continue;
 		}
 		

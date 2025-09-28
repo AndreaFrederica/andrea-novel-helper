@@ -1,0 +1,38 @@
+{
+  // 测试关系文件 - 用于验证修复效果
+  "nodes": [
+    {
+      "id": "node1",
+      "text": "测试角色A",
+      "type": "node",
+      "data": {
+        "roleUuid": "test-uuid-001",
+        "text": "测试角色A"
+      }
+    },
+    {
+      "id": "node2", 
+      "text": "测试角色B",
+      "type": "node",
+      "data": {
+        "roleUuid": "test-uuid-002",
+        "text": "测试角色B"
+      }
+    }
+  ],
+  "lines": [
+    {
+      "id": "line1",
+      "from": "node1",
+      "to": "node2", 
+      "text": "好朋友",
+      "data": {
+        "type": "朋友关系",
+        "strength": 8,
+        "status": "active",
+        "tags": ["测试"],
+        "isDirectional": false
+      }
+    }
+  ]
+}
