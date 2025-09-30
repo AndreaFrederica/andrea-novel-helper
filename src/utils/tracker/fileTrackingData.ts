@@ -87,6 +87,10 @@ export class FileTrackingDataManager {
     // 数据库后端
     private backend: IDatabaseBackend | null = null;
     private backendInitialized = false;
+    // 启动快照相关
+    private snapshotPath!: string;
+    private loadedFromSnapshot: boolean = false;
+    private suppressBackendRead: boolean = false;
     /**
      * 直接写入或更新某个文件的元数据（外部可用，提升写入速度）
      */
@@ -329,6 +333,7 @@ export class FileTrackingDataManager {
         this.dbPath = path.join(workspaceRoot, 'novel-helper', 'file-tracking.json');
         this.dbDir = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb');
         this.indexPath = path.join(this.dbDir, 'index.json');
+        this.snapshotPath = path.join(this.dbDir, 'snapshot.json');
         this.ensureDirectoryExists();
         this.ensureDbDir();
         // 读取配置：是否信任调用者的过滤器（可略过部分重复检查）
@@ -336,6 +341,8 @@ export class FileTrackingDataManager {
             this.trustCallerFilters = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('trustCallerFilters', false) === true;
         } catch { this.trustCallerFilters = false; }
         this.database = this.loadDatabase(); //todo
+        // 若启用了快照，尝试优先用快照恢复内存状态
+        this.tryLoadSnapshotOnStartup();
         // 初始化时赋值到文件级变量，供外部直接访问
         fileTrackingDatabase = this.database;
         // 规范化旧版本/损坏结构（防止后续 Object.keys on undefined）
@@ -353,13 +360,16 @@ export class FileTrackingDataManager {
         this.lastSavedHash = this.calculateDatabaseHash();
         // 启动时清理遗留的 .git 目录内条目
         try { this.purgeGitEntries(); } catch (e) { console.warn('[FileTracking] purgeGitEntries 失败（忽略）', e); }
-        // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
-        this.migrateIfNeeded();
-        // 惰性：若存在 index 且开启惰性，则仅加载索引；否则全量加载分片
-        if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
-            this.loadIndexOnly();
-        } else {
-            this.loadShardedFiles();
+        // 若未通过快照恢复，则继续走索引/分片加载
+        if (!this.loadedFromSnapshot) {
+            // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
+            this.migrateIfNeeded();
+            // 惰性：若存在 index 且开启惰性，则仅加载索引；否则全量加载分片
+            if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
+                this.loadIndexOnly();
+            } else {
+                this.loadShardedFiles();
+            }
         }
         // 异步初始化数据库后端（仅初始化，不迁移数据）
         this.initializeBackend();
@@ -368,6 +378,75 @@ export class FileTrackingDataManager {
         this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
         this.filterFilesAsync = this.filterFilesAsync.bind(this);
         this.getStatsAsync = this.getStatsAsync.bind(this);
+    }
+
+    /** 获取数据库快照配置 */
+    private getSnapshotConfig(): { enabled: boolean; skipBackendReadOnStartup: boolean } {
+        try {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.database');
+            const enabled = cfg.get<boolean>('snapshot.enabled', true) === true;
+            const skip = cfg.get<boolean>('snapshot.skipBackendReadOnStartup', true) === true;
+            return { enabled, skipBackendReadOnStartup: skip };
+        } catch {
+            return { enabled: true, skipBackendReadOnStartup: true };
+        }
+    }
+
+    /** 启动时尝试从快照恢复内存数据库（成功则设置 loadedFromSnapshot 与 suppressBackendRead） */
+    private tryLoadSnapshotOnStartup(): void {
+        const { enabled, skipBackendReadOnStartup } = this.getSnapshotConfig();
+        if (!enabled) { return; }
+        if (!this.snapshotPath || !fs.existsSync(this.snapshotPath)) { return; }
+        try {
+            const raw = fs.readFileSync(this.snapshotPath, 'utf8');
+            const snap = JSON.parse(raw) as FileTrackingDatabase;
+            if (!snap || typeof snap !== 'object' || !snap.files || !snap.pathToUuid) { return; }
+            const files: { [uuid: string]: FileMetadata } = {};
+            const dirFlags = new Set<string>();
+            for (const [uuid, metaAny] of Object.entries(snap.files)) {
+                const meta = metaAny as any as FileMetadata;
+                if (!uuid || !meta) { continue; }
+                if (meta.filePath) { meta.filePath = this.toAbsPath(meta.filePath); }
+                files[uuid] = meta;
+                if (meta.isDirectory) { dirFlags.add(uuid); }
+            }
+            this.database = {
+                version: this.DB_VERSION,
+                lastUpdated: snap.lastUpdated || Date.now(),
+                files,
+                pathToUuid: { ...(snap.pathToUuid || {}) }
+            };
+            this.indexDirFlag = dirFlags;
+            this.loadedFromSnapshot = true;
+            this.suppressBackendRead = !!skipBackendReadOnStartup;
+            // 重新计算哈希以避免立即误判为变化
+            this.lastSavedHash = this.calculateDatabaseHash();
+            console.log('[FileTracking] 快照已加载，跳过分片/后端初始读取');
+        } catch (e) {
+            console.warn('[FileTracking] 快照读取失败，忽略并继续常规初始化', e);
+        }
+    }
+
+    /** 将当前内存数据库写出为启动快照（filePath 使用相对键，便于迁移） */
+    private writeSnapshot(): void {
+        const { enabled } = this.getSnapshotConfig();
+        if (!enabled) { return; }
+        try {
+            const slimFiles: Record<string, any> = {};
+            for (const [uuid, meta] of Object.entries(this.database.files)) {
+                const relPath = meta.filePath ? this.toRelKey(meta.filePath) : '';
+                slimFiles[uuid] = { ...meta, filePath: relPath };
+            }
+            const out: FileTrackingDatabase = {
+                version: this.DB_VERSION,
+                lastUpdated: Date.now(),
+                files: slimFiles as any,
+                pathToUuid: { ...this.database.pathToUuid }
+            };
+            fs.writeFileSync(this.snapshotPath, JSON.stringify(out));
+        } catch (e) {
+            console.warn('[FileTracking] 写入快照失败（忽略）', e);
+        }
     }
 
     /**
@@ -387,19 +466,21 @@ export class FileTrackingDataManager {
                 console.log('[FileTracking] SQLite后端已启用，JSON分片写入已禁用');
             }
 
-            // 后端初始化完成后尝试加载后端中的路径映射（只加载映射，以便查询时能使用后端为权威）
-            try {
-                const pathMap = await this.backend.getAllPathMappings();
-                if (pathMap && pathMap.size > 0) {
-                    // 合并到内存 pathToUuid（以后端为准）
-                    for (const [p, u] of pathMap.entries()) {
-                        // 保持 key 统一（后端中通常存的是相对键或规范化键）
-                        this.database.pathToUuid[p] = u;
+            // 后端初始化完成后：若未启用“跳过读取”，尝试加载后端中的路径映射
+            if (!this.suppressBackendRead) {
+                try {
+                    const pathMap = await this.backend.getAllPathMappings();
+                    if (pathMap && pathMap.size > 0) {
+                        for (const [p, u] of pathMap.entries()) {
+                            this.database.pathToUuid[p] = u;
+                        }
+                        console.log(`[FileTracking] 已从后端加载路径映射 entries=${pathMap.size}`);
                     }
-                    console.log(`[FileTracking] 已从后端加载路径映射 entries=${pathMap.size}`);
+                } catch (e) {
+                    console.warn('[FileTracking] 从后端加载路径映射失败，回退到本地索引', e);
                 }
-            } catch (e) {
-                console.warn('[FileTracking] 从后端加载路径映射失败，回退到本地索引', e);
+            } else {
+                console.log('[FileTracking] 快照优先：启动阶段跳过后端路径映射读取');
             }
 
             console.log('[FileTracking] 数据库后端初始化完成');
@@ -1268,8 +1349,8 @@ export class FileTrackingDataManager {
     private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
         const mem = this.database.files[uuid];
         if (mem) { return mem; }
-        // 优先使用后端读取（若已初始化）
-        if (this.backend && this.backendInitialized) {
+        // 优先使用后端读取（若已初始化且未抑制读取）
+        if (this.backend && this.backendInitialized && !this.suppressBackendRead) {
             try {
                 const row = await this.backend.loadFileMetadata(uuid);
                 if (row) {
@@ -1299,9 +1380,9 @@ export class FileTrackingDataManager {
 
     /** 异步枚举全部文件（惰性按需加载分片；不强制一次性加载全部） */
     public async getAllFilesAsync(opts?: { cacheLoaded?: boolean }): Promise<FileMetadata[]> {
-        // 如果后端可用，优先使用后端的路径映射与批量读取以减少 IO
+        // 如果后端可用，且未抑制读取，则优先使用后端的路径映射与批量读取以减少 IO
         const result: FileMetadata[] = [];
-        if (this.backend && this.backendInitialized) {
+        if (this.backend && this.backendInitialized && !this.suppressBackendRead) {
             try {
                 const pathMap = await this.backend.getAllPathMappings(); // Map<string, string>
                 const uuids = Array.from(new Set(Array.from(pathMap.values())));
@@ -1584,6 +1665,8 @@ export class FileTrackingDataManager {
             this.saveTimer = null;
         }
         this.saveDatabase(true); // 关闭时强制写入
+        // 写出一份快照用于下次启动快速恢复
+        this.writeSnapshot();
     }
 
     // ===== 分片存储逻辑 =====
@@ -1823,9 +1906,9 @@ export class FileTrackingDataManager {
             }
         }
 
-        // 优先后端批量查询
+        // 优先后端批量查询（若未抑制读取）
         let metaMap: Map<string, any> | null = null;
-        if (this.backend && this.backendInitialized && uuidList.length) {
+        if (this.backend && this.backendInitialized && uuidList.length && !this.suppressBackendRead) {
             try {
                 if (typeof (this.backend as any).loadFileMetadataBatch === 'function') {
                     metaMap = await (this.backend as any).loadFileMetadataBatch(uuidList);

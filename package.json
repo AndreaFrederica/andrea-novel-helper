@@ -2293,6 +2293,16 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "切换数据库后端时自动运行数据迁移（否则需要手动运行迁移命令）"
+        },
+        "AndreaNovelHelper.database.snapshot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用启动快照：关闭窗口时保存文件追踪数据库的内存快照，下一次启动优先从快照恢复，避免访问后端或分片进行初始读取，加速启动。"
+        },
+        "AndreaNovelHelper.database.snapshot.skipBackendReadOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "使用快照恢复后，启动阶段跳过从数据库后端读取路径映射/批量元数据（仍会初始化后端以支持后续写入），进一步减少启动时的 IO。"
         }
       }
     },
