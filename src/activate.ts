@@ -62,6 +62,7 @@ import { activateDefLinks } from './Provider/defLinksProvider';
 import { registerOpenRoleSource } from './commands/openRoleSource';
 import { setWordCounterContext, setWordCounterGitGuard } from './utils/WordCount/asyncWordCounter';
 import { setAsyncRoleMatcherContext } from './utils/asyncRoleMatcher';
+import { registerDatabaseCommands } from './commands/databaseCommands';
 import { WebDAVAccountManager } from './sync/accountManager';
 import { WebDAVSyncService } from './sync/webdavSync';
 import { registerWebDAVPanel } from './Provider/view/webdavPanel';
@@ -987,6 +988,9 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData),
             vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking)
         );
+
+        // 注册数据库管理命令
+        registerDatabaseCommands(context);
 
         // WebDAV：账户管理与同步命令
         context.subscriptions.push(

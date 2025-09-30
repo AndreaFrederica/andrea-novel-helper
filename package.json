@@ -31,7 +31,10 @@
         "languageName": "English",
         "localizedLanguageName": "English",
         "translations": [
-          { "id": "vscode", "path": "./l10n/bundle.l10n.json" }
+          {
+            "id": "vscode",
+            "path": "./l10n/bundle.l10n.json"
+          }
         ]
       },
       {
@@ -39,7 +42,10 @@
         "languageName": "Chinese (Simplified)",
         "localizedLanguageName": "简体中文",
         "translations": [
-          { "id": "vscode", "path": "./l10n/bundle.l10n.zh-cn.json" }
+          {
+            "id": "vscode",
+            "path": "./l10n/bundle.l10n.zh-cn.json"
+          }
         ]
       }
     ],
@@ -92,7 +98,7 @@
         "editor.wordBasedSuggestions": "allDocuments",
         "editor.quickSuggestionsDelay": 0
       }
-  },
+    },
     "languages": [
       {
         "id": "wcignore",
@@ -587,8 +593,7 @@
       {
         "command": "AndreaNovelHelper.enableWorkspace",
         "title": "%command.enableWorkspace.title%"
-      }
-      ,
+      },
       {
         "command": "andrea.typo.scanDocument",
         "title": "扫描错别字（未扫描段落）",
@@ -648,6 +653,36 @@
       {
         "command": "andrea.webdav.copyFile",
         "title": "%command.webdav.copyFile.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.database.switchBackend",
+        "title": "切换数据库后端",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.database.migrate",
+        "title": "运行数据库迁移",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.database.showStatus",
+        "title": "查看数据库状态",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.database.healthCheck",
+        "title": "数据库健康检查",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.database.optimize",
+        "title": "优化数据库",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.database.compare",
+        "title": "比较数据库后端数据",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [
@@ -1091,7 +1126,6 @@
         }
       ]
     },
-    
     "configuration": {
       "type": "object",
       "title": "%config.title%",
@@ -1108,13 +1142,21 @@
         },
         "AndreaNovelHelper.comments.style.mode": {
           "type": "string",
-          "enum": ["underline", "highlight"],
+          "enum": [
+            "underline",
+            "highlight"
+          ],
           "default": "underline",
           "markdownDescription": "批注范围展示风格：下划线或高亮背景"
         },
         "AndreaNovelHelper.comments.style.underlineStyle": {
           "type": "string",
-          "enum": ["solid", "wavy", "dotted", "dashed"],
+          "enum": [
+            "solid",
+            "wavy",
+            "dotted",
+            "dashed"
+          ],
           "default": "solid",
           "markdownDescription": "下划线样式"
         },
@@ -1147,7 +1189,11 @@
         },
         "AndreaNovelHelper.allRoles.groupBy": {
           "type": "string",
-          "enum": ["affiliation", "type", "none"],
+          "enum": [
+            "affiliation",
+            "type",
+            "none"
+          ],
           "default": "affiliation",
           "markdownDescription": "全部角色的分组依据：affiliation / type / none"
         },
@@ -1163,25 +1209,69 @@
         },
         "AndreaNovelHelper.allRoles.primaryGroup": {
           "type": "string",
-          "enum": ["affiliation", "type"],
+          "enum": [
+            "affiliation",
+            "type"
+          ],
           "default": "affiliation",
           "markdownDescription": "第一级别分组（归属优先/类型优先）"
         },
         "AndreaNovelHelper.allRoles.customGroups": {
           "type": "array",
           "default": [
-            { "name": "词汇敏感词", "matchType": "type", "patterns": ["词汇", "敏感词", "正则表达式"] },
-            { "name": "主要角色", "matchType": "type", "patterns": ["主角", "重要", "主要"] },
-            { "name": "配角", "matchType": "type", "patterns": ["配角", "次要", "其他"] }
+            {
+              "name": "词汇敏感词",
+              "matchType": "type",
+              "patterns": [
+                "词汇",
+                "敏感词",
+                "正则表达式"
+              ]
+            },
+            {
+              "name": "主要角色",
+              "matchType": "type",
+              "patterns": [
+                "主角",
+                "重要",
+                "主要"
+              ]
+            },
+            {
+              "name": "配角",
+              "matchType": "type",
+              "patterns": [
+                "配角",
+                "次要",
+                "其他"
+              ]
+            }
           ],
           "items": {
             "type": "object",
             "properties": {
-              "name": { "type": "string" },
-              "matchType": { "type": "string", "enum": ["affiliation", "type"] },
-              "patterns": { "type": "array", "items": { "type": "string" } }
+              "name": {
+                "type": "string"
+              },
+              "matchType": {
+                "type": "string",
+                "enum": [
+                  "affiliation",
+                  "type"
+                ]
+              },
+              "patterns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             },
-            "required": ["name", "matchType", "patterns"]
+            "required": [
+              "name",
+              "matchType",
+              "patterns"
+            ]
           },
           "markdownDescription": "全部角色的自定义分组规则"
         },
@@ -1193,19 +1283,38 @@
         "AndreaNovelHelper.wordCount.referenceVisibleExtensions": {
           "type": "array",
           "default": [
-            "png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "tiff", "ico",
+            "png",
+            "jpg",
+            "jpeg",
+            "gif",
+            "bmp",
+            "svg",
+            "webp",
+            "tiff",
+            "ico",
             "pdf",
-            "doc", "docx",
-            "xls", "xlsx", "csv", "ods",
-            "ppt", "pptx",
+            "doc",
+            "docx",
+            "xls",
+            "xlsx",
+            "csv",
+            "ods",
+            "ppt",
+            "pptx",
             "odt"
           ],
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "markdownDescription": "在字数统计树中显示为参考资料但不计入统计的文件扩展名列表。默认包含常见图片、PDF、Word/Excel/PowerPoint 等。"
         },
         "AndreaNovelHelper.docRoles.groupBy": {
           "type": "string",
-          "enum": ["affiliation", "type", "none"],
+          "enum": [
+            "affiliation",
+            "type",
+            "none"
+          ],
           "default": "affiliation",
           "markdownDescription": "当前文章角色的分组依据：**affiliation** (归属)、**type** (类型) 或 **none** (不分组)"
         },
@@ -1221,7 +1330,10 @@
         },
         "AndreaNovelHelper.docRoles.primaryGroup": {
           "type": "string",
-          "enum": ["affiliation", "type"],
+          "enum": [
+            "affiliation",
+            "type"
+          ],
           "default": "affiliation",
           "markdownDescription": "第一级别分组依据：**affiliation** (归属) 或 **type** (类型)"
         },
@@ -1231,17 +1343,29 @@
             {
               "name": "词汇敏感词",
               "matchType": "type",
-              "patterns": ["词汇", "敏感词", "正则表达式"]
+              "patterns": [
+                "词汇",
+                "敏感词",
+                "正则表达式"
+              ]
             },
             {
               "name": "主要角色",
               "matchType": "type",
-              "patterns": ["主角", "重要", "主要"]
+              "patterns": [
+                "主角",
+                "重要",
+                "主要"
+              ]
             },
             {
               "name": "配角",
-              "matchType": "type", 
-              "patterns": ["配角", "次要", "其他"]
+              "matchType": "type",
+              "patterns": [
+                "配角",
+                "次要",
+                "其他"
+              ]
             }
           ],
           "items": {
@@ -1253,16 +1377,25 @@
               },
               "matchType": {
                 "type": "string",
-                "enum": ["affiliation", "type"],
+                "enum": [
+                  "affiliation",
+                  "type"
+                ],
                 "description": "匹配字段类型"
               },
               "patterns": {
                 "type": "array",
-                "items": {"type": "string"},
+                "items": {
+                  "type": "string"
+                },
                 "description": "匹配模式列表（支持部分匹配）"
               }
             },
-            "required": ["name", "matchType", "patterns"]
+            "required": [
+              "name",
+              "matchType",
+              "patterns"
+            ]
           },
           "markdownDescription": "自定义角色分组规则列表，用于创建第一级别的自定义分组"
         },
@@ -1545,7 +1678,15 @@
         },
         "AndreaNovelHelper.timeStats.milestone.targets": {
           "type": "array",
-          "default": [1000, 2000, 5000, 10000, 20000, 50000, 100000],
+          "default": [
+            1000,
+            2000,
+            5000,
+            10000,
+            20000,
+            50000,
+            100000
+          ],
           "items": {
             "type": "number",
             "minimum": 1
@@ -1555,7 +1696,10 @@
         "AndreaNovelHelper.timeStats.milestone.notificationType": {
           "type": "string",
           "default": "information",
-          "enum": ["information", "modal"],
+          "enum": [
+            "information",
+            "modal"
+          ],
           "enumDescriptions": [
             "%config.timeStats.milestone.notificationType.information%",
             "%config.timeStats.milestone.notificationType.modal%"
@@ -1711,8 +1855,7 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "是否允许角色节点可展开以查看属性详情；关闭后角色节点将不再可展开。"
-        }
-        ,
+        },
         "AndreaNovelHelper.typo.service.baseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8001",
@@ -1725,7 +1868,10 @@
         },
         "AndreaNovelHelper.typo.mode": {
           "type": "string",
-          "enum": ["macro", "llm"],
+          "enum": [
+            "macro",
+            "llm"
+          ],
           "default": "macro",
           "markdownDescription": "错别字识别模式：macro 使用 /correct（规则）；llm 使用 /correct/llm（大语言模型）。\n\n⚠️ **数据安全提醒**：使用 llm 模式时，您的文档内容将发送至第三方服务或本地大模型进行处理。请确保您信任所使用的服务提供商，并自行承担数据安全责任。"
         },
@@ -1862,13 +2008,23 @@
         },
         "AndreaNovelHelper.typo.warningLevel": {
           "type": "string",
-          "enum": ["error", "warning", "information", "hint"],
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint"
+          ],
           "default": "warning",
           "markdownDescription": "错别字诊断的警告级别：error（错误）、warning（警告）、information（信息）、hint（提示）。"
         },
         "AndreaNovelHelper.sensitiveWords.warningLevel": {
           "type": "string",
-          "enum": ["error", "warning", "information", "hint"],
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint"
+          ],
           "default": "error",
           "markdownDescription": "敏感词诊断的警告级别：error（错误）、warning（警告）、information（信息）、hint（提示）。"
         },
@@ -1991,7 +2147,11 @@
         },
         "AndreaNovelHelper.webdav.sync.autoSync.method": {
           "type": "string",
-          "enum": ["bidirectional", "upload", "download"],
+          "enum": [
+            "bidirectional",
+            "upload",
+            "download"
+          ],
           "default": "bidirectional",
           "markdownDescription": "定时同步的方法。bidirectional: 双向同步（默认），upload: 仅上传本地文件到服务器，download: 仅从服务器下载文件到本地。"
         },
@@ -2102,6 +2262,37 @@
           },
           "default": [],
           "markdownDescription": "自定义参与智能锁定的笔记本类型列表。例如：['my-notebook', 'another-notebook']"
+        },
+        "AndreaNovelHelper.database.backend": {
+          "type": "string",
+          "enum": [
+            "json",
+            "sqlite"
+          ],
+          "default": "json",
+          "markdownDescription": "数据库后端类型：\n- **json**: JSON文件存储（默认，兼容旧版本）\n- **sqlite**: SQLite数据库（推荐，性能更好）\n\n⚠️ 切换后端时会提示运行数据同步"
+        },
+        "AndreaNovelHelper.database.sqlite.enableWAL": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用SQLite的WAL（Write-Ahead Logging）模式，提升并发性能"
+        },
+        "AndreaNovelHelper.database.sqlite.cacheSize": {
+          "type": "number",
+          "default": 2560,
+          "minimum": 256,
+          "maximum": 10240,
+          "markdownDescription": "SQLite缓存大小（页数），默认2560页约10MB"
+        },
+        "AndreaNovelHelper.database.sqlite.enableMmap": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用SQLite的内存映射IO，提升读取性能"
+        },
+        "AndreaNovelHelper.database.autoMigrate": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "切换数据库后端时自动运行数据迁移（否则需要手动运行迁移命令）"
         }
       }
     },
@@ -2162,7 +2353,6 @@
         }
       ]
     },
-
     "keybindings": [
       {
         "key": "enter",
@@ -2205,6 +2395,7 @@
   },
   "dependencies": {
     "@types/uuid": "^10.0.0",
+    "@vscode/sqlite3": "^5.1.8-vscode",
     "ahocorasick": "^1.0.2",
     "chardet": "^2.1.0",
     "chart.js": "^4.5.0",

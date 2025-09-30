@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 // 仅在需要判断编辑器是否打开数据库文件时才使用 vscode API
 // 避免循环依赖：此文件不被激活阶段直接 import 其它使用本模块的代码
 import * as vscode from 'vscode';
+import { IDatabaseBackend } from '../../database/IDatabaseBackend';
+import { DatabaseFactory } from '../../database/DatabaseFactory';
 import { getFileMetadataFromCache } from '../WordCount/asyncWordCounter.js';
 // 文件级数据库对象，供外部直接访问和读写
 export let fileTrackingDatabase: FileTrackingDatabase | undefined = undefined;
@@ -82,17 +84,30 @@ export interface FileTrackingDatabase {
  * 文件追踪数据管理器
  */
 export class FileTrackingDataManager {
+    // 数据库后端
+    private backend: IDatabaseBackend | null = null;
+    private backendInitialized = false;
     /**
      * 直接写入或更新某个文件的元数据（外部可用，提升写入速度）
      */
-    public setFileMetadata(filePath: string, meta: FileMetadata): void {
+    public async setFileMetadata(filePath: string, meta: FileMetadata): Promise<void> {
         if (!meta || !meta.uuid) { return; }
+        
+        // 更新内存数据库
         this.database.files[meta.uuid] = meta;
         const key = this.toRelKey(filePath);
         this.database.pathToUuid[key] = meta.uuid;
-        this.markChanged();
-        this.markShardDirty(meta.uuid, 'setFileMetadata external update');
-        this.scheduleSave();
+        
+        // 使用数据库后端持久化
+        if (this.backend && this.backendInitialized) {
+            await this.backend.saveFileMetadata(meta.uuid, meta);
+            await this.backend.savePathMapping(key, meta.uuid);
+        } else {
+            // 后端未初始化时使用JSON分片
+            this.markChanged();
+            this.markShardDirty(meta.uuid, 'setFileMetadata external update');
+            this.scheduleSave();
+        }
     }
 
     // 标志：是否检测到需要路径迁移（index / 分片）
@@ -346,11 +361,53 @@ export class FileTrackingDataManager {
         } else {
             this.loadShardedFiles();
         }
+        // 异步初始化数据库后端（仅初始化，不迁移数据）
+        this.initializeBackend();
         this.getAllWritingStatsAsync = this.getAllWritingStatsAsync.bind(this);
         this.streamWritingStats = this.streamWritingStats.bind(this);
         this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
         this.filterFilesAsync = this.filterFilesAsync.bind(this);
         this.getStatsAsync = this.getStatsAsync.bind(this);
+    }
+
+    /**
+     * 初始化数据库后端（仅初始化，不迁移数据）
+     */
+    private async initializeBackend(): Promise<void> {
+        try {
+            const backendType = DatabaseFactory.getCurrentBackendType();
+            console.log(`[FileTracking] 初始化数据库后端: ${backendType}`);
+            
+            this.backend = await DatabaseFactory.createBackend(this.workspaceRoot);
+            this.backendInitialized = true;
+
+            // 如果使用SQLite后端，禁用JSON分片写入
+            if (backendType === 'sqlite') {
+                this.useSharded = false;
+                console.log('[FileTracking] SQLite后端已启用，JSON分片写入已禁用');
+            }
+
+            // 后端初始化完成后尝试加载后端中的路径映射（只加载映射，以便查询时能使用后端为权威）
+            try {
+                const pathMap = await this.backend.getAllPathMappings();
+                if (pathMap && pathMap.size > 0) {
+                    // 合并到内存 pathToUuid（以后端为准）
+                    for (const [p, u] of pathMap.entries()) {
+                        // 保持 key 统一（后端中通常存的是相对键或规范化键）
+                        this.database.pathToUuid[p] = u;
+                    }
+                    console.log(`[FileTracking] 已从后端加载路径映射 entries=${pathMap.size}`);
+                }
+            } catch (e) {
+                console.warn('[FileTracking] 从后端加载路径映射失败，回退到本地索引', e);
+            }
+
+            console.log('[FileTracking] 数据库后端初始化完成');
+        } catch (err) {
+            console.error('[FileTracking] 数据库后端初始化失败:', err);
+            this.backend = null;
+            this.backendInitialized = false;
+        }
     }
 
     /** 判断路径是否位于 .git 目录 */
@@ -765,10 +822,18 @@ export class FileTrackingDataManager {
                 if (changed) {
                     existingFile.lastTrackedAt = nowLite;
                     existingFile.updatedAt = nowLite;
-                    this.markChanged();
-                    this.markShardDirty(uuid, 'existing file content changed (hash/size/mtime)');
+                    
+                    // 使用数据库后端持久化
+                    if (this.backend && this.backendInitialized) {
+                        await this.backend.saveFileMetadata(uuid, existingFile);
+                    } else {
+                        // 后端未初始化时使用JSON分片
+                        this.markChanged();
+                        this.markShardDirty(uuid, 'existing file content changed (hash/size/mtime)');
+                        this.scheduleSave();
+                    }
+                    
                     if (!isDirectory) { this.markAncestorsDirty(filePath); }
-                    this.scheduleSave();
                 }
                 return uuid;
             }
@@ -808,13 +873,20 @@ export class FileTrackingDataManager {
                 updatedAt: now
             };
 
-            // 更新数据库（用相对键写映射）
+            // 更新内存数据库（用相对键写映射）
             this.database.files[uuid] = metadata;
             this.database.pathToUuid[key] = uuid;
 
-            this.markChanged();
-            this.markShardDirty(uuid, existingFile ? 'recreate metadata (missing shard loaded later)' : 'new file tracked');
-            this.scheduleSave();
+            // 使用数据库后端持久化
+            if (this.backend && this.backendInitialized) {
+                await this.backend.saveFileMetadata(uuid, metadata);
+                await this.backend.savePathMapping(key, uuid);
+            } else {
+                // 后端未初始化时使用JSON分片
+                this.markChanged();
+                this.markShardDirty(uuid, existingFile ? 'recreate metadata (missing shard loaded later)' : 'new file tracked');
+                this.scheduleSave();
+            }
 
             // 更新父目录聚合哈希
             if (!isDirectory) {
@@ -838,15 +910,25 @@ export class FileTrackingDataManager {
     /**
      * 移除文件
      */
-    public removeFile(filePath: string): void {
+    public async removeFile(filePath: string): Promise<void> {
         const key = this.toRelKey(filePath);
         const uuid = this.database.pathToUuid[key];
         if (uuid) {
+            // 更新内存数据库
             delete this.database.files[uuid];
             delete this.database.pathToUuid[key];
-            this.removedShardUuids.add(uuid);
-            this.markChanged();
-            this.scheduleSave();
+            
+            // 使用数据库后端持久化
+            if (this.backend && this.backendInitialized) {
+                await this.backend.deleteFileMetadata(uuid);
+                await this.backend.deletePathMapping(key);
+            } else {
+                // 后端未初始化时使用JSON分片
+                this.removedShardUuids.add(uuid);
+                this.markChanged();
+                this.scheduleSave();
+            }
+            
             this.markAncestorsDirty(filePath);
             this.stats.removeFile++;
         }
@@ -856,11 +938,12 @@ export class FileTrackingDataManager {
     /**
      * 重命名文件
      */
-    public renameFile(oldPath: string, newPath: string): void {
+    public async renameFile(oldPath: string, newPath: string): Promise<void> {
         const oldKey = this.toRelKey(oldPath);
         const newKey = this.toRelKey(newPath);
         const uuid = this.database.pathToUuid[oldKey];
         if (uuid) {
+            // 更新内存数据库
             const metadata = this.database.files[uuid];
             if (metadata) {
                 metadata.filePath = this.toAbsPath(newKey);
@@ -870,9 +953,20 @@ export class FileTrackingDataManager {
             }
             delete this.database.pathToUuid[oldKey];
             this.database.pathToUuid[newKey] = uuid;
-            this.markChanged();
-            this.markShardDirty(uuid, 'rename file path/metadata changed');
-            this.scheduleSave();
+
+            // 使用数据库后端持久化
+            if (this.backend && this.backendInitialized) {
+                if (metadata) {
+                    await this.backend.saveFileMetadata(uuid, metadata);
+                }
+                await this.backend.deletePathMapping(oldKey);
+                await this.backend.savePathMapping(newKey, uuid);
+            } else {
+                // 后端未初始化时使用JSON分片
+                this.markChanged();
+                this.markShardDirty(uuid, 'rename file path/metadata changed');
+                this.scheduleSave();
+            }
             this.markAncestorsDirty(newPath);
             this.stats.renameFile++;
         }
@@ -935,7 +1029,7 @@ export class FileTrackingDataManager {
     /**
      * 更新文件的写作统计（供 timeStats 使用）
      */
-    public updateWritingStats(filePath: string, stats: {
+    public async updateWritingStats(filePath: string, stats: {
         totalMillis?: number;
         charsAdded?: number;
         charsDeleted?: number;
@@ -945,7 +1039,7 @@ export class FileTrackingDataManager {
         buckets?: { start: number; end: number; charsAdded: number }[];
         sessions?: { start: number; end: number }[];
         achievedMilestones?: number[]; // 已达成的里程碑目标
-    }): void {
+    }): Promise<void> {
         const uuid = this.getFileUuid(filePath);
         if (uuid) {
             const metadata = this.database.files[uuid];
@@ -997,9 +1091,16 @@ export class FileTrackingDataManager {
                     console.log(`[FileTracking] writingStats diff -> ${reasonParts.join(',') || 'unknown'} file=${filePath}`);
                     Object.assign(prev, next);
                     metadata.updatedAt = Date.now();
-                    this.markChanged();
-                    this.markShardDirty(uuid, 'writingStats changed');
-                    this.scheduleSave();
+
+                    // 使用数据库后端持久化
+                    if (this.backend && this.backendInitialized) {
+                        await this.backend.saveFileMetadata(uuid, metadata);
+                    } else {
+                        // 后端未初始化时使用JSON分片
+                        this.markChanged();
+                        this.markShardDirty(uuid, 'writingStats changed');
+                        this.scheduleSave();
+                    }
                     this.stats.writingStatsUpdates++;
                 }
             }
@@ -1009,13 +1110,13 @@ export class FileTrackingDataManager {
     /**
      * 更新文件的字数统计（供 WordCountProvider 使用）
      */
-    public updateWordCountStats(filePath: string, stats: {
+    public async updateWordCountStats(filePath: string, stats: {
         cjkChars: number;
         asciiChars: number;
         words: number;
         nonWSChars: number;
         total: number;
-    }): void {
+    }): Promise<void> {
         const uuid = this.getFileUuid(filePath);
         if (!uuid) { return; }
         const metadata = this.database.files[uuid];
@@ -1029,9 +1130,16 @@ export class FileTrackingDataManager {
         metadata.wordCountStats = { ...stats };
         metadata.updatedAt = Date.now();
         metadata.lastTrackedAt = Date.now();
-        this.markChanged();
-        this.markShardDirty(uuid, 'wordCountStats changed');
-        this.scheduleSave();
+        
+        // 使用数据库后端持久化
+        if (this.backend && this.backendInitialized) {
+            await this.backend.saveFileMetadata(uuid, metadata);
+        } else {
+            // 后端未初始化时使用JSON分片
+            this.markChanged();
+            this.markShardDirty(uuid, 'wordCountStats changed');
+            this.scheduleSave();
+        }
         this.stats.wordCountUpdates++;
     }
 
@@ -1160,6 +1268,27 @@ export class FileTrackingDataManager {
     private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
         const mem = this.database.files[uuid];
         if (mem) { return mem; }
+        // 优先使用后端读取（若已初始化）
+        if (this.backend && this.backendInitialized) {
+            try {
+                const row = await this.backend.loadFileMetadata(uuid);
+                if (row) {
+                    // 后端中存储可能已经是序列化对象或字符串
+                    const metaObj = typeof row === 'string' ? JSON.parse(row) : row;
+                    if (cacheLoaded && metaObj) {
+                        // 确保 filePath 是绝对路径用于内存使用
+                        if (metaObj.filePath) { metaObj.filePath = this.toAbsPath(metaObj.filePath); }
+                        this.database.files[uuid] = metaObj;
+                        if (metaObj.isDirectory) { this.indexDirFlag.add(uuid); }
+                    }
+                    return metaObj;
+                }
+            } catch (e) {
+                // 后端读取失败，回退到本地分片读取
+                console.warn('[FileTracking] backend.loadFileMetadata 失败，回退到分片读取', e);
+            }
+        }
+
         const meta = await this.readSingleShardAsync(uuid);
         if (cacheLoaded && meta) {
             this.database.files[uuid] = meta;
@@ -1170,12 +1299,58 @@ export class FileTrackingDataManager {
 
     /** 异步枚举全部文件（惰性按需加载分片；不强制一次性加载全部） */
     public async getAllFilesAsync(opts?: { cacheLoaded?: boolean }): Promise<FileMetadata[]> {
-        const entries = Object.entries(this.database.pathToUuid);
+        // 如果后端可用，优先使用后端的路径映射与批量读取以减少 IO
         const result: FileMetadata[] = [];
+        if (this.backend && this.backendInitialized) {
+            try {
+                const pathMap = await this.backend.getAllPathMappings(); // Map<string, string>
+                const uuids = Array.from(new Set(Array.from(pathMap.values())));
+
+                // 批量读取元数据（后端实现会批量优化）
+                const metaMap = await this.backend.loadFileMetadataBatch ? await this.backend.loadFileMetadataBatch(uuids) : new Map<string, any>();
+
+                // 合并：以后端为权威，但若后端没有某 uuid，则回退到本地 cache/shard
+                for (const [pathKey, uuid] of pathMap.entries()) {
+                    let meta = this.database.files[uuid];
+                    if (!meta) {
+                        const row = metaMap.get(uuid);
+                        if (row) {
+                            const metaObj = typeof row === 'string' ? JSON.parse(row) : row;
+                            if (metaObj.filePath) { metaObj.filePath = this.toAbsPath(metaObj.filePath); }
+                            if (opts?.cacheLoaded !== false) { this.database.files[uuid] = metaObj; }
+                            meta = metaObj;
+                        }
+                    }
+
+                    // 后端没有，尝试 pcache，再尝试本地分片
+                    if (!meta) {
+                        const abs = this.toAbsPath(pathKey);
+                        const cacheMeta = await getFileMetadataFromCache(abs).catch(() => null);
+                        if (cacheMeta) {
+                            if (opts?.cacheLoaded !== false) { this.database.files[uuid] = cacheMeta; }
+                            meta = cacheMeta;
+                        } else {
+                            const shardMeta = await this.getMetaAsync(uuid, opts?.cacheLoaded !== false).catch(() => undefined);
+                            if (shardMeta) { meta = shardMeta; }
+                        }
+                    }
+
+                    if (meta) { result.push(meta); }
+                }
+
+                return result;
+            } catch (e) {
+                console.warn('[FileTracking] getAllFilesAsync: 后端批量读取失败，回退到本地', e);
+                // 回退到本地实现
+            }
+        }
+
+        // 本地回退路径（原实现）
+        const entries = Object.entries(this.database.pathToUuid);
         for (const [key, uuid] of entries) {
             let meta = this.database.files[uuid];
             if (!meta) {
-                const abs = this.toAbsPath(key);                                  // ←
+                const abs = this.toAbsPath(key);
                 const cacheMeta = await getFileMetadataFromCache(abs).catch(() => null);
                 if (cacheMeta !== null) {
                     this.database.files[uuid] = cacheMeta;

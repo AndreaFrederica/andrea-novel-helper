@@ -52,7 +52,7 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
     if (workspaceRoot) {
         // 监听文件删除
         const deleteWatcher = vscode.workspace.createFileSystemWatcher('**/*');
-        deleteWatcher.onDidDelete((uri) => {
+        deleteWatcher.onDidDelete(async (uri) => {
             const filePath = uri.fsPath;
             const dataManager = fileTracker.getDataManager();
             if (!dataManager) { return; }
@@ -60,7 +60,7 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
             if (fileTracker.isFileIgnored(filePath)) {
                 return;
             }
-            if (dataManager.handleFileDeleted(filePath)) {
+            if (await dataManager.handleFileDeleted(filePath)) {
                 console.log(`文件删除事件处理: ${filePath}`);
             }
         });
