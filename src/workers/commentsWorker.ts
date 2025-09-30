@@ -4,7 +4,7 @@ import * as path from 'path';
 
 interface CommentMessage {
     id: string;
-    type: 'scan-comments' | 'watch-comments' | 'load-comment-file';
+    type: 'scan-comments' | 'watch-comments' | 'load-comment-file' | 'update-path-mapping';
     data: any;
 }
 
@@ -26,6 +26,8 @@ interface CommentFileInfo {
 
 class CommentsWorker {
     private watchers = new Map<string, fs.FSWatcher>();
+    // 内存中的 uuid -> {filePath, relativePath} 映射表（由主线程传入）
+    private uuidPathMap = new Map<string, { filePath: string; relativePath: string }>();
 
     async handleMessage(message: CommentMessage): Promise<CommentResponse> {
         try {
@@ -36,6 +38,8 @@ class CommentsWorker {
                     return await this.handleWatchComments(message.data);
                 case 'load-comment-file':
                     return await this.handleLoadCommentFile(message.data);
+                case 'update-path-mapping':
+                    return await this.handleUpdatePathMapping(message.data);
                 default:
                     throw new Error(`Unknown message type: ${message.type}`);
             }
@@ -62,31 +66,47 @@ class CommentsWorker {
         return path.resolve(path.join(workspaceRoot, localish));
     }
 
-    // Read novel-helper/.anh-fsdb/index.json and map uuid -> filePath（兼容 entries: [{u,p}]）
-    private getDocPathByUuid(workspaceRoot: string, docUuid: string): { filePath: string | '', relativePath: string | '' } {
+    /**
+     * 处理路径映射更新（由主线程传入）
+     */
+    private async handleUpdatePathMapping(data: { 
+        uuidPathMap: Array<{ uuid: string; filePath: string; relativePath: string }> 
+    }): Promise<CommentResponse> {
         try {
-            const idxPath = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb', 'index.json');
-            const txt = fs.readFileSync(idxPath, 'utf8');
-            const db = JSON.parse(txt);
-
-            // 优先使用 entries: Array<{ u: string; p: string }>
-            const entries = Array.isArray(db?.entries) ? db.entries : (Array.isArray(db?.files) ? db.files : null);
-            if (Array.isArray(entries)) {
-                for (const ent of entries) {
-                    if (ent && typeof ent === 'object') {
-                        const u = (ent as any).u;
-                        const p = (ent as any).p;
-                        if (typeof u === 'string' && typeof p === 'string' && u === docUuid) {
-                            const abs = this.absFromIndexKey(workspaceRoot, p);
-                            const rel = path.relative(workspaceRoot, abs) || path.basename(abs);
-                            return { filePath: abs, relativePath: rel };
-                        }
-                    }
-                }
+            this.uuidPathMap.clear();
+            for (const entry of data.uuidPathMap) {
+                this.uuidPathMap.set(entry.uuid, {
+                    filePath: entry.filePath,
+                    relativePath: entry.relativePath
+                });
             }
-        } catch {
-            // ignore
+            console.log(`[CommentsWorker] 路径映射已更新: ${this.uuidPathMap.size} 条记录`);
+            return {
+                id: '',
+                success: true,
+                data: { updated: this.uuidPathMap.size }
+            };
+        } catch (error) {
+            return {
+                id: '',
+                success: false,
+                error: error instanceof Error ? error.message : String(error)
+            };
         }
+    }
+
+    /**
+     * 通过 uuid 获取文档路径（使用内存映射表）
+     */
+    private getDocPathByUuid(workspaceRoot: string, docUuid: string): { filePath: string | '', relativePath: string | '' } {
+        // 优先使用内存映射表
+        const mapped = this.uuidPathMap.get(docUuid);
+        if (mapped) {
+            return mapped;
+        }
+        
+        // 回退：如果映射表中没有，返回空（不再读取 index.json）
+        console.warn(`[CommentsWorker] UUID ${docUuid} 未在路径映射表中找到`);
         return { filePath: '', relativePath: docUuid };
     }
 

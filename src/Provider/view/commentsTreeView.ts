@@ -129,6 +129,9 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             const workerPath = path.join(__dirname, '../../workers/commentsWorker.js');
             this.worker = new Worker(workerPath);
             
+            // 初始化后立即发送路径映射表
+            this.updateWorkerPathMapping();
+            
             this.worker.on('message', (message: CommentMessage) => {
                 if (message.type === 'response') {
                     const pending = this.pendingMessages.get(message.id);
@@ -159,6 +162,50 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
         } catch (error) {
             console.error('[comments] Failed to initialize comments worker:', error);
             vscode.window.showErrorMessage('无法初始化批注加载器');
+        }
+    }
+
+    /**
+     * 更新 Worker 的路径映射表（从文件追踪数据库获取）
+     */
+    private async updateWorkerPathMapping(): Promise<void> {
+        try {
+            // 动态导入以避免循环依赖
+            const { fileTrackingDatabase } = await import('../../utils/tracker/fileTrackingData.js');
+            
+            if (!fileTrackingDatabase) {
+                console.warn('[comments] 文件追踪数据库未初始化，稍后重试');
+                // 延迟重试
+                setTimeout(() => this.updateWorkerPathMapping(), 1000);
+                return;
+            }
+
+            // 构建 uuid -> {filePath, relativePath} 映射表
+            const uuidPathMap: Array<{ uuid: string; filePath: string; relativePath: string }> = [];
+            
+            // 从 pathToUuid 反向构建映射
+            const pathToUuid = fileTrackingDatabase.pathToUuid as Record<string, string>;
+            const files = fileTrackingDatabase.files as Record<string, any>;
+            
+            for (const [relPath, uuid] of Object.entries(pathToUuid)) {
+                const meta = files[uuid];
+                if (meta && typeof meta.filePath === 'string') {
+                    uuidPathMap.push({
+                        uuid,
+                        filePath: meta.filePath,
+                        relativePath: relPath
+                    });
+                }
+            }
+
+            console.log(`[comments] 准备发送路径映射到 Worker: ${uuidPathMap.length} 条记录`);
+
+            // 发送到 Worker
+            await this.sendWorkerMessage('update-path-mapping', { uuidPathMap });
+            
+            console.log('[comments] Worker 路径映射已更新');
+        } catch (error) {
+            console.error('[comments] 更新 Worker 路径映射失败:', error);
         }
     }
 

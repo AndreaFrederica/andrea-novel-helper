@@ -361,13 +361,23 @@ export class FileTrackingDataManager {
         } else {
             this.loadShardedFiles();
         }
-        // 异步初始化数据库后端（仅初始化，不迁移数据）
-        this.initializeBackend();
+        // 同步初始化数据库后端（确保后端的path2uuid在使用前已加载）
+        this.initializeBackendSync();
         this.getAllWritingStatsAsync = this.getAllWritingStatsAsync.bind(this);
         this.streamWritingStats = this.streamWritingStats.bind(this);
         this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
         this.filterFilesAsync = this.filterFilesAsync.bind(this);
         this.getStatsAsync = this.getStatsAsync.bind(this);
+    }
+
+    /**
+     * 同步触发数据库后端初始化（不等待完成）
+     */
+    private initializeBackendSync(): void {
+        // 在后台异步初始化后端
+        this.initializeBackend().catch(err => {
+            console.error('[FileTracking] 后端初始化失败（后台）:', err);
+        });
     }
 
     /**
