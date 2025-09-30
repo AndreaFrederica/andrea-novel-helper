@@ -263,6 +263,14 @@
         }
       },
       {
+        "command": "andrea.commentsExplorer.rebindFileToDocument",
+        "title": "%command.commentsExplorer.rebindFileToDocument.title%",
+        "icon": {
+          "light": "$(file-symlink-file)",
+          "dark": "$(file-symlink-file)"
+        }
+      },
+      {
         "command": "andrea.commentsExplorer.openComment",
         "title": "%command.commentsExplorer.openComment.title%",
         "icon": {
@@ -1014,6 +1022,11 @@
         {
           "command": "andrea.commentsExplorer.toggleStatus",
           "when": "view == andrea.commentsExplorer && viewItem == commentThread",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.rebindFileToDocument",
+          "when": "view == andrea.commentsExplorer && viewItem == commentFile",
           "group": "1_modification@1"
         },
         {

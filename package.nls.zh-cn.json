@@ -41,6 +41,8 @@
     "command.comments.resolve.title": "将批注标记为已解决",
     "command.comments.reopen.title": "重新打开批注",
     "command.commentsExplorer.toggleStatus.title": "切换批注状态",
+    "command.commentsExplorer.rebindToDocument.title": "修改绑定文档…",
+    "command.commentsExplorer.rebindFileToDocument.title": "将此文件的批注迁移到…",
     "command.commentsExplorer.openComment.title": "跳转到批注",
     "command.commentsExplorer.refresh.title": "刷新批注列表",
     "command.commentsExplorer.search.title": "搜索批注",
