@@ -373,6 +373,13 @@ export async function rebindAllThreadsToDocument(oldDocUuid: string, newDocUuid:
 
     oldIndex.threadIds = [];
     await saveCommentIndex(oldIndex);
+    // 如果旧文档已无任何线程，清理其索引文件以避免“残留空文件”
+    try {
+      const oldIdxPath = indexFilePathForUuid(oldDocUuid);
+      if (oldIdxPath && fs.existsSync(oldIdxPath)) {
+        fs.unlinkSync(oldIdxPath);
+      }
+    } catch { /* ignore */ }
 
     // 3) 合并/转移 MD 文件
     try {

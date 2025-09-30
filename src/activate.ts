@@ -606,6 +606,10 @@ export async function activate(context: vscode.ExtensionContext) {
         // Typo feature (stateful, per-paragraph scanning + quick fixes)
         registerTypoFeature(context);
 
+        // 提前初始化全局文件追踪（供 WordCount/Comments 等功能写入/读取数据库）
+        // 注意：timeStats 也依赖该初始化，保持在其之前
+        try { initializeGlobalFileTracking(context); } catch (e) { console.warn('[ANH] initializeGlobalFileTracking early failed', e); }
+
         // Word Count 树视图
         // 手动排序管理器
         let orderManager: WordCountOrderManager | null = null;
@@ -974,9 +978,9 @@ export async function activate(context: vscode.ExtensionContext) {
         // 注册字数统计视图的右键菜单命令
         registerWordCountContextCommands(context, wordCountProvider);
 
-        // 初始化全局文件追踪（为备份等功能提供基础）
+        // 初始化全局文件追踪（已提前初始化；此处保留但不重复执行）
         // 注意：必须在 timeStats 之前初始化，因为 timeStats 依赖于全局文件追踪
-        initializeGlobalFileTracking(context);
+        // initializeGlobalFileTracking(context);
 
         activateTimeStats(context);
 
