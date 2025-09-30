@@ -105,6 +105,7 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
     // 清理函数
     context.subscriptions.push({
         dispose: () => {
+            try { fileTracker.getDataManager()?.writeStartupSnapshot(); } catch { /* ignore */ }
             disposeFileTracker();
             callbackRegistry.clear();
         }

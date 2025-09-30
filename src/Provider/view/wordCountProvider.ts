@@ -1357,6 +1357,35 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         if (this.gitGuard) {
             this.gitGuard.dispose();
         }
+        // 写出启动快照：仅保存文件列表（相对于工作区）
+        try {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.startupSnapshot');
+            if (cfg.get<boolean>('enabled', true)) {
+                const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                if (ws) {
+                    const snapDir = path.join(ws, 'novel-helper', '.anh-fsdb', 'snapshots');
+                    if (!fs.existsSync(snapDir)) fs.mkdirSync(snapDir, { recursive: true });
+                    const snapPath = path.join(snapDir, 'wordcount-files.json');
+                    const allPaths = new Set<string>();
+                    for (const [id, item] of this.itemsById) {
+                        try {
+                            const p = (item as any)?.resourceUri?.fsPath;
+                            if (p && fs.existsSync(p) && fs.statSync(p).isFile()) {
+                                const rel = path.relative(ws, p).split(path.sep).join('/');
+                                allPaths.add(rel);
+                            }
+                        } catch { /* ignore */ }
+                    }
+                    fs.writeFileSync(snapPath, JSON.stringify({ files: Array.from(allPaths) }));
+                }
+            } else if (cfg.get<boolean>('deleteOnDisable', true)) {
+                const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                if (ws) {
+                    const snapPath = path.join(ws, 'novel-helper', '.anh-fsdb', 'snapshots', 'wordcount-files.json');
+                    if (fs.existsSync(snapPath)) fs.unlinkSync(snapPath);
+                }
+            }
+        } catch { /* ignore */ }
     }
 
     // 新增：收集需要进行字数统计的支持文件（忽略参考文件与忽略规则）
