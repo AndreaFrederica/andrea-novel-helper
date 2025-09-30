@@ -1042,6 +1042,14 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
 
             // 1.5 大文件快速估算路径（若无精确缓存或缓存为过期）
+            // 如果已有任何内存缓存（即使 size/mtime 不匹配），优先使用旧缓存并后台精算，避免估算覆盖已有精确值
+            if (!isForced && cached && !this.largeApproxPending.has(filePath)) {
+                try { wcDebug('cache-preserve:using-existing-cache-and-schedule-background-precise', filePath, 'cachedM', cached.mtime, 'cachedS', cached.size, 'curS', size); } catch { /* ignore */ }
+                // 后台异步精算并更新缓存/聚合
+                this.scheduleFileStat(filePath);
+                return cached.stats;
+            }
+
             if (!isForced && size > largeThreshold && !this.largeApproxPending.has(filePath)) {
                 // 生成估算结果（只估 total，其余置 0）
                 const estimatedTotal = Math.max(1, Math.floor(size / Math.max(0.1, avgBytesPerChar)));
@@ -1178,6 +1186,15 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             // 小延迟让出事件循环，避免长时间占用
             await new Promise(res => setTimeout(res, 5));
         }
+        // 队列清空后，对根目录做一次最终聚合，确保总数一致
+        try {
+            const roots = vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath) || [];
+            for (const r of roots) {
+                this.markDirDirty(r);
+                this.enqueueDirRecompute(r);
+            }
+            this.refreshDebounced();
+        } catch { /* ignore */ }
         this.largeProcessingRunning = false;
     }
 
@@ -1388,7 +1405,7 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`**路径**: \`${resourceUri.fsPath}\``);
             tip.appendMarkdown(`\n\n中文字符数: **${stats.cjkChars}**`);
             tip.appendMarkdown(`\n\n英文单词数: **${stats.words}**`);
-            tip.appendMarkdown(`\n\n非 ASCII 字符数: **${stats.asciiChars}**`);
+            tip.appendMarkdown(`\n\nASCII 字符数: **${stats.asciiChars}**`);
             tip.appendMarkdown(`\n\n非空白字符数: **${stats.nonWSChars}**`);
             tip.appendMarkdown(`\n\n**总字数**: **${stats.total}**`);
             // 附加 UUID（文件或目录）

@@ -4,7 +4,7 @@ import * as path from 'path';
 
 interface CommentMessage {
     id: string;
-    type: 'scan-comments' | 'watch-comments' | 'load-comment-file' | 'update-path-mapping';
+    type: 'scan-comments' | 'watch-comments' | 'load-comment-file' | 'update-path-mapping' | 'resolve-path-response';
     data: any;
 }
 
@@ -28,6 +28,8 @@ class CommentsWorker {
     private watchers = new Map<string, fs.FSWatcher>();
     // 内存中的 uuid -> {filePath, relativePath} 映射表（由主线程传入）
     private uuidPathMap = new Map<string, { filePath: string; relativePath: string }>();
+    // 等待主线程返回的请求
+    private pendingMain = new Map<string, (data: any) => void>();
 
     async handleMessage(message: CommentMessage): Promise<CommentResponse> {
         try {
@@ -40,6 +42,15 @@ class CommentsWorker {
                     return await this.handleLoadCommentFile(message.data);
                 case 'update-path-mapping':
                     return await this.handleUpdatePathMapping(message.data);
+                case 'resolve-path-response': {
+                    // 主线程返回的路径解析应答
+                    const cb = this.pendingMain.get(message.id);
+                    if (cb) {
+                        this.pendingMain.delete(message.id);
+                        try { cb((message as any).data); } catch { /* ignore */ }
+                    }
+                    return { id: message.id, success: true };
+                }
                 default:
                     throw new Error(`Unknown message type: ${message.type}`);
             }
@@ -98,16 +109,34 @@ class CommentsWorker {
     /**
      * 通过 uuid 获取文档路径（使用内存映射表）
      */
-    private getDocPathByUuid(workspaceRoot: string, docUuid: string): { filePath: string | '', relativePath: string | '' } {
+    private async getDocPathByUuid(workspaceRoot: string, docUuid: string): Promise<{ filePath: string | '', relativePath: string | '' }> {
         // 优先使用内存映射表
         const mapped = this.uuidPathMap.get(docUuid);
         if (mapped) {
             return mapped;
         }
         
-        // 回退：如果映射表中没有，返回空（不再读取 index.json）
-        console.warn(`[CommentsWorker] UUID ${docUuid} 未在路径映射表中找到`);
-        return { filePath: '', relativePath: docUuid };
+        // 回退：请求主线程解析一次（使用数据库后端/追踪器）
+        try {
+            const reqId = `${Date.now()}-${Math.random()}`;
+            const data = await new Promise<any>((resolve) => {
+                this.pendingMain.set(reqId, resolve);
+                parentPort?.postMessage({
+                    type: 'resolve-path-request',
+                    id: reqId,
+                    data: { docUuid, workspaceRoot }
+                });
+            });
+            const filePath = (data && typeof data.filePath === 'string') ? data.filePath : '';
+            const relativePath = (data && typeof data.relativePath === 'string') ? data.relativePath : (docUuid || '');
+            if (filePath) {
+                this.uuidPathMap.set(docUuid, { filePath, relativePath });
+            }
+            return { filePath, relativePath };
+        } catch {
+            console.warn(`[CommentsWorker] UUID ${docUuid} 未在路径映射表中找到，且主线程解析失败`);
+            return { filePath: '', relativePath: docUuid };
+        }
     }
 
     /**
@@ -154,6 +183,10 @@ class CommentsWorker {
                                 const content = await fs.promises.readFile(filePath, 'utf8');
                                 const indexData = JSON.parse(content);
                                 const threadIds: string[] = Array.isArray(indexData?.threadIds) ? indexData.threadIds : [];
+                                // 跳过没有任何线程的索引（避免迁移后残留空条目）
+                                if (!threadIds || threadIds.length === 0) {
+                                    continue;
+                                }
                                 
                                 let commentCount = 0;
                                 let resolvedCount = 0;
@@ -178,7 +211,7 @@ class CommentsWorker {
                                 }
                                 
                                 // 通过文件追踪数据库映射到真实文档路径
-                                const { filePath: realPath, relativePath } = this.getDocPathByUuid(wsRoot, docUuid);
+                        const { filePath: realPath, relativePath } = await this.getDocPathByUuid(wsRoot, docUuid);
                                 
                                 dirFiles.push({
                                     docUuid,
@@ -362,7 +395,7 @@ class CommentsWorker {
             // Try map to real document path for UI convenience
             let docPath: string | undefined = undefined;
             if (workspaceRoot) {
-                const mapped = this.getDocPathByUuid(workspaceRoot, realDocUuid);
+                const mapped = await this.getDocPathByUuid(workspaceRoot, realDocUuid);
                 if (mapped.filePath) docPath = mapped.filePath;
             }
             
