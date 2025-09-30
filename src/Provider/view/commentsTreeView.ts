@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
-import { loadComments, getDocUuidForDocument } from '../../comments/storage';
+import { loadComments, getDocUuidForDocument, rebindAllThreadsToDocument } from '../../comments/storage';
+import { getFileTracker } from '../../utils/tracker/globalFileTracking';
 
 interface CommentFileInfo {
     docUuid: string;
@@ -1554,6 +1555,63 @@ export function registerCommentsTreeView(context: vscode.ExtensionContext) {
         }
     );
 
+    // 注册：对“文件/文档项”执行整文档迁移
+    const rebindFileToDocumentCommand = vscode.commands.registerCommand('andrea.commentsExplorer.rebindFileToDocument',
+        async (item: CommentTreeItem) => {
+            if (!item || item.contextValue !== 'commentFile' || !item.docUuid) {
+                vscode.window.showWarningMessage('请在含批注的文件项上执行此操作。');
+                return;
+            }
+
+            try {
+                const picked = await vscode.window.showOpenDialog({
+                    canSelectFiles: true,
+                    canSelectFolders: false,
+                    canSelectMany: false,
+                    title: '选择要迁移到的目标文档',
+                    filters: {
+                        'Text/Markdown': ['md', 'txt', 'markdown'],
+                        'All Files': ['*']
+                    }
+                });
+                if (!picked || picked.length === 0) { return; }
+
+                const targetUri = picked[0];
+                const targetDoc = await vscode.workspace.openTextDocument(targetUri);
+                let newDocUuid = getDocUuidForDocument(targetDoc);
+
+                // 若未被追踪，尝试主动登记到文件追踪数据库
+                if (!newDocUuid) {
+                    try {
+                        const tracker = getFileTracker();
+                        await tracker?.handleFileCreated(targetUri.fsPath);
+                        newDocUuid = getDocUuidForDocument(targetDoc);
+                    } catch {/* ignore */}
+                }
+
+                if (!newDocUuid) {
+                    vscode.window.showErrorMessage('无法为目标文档取得 UUID（是否已被文件追踪器忽略？）');
+                    return;
+                }
+
+                if (newDocUuid === item.docUuid) {
+                    vscode.window.showInformationMessage('目标与当前文档相同，无需迁移。');
+                    return;
+                }
+
+                const res = await rebindAllThreadsToDocument(item.docUuid, newDocUuid);
+                if (res.success) {
+                    vscode.window.showInformationMessage(`已将该文档的 ${res.moved} 条批注迁移到新文档。`);
+                    provider.refresh();
+                } else {
+                    vscode.window.showWarningMessage('批注迁移未完成。');
+                }
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`迁移失败: ${err?.message || String(err)}`);
+            }
+        }
+    );
+
     // 注册搜索命令
     const searchCommand = vscode.commands.registerCommand('andrea.commentsExplorer.search',
         async () => {
@@ -1636,6 +1694,7 @@ export function registerCommentsTreeView(context: vscode.ExtensionContext) {
         openCommentCommand, 
         refreshCommand,
         toggleStatusCommand,
+        rebindFileToDocumentCommand,
         searchCommand,
         filterByStatusCommand,
         clearFilterCommand,

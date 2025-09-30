@@ -42,6 +42,8 @@
     "command.comments.resolve.title": "Mark Comment Resolved",
     "command.comments.reopen.title": "Reopen Comment",
     "command.commentsExplorer.toggleStatus.title": "Toggle Comment Status",
+    "command.commentsExplorer.rebindToDocument.title": "Rebind Comment to Document…",
+    "command.commentsExplorer.rebindFileToDocument.title": "Migrate This File’s Comments…",
     "command.commentsExplorer.openComment.title": "Jump to Comment",
     "command.commentsExplorer.refresh.title": "Refresh Comments List",
     "command.commentsExplorer.search.title": "Search Comments",
