@@ -127,6 +127,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     // 新增：在类里加一个去重用的集合
     private inFlightFileStats = new Set<string>();
 
+    // 新增：首次加载进度仅显示一次
+    private initialProgressStarted = false;
+    // 新增：计算进度循环是否运行中（避免重复弹出）
+    private computeProgressLoopRunning = false;
+
 
     constructor(memento: vscode.Memento, orderManager?: WordCountOrderManager) {
         this.memento = memento;
@@ -184,6 +189,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         setTimeout(() => {
             try { this.orderManager?.migrateAllFileKeys?.(); } catch { /* ignore */ }
         }, 1500);
+
+        // 新增：首次加载时显示实时进度条（仅本会话一次）
+        setTimeout(() => { void this.maybeShowInitialProgress(); }, 300);
     }
 
     /**
@@ -305,6 +313,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private scheduleFileStat(full: string) {
         if (this.inFlightFileStats.has(full)) return;
         this.inFlightFileStats.add(full);
+        // 新增：有新任务时尝试显示通用计算进度条
+        this.ensureComputeProgressLoop();
         setTimeout(async () => {
             try {
                 await this.getOrCalculateFileStats(full);   // 真正算在后台
@@ -316,6 +326,15 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 this.refreshDebounced();
             }
         }, 0);
+    }
+
+    /** 将大文件加入精确统计后台队列 */
+    private scheduleLargeAccurate(filePath: string) {
+        if (this.largeProcessingQueue.includes(filePath)) return;
+        this.largeProcessingQueue.push(filePath);
+        // 新增：有新大文件精算任务时尝试显示通用计算进度条
+        this.ensureComputeProgressLoop();
+        this.runLargeProcessing();
     }
 
     private detectGitRepoAndMaybeRescan() {
@@ -613,7 +632,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 .map(s => (s || '').toLowerCase())
         );
 
-        let dirents: fs.Dirent[] = [];
+    let dirents: fs.Dirent[] = [];
+    // 收集当前目录下需要批量预取的文件（仅文件）
+    const prefetchFiles: string[] = [];
         try {
             dirents = await fs.promises.readdir(root, { withFileTypes: true });
             wcDebug('getChildren:readDir', root, 'entries', dirents.length);
@@ -744,6 +765,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         this.itemsById.set(item.id, item);
                         items.push(item);
                         needsAsync = true;
+                        // 收集用于后端批量预取的文件路径
+                        prefetchFiles.push(full);
                     }
                 }
             }
@@ -840,6 +863,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         // 异步批量计算（目录动态聚合 + 文件统计）
         if (needsAsync) {
             wcDebug('getChildren:needsAsyncBatch', root);
+            // 尝试批量预取（若后端支持），非阻塞
+            try { void this.prefetchDirStatsBatchIfPossible(prefetchFiles); } catch { /* ignore */ }
             void this.calculateStatsAsync(root, exts, dirents).then(() => {
                 wcDebug('getChildren:asyncBatchComplete', root);
                 this.refresh();
@@ -1139,13 +1164,6 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         }
     }
 
-    /** 将大文件加入精确统计后台队列 */
-    private scheduleLargeAccurate(filePath: string) {
-        if (this.largeProcessingQueue.includes(filePath)) return;
-        this.largeProcessingQueue.push(filePath);
-        this.runLargeProcessing();
-    }
-
     /** 后台串行处理大文件精确统计，避免阻塞主线程 */
     private async runLargeProcessing() {
         if (this.largeProcessingRunning) return;
@@ -1323,6 +1341,173 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             this.gitGuard.dispose();
         }
     }
+
+    // 新增：收集需要进行字数统计的支持文件（忽略参考文件与忽略规则）
+    private async collectSupportedFiles(root: string): Promise<string[]> {
+        const results: string[] = [];
+        const stack: string[] = [root];
+        const supportedExts = new Set<string>(getSupportedExtensions());
+        const refExts = new Set<string>(
+            (vscode.workspace.getConfiguration('AndreaNovelHelper')
+                .get<string[]>('wordCount.referenceVisibleExtensions', []) || [])
+                .map(s => (s || '').toLowerCase())
+        );
+
+        while (stack.length) {
+            const dir = stack.pop()!;
+            let dirents: fs.Dirent[] = [];
+            try {
+                dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+            } catch { continue; }
+
+            for (const d of dirents) {
+                const full = path.join(dir, d.name);
+
+                // 忽略规则统一判断（允许的语言包含支持+参考扩展，但真正加入结果时仅保留支持扩展）
+                try {
+                    if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
+                        workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                        respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+                        respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true),
+                        includePatterns: undefined,
+                        excludePatterns: undefined,
+                        allowedLanguages: [...Array.from(supportedExts), ...Array.from(refExts)]
+                    })) { continue; }
+                } catch { /* ignore */ }
+
+                if (d.isDirectory()) { stack.push(full); continue; }
+                if (!d.isFile()) { continue; }
+
+                const name = d.name;
+                const special = (name === '.gitignore' || name === '.wcignore');
+                if (special) { continue; }
+                const ext = path.extname(name).slice(1).toLowerCase();
+                // 仅统计“支持的写作文件”，排除参考文件
+                if (!supportedExts.has(ext)) { continue; }
+
+                results.push(full);
+            }
+        }
+        return results;
+    }
+
+    // 新增：首次加载时的进度条（实时更新）
+    private async maybeShowInitialProgress(): Promise<void> {
+        if (this.initialProgressStarted) return;
+        this.initialProgressStarted = true;
+
+        const folders = vscode.workspace.workspaceFolders || [];
+        if (folders.length === 0) { return; }
+
+        try {
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: '正在加载字数统计…',
+                cancellable: false
+            }, async (progress) => {
+                progress.report({ message: '扫描文件中…' });
+
+                // 收集全部需要统计的文件
+                const allFiles: string[] = [];
+                for (const f of folders) {
+                    const root = f.uri.fsPath;
+                    try {
+                        const list = await this.collectSupportedFiles(root);
+                        allFiles.push(...list);
+                    } catch { /* ignore */ }
+                }
+
+                const total = allFiles.length;
+                if (total === 0) {
+                    progress.report({ message: '没有需要统计的文件' });
+                    return;
+                }
+
+                let done = 0;
+                const step = Math.max(0.05, 100 / Math.max(total, 1));
+
+                // 逐个调度统计，并更新进度
+                for (const file of allFiles) {
+                    try { this.scheduleFileStat(file); } catch { /* ignore */ }
+                    done++;
+                    progress.report({ increment: step, message: `正在加载 ${done}/${total}` });
+                    // 轻微节流，避免 UI 刷新过于频繁
+                    if ((done % 50) === 0) { await new Promise(r => setTimeout(r, 0)); }
+                }
+
+                // 等待队列大致排空（最多等待 30 秒）
+                const startWait = Date.now();
+                while (this.inFlightFileStats.size > 0 && (Date.now() - startWait) < 30000) {
+                    progress.report({ message: `正在计算剩余 ${this.inFlightFileStats.size} 个文件…` });
+                    await new Promise(r => setTimeout(r, 250));
+                }
+
+                progress.report({ message: '字数统计已准备就绪' });
+            });
+        } catch {
+            // 忽略进度异常，避免影响使用
+        }
+    }
+
+    // 新增：确保在有计算任务时展示一个实时更新的进度条（非首次加载通用）
+    private ensureComputeProgressLoop() {
+        if (this.computeProgressLoopRunning) return;
+        // 若当前没有任务，也不需要弹出
+        if (this.inFlightFileStats.size === 0 && this.largeProcessingQueue.length === 0 && !this.largeProcessingRunning) {
+            return;
+        }
+        this.computeProgressLoopRunning = true;
+        void vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: '计算字数中…',
+            cancellable: false
+        }, async (progress) => {
+            try {
+                let tick = 0;
+                while (this.inFlightFileStats.size > 0 || this.largeProcessingQueue.length > 0 || this.largeProcessingRunning) {
+                    const remain = this.inFlightFileStats.size + this.largeProcessingQueue.length + (this.largeProcessingRunning ? 0 : 0);
+                    // 轻微递增让进度条动起来（无固定总量，仅作视觉反馈）
+                    progress.report({ increment: (tick % 5 === 0) ? 1 : 0, message: `剩余 ${remain} 个文件…` });
+                    tick++;
+                    await new Promise(r => setTimeout(r, 250));
+                }
+            } finally {
+                this.computeProgressLoopRunning = false;
+            }
+        });
+    }
+
+    // 新增：批量预取当前目录下需要计算的文件的缓存（若后端支持批量）
+    private async prefetchDirStatsBatchIfPossible(files: string[]) {
+        if (!files || files.length === 0) { return; }
+        const ft = getFileTracker();
+        if (!ft) { return; }
+        try {
+            const dm: any = ft.getDataManager();
+            if (typeof dm.getWordCountStatsBatchByPaths === 'function') {
+                const map: Map<string, { stats: TextStats; mtime?: number; size?: number }> = await dm.getWordCountStatsBatchByPaths(files);
+                // 写入内存缓存，减少后续单个读取/计算；记录是否有命中用于刷新 UI
+                let changed = false;
+                for (const [abs, rec] of map.entries()) {
+                    if (rec?.stats) {
+                        const st = await fs.promises.stat(abs).catch(() => null);
+                        const mtime = rec.mtime ?? st?.mtimeMs;
+                        const size = rec.size ?? st?.size;
+                        if (mtime !== undefined && size !== undefined) {
+                            this.statsCache.set(abs, { stats: rec.stats, mtime, size });
+                        } else {
+                            this.statsCache.set(abs, { stats: rec.stats, mtime: mtime ?? Date.now(), size });
+                        }
+                        changed = true;
+                    }
+                }
+                // 如果批量预取写入了缓存，尽快刷新界面以显示新数据
+                if (changed) {
+                    try { this.refresh(); } catch { /* ignore */ }
+                }
+            }
+        } catch { /* ignore */ }
+    }
 }
 
 export class WordCountItem extends vscode.TreeItem {
@@ -1446,62 +1631,6 @@ export interface WordCountProvider extends HasOrderManager { }
 (WordCountProvider.prototype as any).setOrderManager = function (mgr: WordCountOrderManager) { this.orderManager = mgr; };
 (WordCountProvider.prototype as any).getOrderManager = function () { return this.orderManager; };
 
-// // —— 打开方式工具函数（与包管理器一致）——
-// async function executeOpenAction(action: string, uri: vscode.Uri): Promise<void> {
-//     try {
-//         switch (action) {
-//             case 'vscode':
-//                 await vscode.window.showTextDocument(uri);
-//                 break;
-//             case 'vscode-new':
-//                 try {
-//                     await vscode.commands.executeCommand('vscode.openWith', uri, 'default', vscode.ViewColumn.Beside);
-//                 } catch {
-//                     await vscode.window.showTextDocument(uri, { viewColumn: vscode.ViewColumn.Beside });
-//                 }
-//                 break;
-//             case 'system-default':
-//                 await vscode.env.openExternal(uri);
-//                 break;
-//             case 'explorer':
-//                 await vscode.commands.executeCommand('revealFileInOS', uri);
-//                 break;
-//             default:
-//                 await vscode.window.showTextDocument(uri);
-//                 break;
-//         }
-//     } catch (error) {
-//         vscode.window.showErrorMessage(`打开文件失败: ${error}`);
-//     }
-// }
-
-// // —— 注册 openWith 命令 —__
-// export function registerWordCountOpenWith(context: vscode.ExtensionContext) {
-//     context.subscriptions.push(
-//         vscode.commands.registerCommand('AndreaNovelHelper.openWith', async (node: any) => {
-//             const uri = node.resourceUri || node.uri || node;
-//             const filePath = uri.fsPath;
-//             const fileName = path.basename(filePath);
-//             try {
-//                 await vscode.commands.executeCommand('explorer.openWith', uri);
-//             } catch (error) {
-//                 const options = [
-//                     { label: 'VS Code 编辑器', description: '在当前编辑器中打开', action: 'vscode' },
-//                     { label: 'VS Code 新窗口', description: '在新的 VS Code 窗口中打开', action: 'vscode-new' },
-//                     { label: '系统默认程序', description: '使用系统默认关联程序打开', action: 'system-default' },
-//                     { label: '文件资源管理器', description: '在文件资源管理器中显示', action: 'explorer' }
-//                 ];
-//                 const selected = await vscode.window.showQuickPick(options, {
-//                     placeHolder: `选择打开 ${fileName} 的方式`,
-//                     title: '打开方式'
-//                 });
-//                 if (selected) {
-//                     await executeOpenAction(selected.action, uri);
-//                 }
-//             }
-//         })
-//     );
-// }
 
 // 在 WordCount 视图上注册复制/导出纯文本命令，复用 preview 的渲染逻辑
 export function registerWordCountPlainTextCommands(context: vscode.ExtensionContext, provider: WordCountProvider) {

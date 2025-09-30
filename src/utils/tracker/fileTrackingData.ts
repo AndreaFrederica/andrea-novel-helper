@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-// 仅在需要判断编辑器是否打开数据库文件时才使用 vscode API
+// 仅在需要判断编辑器是否打开数据库文件时使用 vscode API
 // 避免循环依赖：此文件不被激活阶段直接 import 其它使用本模块的代码
 import * as vscode from 'vscode';
 import { IDatabaseBackend } from '../../database/IDatabaseBackend';
@@ -1748,6 +1748,9 @@ export class FileTrackingDataManager {
     }
     private saveSharded(force: boolean): void {
         if (!this.hasUnsavedChanges && !force) { return; }
+
+
+
         if (force && this.dirtyShardUuids.size === 0 && this.removedShardUuids.size === 0) {
             // 全量写入（包括惰性未加载但存在 pathToUuid 的分片 -> 若未加载则跳过，因为没有最新内存副本）
             for (const uuid of Object.values(this.database.pathToUuid)) {
@@ -1795,4 +1798,77 @@ export class FileTrackingDataManager {
     public markAsSaved(filePath: string) { this.markFileSaved(filePath); }
     public handleFileDeleted(filePath: string): boolean { const uuid = this.getFileUuid(filePath); if (!uuid) { return false; } this.removeFile(filePath); return true; }
     public async dispose(): Promise<void> { await this.forceSave(); }
+
+    /**
+     * 批量获取一组路径的字数统计缓存（优先后端批量，回退分片）
+     * 返回 Map<绝对路径, { stats, mtime, size }>
+     */
+    public async getWordCountStatsBatchByPaths(filePaths: string[]): Promise<Map<string, { stats: any; mtime?: number; size?: number }>> {
+        const out = new Map<string, { stats: any; mtime?: number; size?: number }>();
+        if (!filePaths || filePaths.length === 0) { return out; }
+
+        // 预先构建 key/uuid 映射
+        const absList = filePaths.map(p => this.toAbsPath(this.toRelKey(p))); // 归一化为绝对
+        const keyToAbs = new Map<string, string>();
+        const uuidList: string[] = [];
+        const uuidToAbs = new Map<string, string>();
+
+        for (const abs of absList) {
+            const key = this.toRelKey(abs);
+            keyToAbs.set(key, abs);
+            const uuid = this.database.pathToUuid[key];
+            if (uuid) {
+                uuidList.push(uuid);
+                uuidToAbs.set(uuid, abs);
+            }
+        }
+
+        // 优先后端批量查询
+        let metaMap: Map<string, any> | null = null;
+        if (this.backend && this.backendInitialized && uuidList.length) {
+            try {
+                if (typeof (this.backend as any).loadFileMetadataBatch === 'function') {
+                    metaMap = await (this.backend as any).loadFileMetadataBatch(uuidList);
+                }
+            } catch (e) {
+                console.warn('[FileTracking] getWordCountStatsBatchByPaths: backend batch failed, fallback shards', e);
+                metaMap = null;
+            }
+        }
+
+        // 合并后端结果
+        if (metaMap) {
+            for (const [uuid, meta] of metaMap.entries()) {
+                const abs = uuidToAbs.get(uuid);
+                if (!abs || !meta) { continue; }
+                const m = typeof meta === 'string' ? JSON.parse(meta) : meta;
+                if (m?.wordCountStats) {
+                    out.set(abs, { stats: m.wordCountStats, mtime: m.mtime, size: m.size });
+                    // 写回内存缓存
+                    this.database.files[uuid] = m;
+                }
+            }
+        }
+
+        // 回退：对缺失的 uuid 使用分片读取
+        const missingUuids: string[] = [];
+        for (const uuid of uuidList) {
+            const abs = uuidToAbs.get(uuid)!;
+            if (!out.has(abs)) { missingUuids.push(uuid); }
+        }
+        if (missingUuids.length) {
+            for (const uuid of missingUuids) {
+                try {
+                    const m = await this.getMetaAsync(uuid, true);
+                    const abs = uuidToAbs.get(uuid);
+                    if (!abs || !m) { continue; }
+                    if (m.wordCountStats) {
+                        out.set(abs, { stats: m.wordCountStats, mtime: m.mtime, size: m.size });
+                    }
+                } catch { /* ignore */ }
+            }
+        }
+
+        return out;
+    }
 }
