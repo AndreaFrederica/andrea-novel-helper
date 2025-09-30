@@ -262,7 +262,7 @@ function checkAndCelebrateMilestones(filePath: string, oldCount: number, newCoun
     if (!targets || targets.length === 0) { return; }
     
     // 获取持久化的文件统计，包含已达成的里程碑
-    const fileStats = getFileStats(filePath);
+    const fileStats = getFileStatsSync(filePath);
     const persistedMilestones = new Set(fileStats.achievedMilestones || []);
     
     // 初始化运行时里程碑集合（与持久化数据同步）
@@ -419,7 +419,7 @@ export async function computeZhEnCountAsync(filePath: string): Promise<{ zhChars
 }
 
 // 获取或创建文件统计（接入全局追踪）
-function getOrCreateFileStats(filePath: string): FileStats {
+async function getOrCreateFileStats(filePath: string): Promise<FileStats> {
     console.log('TimeStats: getOrCreateFileStats called for:', filePath);
 
     const g = getGlobalFileTracking?.();
@@ -430,7 +430,7 @@ function getOrCreateFileStats(filePath: string): FileStats {
         return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
     }
 
-    let uuid = g.getFileUuid(filePath);
+    let uuid = await g.getFileUuid(filePath);
     console.log('TimeStats: File UUID for', filePath, ':', uuid);
 
     // 如果文件没有UUID（可能是未保存的新文件），创建临时追踪记录
@@ -441,7 +441,7 @@ function getOrCreateFileStats(filePath: string): FileStats {
             const tracker = getFileTracker();
             if (tracker) {
                 const dataManager = tracker.getDataManager();
-                uuid = dataManager.createTemporaryFile(filePath);
+                uuid = await dataManager.createTemporaryFile(filePath);
                 console.log('TimeStats: Created temporary file record with UUID:', uuid);
             }
         } catch (error) {
@@ -476,8 +476,46 @@ function getOrCreateFileStats(filePath: string): FileStats {
 }
 
 // 仅当前文件读取
-function getFileStats(filePath: string): FileStats {
-    return getOrCreateFileStats(filePath);
+async function getFileStats(filePath: string): Promise<FileStats> {
+    return await getOrCreateFileStats(filePath);
+}
+
+// 同步版本的getFileStats，用于同步函数中的调用
+function getFileStatsSync(filePath: string): FileStats {
+    const statsDir = path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '', '.vscode', 'timeStats');
+    const statsFile = path.join(statsDir, `${path.basename(filePath)}.json`);
+    
+    try {
+        if (fs.existsSync(statsFile)) {
+            const data = fs.readFileSync(statsFile, 'utf8');
+            const parsed = JSON.parse(data);
+            return {
+                totalMillis: parsed.totalMillis || 0,
+                charsAdded: parsed.charsAdded || 0,
+                charsDeleted: parsed.charsDeleted || 0,
+                firstSeen: parsed.firstSeen || now(),
+                lastSeen: parsed.lastSeen || now(),
+                buckets: parsed.buckets || [],
+                sessions: parsed.sessions || [],
+                achievedMilestones: parsed.achievedMilestones || []
+            };
+        }
+    } catch (error) {
+        // 如果读取失败，返回默认值
+    }
+    
+    // 返回默认的FileStats
+    const timestamp = now();
+    return {
+        totalMillis: 0,
+        charsAdded: 0,
+        charsDeleted: 0,
+        firstSeen: timestamp,
+        lastSeen: timestamp,
+        buckets: [],
+        sessions: [],
+        achievedMilestones: []
+    };
 }
 
 // 写回全局
@@ -617,7 +655,7 @@ function endSession() {
         return;
     }
     const end = now();
-    const fsEntry = getFileStats(currentDocPath);
+    const fsEntry = getFileStatsSync(currentDocPath);
     const duration = end - currentSessionStart;
     if (duration > 0) {
         fsEntry.totalMillis += duration;
@@ -779,7 +817,7 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
                 });
             }
         } else {
-            const fsEntry = getFileStats(filePath);
+            const fsEntry = getFileStatsSync(filePath);
             if (delta > 0) {
                 fsEntry.charsAdded += delta;
             } else {
@@ -812,7 +850,7 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
                     const full = await computeZhEnCountAsync(filePath);
                     const adjust = full.total - st.lastCount;
                     if (adjust !== 0) {
-                        const fsEntry = getFileStats(filePath);
+                        const fsEntry = await getFileStats(filePath);
                         if (adjust > 0) { fsEntry.charsAdded += adjust; } else { fsEntry.charsDeleted += -adjust; }
                         bumpBucket(fsEntry, now(), Math.max(0, adjust), bucketSizeMs);
                         fsEntry.lastSeen = now();
@@ -885,7 +923,7 @@ function setStatusBarTextAndTooltip() {
     }
 
     // —— CPM & 累计用时计算 ——
-    const fsEntry = getFileStats(currentDocPath);
+    const fsEntry = getFileStatsSync(currentDocPath);
 
     // ✅ 把“进行中的会话时长”叠加到累计用时里（会话未结束时也正确增长）
     let effectiveMillis = fsEntry.totalMillis;
@@ -1007,7 +1045,7 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
     scheduleFlush(doc);
 }
 
-function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
+async function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     const { idleThresholdMs } = getConfig();
 
     // 预览（任意 webview）抢焦点：activeTextEditor 会变成 undefined。
@@ -1086,7 +1124,7 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     }
 
     const g = getGlobalFileTracking?.();
-    currentDocUuid = (g && currentDocPath) ? g.getFileUuid(currentDocPath) : undefined;
+    currentDocUuid = (g && currentDocPath) ? await g.getFileUuid(currentDocPath) : undefined;
 
     // 初始化基线计数（即使忽略也初始化，以便 ignored 统计）
     getOrInitDocState(editor.document);
@@ -1200,7 +1238,7 @@ async function exportStatsCSV(context: vscode.ExtensionContext) {
     }
 
     const rows: string[] = ['filepath,totalMillis,charsAdded,charsDeleted,lastActiveTime,sessionsCount,averageCPM'];
-    const fileUuid = g.getFileUuid(currentDocPath);
+    const fileUuid = await g.getFileUuid(currentDocPath);
     if (fileUuid) {
         const ws = g.getWritingStats(fileUuid);
         if (ws) {
@@ -1278,7 +1316,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
         let perFileLine: { t: number; cpm: number }[] = [];
 
         if (currentDocPath) {
-            const fileStats = getFileStats(currentDocPath);
+            const fileStats = await getFileStats(currentDocPath);
             tsDebug('Current file stats:', {
                 path: currentDocPath,
                 totalMillis: fileStats.totalMillis,
@@ -1343,7 +1381,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
         if (!globalCapable) {
             // 降级：只用当前文件（如果有的话）
             if (currentDocPath) {
-                const fileStats = getFileStats(currentDocPath);
+                const fileStats = await getFileStats(currentDocPath);
                 allStats = [{
                     filePath: currentDocPath,
                     totalMillis: fileStats.totalMillis,

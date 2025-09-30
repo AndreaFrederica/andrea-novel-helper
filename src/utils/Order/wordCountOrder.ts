@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { getFileUuid } from '../tracker/globalFileTracking';
+import { getFileUuidSync } from '../tracker/globalFileTracking';
 
 interface OrderDB {
   version: number;
@@ -120,7 +120,7 @@ export class WordCountOrderManager {
       }
     } catch { /* ignore */ }
     try {
-      const uuid = getFileUuid(p);
+      const uuid = getFileUuidSync(p);
       if (uuid) { return 'f:' + uuid; }
     } catch { /* ignore */ }
     return 'p:' + path.resolve(p);
@@ -134,7 +134,7 @@ export class WordCountOrderManager {
       if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) { return; }
     } catch { return; }
     try {
-      const uuid = getFileUuid(filePath);
+      const uuid = getFileUuidSync(filePath);
   if (!uuid) { return; }
       const abs = path.resolve(filePath);
       const pathKey = 'p:' + abs;
@@ -161,7 +161,7 @@ export class WordCountOrderManager {
         try {
           if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) { continue; }
         } catch { continue; }
-        const uuid = getFileUuid(abs);
+        const uuid = getFileUuidSync(abs);
   if (!uuid) { continue; }
         const fileKey = 'f:' + uuid;
         if (this.db.indexes[fileKey] === undefined) {

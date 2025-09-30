@@ -41,6 +41,8 @@ import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
 import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
 import { PreviewManager, registerPreviewPane, stopAllPreviewTTS } from './Provider/view/previewPane';
+
+
 import { registerCommentsFeature } from './comments/controller';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
@@ -68,6 +70,7 @@ import { WebDAVSyncService } from './sync/webdavSync';
 import { registerWebDAVPanel } from './Provider/view/webdavPanel';
 import { registerWebDAVTreeView } from './Provider/view/webdavTreeView';
 import { registerCommentsTreeView } from './Provider/view/commentsTreeView';
+import { registerCommentsPanelView } from './Provider/view/commentsPanelView';
 import { WebDAVFileSystemProvider } from './Provider/fileSystem/webdavFileSystemProvider';
 import { AutoGitService } from './sync/autoGitService';
 import { registerAutoGitTreeView } from './Provider/view/autoGitTreeView';
@@ -455,6 +458,9 @@ export async function activate(context: vscode.ExtensionContext) {
         registerDocRolesTreeView(context);
         registerDocRolesExplorerView(context);
         registerCommentsTreeView(context);
+        
+        // 侧栏版批注 Webview（与面板共享同一 UI 脚本）
+        registerCommentsPanelView(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);
@@ -1506,3 +1512,7 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
         })
     );
 }
+
+
+
+

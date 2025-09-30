@@ -72,7 +72,7 @@ export class CommentDefinitionProvider implements vscode.DefinitionProvider {
     }
 
     // 获取文档UUID
-    const docUuid = this.getDocUuidFromUri(docUri);
+    const docUuid = await this.getDocUuidFromUri(docUri);
     console.log('CommentDefinitionProvider: docUuid', docUuid);
     if (!docUuid) {
       console.log('CommentDefinitionProvider: no docUuid found');
@@ -139,10 +139,10 @@ export class CommentDefinitionProvider implements vscode.DefinitionProvider {
     return undefined;
   }
 
-  private getDocUuidFromUri(docUri: string): string | undefined {
+  private async getDocUuidFromUri(docUri: string): Promise<string | undefined> {
     try {
       const uri = vscode.Uri.parse(docUri);
-      return getFileUuid(uri.fsPath);
+      return await getFileUuid(uri.fsPath);
     } catch {
       return undefined;
     }

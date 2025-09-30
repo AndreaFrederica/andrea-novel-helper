@@ -49,6 +49,7 @@
     "command.commentsExplorer.exportComments.title": "导出批注",
     "command.commentsExplorer.exportToMarkdown.title": "导出为Markdown",
     "command.commentsExplorer.exportToJson.title": "导出为JSON",
+  "command.commentsExplorer.rebindFile.title": "重新绑定文件",
     "view.comments.explorer.name": "批注管理",
     "command.webdav.manageAccounts.title": "WebDAV: 账户管理",
     "command.webdav.syncNow.title": "WebDAV: 立即同步",

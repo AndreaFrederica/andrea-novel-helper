@@ -87,6 +87,7 @@ export class FileTrackingDataManager {
     // 数据库后端
     private backend: IDatabaseBackend | null = null;
     private backendInitialized = false;
+    private backendInitPromise: Promise<void> | null = null;
     // 启动快照相关
     private snapshotPath!: string;
     private loadedFromSnapshot: boolean = false;
@@ -175,6 +176,9 @@ export class FileTrackingDataManager {
     // 脏分片追踪（仅写入变化的元数据分片，减少 IO）
     private dirtyShardUuids: Set<string> = new Set();
     private removedShardUuids: Set<string> = new Set();
+    
+    // 配置变更监听器
+    private configChangeDisposable: vscode.Disposable | null = null;
     /**
      * 标记某个分片为脏并记录原因
      * @param uuid 分片 UUID
@@ -371,13 +375,19 @@ export class FileTrackingDataManager {
                 this.loadShardedFiles();
             }
         }
-        // 异步初始化数据库后端（仅初始化，不迁移数据）
-        this.initializeBackend();
+        // 绑定异步方法
         this.getAllWritingStatsAsync = this.getAllWritingStatsAsync.bind(this);
         this.streamWritingStats = this.streamWritingStats.bind(this);
         this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
         this.filterFilesAsync = this.filterFilesAsync.bind(this);
         this.getStatsAsync = this.getStatsAsync.bind(this);
+        
+        // 设置配置变更监听器，监听启动快照配置的变化
+        this.setupConfigurationListener();
+        
+        // 异步初始化数据库后端（确保在构造完成后立即初始化）
+        // 使用Promise.resolve().then()确保在下一个事件循环中执行，避免阻塞构造函数
+        this.backendInitPromise = Promise.resolve().then(() => this.initializeBackend());
     }
 
     /** 获取数据库快照配置 */
@@ -402,26 +412,40 @@ export class FileTrackingDataManager {
             const snap = JSON.parse(raw) as FileTrackingDatabase;
             if (!snap || typeof snap !== 'object' || !snap.files || !snap.pathToUuid) { return; }
             const files: { [uuid: string]: FileMetadata } = {};
+            const pathToUuid: { [filePath: string]: string } = {};
             const dirFlags = new Set<string>();
+            
+            // 处理文件元数据，将相对路径转换为绝对路径
             for (const [uuid, metaAny] of Object.entries(snap.files)) {
                 const meta = metaAny as any as FileMetadata;
                 if (!uuid || !meta) { continue; }
-                if (meta.filePath) { meta.filePath = this.toAbsPath(meta.filePath); }
+                if (meta.filePath) { 
+                    meta.filePath = this.toAbsPath(meta.filePath); 
+                }
                 files[uuid] = meta;
                 if (meta.isDirectory) { dirFlags.add(uuid); }
             }
+            
+            // 处理路径到UUID的映射，确保使用相对键
+            for (const [relPath, uuid] of Object.entries(snap.pathToUuid)) {
+                if (relPath && uuid) {
+                    // 快照中的路径映射应该已经是相对键，直接使用
+                    pathToUuid[relPath] = uuid;
+                }
+            }
+            
             this.database = {
                 version: this.DB_VERSION,
                 lastUpdated: snap.lastUpdated || Date.now(),
                 files,
-                pathToUuid: { ...(snap.pathToUuid || {}) }
+                pathToUuid
             };
             this.indexDirFlag = dirFlags;
             this.loadedFromSnapshot = true;
             this.suppressBackendRead = !!skipBackendReadOnStartup;
             // 重新计算哈希以避免立即误判为变化
             this.lastSavedHash = this.calculateDatabaseHash();
-            console.log('[FileTracking] 快照已加载，跳过分片/后端初始读取');
+            console.log(`[FileTracking] 快照已加载，包含 ${Object.keys(files).length} 个文件，${Object.keys(pathToUuid).length} 个路径映射，跳过分片/后端初始读取`);
         } catch (e) {
             console.warn('[FileTracking] 快照读取失败，忽略并继续常规初始化', e);
         }
@@ -437,13 +461,23 @@ export class FileTrackingDataManager {
                 const relPath = meta.filePath ? this.toRelKey(meta.filePath) : '';
                 slimFiles[uuid] = { ...meta, filePath: relPath };
             }
+            
+            // 确保pathToUuid映射使用相对键
+            const pathToUuid: Record<string, string> = {};
+            for (const [path, uuid] of Object.entries(this.database.pathToUuid)) {
+                // 始终通过toRelKey转换，确保格式一致性
+                const relKey = this.toRelKey(path);
+                pathToUuid[relKey] = uuid;
+            }
+            
             const out: FileTrackingDatabase = {
                 version: this.DB_VERSION,
                 lastUpdated: Date.now(),
                 files: slimFiles as any,
-                pathToUuid: { ...this.database.pathToUuid }
+                pathToUuid
             };
-            fs.writeFileSync(this.snapshotPath, JSON.stringify(out));
+            fs.writeFileSync(this.snapshotPath, JSON.stringify(out, null, 2));
+            console.log(`[FileTracking] 快照已写入，包含 ${Object.keys(slimFiles).length} 个文件，${Object.keys(pathToUuid).length} 个路径映射`);
         } catch (e) {
             console.warn('[FileTracking] 写入快照失败（忽略）', e);
         }
@@ -471,9 +505,13 @@ export class FileTrackingDataManager {
                 try {
                     const pathMap = await this.backend.getAllPathMappings();
                     if (pathMap && pathMap.size > 0) {
+                        // 清空现有的pathToUuid映射，确保从数据库加载的数据是权威的
+                        this.database.pathToUuid = {};
                         for (const [p, u] of pathMap.entries()) {
                             this.database.pathToUuid[p] = u;
                         }
+                        // 标记数据已更改，确保后续保存
+                        this.markChanged();
                         console.log(`[FileTracking] 已从后端加载路径映射 entries=${pathMap.size}`);
                     }
                 } catch (e) {
@@ -772,7 +810,7 @@ export class FileTrackingDataManager {
         this.dirtyDirs.clear();
         let changed = false;
         for (const dir of dirs) {
-            const uuid = this.getFileUuid(dir);
+            const uuid = await this.getFileUuid(dir);
             if (!uuid) { continue; }
             const meta = this.database.files[uuid];
             if (!meta || !meta.isDirectory) { continue; }
@@ -827,7 +865,11 @@ export class FileTrackingDataManager {
     /**
      * 获取文件的 UUID
      */
-    public getFileUuid(filePath: string): string | undefined {
+    public async getFileUuid(filePath: string): Promise<string | undefined> {
+        // 等待后端初始化完成
+        if (this.backendInitPromise) {
+            await this.backendInitPromise;
+        }
         const key = this.toRelKey(filePath);
         return this.database.pathToUuid[key];
     }
@@ -864,11 +906,11 @@ export class FileTrackingDataManager {
 
         // 避免追踪数据库文件自身
         if (filePath === this.dbPath) {
-            return this.getFileUuid(filePath) || '';
+            return (await this.getFileUuid(filePath)) || '';
         }
         // 完全忽略 .git 目录（除非信任调用者已完成过滤）
         if (!this.trustCallerFilters && this.isInGitDir(filePath)) {
-            return this.getFileUuid(filePath) || '';
+            return (await this.getFileUuid(filePath)) || '';
         }
 
         const key = this.toRelKey(filePath);               // ← 相对键
@@ -1121,7 +1163,7 @@ export class FileTrackingDataManager {
         sessions?: { start: number; end: number }[];
         achievedMilestones?: number[]; // 已达成的里程碑目标
     }): Promise<void> {
-        const uuid = this.getFileUuid(filePath);
+        const uuid = await this.getFileUuid(filePath);
         if (uuid) {
             const metadata = this.database.files[uuid];
             if (metadata) {
@@ -1198,7 +1240,7 @@ export class FileTrackingDataManager {
         nonWSChars: number;
         total: number;
     }): Promise<void> {
-        const uuid = this.getFileUuid(filePath);
+        const uuid = await this.getFileUuid(filePath);
         if (!uuid) { return; }
         const metadata = this.database.files[uuid];
         if (!metadata) { return; }
@@ -1225,8 +1267,8 @@ export class FileTrackingDataManager {
     }
 
     /** 标记文件为临时（未保存） */
-    public markFileTemporary(filePath: string): void {
-        const uuid = this.getFileUuid(filePath);
+    public async markFileTemporary(filePath: string): Promise<void> {
+        const uuid = await this.getFileUuid(filePath);
         if (!uuid) { return; }
         const meta = this.database.files[uuid];
         if (!meta) { return; }
@@ -1240,8 +1282,8 @@ export class FileTrackingDataManager {
         this.stats.markTemp++;
     }
     /** 取消临时标记（文件已保存） */
-    public markFileSaved(filePath: string): void {
-        const uuid = this.getFileUuid(filePath);
+    public async markFileSaved(filePath: string): Promise<void> {
+        const uuid = await this.getFileUuid(filePath);
         if (!uuid) { return; }
         const meta = this.database.files[uuid];
         if (!meta) { return; }
@@ -1855,9 +1897,9 @@ export class FileTrackingDataManager {
         this.removedShardUuids.clear();
     }
     /** 兼容: 创建临时文件追踪记录 */
-    public createTemporaryFile(filePath: string): string {
-        const existing = this.getFileUuid(filePath);
-        if (existing) { this.markFileTemporary(filePath); return existing; }
+    public async createTemporaryFile(filePath: string): Promise<string> {
+        const existing = await this.getFileUuid(filePath);
+        if (existing) { await this.markFileTemporary(filePath); return existing; }
         const now = Date.now();
         const uuid = uuidv4();
         const fileName = path.basename(filePath);
@@ -1877,10 +1919,9 @@ export class FileTrackingDataManager {
         return uuid;
     }
 
-    public markAsTemporary(filePath: string) { this.markFileTemporary(filePath); }
-    public markAsSaved(filePath: string) { this.markFileSaved(filePath); }
-    public handleFileDeleted(filePath: string): boolean { const uuid = this.getFileUuid(filePath); if (!uuid) { return false; } this.removeFile(filePath); return true; }
-    public async dispose(): Promise<void> { await this.forceSave(); }
+    public async markAsTemporary(filePath: string) { await this.markFileTemporary(filePath); }
+    public async markAsSaved(filePath: string) { await this.markFileSaved(filePath); }
+    public async handleFileDeleted(filePath: string): Promise<boolean> { const uuid = await this.getFileUuid(filePath); if (!uuid) { return false; } await this.removeFile(filePath); return true; }
 
     /**
      * 批量获取一组路径的字数统计缓存（优先后端批量，回退分片）
@@ -1953,5 +1994,57 @@ export class FileTrackingDataManager {
         }
 
         return out;
+    }
+
+    /**
+     * 设置配置变更监听器，监听启动快照配置的变化
+     */
+    private setupConfigurationListener(): void {
+        this.configChangeDisposable = vscode.workspace.onDidChangeConfiguration(event => {
+            // 检查是否是启动快照相关的配置变更
+            if (event.affectsConfiguration('AndreaNovelHelper.database.snapshot.enabled')) {
+                const config = this.getSnapshotConfig();
+                
+                // 如果启动快照被禁用，自动删除快照文件
+                if (!config.enabled) {
+                    this.deleteSnapshotFile();
+                }
+            }
+        });
+    }
+
+    /**
+     * 删除快照文件
+     */
+    private deleteSnapshotFile(): void {
+        try {
+            if (fs.existsSync(this.snapshotPath)) {
+                fs.unlinkSync(this.snapshotPath);
+                console.log(`[FileTrackingDataManager] 启动快照已禁用，已删除快照文件: ${this.snapshotPath}`);
+            }
+        } catch (error) {
+            console.error(`[FileTrackingDataManager] 删除快照文件失败: ${error}`);
+        }
+    }
+
+    /**
+     * 清理资源，包括配置监听器
+     */
+    public dispose(): void {
+        if (this.configChangeDisposable) {
+            this.configChangeDisposable.dispose();
+            this.configChangeDisposable = null;
+        }
+        
+        // 清理定时器
+        if (this.saveTimer) {
+            clearTimeout(this.saveTimer);
+            this.saveTimer = null;
+        }
+        
+        if (this.dirHashTimer) {
+            clearTimeout(this.dirHashTimer);
+            this.dirHashTimer = null;
+        }
     }
 }

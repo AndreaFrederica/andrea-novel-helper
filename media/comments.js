@@ -523,6 +523,14 @@
       vscode && vscode.postMessage({ type: 'requestRefresh' });
       return;
     }
+    if (msg.type === 'clear') {
+      console.log('Clearing panel display');
+      docUri = '';
+      items = [];
+      totalLines = 1;
+      render();
+      return;
+    }
     if (msg.type === 'threads') {
       lineHeight = msg.lineHeight || lineHeight;
       totalLines = msg.totalLines || totalLines;

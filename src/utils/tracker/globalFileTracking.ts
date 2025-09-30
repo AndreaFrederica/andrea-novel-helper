@@ -209,16 +209,32 @@ export function getAllTrackedFiles(): FileMetadata[] {
 }
 
 /**
- * 获取文件的 UUID
+ * 获取文件的 UUID (异步版本)
  */
-export function getFileUuid(filePath: string): string | undefined {
+export async function getFileUuid(filePath: string): Promise<string | undefined> {
     const tracker = getFileTracker();
     if (!tracker) {
         return undefined;
     }
     
-    const uuid = tracker.getFileUuid(filePath);
+    const uuid = await tracker.getFileUuid(filePath);
     return uuid;
+}
+
+/**
+ * 获取文件的 UUID (同步版本，仅用于向后兼容)
+ * 注意：这个方法可能返回 undefined，如果文件尚未被追踪
+ */
+export function getFileUuidSync(filePath: string): string | undefined {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return undefined;
+    }
+    
+    const dataManager = tracker.getDataManager();
+    // 尝试从已有的缓存中获取UUID
+    const existingFile = dataManager.getAllFiles().find(f => f.filePath === filePath);
+    return existingFile?.uuid;
 }
 
 /**
@@ -237,14 +253,15 @@ export function getFileByUuid(uuid: string): FileMetadata | undefined {
 /**
  * 通过路径获取文件元数据
  */
-export function getFileByPath(filePath: string): FileMetadata | undefined {
+export async function getFileByPath(filePath: string): Promise<FileMetadata | undefined> {
     const tracker = getFileTracker();
     if (!tracker) {
         return undefined;
     }
 
     const dataManager = tracker.getDataManager();
-    return dataManager.getFileByPath(filePath);
+    const uuid = await dataManager.getFileUuid(filePath);
+    return uuid ? dataManager.getFileByUuid(uuid) : undefined;
 }
 
 /**
@@ -303,9 +320,9 @@ export function isFileTracked(filePath: string): boolean {
  * 获取全局文件追踪实例（供其他模块使用）
  */
 export function getGlobalFileTracking(): {
-    getFileUuid: (filePath: string) => string | undefined;
+    getFileUuid: (filePath: string) => Promise<string | undefined>;
     getFileMetadata: (uuid: string) => FileMetadata | undefined;
-    getFileByPath: (filePath: string) => FileMetadata | undefined;
+    getFileByPath: (filePath: string) => Promise<FileMetadata | undefined>;
     getWritingStats: (uuid: string) => any;
     getAllWritingStats: () => Array<{
         filePath: string;
@@ -318,8 +335,8 @@ export function getGlobalFileTracking(): {
         buckets?: { start: number; end: number; charsAdded: number }[];
         sessions?: { start: number; end: number }[];
     }>;
-    markAsTemporary: (filePath: string) => void;
-    markAsSaved: (filePath: string) => void;
+    markAsTemporary: (filePath: string) => Promise<void>;
+    markAsSaved: (filePath: string) => Promise<void>;
 } | null {
     const tracker = getFileTracker();
     if (!tracker) {
@@ -329,10 +346,10 @@ export function getGlobalFileTracking(): {
     const dataManager = tracker.getDataManager();
     
     return {
-        getFileUuid: (filePath: string) => dataManager.getFileUuid(filePath),
+        getFileUuid: async (filePath: string) => await dataManager.getFileUuid(filePath),
         getFileMetadata: (uuid: string) => dataManager.getFileByUuid(uuid),
-        getFileByPath: (filePath: string) => {
-            const uuid = dataManager.getFileUuid(filePath);
+        getFileByPath: async (filePath: string) => {
+            const uuid = await dataManager.getFileUuid(filePath);
             return uuid ? dataManager.getFileByUuid(uuid) : undefined;
         },
         getWritingStats: (uuid: string) => {
@@ -340,8 +357,8 @@ export function getGlobalFileTracking(): {
             return metadata?.writingStats;
         },
         getAllWritingStats: () => dataManager.getAllWritingStats(),
-        markAsTemporary: (filePath: string) => dataManager.markAsTemporary(filePath),
-        markAsSaved: (filePath: string) => dataManager.markAsSaved(filePath)
+        markAsTemporary: async (filePath: string) => await dataManager.markAsTemporary(filePath),
+    markAsSaved: async (filePath: string) => await dataManager.markAsSaved(filePath)
     };
 }
 
@@ -526,27 +543,27 @@ export async function getWritingStatsByUuidAsync(uuid: string): Promise<WritingS
  * 若追踪器未初始化，返回 null
  */
 export async function getGlobalFileTrackingAsync(): Promise<{
-    getFileUuid: (filePath: string) => string | undefined; // 同步：纯映射查找即可
+    getFileUuid: (filePath: string) => Promise<string | undefined>; // 异步：需要等待后端初始化
     getFileMetadataAsync: (uuid: string) => Promise<FileMetadata | undefined>;
     getFileByPathAsync: (filePath: string) => Promise<FileMetadata | undefined>;
     getWritingStatsAsync: (uuid: string) => Promise<WritingStatsView | undefined>;
     getAllWritingStatsAsync: () => Promise<WritingStatsView[]>;
     streamWritingStats: () => AsyncGenerator<WritingStatsView>;
-    markAsTemporary: (filePath: string) => void; // 同步标记即可
-    markAsSaved: (filePath: string) => void;     // 同步标记即可
+    markAsTemporary: (filePath: string) => Promise<void>; // 异步标记
+    markAsSaved: (filePath: string) => Promise<void>;     // 异步标记
 } | null> {
     const tracker = getFileTracker();
     if (!tracker) {return null;}
     const dm = tracker.getDataManager();
 
     return {
-        getFileUuid: (filePath: string) => dm.getFileUuid(filePath),
+        getFileUuid: async (filePath: string) => await dm.getFileUuid(filePath),
         getFileMetadataAsync: (uuid: string) => getFileByUuidAsync(uuid),
         getFileByPathAsync: (filePath: string) => getFileByPathAsync(filePath),
         getWritingStatsAsync: (uuid: string) => getWritingStatsByUuidAsync(uuid),
         getAllWritingStatsAsync: () => getAllWritingStatsAsync(),
         streamWritingStats: () => streamAllWritingStats(),
-        markAsTemporary: (filePath: string) => dm.markAsTemporary(filePath),
-        markAsSaved: (filePath: string) => dm.markAsSaved(filePath),
+        markAsTemporary: async (filePath: string) => await dm.markAsTemporary(filePath),
+        markAsSaved: async (filePath: string) => await dm.markAsSaved(filePath),
     };
 }

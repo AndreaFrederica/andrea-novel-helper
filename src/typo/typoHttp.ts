@@ -97,7 +97,7 @@ export async function detectTyposBatchHttp(sentences: string[], ctx?: { docFsPat
     const roleNames = ctx?.roleNames;
     const fsPath = ctx?.docFsPath || (ctx?.docUri ? vscode.Uri.parse(ctx.docUri).fsPath : undefined);
     if (!docUuid && fsPath) {
-        try { docUuid = getFileTracker()?.getFileUuid(fsPath); } catch { /* ignore */ }
+        try { docUuid = await getFileTracker()?.getFileUuid(fsPath); } catch { /* ignore */ }
     }
 
     const byChunks: (TypoApiResult | null)[][] = [];

@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { Worker } from 'worker_threads';
 import { loadComments, getDocUuidForDocument } from '../../comments/storage';
+import { getFileByUuid, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 
 interface CommentFileInfo {
     docUuid: string;
@@ -14,7 +16,7 @@ interface CommentFileInfo {
 
 interface CommentMessage {
     id: string;
-    type: 'scan-comments' | 'watch-comments' | 'load-comment-file' | 'response' | 'file-changed';
+    type: 'scan-comments' | 'watch-comments' | 'load-comment-file' | 'response' | 'file-changed' | 'get-file-by-uuid';
     data: any;
 }
 
@@ -38,7 +40,8 @@ export class CommentTreeItem extends vscode.TreeItem {
         public readonly lineNumber?: number,
         public readonly commentId?: string,
         public readonly isResolved?: boolean,
-        public readonly commentText?: string
+        public readonly commentText?: string,
+        public readonly isCurrentFile?: boolean
     ) {
         super(label, collapsibleState);
         
@@ -53,12 +56,21 @@ export class CommentTreeItem extends vscode.TreeItem {
             this.command = {
                 command: 'andrea.commentsExplorer.openComment',
                 title: '跳转到批注',
-                arguments: [fileUri, lineNumber, commentId]
+                arguments: [this]
             };
         } else {
             // 文件夹项
-            this.iconPath = new vscode.ThemeIcon('file');
-            this.tooltip = `文件: ${label}`;
+            this.iconPath = new vscode.ThemeIcon(
+                isCurrentFile ? 'file-text' : 'file',
+                isCurrentFile ? new vscode.ThemeColor('list.highlightForeground') : undefined
+            );
+            this.tooltip = `文件: ${label}${isCurrentFile ? ' (当前文件)' : ''}`;
+        }
+        
+        // 如果是当前文件，设置高亮样式
+        if (isCurrentFile) {
+            this.resourceUri = fileUri;
+            this.description = '当前文件';
         }
         
         this.contextValue = fileUri && lineNumber !== undefined ? 'comment' : 'file';
@@ -84,12 +96,18 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
     private isFiltered: boolean = false;
     // 已发现的v2批注目录缓存（用于构造正确的索引路径）
     private commentsDirs: string[] = [];
+    
+    // 编辑器同步状态
+    private currentActiveDocUri?: string;
+    private disposables: vscode.Disposable[] = [];
 
     constructor() {
         this.initWorker();
         this.watchCommentChanges();
         // 初始化时自动扫描批注
         this.refresh();
+        this.setupEditorSync();
+        this.setupFileTracking();
     }
 
     // 计算指定文档的索引文件路径（使用v2 comments目录）
@@ -143,6 +161,9 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
                 } else if (message.type === 'file-changed') {
                     // 处理文件变化事件
                     this.handleFileChanged(message.data);
+                } else if (message.type === 'get-file-by-uuid') {
+                    // 处理Worker请求文件信息
+                    this.handleGetFileByUuid(message);
                 }
             });
             
@@ -322,6 +343,125 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             this._onDidChangeTreeData.fire();
         } catch (error) {
             console.error('[comments] Error handling file change:', error);
+        }
+    }
+
+    /**
+     * 设置编辑器同步
+     */
+    private setupEditorSync(): void {
+        // 监听活动编辑器变化
+        this.disposables.push(
+            vscode.window.onDidChangeActiveTextEditor(editor => {
+                if (editor && editor.document) {
+                    this.currentActiveDocUri = editor.document.uri.toString();
+                    this.highlightCurrentFileComments();
+                }
+            })
+        );
+
+        // 监听编辑器可见范围变化（滚动）
+        this.disposables.push(
+            vscode.window.onDidChangeTextEditorVisibleRanges(event => {
+                if (event.textEditor && event.textEditor.document) {
+                    const docUri = event.textEditor.document.uri.toString();
+                    if (docUri === this.currentActiveDocUri) {
+                        this.highlightCurrentFileComments();
+                    }
+                }
+            })
+        );
+
+        // 初始化当前活动编辑器
+        const activeEditor = vscode.window.activeTextEditor;
+        if (activeEditor && activeEditor.document) {
+            this.currentActiveDocUri = activeEditor.document.uri.toString();
+            this.highlightCurrentFileComments();
+        }
+    }
+
+    /**
+     * 设置文件追踪监听
+     */
+    private setupFileTracking(): void {
+        // 注册文件变化回调，监听批注文件夹变化
+        const fileChangeCallback = (event: FileChangeEvent) => {
+            // 检查是否是批注相关文件的变化
+            if (this.isCommentRelatedFile(event.filePath)) {
+                console.log(`[comments] 检测到批注相关文件变化: ${event.type} - ${event.filePath}`);
+                // 延迟刷新，避免频繁更新
+                this.debounceRefresh();
+            }
+        };
+
+        registerFileChangeCallback('commentsTreeView', fileChangeCallback);
+        
+        // 保存回调引用以便清理
+        this.disposables.push({
+            dispose: () => {
+                unregisterFileChangeCallback('commentsTreeView', fileChangeCallback);
+            }
+        });
+    }
+
+    /**
+     * 检查文件是否与批注相关
+     */
+    private isCommentRelatedFile(filePath: string): boolean {
+        const normalizedPath = path.normalize(filePath).toLowerCase();
+        
+        // 检查是否在已知的批注目录中
+        for (const commentsDir of this.commentsDirs) {
+            const normalizedCommentsDir = path.normalize(commentsDir).toLowerCase();
+            if (normalizedPath.startsWith(normalizedCommentsDir)) {
+                // 检查是否是批注相关文件
+                if (normalizedPath.endsWith('.json') || normalizedPath.endsWith('.md')) {
+                    return true;
+                }
+            }
+        }
+        
+        // 检查是否是批注目录本身或其子目录
+        return normalizedPath.includes('comments') && 
+               (normalizedPath.includes('data') || normalizedPath.includes('content'));
+    }
+
+    /**
+     * 防抖刷新
+     */
+    private refreshTimeout?: NodeJS.Timeout;
+    private debounceRefresh(): void {
+        if (this.refreshTimeout) {
+            clearTimeout(this.refreshTimeout);
+        }
+        
+        this.refreshTimeout = setTimeout(() => {
+            console.log('[comments] 执行防抖刷新');
+            this.refresh();
+        }, 500); // 500ms 防抖延迟
+    }
+
+    /**
+     * 高亮当前文件的批注
+     */
+    private highlightCurrentFileComments(): void {
+        // 触发树视图刷新以更新高亮状态
+        this._onDidChangeTreeData.fire();
+    }
+
+    /**
+     * 释放资源
+     */
+    dispose(): void {
+        // 清理防抖定时器
+        if (this.refreshTimeout) {
+            clearTimeout(this.refreshTimeout);
+        }
+        
+        this.disposables.forEach(d => d.dispose());
+        this.disposables = [];
+        if (this.worker) {
+            this.worker.terminate();
         }
     }
 
@@ -675,13 +815,134 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
         return content;
     }
 
-    dispose(): void {
-         if (this.worker) {
-             this.worker.terminate();
-             this.worker = undefined;
-         }
-         this.pendingMessages.clear();
-     }
+    /**
+     * 重新绑定文件 - 为未知文件的批注选择新的文件路径
+     */
+    async rebindFile(item: CommentTreeItem): Promise<void> {
+        if (!item.docUuid) {
+            vscode.window.showErrorMessage('无法获取批注文件信息');
+            return;
+        }
+
+        try {
+            // 查找对应的文件信息
+            const fileInfo = this.commentFiles.find(f => f.docUuid === item.docUuid);
+            if (!fileInfo) {
+                vscode.window.showErrorMessage('无法找到批注文件信息');
+                return;
+            }
+
+            // 对于正常绑定的文件，先询问是否真的要重新绑定
+            if (item.contextValue === 'commentFile') {
+                const preConfirm = await vscode.window.showWarningMessage(
+                    `此批注文件已正常绑定到 "${fileInfo.relativePath}"。\n\n确定要重新绑定到其他文件吗？这将改变批注的关联关系。`,
+                    { modal: true },
+                    '确定重新绑定'
+                );
+                
+                if (preConfirm !== '确定重新绑定') {
+                    return;
+                }
+            }
+
+            // 显示文件选择对话框
+            const selectedFiles = await vscode.window.showOpenDialog({
+                canSelectFiles: true,
+                canSelectFolders: false,
+                canSelectMany: false,
+                openLabel: '选择新的文件',
+                title: `为批注重新绑定文件 - 当前: ${fileInfo.relativePath}`,
+                filters: {
+                    '所有文件': ['*']
+                }
+            });
+
+            if (!selectedFiles || selectedFiles.length === 0) {
+                return; // 用户取消了选择
+            }
+
+            const newFilePath = selectedFiles[0].fsPath;
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            
+            if (!workspaceFolder) {
+                vscode.window.showErrorMessage('未找到工作区文件夹');
+                return;
+            }
+
+            // 计算相对路径
+            const newRelativePath = path.relative(workspaceFolder.uri.fsPath, newFilePath);
+
+            // 对于未知文件，显示最终确认对话框
+            if (item.contextValue === 'unknownFile') {
+                const confirmation = await vscode.window.showWarningMessage(
+                    `确定要将批注从 "${fileInfo.relativePath}" 重新绑定到 "${newRelativePath}" 吗？`,
+                    { modal: true },
+                    '确定'
+                );
+
+                if (confirmation !== '确定') {
+                    return;
+                }
+            }
+
+            // 获取文件追踪器
+            const { getFileTracker } = await import('../../utils/tracker/globalFileTracking.js');
+            const tracker = getFileTracker();
+            if (!tracker) {
+                vscode.window.showErrorMessage('文件追踪系统未初始化');
+                return;
+            }
+
+            const dataManager = tracker.getDataManager();
+            
+            // 获取新文件的UUID（如果不存在则创建）
+            let newFileUuid = await tracker.getFileUuid(newFilePath);
+            if (!newFileUuid) {
+                newFileUuid = await dataManager.addOrUpdateFile(newFilePath);
+            }
+
+            // 更新批注文件的docUuid
+            const { updateCommentDocUuid } = await import('../../comments/storage.js');
+            const updateSuccess = await updateCommentDocUuid(item.docUuid, newFileUuid);
+            
+            if (!updateSuccess) {
+                vscode.window.showErrorMessage('更新批注文件docUuid失败');
+                return;
+            }
+
+            // 更新文件追踪系统中的UUID映射：将新UUID映射到新文件路径
+            await dataManager.setFileMetadata(newFilePath, {
+                uuid: newFileUuid,
+                filePath: newFilePath,
+                fileName: path.basename(newFilePath),
+                fileExtension: path.extname(newFilePath).toLowerCase(),
+                size: fs.statSync(newFilePath).size,
+                mtime: fs.statSync(newFilePath).mtimeMs,
+                hash: '', // 将由系统重新计算
+                isDirectory: false,
+                createdAt: Date.now(),
+                lastTrackedAt: Date.now(),
+                updatedAt: Date.now()
+            });
+
+            // 更新本地文件信息缓存
+            fileInfo.filePath = newFilePath;
+            fileInfo.relativePath = newRelativePath;
+            fileInfo.docUuid = newFileUuid; // 更新为新的UUID
+
+            // 刷新树视图
+            this.refresh();
+
+            vscode.window.showInformationMessage(
+                `批注已成功重新绑定到文件: ${newRelativePath}`
+            );
+
+        } catch (error) {
+            vscode.window.showErrorMessage(`重新绑定文件失败: ${error}`);
+        }
+    }
+
+
 
     /**
      * 获取树项
@@ -888,12 +1149,19 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             const resolvedCount = fileInfo.resolvedCount;
             const completionRate = fileInfo.commentCount > 0 ? Math.round((resolvedCount / fileInfo.commentCount) * 100) : 0;
             
+            // 检查文件是否存在
+            const fileExistsCheck = fs.existsSync(fileInfo.filePath);
+            
             // 状态图标和文本
             let statusIcon: string;
             let statusColor: string;
             let priorityLevel: string;
             
-            if (completionRate === 100) {
+            if (!fileExistsCheck) {
+                statusIcon = '❌';
+                statusColor = 'list.errorForeground';
+                priorityLevel = '文件不存在';
+            } else if (completionRate === 100) {
                 statusIcon = '✅';
                 statusColor = 'charts.green';
                 priorityLevel = '已完成';
@@ -924,7 +1192,10 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
                 vscode.TreeItemCollapsibleState.Collapsed
             );
             item.docUuid = fileInfo.docUuid;
-            item.contextValue = 'commentFile';
+            
+            // 检查文件是否存在，设置不同的contextValue
+            const fileExistsForContext = fs.existsSync(fileInfo.filePath);
+            item.contextValue = fileExistsForContext ? 'commentFile' : 'unknownFile';
             
             // 丰富的tooltip信息
             const lastModified = new Date(fileInfo.lastModified).toLocaleString('zh-CN', {
@@ -940,6 +1211,16 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             // 根据状态设置图标
             const iconName = this.getFileIcon(fileName);
             item.iconPath = new vscode.ThemeIcon(iconName, new vscode.ThemeColor(statusColor));
+            
+            // 检查是否为当前活动文件
+            const isCurrentFile = this.currentActiveDocUri && 
+                vscode.Uri.file(fileInfo.filePath).toString() === this.currentActiveDocUri;
+            
+            // 如果是当前文件，更新显示样式
+            if (isCurrentFile) {
+                item.description = '当前文件';
+                item.iconPath = new vscode.ThemeIcon('file-text', new vscode.ThemeColor('list.highlightForeground'));
+            }
             
             // 添加命令以打开文件
             item.command = {
@@ -1456,6 +1737,35 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
             return null;
         }
     }
+
+    /**
+     * 处理Worker请求文件信息
+     */
+    private async handleGetFileByUuid(message: CommentMessage) {
+        try {
+            const { uuid } = message.data;
+            const fileMetadata = getFileByUuid(uuid);
+            
+            // 发送响应回Worker
+            this.worker?.postMessage({
+                id: message.id,
+                type: 'response',
+                success: true,
+                data: {
+                    filePath: fileMetadata?.filePath,
+                    fileName: fileMetadata?.fileName || '未知文件'
+                }
+            });
+        } catch (error) {
+            // 发送错误响应
+            this.worker?.postMessage({
+                id: message.id,
+                type: 'response',
+                success: false,
+                error: error instanceof Error ? error.message : String(error)
+            });
+        }
+    }
 }
 
 /**
@@ -1584,6 +1894,15 @@ export function registerCommentsTreeView(context: vscode.ExtensionContext) {
         () => provider.exportComments('json')
     );
 
+    // 注册重新绑定文件命令
+    const rebindFileCommand = vscode.commands.registerCommand('andrea.commentsExplorer.rebindFile',
+        async (item: CommentTreeItem) => {
+            if (item && (item.contextValue === 'unknownFile' || item.contextValue === 'commentFile') && item.docUuid) {
+                await provider.rebindFile(item);
+            }
+        }
+    );
+
     context.subscriptions.push(
         treeView, 
         openCommentCommand, 
@@ -1595,6 +1914,7 @@ export function registerCommentsTreeView(context: vscode.ExtensionContext) {
         exportCommentsCommand,
         exportToMarkdownCommand,
         exportToJsonCommand,
+        rebindFileCommand,
         provider
     );
     

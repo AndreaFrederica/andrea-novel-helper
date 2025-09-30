@@ -123,7 +123,7 @@ export class JSONBackend implements IDatabaseBackend {
             throw new Error('数据库未初始化');
         }
 
-        return this.manager.getFileUuid(path) || null;
+        return await this.manager.getFileUuid(path) || null;
     }
 
     async deletePathMapping(path: string): Promise<void> {

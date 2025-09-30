@@ -50,6 +50,7 @@
     "command.commentsExplorer.exportComments.title": "Export Comments",
     "command.commentsExplorer.exportToMarkdown.title": "Export as Markdown",
     "command.commentsExplorer.exportToJson.title": "Export as JSON",
+  "command.commentsExplorer.rebindFile.title": "Rebind File",
     "view.comments.explorer.name": "Comments",
     "command.webdav.manageAccounts.title": "WebDAV: Manage Accounts",
     "command.webdav.syncNow.title": "WebDAV: Sync Now",

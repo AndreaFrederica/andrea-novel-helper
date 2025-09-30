@@ -4,7 +4,7 @@ import * as path from 'path';
 
 interface CommentMessage {
     id: string;
-    type: 'scan-comments' | 'watch-comments' | 'load-comment-file';
+    type: 'scan-comments' | 'watch-comments' | 'load-comment-file' | 'get-file-by-uuid';
     data: any;
 }
 
@@ -53,41 +53,47 @@ class CommentsWorker {
         return path.resolve(commentsDir, '..', '..');
     }
 
-    // 将索引中的键（可能为相对键）转换为绝对路径（兼容 Windows/UNC）
-    private absFromIndexKey(workspaceRoot: string, p: string): string {
-        const localish = p.replace(/\//g, path.sep);
-        if (path.isAbsolute(localish) || /^[a-z]:[\\/]/i.test(localish) || localish.startsWith('\\\\')) {
-            return path.resolve(localish);
+    // 通过消息传递机制从主线程获取UUID对应的文件路径
+    private async getDocPathByUuid(workspaceRoot: string, docUuid: string): Promise<{ filePath: string | '', relativePath: string | '' }> {
+        try {
+            // 向主线程发送请求获取文件信息
+            const response = await this.sendMessageToMain({
+                id: `get-file-${Date.now()}-${Math.random()}`,
+                type: 'get-file-by-uuid',
+                data: { uuid: docUuid }
+            });
+
+            if (response.success && response.data && response.data.filePath) {
+                const abs = response.data.filePath;
+                const rel = path.relative(workspaceRoot, abs) || path.basename(abs);
+                return { filePath: abs, relativePath: rel };
+            }
+        } catch (error) {
+            console.warn(`Failed to get file by UUID ${docUuid}:`, error);
         }
-        return path.resolve(path.join(workspaceRoot, localish));
+        
+        // 当找不到UUID对应的文件时，返回一个更友好的显示名称
+        return { filePath: '', relativePath: `未知文件 (${docUuid.substring(0, 8)}...)` };
     }
 
-    // Read novel-helper/.anh-fsdb/index.json and map uuid -> filePath（兼容 entries: [{u,p}]）
-    private getDocPathByUuid(workspaceRoot: string, docUuid: string): { filePath: string | '', relativePath: string | '' } {
-        try {
-            const idxPath = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb', 'index.json');
-            const txt = fs.readFileSync(idxPath, 'utf8');
-            const db = JSON.parse(txt);
+    // 向主线程发送消息并等待响应
+    private sendMessageToMain(message: CommentMessage): Promise<CommentResponse> {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Message timeout'));
+            }, 5000); // 5秒超时
 
-            // 优先使用 entries: Array<{ u: string; p: string }>
-            const entries = Array.isArray(db?.entries) ? db.entries : (Array.isArray(db?.files) ? db.files : null);
-            if (Array.isArray(entries)) {
-                for (const ent of entries) {
-                    if (ent && typeof ent === 'object') {
-                        const u = (ent as any).u;
-                        const p = (ent as any).p;
-                        if (typeof u === 'string' && typeof p === 'string' && u === docUuid) {
-                            const abs = this.absFromIndexKey(workspaceRoot, p);
-                            const rel = path.relative(workspaceRoot, abs) || path.basename(abs);
-                            return { filePath: abs, relativePath: rel };
-                        }
-                    }
+            const handler = (response: CommentResponse) => {
+                if (response.id === message.id) {
+                    clearTimeout(timeout);
+                    parentPort?.off('message', handler);
+                    resolve(response);
                 }
-            }
-        } catch {
-            // ignore
-        }
-        return { filePath: '', relativePath: docUuid };
+            };
+
+            parentPort?.on('message', handler);
+            parentPort?.postMessage(message);
+        });
     }
 
     /**
@@ -158,7 +164,7 @@ class CommentsWorker {
                                 }
                                 
                                 // 通过文件追踪数据库映射到真实文档路径
-                                const { filePath: realPath, relativePath } = this.getDocPathByUuid(wsRoot, docUuid);
+                                const { filePath: realPath, relativePath } = await this.getDocPathByUuid(wsRoot, docUuid);
                                 
                                 dirFiles.push({
                                     docUuid,
@@ -342,7 +348,7 @@ class CommentsWorker {
             // Try map to real document path for UI convenience
             let docPath: string | undefined = undefined;
             if (workspaceRoot) {
-                const mapped = this.getDocPathByUuid(workspaceRoot, realDocUuid);
+                const mapped = await this.getDocPathByUuid(workspaceRoot, realDocUuid);
                 if (mapped.filePath) docPath = mapped.filePath;
             }
             

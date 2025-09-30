@@ -34,9 +34,9 @@ function typoDataDir(): string | undefined {
   return dataDir;
 }
 
-export function getDocUuidForDocument(doc: vscode.TextDocument): string | undefined {
+export async function getDocUuidForDocument(doc: vscode.TextDocument): Promise<string | undefined> {
   try {
-    const u = getFileUuid(doc.uri.fsPath);
+    const u = await getFileUuid(doc.uri.fsPath);
     return u || undefined;
   } catch {
     return undefined;

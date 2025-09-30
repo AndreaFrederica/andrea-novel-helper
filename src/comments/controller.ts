@@ -323,7 +323,7 @@ class CommentsController {
     setActiveCommentPanel(this.activeDocUri);
     try { await this.context.workspaceState.update(CommentsController.STATE_KEY, this.activeDocUri); } catch {}
     
-    const docUuid = getDocUuidForDocument(doc);
+    const docUuid = await getDocUuidForDocument(doc);
     const data = docUuid ? await loadComments(docUuid) : [];
     
     this.threadsByDoc.set(doc.uri.toString(), data);
@@ -350,7 +350,7 @@ class CommentsController {
     if (body === undefined) return;
     
     // 获取文档UUID并使用addThread函数支持多选择
-    const docUuid = getDocUuidForDocument(ed.document);
+    const docUuid = await getDocUuidForDocument(ed.document);
     if (!docUuid) return;
     const thread = await addThread(ed.document, selections, body, author);
     if (!thread) return;
@@ -370,7 +370,7 @@ class CommentsController {
   }
 
   private async updateStatusSelected(status: 'open' | 'resolved', id?: string) {
-    const ed = vscode.window.activeTextEditor; if (!ed) return; const docUuid = getDocUuidForDocument(ed.document); if (!docUuid) return;
+    const ed = vscode.window.activeTextEditor; if (!ed) return; const docUuid = await getDocUuidForDocument(ed.document); if (!docUuid) return;
     const key = ed.document.uri.toString();
     const list = this.threadsByDoc.get(key) || [];
     let targetId = id;
@@ -647,7 +647,7 @@ class CommentsController {
   private async ensureCommentsLoaded(doc: vscode.TextDocument) {
     const key = doc.uri.toString();
     if (this.threadsByDoc.has(key)) { this.applyDecorations(doc); return; }
-    const uuid = getDocUuidForDocument(doc);
+    const uuid = await getDocUuidForDocument(doc);
     if (!uuid) { this.threadsByDoc.set(key, []); this.applyDecorations(doc); return; }
     const threads = await loadComments(uuid);
     this.threadsByDoc.set(key, threads || []);
@@ -751,7 +751,7 @@ class CommentsController {
       t.updatedAt = Date.now();
       updated.push(t);
     }
-    const docUuid = getDocUuidForDocument(doc);
+    const docUuid = await getDocUuidForDocument(doc);
     if (docUuid) {
       // 使用updateThreadsByDoc保存更新后的线程数据
       await updateThreadsByDoc(docUuid, () => updated);
@@ -882,7 +882,7 @@ class CommentsController {
         return;
       }
       
-      const docUuid = getDocUuidForDocument(targetDoc); 
+      const docUuid = await getDocUuidForDocument(targetDoc); 
       if (!docUuid) {
         console.log('[Controller] No docUuid for document in reply');
         return;
@@ -931,7 +931,7 @@ class CommentsController {
         return;
       }
       
-      const docUuid = getDocUuidForDocument(targetDoc); 
+      const docUuid = await getDocUuidForDocument(targetDoc); 
       if (!docUuid) {
         console.log('[Controller] No docUuid for document');
         return;
@@ -979,7 +979,7 @@ class CommentsController {
         return;
       }
       
-      const docUuid = getDocUuidForDocument(targetDoc); 
+      const docUuid = await getDocUuidForDocument(targetDoc); 
       if (!docUuid) {
         console.log('[Controller] No docUuid for document');
         return;
@@ -1032,7 +1032,7 @@ class CommentsController {
         return;
       }
       
-      const docUuid = getDocUuidForDocument(targetDoc);
+      const docUuid = await getDocUuidForDocument(targetDoc);
       if (!docUuid) {
         console.log('[Controller] No docUuid for document');
         return;
@@ -1078,7 +1078,7 @@ class CommentsController {
         return;
       }
       
-      const docUuid = getDocUuidForDocument(targetDoc);
+      const docUuid = await getDocUuidForDocument(targetDoc);
       if (!docUuid) {
         console.log('[Controller] No docUuid for document');
         return;
@@ -1262,7 +1262,7 @@ class CommentsController {
         return;
       }
       
-      const docUuid = getDocUuidForDocument(targetDoc);
+      const docUuid = await getDocUuidForDocument(targetDoc);
       if (!docUuid) {
         console.log('[Controller] No docUuid for document in garbage collection');
         return;
@@ -1311,7 +1311,7 @@ class CommentsController {
           // 刷新批注列表
           const uri = vscode.Uri.parse(this.activeDocUri);
           const targetDoc = await vscode.workspace.openTextDocument(uri);
-          const docUuid = getDocUuidForDocument(targetDoc);
+          const docUuid = await getDocUuidForDocument(targetDoc);
           
           if (docUuid) {
             const updated = await loadComments(docUuid);

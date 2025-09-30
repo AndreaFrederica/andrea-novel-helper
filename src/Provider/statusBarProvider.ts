@@ -105,7 +105,7 @@ export class StatusBarProvider {
 
         try {
             // 获取文件追踪数据
-            const fileMetadata = getFileByPath(filePath);
+            const fileMetadata = await getFileByPath(filePath);
             
             if (!fileMetadata?.writingStats) {
                 this.statusBarItem.text = '$(edit) 新文档';
@@ -175,7 +175,7 @@ export class StatusBarProvider {
             return;
         }
 
-        const fileMetadata = getFileByPath(this.currentFilePath);
+        const fileMetadata = await getFileByPath(this.currentFilePath);
         
         if (!fileMetadata?.writingStats) {
             vscode.window.showInformationMessage('此文档暂无写作统计数据');

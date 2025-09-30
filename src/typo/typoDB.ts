@@ -51,7 +51,7 @@ export async function getDocDB(docKey: string, doc?: vscode.TextDocument): Promi
     if (!db) {
         // 尝试从持久化存储加载
         if (isTypoPersistenceEnabled() && doc) {
-            const docUuid = getDocUuidForDocument(doc);
+            const docUuid = await getDocUuidForDocument(doc);
             if (docUuid) {
                 try {
                     const persistedData = await loadTypoData(docUuid);
@@ -91,7 +91,7 @@ export async function clearDocDB(docKey: string, doc?: vscode.TextDocument) {
     if (isTypoPersistenceEnabled() && doc) {
         const db = store.get(docKey);
         if (db) {
-            const docUuid = getDocUuidForDocument(doc);
+            const docUuid = await getDocUuidForDocument(doc);
             if (docUuid) {
                 try {
                     const persistData = documentDBToTypoData(docUuid, db);
@@ -118,7 +118,7 @@ export async function setParagraphResult(docKey: string, result: ParagraphScanRe
     
     // 如果启用持久化，异步保存
     if (isTypoPersistenceEnabled() && doc) {
-        const docUuid = getDocUuidForDocument(doc);
+        const docUuid = await getDocUuidForDocument(doc);
         if (docUuid) {
             try {
                 const persistData = documentDBToTypoData(docUuid, db);
@@ -158,7 +158,7 @@ export async function resetParagraphs(docKey: string, doc?: vscode.TextDocument)
     
     // 如果启用持久化，清空持久化数据
     if (isTypoPersistenceEnabled() && doc) {
-        const docUuid = getDocUuidForDocument(doc);
+        const docUuid = await getDocUuidForDocument(doc);
         if (docUuid) {
             try {
                 await deleteTypoData(docUuid);

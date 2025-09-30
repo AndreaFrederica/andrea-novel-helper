@@ -44,10 +44,10 @@ function commentsContentDir(): string | undefined {
   return contentDir;
 }
 
-export function getDocUuidForDocument(doc: vscode.TextDocument): string | undefined {
+export async function getDocUuidForDocument(doc: vscode.TextDocument): Promise<string | undefined> {
   try {
     const filePath = doc.uri.fsPath;
-    const uuid = getFileUuid(filePath);
+    const uuid = await getFileUuid(filePath);
     return uuid || undefined;
   } catch {
     return undefined;
@@ -278,7 +278,7 @@ export async function addThread(
   initialBody: string, 
   author: string
 ): Promise<CommentThreadData | undefined> {
-  const docUuid = getDocUuidForDocument(doc);
+  const docUuid = await getDocUuidForDocument(doc);
   if (!docUuid) { 
     vscode.window.showWarningMessage('当前文件尚无 UUID（可能未被追踪）。'); 
     return undefined; 
@@ -483,6 +483,59 @@ export async function restoreDeletedThread(commentId: string): Promise<boolean> 
   await saveCommentMetadata(metadata);
   
   return true;
+}
+
+// 更新批注文件的docUuid
+export async function updateCommentDocUuid(oldDocUuid: string, newDocUuid: string): Promise<boolean> {
+  try {
+    // 1. 加载旧文档的批注索引
+    const oldIndex = await loadCommentIndex(oldDocUuid);
+    if (oldIndex.threadIds.length === 0) {
+      return true; // 没有批注需要更新
+    }
+
+    // 2. 更新所有批注的docUuid
+    for (const threadId of oldIndex.threadIds) {
+      const metadata = await loadCommentMetadata(threadId);
+      if (metadata) {
+        metadata.docUuid = newDocUuid;
+        metadata.updatedAt = Date.now();
+        await saveCommentMetadata(metadata);
+      }
+    }
+
+    // 3. 创建新文档的索引文件
+    const newIndex: CommentDocumentIndex = {
+      version: VERSION,
+      docUuid: newDocUuid,
+      threadIds: oldIndex.threadIds
+    };
+    await saveCommentIndex(newIndex);
+
+    // 4. 处理md文件的迁移
+    const oldMdPath = mdFilePathForDocument(oldDocUuid);
+    const newMdPath = mdFilePathForDocument(newDocUuid);
+    
+    if (oldMdPath && newMdPath && fs.existsSync(oldMdPath)) {
+      // 复制md文件到新位置
+      const mdContent = fs.readFileSync(oldMdPath, 'utf8');
+      fs.writeFileSync(newMdPath, mdContent, 'utf8');
+      
+      // 删除旧的md文件
+      fs.unlinkSync(oldMdPath);
+    }
+
+    // 5. 删除旧文档的索引文件
+    const oldIndexPath = indexFilePathForUuid(oldDocUuid);
+    if (oldIndexPath && fs.existsSync(oldIndexPath)) {
+      fs.unlinkSync(oldIndexPath);
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Failed to update comment docUuid:', error);
+    return false;
+  }
 }
 
 // 兼容旧接口的updateThread函数

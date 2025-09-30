@@ -148,13 +148,13 @@ export class FileTracker {
                                     this.dataManager.renameDirectoryChildren(oldPath, filePath);
                                 }
                             } catch {/* ignore */}
-                            uuid = this.dataManager.getFileUuid(filePath);
+                            uuid = await this.dataManager.getFileUuid(filePath);
                 } else {
                     try {
                         const stat = await fs.promises.stat(filePath);
                         if (stat.isDirectory()) {
                             // 仅登记一次（若需要）
-                            uuid = this.dataManager.getFileUuid(filePath);
+                            uuid = await this.dataManager.getFileUuid(filePath);
                             if (!uuid) {
                                 // 为目录创建一个临时记录（无内容哈希）
                                 uuid = await this.dataManager.addOrUpdateFile(filePath);
@@ -380,8 +380,8 @@ export class FileTracker {
     /**
      * 获取文件的 UUID
      */
-    public getFileUuid(filePath: string): string | undefined {
-        return this.dataManager.getFileUuid(filePath);
+    public async getFileUuid(filePath: string): Promise<string | undefined> {
+        return await this.dataManager.getFileUuid(filePath);
     }
 
     /**

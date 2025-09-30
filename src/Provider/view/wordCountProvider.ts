@@ -11,7 +11,7 @@ import { GitGuard } from '../../utils/Git/gitGuard';
 import { getFileTracker } from '../../utils/tracker/fileTracker';
 import * as timeStatsModule from '../../timeStats';
 import { mdToPlainText } from '../../utils/md_plain';
-import { getFileByPath, updateFileWritingStats, getFileUuid, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
+import { getFileByPath, updateFileWritingStats, getFileUuid, getFileUuidSync, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 import { getCutClipboard } from '../../utils/WordCount/wordCountCutHelper';
 import { WordCountOrderManager } from '../../utils/Order/wordCountOrder';
 
@@ -95,6 +95,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     }
     // 目录聚合进行中的 Promise，用于并发去重
     private inFlightDirAgg = new Map<string, Promise<TextStats>>();
+    // 每个目录的最新代次（generation），用于只接受“最后一次任务”的结果
+    private dirAggGen = new Map<string, number>();
+    // 每个目录当前在跑的任务的 AbortController，用于取消旧任务
+    private dirAggAbort = new Map<string, AbortController>();
     // 事件驱动目录重算：子目录完成后向父目录发送链式信号
     private dirRecalcQueue: string[] = [];
     private dirRecalcQueued = new Set<string>();
@@ -103,6 +107,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private pendingRefresh = false;
     private refreshThrottleTimer: NodeJS.Timeout | null = null;
     private ignoreParser: CombinedIgnoreParser | null = null;
+
+    // 新增：目录聚合延迟机制
+    private dirRecalcDelayTimer: NodeJS.Timeout | null = null;
+    private dirRecalcDelayMs = 500; // 延迟500ms，等待文件统计队列稳定
 
     // 大文件异步精确统计支持
     private largeApproxPending = new Set<string>(); // 仍为估算结果等待精确统计
@@ -132,6 +140,134 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     // 新增：计算进度循环是否运行中（避免重复弹出）
     private computeProgressLoopRunning = false;
 
+    // 目录结构快照
+    private directorySnapshot: {
+        files: string[];        // 文件路径列表
+        timestamp: number;      // 快照时间戳
+        workspaceRoot: string;  // 工作区根路径
+    } | null = null;
+    private backgroundScanRunning = false;
+
+    // 批量更新机制
+    private batchUpdatePending = false;
+    private batchUpdateTimer: NodeJS.Timeout | null = null;
+    private batchUpdateDelay = 1000; // 1000ms 延迟批量更新
+    private activeBatchOperations = new Set<string>(); // 跟踪活跃的批量操作
+
+    // 优化：统一的文件统计任务队列，避免大量独立 setTimeout
+    private fileStatQueue: string[] = [];
+    private fileStatProcessing = false;
+
+    // 添加批量收集机制
+    private pendingDirUpdates = new Set<string>();
+    private dirUpdateBatchTimer: NodeJS.Timeout | null = null;
+    
+    // 目录内容指纹（用于检测目录是否真的变化了）
+    private dirContentFingerprints = new Map<string, string>();
+
+    // 新增方法：批量调度父目录更新
+    private scheduleParentDirUpdate(filePath: string) {
+        const parent = path.dirname(filePath);
+        this.pendingDirUpdates.add(parent);
+        
+        if (this.dirUpdateBatchTimer) {
+            clearTimeout(this.dirUpdateBatchTimer);
+        }
+        
+        this.dirUpdateBatchTimer = setTimeout(() => {
+            this.dirUpdateBatchTimer = null;
+            for (const dir of this.pendingDirUpdates) {
+                this.markDirDirty(dir);
+                this.enqueueDirRecompute(dir);
+            }
+            this.pendingDirUpdates.clear();
+        }, this.batchUpdateDelay); // 1000ms内的文件变化合并处理
+    }
+
+    // 新增：计算目录内容指纹（基于文件列表和mtime）
+    private async calculateDirFingerprint(dir: string): Promise<string> {
+        try {
+            const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+            const exts = getSupportedExtensions();
+            const items: string[] = [];
+
+            for (const d of dirents) {
+                const full = path.join(dir, d.name);
+                
+                if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
+                    workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                    respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+                    respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true),
+                    allowedLanguages: getAllowedExtensions()
+                })) continue;
+
+                if (d.isDirectory()) {
+                    // 子目录：记录名称和聚合缓存的时间戳
+                    const subCache = this.dirAggCache.get(full);
+                    items.push(`D:${d.name}:${subCache?.ts ?? 0}`);
+                } else {
+                    const ext = path.extname(d.name).slice(1).toLowerCase();
+                    const special = isSpecialVisibleFile(d.name);
+                    if (!special && !exts.includes(ext)) continue;
+
+                    // 文件：记录名称、mtime和size
+                    const cached = this.statsCache.get(full);
+                    if (cached) {
+                        items.push(`F:${d.name}:${cached.mtime}:${cached.size ?? 0}`);
+                    } else {
+                        // 没有缓存时尝试读取文件状态
+                        try {
+                            const stat = await fs.promises.stat(full);
+                            items.push(`F:${d.name}:${stat.mtimeMs}:${stat.size}`);
+                        } catch {
+                            items.push(`F:${d.name}:0:0`);
+                        }
+                    }
+                }
+            }
+
+            // 排序后拼接，确保顺序一致
+            items.sort();
+            return items.join('|');
+        } catch {
+            return '';
+        }
+    }
+
+    // 新增：检查父目录是否应该跳过更新
+    private async shouldSkipParentUpdate(parentDir: string, changedChildDir: string): Promise<boolean> {
+        try {
+            const dirents = await fs.promises.readdir(parentDir, { withFileTypes: true });
+            
+            // 检查父目录的其他子项是否有变化
+            for (const d of dirents) {
+                const full = path.join(parentDir, d.name);
+                
+                if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
+                    workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+                    respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+                    respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true),
+                    allowedLanguages: getAllowedExtensions()
+                })) continue;
+
+                // 跳过刚才处理的子目录
+                if (full === changedChildDir) continue;
+
+                if (d.isDirectory()) {
+                    // 如果其他子目录在队列中，说明父目录确实需要更新
+                    if (this.dirRecalcQueued.has(full)) {
+                        return false;
+                    }
+                }
+            }
+
+            // 所有其他子项都没有待处理的更新，可以跳过父目录
+            return true;
+        } catch {
+            // 出错时保守处理，不跳过
+            return false;
+        }
+    }
 
     constructor(memento: vscode.Memento, orderManager?: WordCountOrderManager) {
         this.memento = memento;
@@ -169,7 +305,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const parent = path.dirname(fsPath);
             this.markDirDirty(parent);
             this.enqueueDirRecompute(parent);
-            this.refreshDebounced();
+            this.scheduleBatchUpdate('file-watcher');
 
             // 4) 重活丢后台：由 scheduleFileStat 去 worker 线程精算并二次触发父目录聚合
             this.scheduleFileStat(fsPath);
@@ -190,8 +326,119 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             try { this.orderManager?.migrateAllFileKeys?.(); } catch { /* ignore */ }
         }, 1500);
 
+        // 加载目录结构快照
+        this.loadDirectorySnapshot();
+
         // 新增：首次加载时显示实时进度条（仅本会话一次）
         setTimeout(() => { void this.maybeShowInitialProgress(); }, 300);
+    }
+
+    /**
+     * 保存目录结构快照到持久化存储
+     */
+    private async saveDirectorySnapshot(files: string[]): Promise<void> {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) return;
+
+        this.directorySnapshot = {
+            files,
+            timestamp: Date.now(),
+            workspaceRoot
+        };
+
+        try {
+            await this.memento.update('wordCountDirectorySnapshot', this.directorySnapshot);
+            wcDebug('snapshot:saved', 'files', files.length, 'timestamp', this.directorySnapshot.timestamp);
+        } catch (error) {
+            wcDebug('snapshot:save:error', error);
+        }
+    }
+
+    /**
+     * 从持久化存储加载目录结构快照
+     */
+    private loadDirectorySnapshot(): void {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) return;
+
+        try {
+            const snapshot = this.memento.get<{
+                files: string[];
+                timestamp: number;
+                workspaceRoot: string;
+            }>('wordCountDirectorySnapshot');
+
+            if (snapshot && snapshot.workspaceRoot === workspaceRoot) {
+                this.directorySnapshot = snapshot;
+                wcDebug('snapshot:loaded', 'files', snapshot.files.length, 'age', Date.now() - snapshot.timestamp);
+            } else {
+                wcDebug('snapshot:load:invalid-or-missing');
+            }
+        } catch (error) {
+            wcDebug('snapshot:load:error', error);
+        }
+    }
+
+    /**
+     * 启动后台目录扫描和diff更新
+     */
+    private async runBackgroundDirectoryScan(): Promise<void> {
+        if (this.backgroundScanRunning) return;
+        this.backgroundScanRunning = true;
+
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) {
+            this.backgroundScanRunning = false;
+            return;
+        }
+
+        try {
+            wcDebug('background-scan:start');
+            
+            // 扫描实际目录结构
+            const actualFiles = await this.collectSupportedFiles(workspaceRoot);
+            wcDebug('background-scan:collected', actualFiles.length);
+
+            // 如果有快照，进行diff
+            if (this.directorySnapshot && this.directorySnapshot.files.length > 0) {
+                const snapshotSet = new Set(this.directorySnapshot.files);
+                const actualSet = new Set(actualFiles);
+
+                // 找出新增的文件
+                const addedFiles = actualFiles.filter(f => !snapshotSet.has(f));
+                // 找出删除的文件
+                const deletedFiles = this.directorySnapshot.files.filter(f => !actualSet.has(f));
+
+                wcDebug('background-scan:diff', 'added', addedFiles.length, 'deleted', deletedFiles.length);
+
+                // 处理新增文件：安排统计
+                for (const file of addedFiles) {
+                    this.scheduleFileStat(file);
+                }
+
+                // 处理删除文件：清理缓存
+                for (const file of deletedFiles) {
+                    this.statsCache.delete(file);
+                    const parent = path.dirname(file);
+                    this.markDirDirty(parent);
+                    this.enqueueDirRecompute(parent);
+                }
+
+                // 如果有变化，刷新UI
+                if (addedFiles.length > 0 || deletedFiles.length > 0) {
+                    this.scheduleBatchUpdate('background-scan-diff');
+                }
+            }
+
+            // 保存新的快照
+            await this.saveDirectorySnapshot(actualFiles);
+            wcDebug('background-scan:complete');
+
+        } catch (error) {
+            wcDebug('background-scan:error', error);
+        } finally {
+            this.backgroundScanRunning = false;
+        }
     }
 
     /**
@@ -228,7 +475,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const parent = path.dirname(filePath);
                 this.markDirDirty(parent);
                 this.enqueueDirRecompute(parent);
-                this.refreshDebounced();
+                this.scheduleBatchUpdate('file-change');
                 // 对于新创建的文件，只有支持的文件类型才安排后台统计，参考文件不需要
                 if (event.type === 'create' && isSupported) {
                     wcDebug(`WordCount: Scheduling file stats for new supported file: ${filePath}`);
@@ -240,31 +487,57 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             case 'rename':
                 wcDebug(`WordCount: Processing file rename: ${event.oldPath} -> ${filePath}`);
                 if (event.oldPath) {
-                    // 删除旧路径的缓存
-                    this.statsCache.delete(event.oldPath);
-                    // 删除旧路径的子文件缓存（如果是目录）
-                    for (const key of Array.from(this.statsCache.keys())) {
-                        if (key.startsWith(event.oldPath + path.sep)) {
-                            this.statsCache.delete(key);
+                    try {
+                        const oldIsFile = (() => { try { return fs.statSync(event.oldPath!).isFile(); } catch { return true; } })();
+                        if (oldIsFile) {
+                            // 取旧文件的最后一次已知统计（内存或持久化）
+                            let snap: TextStats | undefined = this.statsCache.get(event.oldPath)?.stats;
+                            if (!snap) {
+                                const ft = getFileTracker();
+                                const dm = ft?.getDataManager();
+                                const meta = dm?.getFileByPath(event.oldPath);
+                                if (meta?.wordCountStats) snap = meta.wordCountStats;
+                            }
+                            if (snap) {
+                                // 旧父扣，新父加
+                                const neg: TextStats = {
+                                    cjkChars: -snap.cjkChars,
+                                    asciiChars: -snap.asciiChars,
+                                    words: -snap.words,
+                                    nonWSChars: -snap.nonWSChars,
+                                    total: -snap.total
+                                };
+                                this.bumpAncestorsWithDelta(event.oldPath, neg);
+                                this.bumpAncestorsWithDelta(filePath, snap);
+                                // 迁移缓存项（让新路径立即显示旧值，后续精算会覆盖）
+                                const rec = this.statsCache.get(event.oldPath);
+                                if (rec) {
+                                    this.statsCache.delete(event.oldPath);
+                                    this.statsCache.set(filePath, rec);
+                                }
+                                this.scheduleBatchUpdate('delta-rename-file');
+                            }
+                        } else {
+                            // 目录重命名：保留原有清理策略（目录整块 delta 成本较高）
+                            this.statsCache.delete(event.oldPath);
+                            for (const key of Array.from(this.statsCache.keys())) {
+                                if (key.startsWith(event.oldPath + path.sep)) this.statsCache.delete(key);
+                            }
+                            for (const key of Array.from(this.dirAggCache.keys())) {
+                                if (key === event.oldPath || key.startsWith(event.oldPath + path.sep)) this.dirAggCache.delete(key);
+                            }
+                            const oldParent = path.dirname(event.oldPath);
+                            this.markDirDirty(oldParent);
+                            this.enqueueDirRecompute(oldParent);
                         }
-                    }
-                    // 删除旧路径的目录聚合缓存
-                    for (const key of Array.from(this.dirAggCache.keys())) {
-                        if (key === event.oldPath || key.startsWith(event.oldPath + path.sep)) {
-                            this.dirAggCache.delete(key);
-                        }
-                    }
-                    // 标记旧路径的父目录为脏
-                    const oldParent = path.dirname(event.oldPath);
-                    this.markDirDirty(oldParent);
-                    this.enqueueDirRecompute(oldParent);
+                    } catch { /* ignore */ }
                 }
                 // 处理新路径
                 this.invalidateCache(filePath);
                 const newParent = path.dirname(filePath);
                 this.markDirDirty(newParent);
                 this.enqueueDirRecompute(newParent);
-                this.refreshDebounced();
+                this.scheduleBatchUpdate('file-rename');
                 // 对于支持的文件类型，安排后台统计
                 if (isSupported) {
                     wcDebug(`WordCount: Scheduling file stats for renamed supported file: ${filePath}`);
@@ -275,57 +548,122 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 break;
             case 'delete':
                 wcDebug(`WordCount: Processing file deletion: ${filePath}`);
-                // 删除文件缓存
-                if (this.statsCache.delete(filePath)) {
-                    const parentDir = path.dirname(filePath);
-                    this.markDirDirty(parentDir);
-                    this.enqueueDirRecompute(parentDir);
-                    // 删除子文件缓存（如果是目录）
-                    for (const key of Array.from(this.statsCache.keys())) {
-                        if (key.startsWith(filePath + path.sep)) {
-                            this.statsCache.delete(key);
-                        }
+                // 先用最后一次已知统计做“负 delta”回滚父链
+                try {
+                    let last: TextStats | undefined = this.statsCache.get(filePath)?.stats;
+                    if (!last) {
+                        const ft = getFileTracker();
+                        const dm = ft?.getDataManager();
+                        const meta = dm?.getFileByPath(filePath);
+                        if (meta?.wordCountStats) last = meta.wordCountStats;
                     }
-                    // 删除目录聚合缓存
-                    for (const key of Array.from(this.dirAggCache.keys())) {
-                        if (key === filePath || key.startsWith(filePath + path.sep)) {
-                            this.dirAggCache.delete(key);
-                        }
+                    if (last) {
+                        const neg: TextStats = {
+                            cjkChars: -last.cjkChars,
+                            asciiChars: -last.asciiChars,
+                            words: -last.words,
+                            nonWSChars: -last.nonWSChars,
+                            total: -last.total
+                        };
+                        this.bumpAncestorsWithDelta(filePath, neg);
+                        this.scheduleBatchUpdate('delta-delete');
                     }
-                    this.refreshDebounced();
-                }
+                } catch { /* ignore */ }
+
+                // 清理自身缓存；不再触发整目录失效
+                this.statsCache.delete(filePath);
+                this.refreshDebounced();
                 break;
         }
     }
 
     private isPathForced(p: string): boolean {
         const abs = path.resolve(p);
-        // 新增：如果在 recountRegisteredFiles 列表中，直接返回 true
+        // 如果在 recountRegisteredFiles 列表中，直接返回 true
         if (this.recountRegisteredFiles.includes(abs)) return true;
-        for (const base of this.forcedPaths) {
-            if (abs === base) return true;
-            if (abs.startsWith(base.endsWith(path.sep) ? base : (base + path.sep))) return true;
-        }
-        return false;
+        // 仅对完全相等的路径判定为强制（避免祖先路径扩散到子项）
+        return this.forcedPaths.has(abs);
     }
 
-    // 新增：非阻塞地安排单文件统计
+    // 优化：非阻塞地安排单文件统计（使用统一任务队列）
     private scheduleFileStat(full: string) {
         if (this.inFlightFileStats.has(full)) return;
-        this.inFlightFileStats.add(full);
-        // 新增：有新任务时尝试显示通用计算进度条
-        this.ensureComputeProgressLoop();
-        setTimeout(async () => {
-            try {
-                await this.getOrCalculateFileStats(full);   // 真正算在后台
-            } finally {
-                this.inFlightFileStats.delete(full);
-                const parent = path.dirname(full);
-                this.markDirDirty(parent);                  // 标脏父目录
-                this.enqueueDirRecompute(parent);           // 再次触发聚合（这次能命中缓存）
-                this.refreshDebounced();
+        if (this.fileStatQueue.includes(full)) return;
+        
+        // 🔥 关键新增：如果已有有效缓存，直接跳过
+        try {
+            const cached = this.statsCache.get(full);
+            if (cached) {
+                // 验证缓存是否仍然有效
+                const stat = fs.statSync(full);
+                if (cached.mtime === stat.mtimeMs && 
+                    (cached.size === undefined || cached.size === stat.size) &&
+                    !this.largeApproxPending.has(full) &&
+                    !this.isPathForced(full)) {
+                    wcDebug('scheduleFileStat:skip:valid-cache', full);
+                    return; // 有效缓存，直接跳过
+                }
             }
-        }, 0);
+        } catch {
+            // 文件不存在或读取失败，继续正常流程
+        }
+
+        this.fileStatQueue.push(full);
+        this.inFlightFileStats.add(full);
+        this.ensureComputeProgressLoop();
+
+        if (!this.fileStatProcessing) {
+            this.processFileStatQueue();
+        }
+    }
+
+    // 优化：批量处理文件统计队列
+    private async processFileStatQueue() {
+        if (this.fileStatProcessing) return;
+        this.fileStatProcessing = true;
+
+        // 检查是否启用批量处理
+        const enableBatchProcessing = vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.enableBatchProcessing', true);
+
+        if (!enableBatchProcessing) {
+            // 传统模式：逐个处理
+            while (this.fileStatQueue.length > 0) {
+                const full = this.fileStatQueue.shift()!;
+                try {
+                    await this.getOrCalculateFileStats(full);
+                } catch (error) {
+                    wcDebug('fileStatQueue:error', full, error);
+                } finally {
+                    // 只在这里清理 in-flight 标记；不要无条件标脏或入队
+                    this.inFlightFileStats.delete(full);
+                }
+                // 让出事件循环
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        } else {
+            // 批量模式：批量处理
+            const batchSize = 10; // 每批处理10个文件
+            
+            while (this.fileStatQueue.length > 0) {
+                const batch = this.fileStatQueue.splice(0, batchSize);
+                
+                await Promise.all(batch.map(async (full) => {
+                    try {
+                        await this.getOrCalculateFileStats(full);
+                    } catch (error) {
+                        wcDebug('fileStatQueue:error', full, error);
+                    } finally {
+                        // 仅清理 in-flight，实际是否需要标脏/入队由 getOrCalculateFileStats 内部决定
+                        this.inFlightFileStats.delete(full);
+                    }
+                }));
+                
+                // 让出事件循环
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        }
+
+        this.fileStatProcessing = false;
     }
 
     /** 将大文件加入精确统计后台队列 */
@@ -395,6 +733,46 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         }, 800); // 增加到 800ms 防抖避免频繁刷新
     }
 
+    /**
+     * 批量更新机制：延迟执行TreeView刷新，避免频繁更新
+     */
+    private scheduleBatchUpdate(operationId?: string) {
+        // 如果提供了操作ID，添加到活跃操作集合
+        if (operationId) {
+            this.activeBatchOperations.add(operationId);
+        }
+
+        // 如果已经有待处理的批量更新，重置定时器
+        if (this.batchUpdateTimer) {
+            clearTimeout(this.batchUpdateTimer);
+        }
+
+        this.batchUpdatePending = true;
+        this.batchUpdateTimer = setTimeout(() => {
+            this.batchUpdateTimer = null;
+            this.batchUpdatePending = false;
+            this.activeBatchOperations.clear();
+            this.refresh();
+        }, this.batchUpdateDelay);
+    }
+
+    /**
+     * 完成批量操作，如果没有其他活跃操作则立即刷新
+     */
+    private completeBatchOperation(operationId: string) {
+        this.activeBatchOperations.delete(operationId);
+        
+        // 如果没有其他活跃操作且有待处理的更新，立即执行
+        if (this.activeBatchOperations.size === 0 && this.batchUpdatePending) {
+            if (this.batchUpdateTimer) {
+                clearTimeout(this.batchUpdateTimer);
+                this.batchUpdateTimer = null;
+            }
+            this.batchUpdatePending = false;
+            this.refresh();
+        }
+    }
+
     refresh() {
         // 如果正在初始化大量文件，延迟刷新
         if (this.isInitializing) {
@@ -447,20 +825,20 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         this.statsCache.clear();
         this.dirAggCache.clear();
         try { (this.gitGuard as any)?.reset?.(); } catch { /* ignore */ }
-        roots.forEach(r => {
-            const absPath = path.resolve(r);
-            this.forcedPaths.add(absPath);
-            // 只注册文件路径，排除目录
-            try {
-                const dirents = fs.readdirSync(absPath, { withFileTypes: true });
-                dirents.forEach(d => {
-                    if (d.isFile()) {
-                        const filePath = path.join(absPath, d.name);
-                        this.recountRegisteredFiles.push(filePath);
+        // 不再把根目录加入 forcedPaths（避免祖先扩散）。改为异步收集根目录下的所有受支持文件并逐个加入 forcedPaths/recountRegisteredFiles
+        (async () => {
+            for (const r of roots) {
+                try {
+                    const rootAbs = path.resolve(r);
+                    const files = await this.collectSupportedFiles(rootAbs);
+                    for (const fp of files) {
+                        const absFp = path.resolve(fp);
+                        this.forcedPaths.add(absFp);
+                        if (!this.recountRegisteredFiles.includes(absFp)) this.recountRegisteredFiles.push(absFp);
                     }
-                });
-            } catch { }
-        });
+                } catch (e) { /* ignore */ }
+            }
+        })();
         this.refresh();
         // 复用首次扫描：对每个根目录触发一次 getChildren -> calculateStatsAsync
         setTimeout(() => { this.refresh(); }, 0);
@@ -518,8 +896,22 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             }
         }
 
-        // 4) 标记强制：祖先目录强制逻辑会让子文件即便命中缓存也会后台重算
-        this.forcedPaths.add(abs);
+        // 4) 标记强制：仅对文件级路径加入 forcedPaths，避免祖先路径扩散
+        if (st.isDirectory()) {
+            // 异步将目录下受支持的文件加入 forcedPaths
+            (async () => {
+                try {
+                    const files = await this.collectSupportedFiles(abs);
+                    for (const fp of files) {
+                        const afp = path.resolve(fp);
+                        if (!this.recountRegisteredFiles.includes(afp)) this.recountRegisteredFiles.push(afp);
+                        this.forcedPaths.add(afp);
+                    }
+                } catch { /* ignore */ }
+            })();
+        } else {
+            this.forcedPaths.add(abs);
+        }
 
         // 5) 入队链式聚合；文件则顺带立刻做一次强制精算
         if (st.isDirectory()) {
@@ -662,7 +1054,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const isExpanded = this.expandedNodes.has(full);
                 const forced = this.forcedPaths.has(path.resolve(full));
                 const cacheEntry = this.dirAggCache.get(full);
-                const cacheValid = cacheEntry && !forced; // 去除 TTL 约束，仅强制/失效时重算
+                const inflight = this.inFlightDirAgg.get(full);              // ★ 新增：检测是否有在跑任务
+                const hasPrev = this.previousDirAggCache.has(full);
+
+                const cacheValid = cacheEntry && !forced;
+
                 if (cacheValid) {
                     const item = new WordCountItem(
                         uri,
@@ -680,22 +1076,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         }
                     } catch { /* ignore */ }
                     items.push(item);
-                } else if (cacheEntry && !cacheValid) {
-                    // 强制：改回占位符显示“计算中”
-                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
-                    const item = new WordCountItem(
-                        uri,
-                        d.name,
-                        zero,
-                        isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
-                        true
-                    );
-                    item.id = full;
-                    this.itemsById.set(item.id, item);
-                    items.push(item);
-                    needsAsync = true;
-                } else if (this.previousDirAggCache.has(full)) {
-                    // 没有现缓存但有旧值：显示旧值 + 旋转图标，不出现“计算中”字样
+                } else if (hasPrev) {
+                    // 用旧值 + loading 图标（不出现“计算中”字样）
                     const prev = this.previousDirAggCache.get(full)!;
                     const staleItem = new WordCountItem(
                         uri,
@@ -714,8 +1096,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     } catch { /* ignore */ }
                     this.itemsById.set(staleItem.id, staleItem);
                     items.push(staleItem);
-                    needsAsync = true;
+
+                    // ★ 关键：如果已经有 in-flight，就不要再置 needsAsync=true
+                    if (!inflight) needsAsync = true;
                 } else {
+                    // 初次或被强制：占位
                     const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
                     const item = new WordCountItem(
                         uri,
@@ -727,7 +1112,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     item.id = full;
                     this.itemsById.set(item.id, item);
                     items.push(item);
-                    needsAsync = true;
+
+                    // ★ 同样：有 in-flight 的情况下不给 needsAsync，避免重复排队
+                    if (!inflight) needsAsync = true;
                 }
             } else {
                 const ext = path.extname(d.name).slice(1).toLowerCase();
@@ -867,7 +1254,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             try { void this.prefetchDirStatsBatchIfPossible(prefetchFiles); } catch { /* ignore */ }
             void this.calculateStatsAsync(root, exts, dirents).then(() => {
                 wcDebug('getChildren:asyncBatchComplete', root);
-                this.refresh();
+                // calculateStatsAsync 已经使用批量更新机制，这里不需要再次刷新
             });
         }
 
@@ -875,34 +1262,37 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     }
 
 
-    // 动态聚合目录：不写缓存；被父目录调用
     // 动态聚合目录：不写缓存；被父目录调用（支持祖先目录强制）
     private async analyzeFolderDynamic(folder: string, exts: string[]): Promise<TextStats> {
-        const forced = this.isPathForced(folder); // ⬅ 祖先目录强制判定
-        if (!forced) {
-            const hit = this.dirAggCache.get(folder);
-            if (hit) {
-                wcDebug('dirAggCache:hit', folder);
-                return hit.stats;
-            }
-            const inflight = this.inFlightDirAgg.get(folder);
-            if (inflight) {
-                wcDebug('dirAgg:reuse-inflight', folder);
-                return inflight;
-            }
-        } else {
-            wcDebug('dirAgg:forced-recompute', folder);
-        }
+        const abs = path.resolve(folder);
 
-        const work = (async () => {
+        // —— 建立/提升代次，并中止旧任务 —— //
+        const myGen = (this.dirAggGen.get(abs) ?? 0) + 1;
+        this.dirAggGen.set(abs, myGen);
+        const prevCtrl = this.dirAggAbort.get(abs);
+        if (prevCtrl) prevCtrl.abort();
+        const ctrl = new AbortController();
+        const { signal } = ctrl;
+        this.dirAggAbort.set(abs, ctrl);
+
+        const forced = this.isPathForced(abs);
+
+        const work = (async (): Promise<TextStats> => {
             let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+
+            // 如果不是强制且有新鲜缓存，直接返回（保持原有语义）
+            if (!forced) {
+                const hit = this.dirAggCache.get(abs);
+                if (hit) return hit.stats;
+            }
+
             try {
-                const dirents = await fs.promises.readdir(folder, { withFileTypes: true });
-                // 分离文件与子目录，避免深度递归串行阻塞
+                const dirents = await fs.promises.readdir(abs, { withFileTypes: true });
                 const subDirs: fs.Dirent[] = [];
                 const files: fs.Dirent[] = [];
                 for (const d of dirents) {
-                    const full = path.join(folder, d.name);
+                    if (signal.aborted || (this.dirAggGen.get(abs) ?? 0) !== myGen) return agg; // 旧任务直接结束
+                    const full = path.join(abs, d.name);
                     if (shouldIgnoreWordCountFile(full, this.ignoreParser, {
                         workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
                         respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
@@ -912,79 +1302,68 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     if (d.isDirectory()) subDirs.push(d); else files.push(d);
                 }
 
-                // —— 先处理文件（并发分批）——
-                const fileBatchSize = 6;
+                // 文件：分批并在每批之间检查是否被废弃
+                const fileBatchSize = 30;
                 for (let i = 0; i < files.length; i += fileBatchSize) {
+                    if (signal.aborted || (this.dirAggGen.get(abs) ?? 0) !== myGen) return agg;
                     const batch = files.slice(i, i + fileBatchSize);
-
                     const subResults = await Promise.all(batch.map(async d => {
-                        const full = path.join(folder, d.name);
+                        const full = path.join(abs, d.name);
                         const ext = path.extname(d.name).slice(1).toLowerCase();
                         const special = isSpecialVisibleFile(d.name);
                         if (!special && !exts.includes(ext)) return null;
 
-                        // 1) 内存缓存：强制时也先用旧值占位，但仍派发后台重算
                         const mem = this.statsCache.get(full);
                         if (mem) {
-                            if (forced) this.scheduleFileStat(full); // ⬅ 强制：有缓存也重算
+                            if (forced) this.scheduleFileStat(full);
                             return mem.stats;
                         }
-
-                        // 2) 持久化缓存（仅非强制时使用；强制时绕过）
-                        if (!forced) {
-                            try {
-                                const ft = getFileTracker();
-                                const dm = ft?.getDataManager();
-                                const meta = dm?.getFileByPath(full);
-                                if (meta?.wordCountStats) {
-                                    const st = await fs.promises.stat(full);
-                                    if (st && meta.mtime === st.mtimeMs && (meta.size === undefined || meta.size === st.size)) {
-                                        this.statsCache.set(full, { stats: meta.wordCountStats, mtime: meta.mtime, size: st.size });
-                                        return meta.wordCountStats;
-                                    }
-                                }
-                            } catch { /* ignore */ }
-                        }
-
-                        // 3) 被强制或没有可用缓存 → 不阻塞：排队后台精算，聚合先略过
                         this.scheduleFileStat(full);
                         return null;
                     }));
-
                     for (const st of subResults) if (st) agg = mergeStats(agg, st);
                     await new Promise(r => setTimeout(r, 0));
                 }
 
-                // —— 再处理子目录（并发分批）——
-                const dirBatchSize = 2; // 控制递归并发
+                // 子目录：分批并在每批之间检查是否被废弃
+                const dirBatchSize = 8;
                 for (let i = 0; i < subDirs.length; i += dirBatchSize) {
+                    if (signal.aborted || (this.dirAggGen.get(abs) ?? 0) !== myGen) return agg;
                     const batch = subDirs.slice(i, i + dirBatchSize);
                     const subStats = await Promise.all(batch.map(async d => {
-                        const full = path.join(folder, d.name);
+                        const full = path.join(abs, d.name);
                         try { return await this.analyzeFolderDynamic(full, exts); } catch { return null; }
                     }));
                     for (const st of subStats) if (st) agg = mergeStats(agg, st);
                     await new Promise(r => setTimeout(r, 0));
                 }
+
             } catch { /* ignore */ }
 
-            const now = Date.now();
-            this.dirAggCache.set(folder, { stats: agg, ts: now });
-            this.previousDirAggCache.delete(folder);
-            wcDebug('dirAggCache:update', folder, 'total', agg.total, 'forced', forced);
-
-            if (forced) {
-                this.forcedPaths.delete(path.resolve(folder));
-                wcDebug('dir:forced-clear', folder);
+            // —— 回写前再确认"我仍是最新代次" —— //
+            if (signal.aborted || (this.dirAggGen.get(abs) ?? 0) !== myGen) {
+                return agg; // 旧任务：不写缓存
             }
+
+            this.dirAggCache.set(abs, { stats: agg, ts: Date.now() });
+            this.previousDirAggCache.delete(abs);
+
+            // 目录层 forced 标记可以安全清理（通常现在 forced 只存文件，但保留兼容）
+            if (forced) this.forcedPaths.delete(abs);
+
             return agg;
         })();
 
-        if (!forced) this.inFlightDirAgg.set(folder, work);
-        try {
-            return await work;
-        } finally {
-            if (!forced) this.inFlightDirAgg.delete(folder);
+        // 🚩 关键：**无论 forced 与否**，都登记为"唯一在跑的任务"
+        this.inFlightDirAgg.set(abs, work);
+
+        try { return await work; }
+        finally {
+            // 只有当"我还是最新代次"才清理 inFlight；否则说明新任务已经覆盖了
+            if ((this.dirAggGen.get(abs) ?? 0) === myGen) {
+                this.inFlightDirAgg.delete(abs);
+                this.dirAggAbort.delete(abs);
+            }
         }
     }
 
@@ -992,7 +1371,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
      * 异步计算所有统计数据
      */
     private async calculateStatsAsync(root: string, exts: string[], dirents: fs.Dirent[]) {
+        const batchId = `calculateStats-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const tasks: Promise<void>[] = [];
+
+        // 开始批量操作
+        this.scheduleBatchUpdate(batchId);
 
         for (const d of dirents) {
             const full = path.join(root, d.name);
@@ -1006,23 +1389,47 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             })) { continue; }
 
             if (d.isDirectory()) {
-                tasks.push(this.analyzeFolderDynamic(full, exts).then(stats => {
-                    const existing = this.itemsById.get(full);
-                    if (existing && existing instanceof WordCountItem) {
-                        const item = new WordCountItem(vscode.Uri.file(full), path.basename(full), stats,
-                            this.expandedNodes.has(full) ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
-                            false);
-                        item.id = full;
-                        this.itemsById.set(full, item);
-                    }
-                }));
+                const dirPath = full;
+                // 如果已经有在跑的目录聚合，直接复用该 promise；否则发起一次最新聚合
+                const inflight = this.inFlightDirAgg.get(dirPath);
+                if (inflight) {
+                    tasks.push(inflight.then(() => {
+                        const existing = this.itemsById.get(dirPath);
+                        const stats = this.dirAggCache.get(dirPath)?.stats ?? { cjkChars:0, asciiChars:0, words:0, nonWSChars:0, total:0 };
+                        if (existing && existing instanceof WordCountItem) {
+                            const item = new WordCountItem(vscode.Uri.file(dirPath), path.basename(dirPath), stats,
+                                this.expandedNodes.has(dirPath) ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+                                false);
+                            item.id = dirPath;
+                            this.itemsById.set(dirPath, item);
+                        }
+                    }));
+                } else {
+                    tasks.push(this.analyzeFolderDynamic(dirPath, exts).then(stats => {
+                        const existing = this.itemsById.get(dirPath);
+                        if (existing && existing instanceof WordCountItem) {
+                            const item = new WordCountItem(vscode.Uri.file(dirPath), path.basename(dirPath), stats,
+                                this.expandedNodes.has(dirPath) ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
+                                false);
+                            item.id = dirPath;
+                            this.itemsById.set(dirPath, item);
+                        }
+                    }));
+                }
             } else {
                 const ext = path.extname(d.name).slice(1).toLowerCase();
                 const special = isSpecialVisibleFile(d.name);
                 if (special || exts.includes(ext)) {
-                    // tasks.push(this.getOrCalculateFileStats(full).then(() => { }));
-                    if (!this.inFlightFileStats.has(full)) {
-                        this.scheduleFileStat(full); // 统一走去重通道
+                    // 仅对确实需要的文件入队：没有内存缓存 或 被强制重算
+                    try {
+                        const forced = this.isPathForced(full);
+                        const cached = this.statsCache.get(full);
+                        if ((!cached || forced) && !this.inFlightFileStats.has(full)) {
+                            this.scheduleFileStat(full); // 统一走去重通道
+                        }
+                    } catch (e) {
+                        // 若检查出错，回退到原有行为以保证功能
+                        if (!this.inFlightFileStats.has(full)) this.scheduleFileStat(full);
                     }
                 }
             }
@@ -1034,13 +1441,13 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const batch = tasks.slice(i, i + batchSize);
             await Promise.all(batch);
 
-            // 每处理一批就刷新一次UI
-            if (i + batchSize < tasks.length) {
-                this.refreshDebounced();
-                // 让出线程，避免阻塞UI
-                await new Promise(resolve => setTimeout(resolve, 10));
-            }
+            // 不再每处理一批就刷新UI，而是使用批量更新机制
+            // 让出线程，避免阻塞UI
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
+
+        // 完成批量操作
+        this.completeBatchOperation(batchId);
     }
 
     /**
@@ -1135,10 +1542,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             this.statsCache.set(filePath, { stats, mtime: finalMtime, size: finalSize });
 
             // 只有真的变了，才让父目录失效并重算
-            if (changed) {
-                this.markDirDirty(path.dirname(filePath));
-                this.enqueueDirRecompute(path.dirname(filePath));
-            }
+                    if (changed) {
+                        this.scheduleParentDirUpdate(filePath);
+                    }
 
 
             // 6. 持久化到文件追踪数据库（只写统计；mtime 按你的 DataManager 设计自处理）
@@ -1168,6 +1574,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private async runLargeProcessing() {
         if (this.largeProcessingRunning) return;
         this.largeProcessingRunning = true;
+        
+        const batchId = `largeProcessing-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        let hasUpdates = false;
+
         while (this.largeProcessingQueue.length) {
             const fp = this.largeProcessingQueue.shift()!;
             if (!this.largeApproxPending.has(fp)) continue; // 已被其它路径精算
@@ -1187,7 +1597,12 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 this.markDirDirty(path.dirname(fp));
                 this.enqueueDirRecompute(path.dirname(fp));
                 wcDebug('largeFile:processing:done', fp, 'total', textStats.total);
-                this.refreshDebounced();
+                
+                // 标记有更新，但不立即刷新
+                if (!hasUpdates) {
+                    hasUpdates = true;
+                    this.scheduleBatchUpdate(batchId);
+                }
             } catch (e) {
                 wcDebug('largeFile:processing:error', fp, e);
                 // 出错也移除，避免无限循环
@@ -1196,6 +1611,12 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             // 小延迟让出事件循环，避免长时间占用
             await new Promise(res => setTimeout(res, 5));
         }
+        
+        // 完成批量操作
+        if (hasUpdates) {
+            this.completeBatchOperation(batchId);
+        }
+        
         this.largeProcessingRunning = false;
     }
 
@@ -1208,7 +1629,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         this.dirAggCache.delete(dir);
     }
 
-    /** 入队目录重算（事件链） */
+    /** 入队目录重算（事件链 + 智能延迟） */
     private enqueueDirRecompute(dir: string) {
         if (!dir) return;
         const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -1216,28 +1637,134 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         if (this.dirRecalcQueued.has(dir)) return;
         this.dirRecalcQueued.add(dir);
         this.dirRecalcQueue.push(dir);
-        if (!this.dirRecalcProcessing) this.processDirRecalcQueue();
+        
+        // 智能延迟：如果有文件统计任务正在进行，延迟启动目录聚合
+        if (!this.dirRecalcProcessing) {
+            this.scheduleDelayedDirRecalc();
+        }
+    }
+
+    /** 智能延迟启动目录聚合：检测文件统计队列状态 */
+    private scheduleDelayedDirRecalc() {
+        // 清除之前的定时器
+        if (this.dirRecalcDelayTimer) {
+            clearTimeout(this.dirRecalcDelayTimer);
+            this.dirRecalcDelayTimer = null;
+        }
+
+        // 检查是否有活跃的文件统计任务
+        const hasActiveFileTasks = 
+            this.fileStatQueue.length > 0 || 
+            this.fileStatProcessing || 
+            this.inFlightFileStats.size > 0 ||
+            this.largeProcessingQueue.length > 0 ||
+            this.largeProcessingRunning;
+
+        if (hasActiveFileTasks) {
+            // 有活跃任务：延迟启动，等待队列稳定
+            wcDebug('dirRecalc:delayed', 'activeFileTasks', {
+                queueLen: this.fileStatQueue.length,
+                processing: this.fileStatProcessing,
+                inFlight: this.inFlightFileStats.size,
+                largeQueue: this.largeProcessingQueue.length,
+                largeRunning: this.largeProcessingRunning
+            });
+            
+            this.dirRecalcDelayTimer = setTimeout(() => {
+                this.dirRecalcDelayTimer = null;
+                // 递归检查：如果延迟后仍有任务，继续延迟
+                this.scheduleDelayedDirRecalc();
+            }, this.dirRecalcDelayMs);
+        } else {
+            // 没有活跃任务：立即启动目录聚合
+            wcDebug('dirRecalc:start', 'queueSize', this.dirRecalcQueue.length);
+            this.processDirRecalcQueue();
+        }
     }
 
     /** 处理目录重算队列：单层聚合+向上扩散 */
     private async processDirRecalcQueue() {
         this.dirRecalcProcessing = true;
+        this.scheduleBatchUpdate('dir-recalc-queue');
+        
         while (this.dirRecalcQueue.length) {
             const dir = this.dirRecalcQueue.shift()!;
             this.dirRecalcQueued.delete(dir);
-            try { await this.recomputeDirAggregate(dir); } catch (e) { wcDebug('dirRecalc:error', dir, e); }
+            try {
+                // 把链式重算也登记为 inFlight，这样 getChildren 能看到正在运行的聚合并避免重复排队
+                const work = this.recomputeDirAggregate(dir);
+                this.inFlightDirAgg.set(dir, work);
+                await work;
+            } catch (e) { wcDebug('dirRecalc:error', dir, e); }
+            finally {
+                this.inFlightDirAgg.delete(dir);
+            }
+
             const parent = path.dirname(dir);
             const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
-            if (parent && parent !== dir && parent.startsWith(root)) this.enqueueDirRecompute(parent);
-            this.refresh();
+            // 🔥 新增标志：默认允许向上传播，recomputeDirAggregate 的刹车逻辑会通过
+            // dirContentFingerprints 管理指纹，避免不必要的向上传播。
+            let shouldPropagateToParent = true;
+
+            // 只有在没有被刹车阻止且父目录尚未有聚合指纹时才入队父目录
+            if (parent && parent !== dir && parent.startsWith(root)) {
+                const parentFingerprint = this.dirContentFingerprints.get(parent);
+                if (shouldPropagateToParent && !parentFingerprint) {
+                    this.enqueueDirRecompute(parent);
+                } else {
+                    wcDebug('dirRecalc:propagate:skipped', parent, { hasFingerprint: !!parentFingerprint });
+                }
+            }
+            // 移除频繁的refresh调用，改为批量更新
             await new Promise(r => setTimeout(r, 0));
         }
+        
         this.dirRecalcProcessing = false;
+        this.completeBatchOperation('dir-recalc-queue');
+        
+        // 关键修复：如果处理完后队列中又有新项目（父目录），重新检查是否需要延迟
+        if (this.dirRecalcQueue.length > 0) {
+            wcDebug('dirRecalc:queue-refilled', 'size', this.dirRecalcQueue.length);
+            this.scheduleDelayedDirRecalc();
+        }
+    }
+
+    /**
+     * 轻量“增量传播”：把某个文件统计变化量（delta）沿父目录链向上加/减，
+     * 直接更新 dirAggCache（若无现值尝试用 previous 作基），避免整目录重算。
+     * delta 可为负（删除/重命名旧父扣回）。
+     */
+    private bumpAncestorsWithDelta(filePath: string, delta: TextStats) {
+        try {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+            let cur = path.dirname(filePath);
+            const seen = new Set<string>();
+            while (cur && cur.startsWith(root) && !seen.has(cur)) {
+                const rec = this.dirAggCache.get(cur);
+                if (rec) {
+                    this.dirAggCache.set(cur, { stats: mergeStats(rec.stats, delta), ts: Date.now() });
+                } else {
+                    const prev = this.previousDirAggCache.get(cur);
+                    if (prev) {
+                        this.dirAggCache.set(cur, { stats: mergeStats(prev.stats, delta), ts: Date.now() });
+                        this.previousDirAggCache.delete(cur);
+                    }
+                }
+                seen.add(cur);
+                const parent = path.dirname(cur);
+                if (parent === cur) break;
+                cur = parent;
+            }
+        } catch { /* ignore */ }
     }
 
     /** 非递归聚合目录：依赖子目录已更新的聚合值 + 文件最新值（支持祖先目录强制） */
-    private async recomputeDirAggregate(dir: string) {
+    private async recomputeDirAggregate(dir: string): Promise<TextStats> {
         let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+        
+        // 计算重算前的指纹
+        const fingerprintBefore = await this.calculateDirFingerprint(dir);
+        
         try {
             const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
             const exts = getSupportedExtensions();
@@ -1258,7 +1785,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     if (childAgg) agg = mergeStats(agg, childAgg);
 
                     // 目录项这里不递归；若需要可在别处触发 analyzeFolderDynamic
-                    // （保持“非递归聚合”的语义）
+                    // （保持"非递归聚合"的语义）
                 } else {
                     const ext = path.extname(d.name).slice(1).toLowerCase();
                     const special = isSpecialVisibleFile(d.name);
@@ -1291,7 +1818,43 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             wcDebug('dirAgg:forced-cleared', dir);
         }
 
-        wcDebug('dirAgg:update:eventChain', dir, 'total', agg.total);
+        // 🚨 刹车机制：计算重算后的指纹
+        const fingerprintAfter = await this.calculateDirFingerprint(dir);
+        
+        // 如果指纹完全一致，说明目录内容没有真正变化
+        if (fingerprintBefore && fingerprintAfter && fingerprintBefore === fingerprintAfter) {
+            wcDebug('dirAgg:brake:no-change-detected', dir, 'removing-queued-tasks');
+            
+            // 从父目录队列中移除该目录的父目录（避免继续向上传播）
+            const parent = path.dirname(dir);
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+            
+            if (parent && parent !== dir && parent.startsWith(root)) {
+                // 检查父目录的队列项：如果父目录在队列中，且是由该目录触发的，则移除
+                const parentIndex = this.dirRecalcQueue.indexOf(parent);
+                if (parentIndex !== -1) {
+                    // 验证父目录是否也没有其他子项变化
+                    const parentShouldSkip = await this.shouldSkipParentUpdate(parent, dir);
+                    if (parentShouldSkip) {
+                        this.dirRecalcQueue.splice(parentIndex, 1);
+                        this.dirRecalcQueued.delete(parent);
+                        wcDebug('dirAgg:brake:removed-parent-from-queue', parent);
+                    }
+                }
+            }
+            
+            // 保存当前指纹供下次比对
+            this.dirContentFingerprints.set(dir, fingerprintAfter);
+        } else {
+            wcDebug('dirAgg:update:eventChain', dir, 'total', agg.total, 'fingerprint-changed');
+            // 指纹变化了，保存新指纹
+            if (fingerprintAfter) {
+                this.dirContentFingerprints.set(dir, fingerprintAfter);
+            }
+        }
+
+        // 返回本次聚合结果，调用方（链式重算或 analyzeFolderDynamic）可将其登记为 inFlight
+        return agg;
     }
 
 
@@ -1336,6 +1899,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     public dispose(): void {
         // 取消注册全局文件追踪回调
         unregisterFileChangeCallback('wordCount');
+        
+        if (this.dirUpdateBatchTimer) {
+            clearTimeout(this.dirUpdateBatchTimer);
+            this.dirUpdateBatchTimer = null;
+        }
         
         if (this.gitGuard) {
             this.gitGuard.dispose();
@@ -1391,7 +1959,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         return results;
     }
 
-    // 新增：首次加载时的进度条（实时更新）
+    // 新增：首次加载时的进度条（实时更新，支持快照）
     private async maybeShowInitialProgress(): Promise<void> {
         if (this.initialProgressStarted) return;
         this.initialProgressStarted = true;
@@ -1405,21 +1973,32 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 title: '正在加载字数统计…',
                 cancellable: false
             }, async (progress) => {
-                progress.report({ message: '扫描文件中…' });
+                let allFiles: string[] = [];
+                
+                // 优先使用快照
+                if (this.directorySnapshot && this.directorySnapshot.files.length > 0) {
+                    wcDebug('initial-progress:using-snapshot', this.directorySnapshot.files.length);
+                    progress.report({ message: '从快照加载文件列表…' });
+                    allFiles = this.directorySnapshot.files;
+                } else {
+                    wcDebug('initial-progress:no-snapshot:scanning');
+                    progress.report({ message: '扫描文件中…' });
 
-                // 收集全部需要统计的文件
-                const allFiles: string[] = [];
-                for (const f of folders) {
-                    const root = f.uri.fsPath;
-                    try {
-                        const list = await this.collectSupportedFiles(root);
-                        allFiles.push(...list);
-                    } catch { /* ignore */ }
+                    // 没有快照，需要扫描
+                    for (const f of folders) {
+                        const root = f.uri.fsPath;
+                        try {
+                            const list = await this.collectSupportedFiles(root);
+                            allFiles.push(...list);
+                        } catch { /* ignore */ }
+                    }
                 }
 
                 const total = allFiles.length;
                 if (total === 0) {
                     progress.report({ message: '没有需要统计的文件' });
+                    // 即使没有文件，也启动后台扫描
+                    setTimeout(() => { void this.runBackgroundDirectoryScan(); }, 1000);
                     return;
                 }
 
@@ -1444,7 +2023,15 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
                 progress.report({ message: '字数统计已准备就绪' });
             });
-        } catch {
+
+            // 启动后台目录扫描和diff（延迟1秒，避免影响初始加载）
+            setTimeout(() => {
+                wcDebug('initial-progress:starting-background-scan');
+                void this.runBackgroundDirectoryScan();
+            }, 1000);
+
+        } catch (error) {
+            wcDebug('initial-progress:error', error);
             // 忽略进度异常，避免影响使用
         }
     }
@@ -1503,7 +2090,18 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 }
                 // 如果批量预取写入了缓存，尽快刷新界面以显示新数据
                 if (changed) {
-                    try { this.refresh(); } catch { /* ignore */ }
+                    try {
+                        // 从队列中撤回已被 prefetch 命中的文件，避免重复处理
+                        const beforeQueueLen = this.fileStatQueue.length;
+                        this.fileStatQueue = this.fileStatQueue.filter(fp => {
+                            const keep = !this.statsCache.has(fp);
+                            if (!keep) this.inFlightFileStats.delete(fp);
+                            return keep;
+                        });
+                        const afterQueueLen = this.fileStatQueue.length;
+                        wcDebug('prefetch:removed-from-queue', beforeQueueLen - afterQueueLen);
+                        this.refresh();
+                    } catch { /* ignore */ }
                 }
             }
         } catch { /* ignore */ }
@@ -1573,12 +2171,12 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`**路径**: \`${resourceUri.fsPath}\``);
             tip.appendMarkdown(`\n\n中文字符数: **${stats.cjkChars}**`);
             tip.appendMarkdown(`\n\n英文单词数: **${stats.words}**`);
-            tip.appendMarkdown(`\n\n非 ASCII 字符数: **${stats.asciiChars}**`);
+            tip.appendMarkdown(`\n\nASCII 字符数: **${stats.asciiChars}**`);
             tip.appendMarkdown(`\n\n非空白字符数: **${stats.nonWSChars}**`);
             tip.appendMarkdown(`\n\n**总字数**: **${stats.total}**`);
             // 附加 UUID（文件或目录）
             try {
-                const fUuid = getFileUuid(resourceUri.fsPath);
+                const fUuid = getFileUuidSync(resourceUri.fsPath);
                 if (fUuid) {
                     tip.appendMarkdown(`\n\nUUID: \`${fUuid}\``);
                 }

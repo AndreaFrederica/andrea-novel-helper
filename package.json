@@ -151,6 +151,11 @@
           "id": "AndreaWebDAVSidebar",
           "title": "%sidebar.webdav.title%",
           "icon": "$(cloud)"
+        },
+        {
+          "id": "AndreaCommentsPanelSidebar",
+          "title": "批注面板",
+          "icon": "$(comment-discussion)"
         }
       ]
     },
@@ -324,6 +329,14 @@
         "icon": {
           "light": "$(json)",
           "dark": "$(json)"
+        }
+      },
+      {
+        "command": "andrea.commentsExplorer.rebindFile",
+        "title": "%command.commentsExplorer.rebindFile.title%",
+        "icon": {
+          "light": "$(link)",
+          "dark": "$(link)"
         }
       },
       {
@@ -1050,6 +1063,11 @@
           "command": "andrea.commentsExplorer.exportToJson",
           "when": "view == andrea.commentsExplorer",
           "group": "3_export@3"
+        },
+        {
+          "command": "andrea.commentsExplorer.rebindFile",
+          "when": "view == andrea.commentsExplorer && (viewItem == unknownFile || viewItem == commentFile)",
+          "group": "1_modification@2"
         }
       ],
       "editor/title": [
@@ -1803,6 +1821,11 @@
           "default": false,
           "description": "%config.wordCount.debug.description%"
         },
+        "AndreaNovelHelper.wordCount.enableBatchProcessing": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用批量处理模式以提升性能。开启时会批量处理文件统计和目录更新；关闭则使用传统的逐个计算模式。\n\n**推荐保持开启**以获得更好的性能。如遇到问题可暂时关闭回退到旧模式。"
+        },
         "AndreaNovelHelper.wordCount.respectGitignore": {
           "type": "boolean",
           "default": true,
@@ -2340,8 +2363,8 @@
       "AndreaCommentsSidebar": [
         {
           "id": "andrea.commentsExplorer",
-          "name": "%view.comments.explorer.name%",
-          "icon": "comment-discussion"
+          "icon": "comment-discussion",
+          "name": "%view.comments.explorer.name%"
         }
       ],
       "AndreaWebDAVSidebar": [
@@ -2360,6 +2383,14 @@
           "id": "andrea.autoGitPanel",
           "name": "AutoGit 管理",
           "icon": "git-branch"
+        }
+      ],
+      "AndreaCommentsPanelSidebar": [
+        {
+          "id": "andrea.commentsPanel",
+          "type": "webview",
+          "name": "批注面板",
+          "icon": "comment-discussion"
         }
       ]
     },
