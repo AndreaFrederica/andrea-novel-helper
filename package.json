@@ -263,6 +263,14 @@
         }
       },
       {
+        "command": "andrea.commentsExplorer.rebindFileToDocument",
+        "title": "%command.commentsExplorer.rebindFileToDocument.title%",
+        "icon": {
+          "light": "$(file-symlink-file)",
+          "dark": "$(file-symlink-file)"
+        }
+      },
+      {
         "command": "andrea.commentsExplorer.openComment",
         "title": "%command.commentsExplorer.openComment.title%",
         "icon": {
@@ -1014,6 +1022,11 @@
         {
           "command": "andrea.commentsExplorer.toggleStatus",
           "when": "view == andrea.commentsExplorer && viewItem == commentThread",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.rebindFileToDocument",
+          "when": "view == andrea.commentsExplorer && viewItem == commentFile",
           "group": "1_modification@1"
         },
         {
@@ -2293,6 +2306,16 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "切换数据库后端时自动运行数据迁移（否则需要手动运行迁移命令）"
+        },
+        "AndreaNovelHelper.startupSnapshot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.startupSnapshot.enabled.description%"
+        },
+        "AndreaNovelHelper.startupSnapshot.deleteOnDisable": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.startupSnapshot.deleteOnDisable.description%"
         }
       }
     },
@@ -2332,6 +2355,12 @@
           "id": "andrea.commentsExplorer",
           "name": "%view.comments.explorer.name%",
           "icon": "comment-discussion"
+        },
+        {
+          "id": "andrea.commentsPanelView",
+          "type": "webview",
+          "name": "%view.comments.panel.name%",
+          "icon": "comment"
         }
       ],
       "AndreaWebDAVSidebar": [

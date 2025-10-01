@@ -271,6 +271,161 @@ export async function removeThreadFromMd(docUuid: string, threadId: string): Pro
   }
 }
 
+/**
+ * 将指定批注线程绑定到新的文档（通过重写 docUuid）
+ * - 从旧文档索引移除该线程
+ * - 将线程添加到新文档索引
+ * - 更新线程元数据中的 docUuid
+ * - 将 Markdown 内容从旧文档文件迁移到新文档文件
+ */
+export async function rebindThreadToDocument(threadId: string, newDocUuid: string): Promise<{ success: boolean; oldDocUuid?: string }>
+{
+  const metadata = await loadCommentMetadata(threadId);
+  if (!metadata) {
+    return { success: false };
+  }
+
+  const oldDocUuid = metadata.docUuid;
+  if (!newDocUuid || oldDocUuid === newDocUuid) {
+    return { success: false, oldDocUuid };
+  }
+
+  try {
+    // 1) 从旧索引移除
+    try {
+      const oldIndex = await loadCommentIndex(oldDocUuid);
+      oldIndex.threadIds = (oldIndex.threadIds || []).filter(id => id !== threadId);
+      await saveCommentIndex(oldIndex);
+    } catch {/* ignore */}
+
+    // 2) 添加到新索引
+    try {
+      const newIndex = await loadCommentIndex(newDocUuid);
+      const set = new Set(newIndex.threadIds || []);
+      set.add(threadId);
+      newIndex.docUuid = newDocUuid;
+      newIndex.threadIds = Array.from(set);
+      await saveCommentIndex(newIndex);
+    } catch {/* ignore */}
+
+    // 3) 迁移 MD 内容：先把旧文档中的该线程移除，再把所有消息写入新文档
+    try {
+      // 移除旧文档中的线程
+      await removeThreadFromMd(oldDocUuid, threadId);
+
+      // 写入新文档中的线程所有消息
+      const msgs = metadata.messages || [];
+      for (const m of msgs) {
+        await saveCommentToMd(newDocUuid, threadId, {
+          id: m.id || threadId,
+          author: m.author || 'Unknown',
+          createdAt: m.createdAt || metadata.createdAt,
+          content: m.body || ''
+        });
+      }
+    } catch {/* ignore */}
+
+    // 4) 更新元数据中的 docUuid
+    metadata.docUuid = newDocUuid;
+    metadata.updatedAt = Date.now();
+    await saveCommentMetadata(metadata);
+
+    return { success: true, oldDocUuid };
+  } catch (err) {
+    console.error('rebindThreadToDocument failed:', err);
+    return { success: false, oldDocUuid };
+  }
+}
+
+/**
+ * 将某个文档下的全部批注迁移到另一个文档（重写所有线程的 docUuid）
+ * - 合并索引：old -> new
+ * - 更新所有线程元数据中的 docUuid
+ * - 合并/重命名 MD 内容文件
+ */
+export async function rebindAllThreadsToDocument(oldDocUuid: string, newDocUuid: string): Promise<{ success: boolean; moved: number }>
+{
+  if (!oldDocUuid || !newDocUuid || oldDocUuid === newDocUuid) {
+    return { success: false, moved: 0 };
+  }
+
+  try {
+    const oldIndex = await loadCommentIndex(oldDocUuid);
+    const newIndex = await loadCommentIndex(newDocUuid);
+
+    const oldIds = Array.isArray(oldIndex.threadIds) ? oldIndex.threadIds.slice() : [];
+    const newSet = new Set<string>(Array.isArray(newIndex.threadIds) ? newIndex.threadIds : []);
+
+    // 1) 更新每个线程的元数据 docUuid 并保存
+    for (const tid of oldIds) {
+      const meta = await loadCommentMetadata(tid);
+      if (!meta) continue;
+      meta.docUuid = newDocUuid;
+      meta.updatedAt = Date.now();
+      await saveCommentMetadata(meta);
+      newSet.add(tid);
+    }
+
+    // 2) 保存新/旧索引
+    newIndex.docUuid = newDocUuid;
+    newIndex.threadIds = Array.from(newSet);
+    await saveCommentIndex(newIndex);
+
+    oldIndex.threadIds = [];
+    await saveCommentIndex(oldIndex);
+    // 如果旧文档已无任何线程，清理其索引文件以避免“残留空文件”
+    try {
+      const oldIdxPath = indexFilePathForUuid(oldDocUuid);
+      if (oldIdxPath && fs.existsSync(oldIdxPath)) {
+        fs.unlinkSync(oldIdxPath);
+      }
+    } catch { /* ignore */ }
+
+    // 3) 合并/转移 MD 文件
+    try {
+      const oldMd = mdFilePathForDocument(oldDocUuid);
+      const newMd = mdFilePathForDocument(newDocUuid);
+      if (oldMd && newMd) {
+        const oldExists = fs.existsSync(oldMd);
+        if (oldExists) {
+          const newExists = fs.existsSync(newMd);
+          if (!newExists) {
+            // 直接重命名迁移（更快）
+            try { fs.renameSync(oldMd, newMd); }
+            catch {
+              // 回退：读写复制
+              try {
+                const parsed = MdCommentStorage.readMdFile(oldMd);
+                MdCommentStorage.writeMdFile(newMd, parsed.preamble, parsed.threads, parsed.otherSections);
+                fs.unlinkSync(oldMd);
+              } catch {/* ignore */}
+            }
+          } else {
+            // 合并两个文件的线程
+            try {
+              const oldParsed = MdCommentStorage.readMdFile(oldMd);
+              const newParsed = MdCommentStorage.readMdFile(newMd);
+              const existing = new Set(newParsed.threads.map(t => t.threadId));
+              for (const t of oldParsed.threads) {
+                if (!existing.has(t.threadId)) {
+                  newParsed.threads.push(t);
+                }
+              }
+              MdCommentStorage.writeMdFile(newMd, newParsed.preamble || oldParsed.preamble, newParsed.threads, newParsed.otherSections);
+              try { fs.unlinkSync(oldMd); } catch {/* ignore */}
+            } catch {/* ignore */}
+          }
+        }
+      }
+    } catch {/* ignore */}
+
+    return { success: true, moved: oldIds.length };
+  } catch (err) {
+    console.error('rebindAllThreadsToDocument failed:', err);
+    return { success: false, moved: 0 };
+  }
+}
+
 // 支持多个选择范围的addThread函数
 export async function addThread(
   doc: vscode.TextDocument, 

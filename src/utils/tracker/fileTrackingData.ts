@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-// 仅在需要判断编辑器是否打开数据库文件时才使用 vscode API
+// 仅在需要判断编辑器是否打开数据库文件时使用 vscode API
 // 避免循环依赖：此文件不被激活阶段直接 import 其它使用本模块的代码
 import * as vscode from 'vscode';
 import { IDatabaseBackend } from '../../database/IDatabaseBackend';
@@ -124,6 +124,10 @@ export class FileTrackingDataManager {
     public database: FileTrackingDatabase; // 内存聚合（加载后）
     private dbDir: string; // 新的分片目录 .anh-fsdb
     private indexPath: string; // 索引文件 .anh-fsdb/index.json
+    private snapshotDir: string; // 启动快照目录
+    private trackerSnapshotPath: string; // 文件追踪快照文件
+    private wcSnapshotPath: string; // WordCount 列表快照文件
+    private startupSnapshotLoaded = false;
     private useSharded: boolean = true; // 始终启用分片
     private lazyLoadShards: boolean = true; // 启动仅加载索引按需加载
     private trustCallerFilters: boolean = false; // 如果启用，则信任调用者已应用过滤，可跳过部分重复检查
@@ -330,6 +334,9 @@ export class FileTrackingDataManager {
         this.dbDir = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb');
         this.indexPath = path.join(this.dbDir, 'index.json');
         this.ensureDirectoryExists();
+        this.snapshotDir = path.join(this.dbDir, 'snapshots');
+        this.trackerSnapshotPath = path.join(this.snapshotDir, 'tracker-snapshot.json');
+        this.wcSnapshotPath = path.join(this.snapshotDir, 'wordcount-files.json');
         this.ensureDbDir();
         // 读取配置：是否信任调用者的过滤器（可略过部分重复检查）
         try {
@@ -347,6 +354,8 @@ export class FileTrackingDataManager {
             if (!this.database.version) { (this.database as any).version = this.DB_VERSION; }
             if (!this.database.lastUpdated) { (this.database as any).lastUpdated = Date.now(); }
         }
+        // 启动快照：若开启则优先加载快照覆盖内存数据库（避免重读索引/分片）
+        this.tryLoadStartupSnapshot();
         this.migrateKeysToRelativeAndDedup();
         this.ensureDirectoryExists();
         // 计算初始数据哈希
@@ -355,19 +364,117 @@ export class FileTrackingDataManager {
         try { this.purgeGitEntries(); } catch (e) { console.warn('[FileTracking] purgeGitEntries 失败（忽略）', e); }
         // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
         this.migrateIfNeeded();
-        // 惰性：若存在 index 且开启惰性，则仅加载索引；否则全量加载分片
-        if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
-            this.loadIndexOnly();
+        const loadRoutine = () => {
+            try {
+                if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
+                    this.loadIndexOnly();
+                } else {
+                    this.loadShardedFiles();
+                }
+            } catch (e) {
+                console.warn('[FileTracking] 启动快照后的后台加载失败', e);
+            }
+        };
+        if (this.startupSnapshotLoaded) {
+            setTimeout(loadRoutine, 0);
         } else {
-            this.loadShardedFiles();
+            loadRoutine();
         }
-        // 异步初始化数据库后端（仅初始化，不迁移数据）
-        this.initializeBackend();
+        // 同步初始化数据库后端（确保后端的path2uuid在使用前已加载）
+        this.initializeBackendSync();
         this.getAllWritingStatsAsync = this.getAllWritingStatsAsync.bind(this);
         this.streamWritingStats = this.streamWritingStats.bind(this);
         this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
         this.filterFilesAsync = this.filterFilesAsync.bind(this);
         this.getStatsAsync = this.getStatsAsync.bind(this);
+    }
+    /** 读取启动快照（若已启用） */
+    private tryLoadStartupSnapshot(): void {
+        try {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.startupSnapshot');
+            const enabled = cfg.get<boolean>('enabled', true);
+            if (!enabled) {
+                if (cfg.get<boolean>('deleteOnDisable', true)) { this.deleteSnapshotsSafe(); }
+                this.startupSnapshotLoaded = false;
+                return;
+            }
+            if (!fs.existsSync(this.trackerSnapshotPath)) {return;}
+            const raw = fs.readFileSync(this.trackerSnapshotPath, 'utf8');
+            const snap = JSON.parse(raw);
+            if (snap && snap.files && snap.pathToUuid) {
+                this.database.files = snap.files;
+                this.database.pathToUuid = snap.pathToUuid;
+                // 规范化：还原绝对路径，填入目录标记
+                for (const [uuid, meta] of Object.entries(this.database.files)) {
+                    const m = meta as any;
+                    if (m && m.filePath) { m.filePath = this.toAbsPath(m.filePath); }
+                    if (m?.isDirectory) { this.indexDirFlag.add(uuid); }
+                }
+                console.log('[FileTracking] 启动：已载入追踪快照');
+                this.startupSnapshotLoaded = true;
+                // 在 UI 上提示用户已载入启动快照，并提供打开快照文件夹的快捷操作
+                try {
+                    // 在某些非 UI 环境 vscode.window 可能不存在，故用 try/catch 保护
+                    if (vscode && vscode.window && typeof vscode.window.showInformationMessage === 'function') {
+                        const prompt = '已载入写作追踪启动快照以加速启动。要打开快照目录查看文件吗？';
+                        // showInformationMessage 返回 Thenable（PromiseLike），直接调用 .catch 在某些环境会报类型问题
+                        Promise.resolve(vscode.window.showInformationMessage(prompt, '打开快照文件夹'))
+                            .then(selection => {
+                                if (selection === '打开快照文件夹') {
+                                    try {
+                                        const uri = vscode.Uri.file(this.snapshotDir);
+                                        // revealFileInOS 在 VS Code 中会在文件管理器中显示该路径
+                                        vscode.commands.executeCommand('revealFileInOS', uri);
+                                    } catch (e) { /* ignore */ }
+                                }
+                            })
+                            .catch(() => { /* ignore */ });
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        } catch (e) {
+            console.warn('[FileTracking] 读取启动快照失败（忽略）', e);
+        }
+    }
+    /** 写出启动快照（在扩展关闭时调用） */
+    public writeStartupSnapshot(): void {
+        try {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.startupSnapshot');
+            const enabled = cfg.get<boolean>('enabled', true);
+            if (!enabled) { if (cfg.get<boolean>('deleteOnDisable', true)) {this.deleteSnapshotsSafe();} return; }
+            if (!fs.existsSync(this.snapshotDir)) { fs.mkdirSync(this.snapshotDir, { recursive: true }); }
+            const minimal: any = { version: this.database.version, lastUpdated: Date.now(), files: {}, pathToUuid: this.database.pathToUuid };
+            // 压缩：仅写必要字段，路径按 toRelKey 存储（跨平台）
+            for (const [uuid, meta] of Object.entries(this.database.files)) {
+                const m = meta as any;
+                minimal.files[uuid] = {
+                    uuid,
+                    filePath: this.toRelKey(m.filePath || ''),
+                    fileName: m.fileName,
+                    fileExtension: m.fileExtension,
+                    size: m.size,
+                    mtime: m.mtime,
+                    isDirectory: m.isDirectory,
+                    wordCountStats: m.wordCountStats || undefined
+                };
+            }
+            fs.writeFileSync(this.trackerSnapshotPath, JSON.stringify(minimal));
+            // WordCount 文件列表由 WordCountProvider 写，若该文件不存在，此处不创建
+        } catch (e) { console.warn('[FileTracking] 写出启动快照失败（忽略）', e); }
+    }
+    private deleteSnapshotsSafe(): void {
+        try { if (fs.existsSync(this.trackerSnapshotPath)) fs.unlinkSync(this.trackerSnapshotPath); } catch {}
+        try { if (fs.existsSync(this.wcSnapshotPath)) fs.unlinkSync(this.wcSnapshotPath); } catch {}
+    }
+
+    /**
+     * 同步触发数据库后端初始化（不等待完成）
+     */
+    private initializeBackendSync(): void {
+        // 在后台异步初始化后端
+        this.initializeBackend().catch(err => {
+            console.error('[FileTracking] 后端初始化失败（后台）:', err);
+        });
     }
 
     /**
@@ -1748,6 +1855,9 @@ export class FileTrackingDataManager {
     }
     private saveSharded(force: boolean): void {
         if (!this.hasUnsavedChanges && !force) { return; }
+
+
+
         if (force && this.dirtyShardUuids.size === 0 && this.removedShardUuids.size === 0) {
             // 全量写入（包括惰性未加载但存在 pathToUuid 的分片 -> 若未加载则跳过，因为没有最新内存副本）
             for (const uuid of Object.values(this.database.pathToUuid)) {
@@ -1795,4 +1905,77 @@ export class FileTrackingDataManager {
     public markAsSaved(filePath: string) { this.markFileSaved(filePath); }
     public handleFileDeleted(filePath: string): boolean { const uuid = this.getFileUuid(filePath); if (!uuid) { return false; } this.removeFile(filePath); return true; }
     public async dispose(): Promise<void> { await this.forceSave(); }
+
+    /**
+     * 批量获取一组路径的字数统计缓存（优先后端批量，回退分片）
+     * 返回 Map<绝对路径, { stats, mtime, size }>
+     */
+    public async getWordCountStatsBatchByPaths(filePaths: string[]): Promise<Map<string, { stats: any; mtime?: number; size?: number }>> {
+        const out = new Map<string, { stats: any; mtime?: number; size?: number }>();
+        if (!filePaths || filePaths.length === 0) { return out; }
+
+        // 预先构建 key/uuid 映射
+        const absList = filePaths.map(p => this.toAbsPath(this.toRelKey(p))); // 归一化为绝对
+        const keyToAbs = new Map<string, string>();
+        const uuidList: string[] = [];
+        const uuidToAbs = new Map<string, string>();
+
+        for (const abs of absList) {
+            const key = this.toRelKey(abs);
+            keyToAbs.set(key, abs);
+            const uuid = this.database.pathToUuid[key];
+            if (uuid) {
+                uuidList.push(uuid);
+                uuidToAbs.set(uuid, abs);
+            }
+        }
+
+        // 优先后端批量查询
+        let metaMap: Map<string, any> | null = null;
+        if (this.backend && this.backendInitialized && uuidList.length) {
+            try {
+                if (typeof (this.backend as any).loadFileMetadataBatch === 'function') {
+                    metaMap = await (this.backend as any).loadFileMetadataBatch(uuidList);
+                }
+            } catch (e) {
+                console.warn('[FileTracking] getWordCountStatsBatchByPaths: backend batch failed, fallback shards', e);
+                metaMap = null;
+            }
+        }
+
+        // 合并后端结果
+        if (metaMap) {
+            for (const [uuid, meta] of metaMap.entries()) {
+                const abs = uuidToAbs.get(uuid);
+                if (!abs || !meta) { continue; }
+                const m = typeof meta === 'string' ? JSON.parse(meta) : meta;
+                if (m?.wordCountStats) {
+                    out.set(abs, { stats: m.wordCountStats, mtime: m.mtime, size: m.size });
+                    // 写回内存缓存
+                    this.database.files[uuid] = m;
+                }
+            }
+        }
+
+        // 回退：对缺失的 uuid 使用分片读取
+        const missingUuids: string[] = [];
+        for (const uuid of uuidList) {
+            const abs = uuidToAbs.get(uuid)!;
+            if (!out.has(abs)) { missingUuids.push(uuid); }
+        }
+        if (missingUuids.length) {
+            for (const uuid of missingUuids) {
+                try {
+                    const m = await this.getMetaAsync(uuid, true);
+                    const abs = uuidToAbs.get(uuid);
+                    if (!abs || !m) { continue; }
+                    if (m.wordCountStats) {
+                        out.set(abs, { stats: m.wordCountStats, mtime: m.mtime, size: m.size });
+                    }
+                } catch { /* ignore */ }
+            }
+        }
+
+        return out;
+    }
 }

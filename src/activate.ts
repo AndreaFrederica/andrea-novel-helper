@@ -42,6 +42,7 @@ import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
 import { PreviewManager, registerPreviewPane, stopAllPreviewTTS } from './Provider/view/previewPane';
 import { registerCommentsFeature } from './comments/controller';
+import { CommentsPanelSidebarProvider } from './Provider/view/commentsPanelSidebar';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
 import { forwardEnterToMaioOrNative } from './typeset/core/maioRoute';
@@ -333,7 +334,15 @@ export async function activate(context: vscode.ExtensionContext) {
         (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
         _previewManager = previewManager; // 模块级保存
         // 批注专用面板与装饰
-        try { registerCommentsFeature(context); } catch (e) { console.warn('[ANH] registerCommentsFeature failed', e); }
+        let commentsController: any;
+        try { commentsController = registerCommentsFeature(context); } catch (e) { console.warn('[ANH] registerCommentsFeature failed', e); }
+        if (commentsController) {
+            try {
+                context.subscriptions.push(vscode.window.registerWebviewViewProvider('andrea.commentsPanelView', new CommentsPanelSidebarProvider(commentsController)));
+            } catch (e) {
+                console.warn('[ANH] register comments sidebar view failed', e);
+            }
+        }
 
         // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
         setTimeout(() => {
@@ -605,6 +614,10 @@ export async function activate(context: vscode.ExtensionContext) {
     registerOpenRoleSource(context);
         // Typo feature (stateful, per-paragraph scanning + quick fixes)
         registerTypoFeature(context);
+
+        // 提前初始化全局文件追踪（供 WordCount/Comments 等功能写入/读取数据库）
+        // 注意：timeStats 也依赖该初始化，保持在其之前
+        try { initializeGlobalFileTracking(context); } catch (e) { console.warn('[ANH] initializeGlobalFileTracking early failed', e); }
 
         // Word Count 树视图
         // 手动排序管理器
@@ -974,9 +987,9 @@ export async function activate(context: vscode.ExtensionContext) {
         // 注册字数统计视图的右键菜单命令
         registerWordCountContextCommands(context, wordCountProvider);
 
-        // 初始化全局文件追踪（为备份等功能提供基础）
+        // 初始化全局文件追踪（已提前初始化；此处保留但不重复执行）
         // 注意：必须在 timeStats 之前初始化，因为 timeStats 依赖于全局文件追踪
-        initializeGlobalFileTracking(context);
+        // initializeGlobalFileTracking(context);
 
         activateTimeStats(context);
 
