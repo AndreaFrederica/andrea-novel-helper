@@ -24,8 +24,9 @@ export function registerCommentsFeature(context: vscode.ExtensionContext) {
   return controller;
 }
 
-class CommentsController {
+export class CommentsController {
   private panel: vscode.WebviewPanel | undefined;
+  private sidebarView?: vscode.WebviewView;
   private activeDocUri: string | undefined;
   private threadsByDoc = new Map<string, CommentThreadData[]>();
   private decorationUnderline?: vscode.TextEditorDecorationType;
@@ -68,7 +69,7 @@ class CommentsController {
     // Listeners for scrolling & changes
     this.disposables.push(
       vscode.window.onDidChangeTextEditorVisibleRanges(e => {
-        if (!this.panel) return; if (!e.textEditor.document) return; if (this.activeDocUri !== e.textEditor.document.uri.toString()) return;
+        if (!this.hasAnyHost()) return; if (!e.textEditor.document) return; if (this.activeDocUri !== e.textEditor.document.uri.toString()) return;
         this.postEditorScroll(e.textEditor.document);
       }),
       vscode.window.onDidChangeActiveTextEditor(ed => {
@@ -80,7 +81,7 @@ class CommentsController {
         // 始终为当前文档确保加载装饰
         this.ensureCommentsLoaded(ed.document);
         // 若面板存在，同步绑定
-        if (this.panel) { this.bindPanelToDoc(ed.document); }
+        if (this.hasAnyHost()) { this.bindToDoc(ed.document); }
       }),
       // 监听编辑器选择变化（光标移动、文本选择等）
       vscode.window.onDidChangeTextEditorSelection(e => {
@@ -114,7 +115,14 @@ class CommentsController {
     this.disposables.push({ dispose: () => { if (this.heartbeat) clearInterval(this.heartbeat); this.heartbeat = undefined; } });
   }
 
-  dispose() { this.disposables.forEach(d => d.dispose()); this.disposeDecorations(); commentDiagnosticCollection.dispose(); }
+  dispose() {
+    this.disposables.forEach(d => d.dispose());
+    this.sidebarView = undefined;
+    this.panel = undefined;
+    setActiveCommentPanel(undefined);
+    this.disposeDecorations();
+    commentDiagnosticCollection.dispose();
+  }
 
   setDefinitionProvider(provider: CommentDefinitionProvider) {
     this.definitionProvider = provider;
@@ -167,10 +175,25 @@ class CommentsController {
     return doc.uri.scheme === 'file' && (doc.languageId === 'markdown' || doc.languageId === 'plaintext');
   }
 
+  private getWebviews(): vscode.Webview[] {
+    const views: vscode.Webview[] = [];
+    if (this.panel) views.push(this.panel.webview);
+    if (this.sidebarView) views.push(this.sidebarView.webview);
+    return views;
+  }
+
+  private hasAnyHost(): boolean {
+    return this.panel !== undefined || this.sidebarView !== undefined;
+  }
+
+  private postMessage(message: any) {
+    for (const webview of this.getWebviews()) {
+      try { webview.postMessage(message); } catch { /* ignore */ }
+    }
+  }
+
   private ensurePanel(): vscode.WebviewPanel {
-    // 若已有有效面板（关闭时会在 onDidDispose 中置为 undefined），直接复用
     if (this.panel) {
-      // 确保活跃状态正确设置
       if (this.activeDocUri) {
         setActiveCommentPanel(this.activeDocUri);
       }
@@ -186,75 +209,121 @@ class CommentsController {
         retainContextWhenHidden: true,
       }
     );
-    panel.iconPath = {
-      light: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'comments_light.svg'),
-      dark: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'comments_dark.svg'),
-    };
-    panel.onDidDispose(() => { 
-      this.panel = undefined;
-      // 清除活跃批注面板状态
-      setActiveCommentPanel(undefined);
-    }, null, this.disposables);
-    panel.onDidChangeViewState(e => {
-      if (e.webviewPanel.active) {
-        // 面板获得焦点时设置活跃状态
-        if (this.activeDocUri) {
-          setActiveCommentPanel(this.activeDocUri);
-        }
-      } else {
-        // 面板失去焦点时清除活跃状态
-        setActiveCommentPanel(undefined);
-      }
-    }, null, this.disposables);
-    
-    // 面板创建时立即设置活跃状态（如果有绑定文档）
-    if (this.activeDocUri) {
-      setActiveCommentPanel(this.activeDocUri);
-    }
-    panel.webview.onDidReceiveMessage(msg => this.onMessage(msg));
-    panel.webview.html = this.wrapHtml(panel.webview);
-    this.panel = panel;
+    this.initializePanel(panel);
     return panel;
   }
 
-  private async deserialize(panel: vscode.WebviewPanel, state: any) {
-    // Re-setup panel and bind saved doc
-    this.panel = panel;
-    panel.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')], retainContextWhenHidden: true } as any;
+  private initializePanel(panel: vscode.WebviewPanel) {
     panel.iconPath = {
       light: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'comments_light.svg'),
       dark: vscode.Uri.joinPath(this.context.extensionUri, 'images', 'comments_dark.svg'),
     };
+    panel.onDidDispose(() => {
+      if (this.panel === panel) {
+        this.panel = undefined;
+        if (!this.sidebarView) {
+          setActiveCommentPanel(undefined);
+        }
+      }
+    }, null, this.disposables);
+    panel.onDidChangeViewState(e => {
+      if (e.webviewPanel.active) {
+        if (this.activeDocUri) {
+          setActiveCommentPanel(this.activeDocUri);
+        }
+      } else if (!this.sidebarView) {
+        setActiveCommentPanel(undefined);
+      }
+    }, null, this.disposables);
     panel.webview.onDidReceiveMessage(msg => this.onMessage(msg));
-    panel.onDidDispose(() => { this.panel = undefined; });
     panel.webview.html = this.wrapHtml(panel.webview);
+    this.panel = panel;
+    if (this.activeDocUri) {
+      setActiveCommentPanel(this.activeDocUri);
+    }
+  }
 
-    // Resolve doc to bind
-    const saved = (state && typeof state.docUri === 'string') ? state.docUri : this.context.workspaceState.get<string>(CommentsController.STATE_KEY);
-    let targetDoc: vscode.TextDocument | undefined;
-    if (saved) {
-      try { const uri = vscode.Uri.parse(saved); targetDoc = await vscode.workspace.openTextDocument(uri); } catch { /* ignore */ }
+  public async attachSidebarView(view: vscode.WebviewView) {
+    this.sidebarView = view;
+    view.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
+      retainContextWhenHidden: true,
+    } as any;
+    view.webview.onDidReceiveMessage(msg => this.onMessage(msg));
+    view.onDidDispose(() => {
+      if (this.sidebarView === view) {
+        this.sidebarView = undefined;
+        if (!this.panel) {
+          setActiveCommentPanel(undefined);
+        }
+      }
+    });
+    view.onDidChangeVisibility(() => {
+      if (view.visible) {
+        if (this.activeDocUri) {
+          setActiveCommentPanel(this.activeDocUri);
+        }
+        this.refreshCurrentHost();
+      } else if (!this.panel) {
+        setActiveCommentPanel(undefined);
+      }
+    });
+    view.webview.html = this.wrapHtml(view.webview);
+    if (view.visible && this.activeDocUri) {
+      setActiveCommentPanel(this.activeDocUri);
     }
-    if (!targetDoc || !(targetDoc.languageId === 'markdown' || targetDoc.languageId === 'plaintext')) {
-      const ed = vscode.window.activeTextEditor; if (ed && (ed.document.languageId === 'markdown' || ed.document.languageId === 'plaintext')) targetDoc = ed.document;
-    }
-    
-    // 如果仍然没有找到目标文档，延迟绑定直到有合适的编辑器打开
+
+    const targetDoc = await this.pickDocument();
     if (targetDoc) {
-      await this.bindPanelToDoc(targetDoc);
+      await this.bindToDoc(targetDoc);
     } else {
-      // 监听编辑器变化，一旦有合适的文档就立即绑定
-      const disposable = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-        if (editor && (editor.document.languageId === 'markdown' || editor.document.languageId === 'plaintext')) {
-          await this.bindPanelToDoc(editor.document);
-          disposable.dispose(); // 绑定成功后移除监听器
+      const disposable = vscode.window.onDidChangeActiveTextEditor(async editor => {
+        if (editor && this.isSupportedDoc(editor.document)) {
+          await this.bindToDoc(editor.document);
+          disposable.dispose();
         }
       });
-      // 5秒后自动清理监听器，避免内存泄漏
       setTimeout(() => disposable.dispose(), 5000);
     }
   }
 
+  private async deserialize(panel: vscode.WebviewPanel, state: any) {
+    // Re-setup panel and bind saved doc
+    panel.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')], retainContextWhenHidden: true } as any;
+    this.initializePanel(panel);
+
+    // Resolve doc to bind
+    const saved = state && typeof state.docUri === 'string' ? state.docUri : undefined;
+    let targetDoc = await this.pickDocument(saved);
+
+    if (targetDoc) {
+      await this.bindToDoc(targetDoc);
+    } else {
+      const disposable = vscode.window.onDidChangeActiveTextEditor(async (editor) => {
+        if (editor && this.isSupportedDoc(editor.document)) {
+          await this.bindToDoc(editor.document);
+          disposable.dispose();
+        }
+      });
+      setTimeout(() => disposable.dispose(), 5000);
+    }
+  }
+
+
+  private async refreshCurrentHost() {
+    if (!this.hasAnyHost()) { return; }
+    if (!this.activeDocUri) {
+      return;
+    }
+    try {
+      const uri = vscode.Uri.parse(this.activeDocUri);
+      const doc = await vscode.workspace.openTextDocument(uri);
+      if (!this.isSupportedDoc(doc)) { return; }
+      const threads = this.threadsByDoc.get(doc.uri.toString()) || [];
+      this.postInit(doc, threads);
+    } catch { /* ignore */ }
+  }
   private wrapHtml(webview: vscode.Webview): string {
     const nonce = String(Math.random()).slice(2);
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'comments.js'));
@@ -312,12 +381,17 @@ class CommentsController {
     const ed = vscode.window.activeTextEditor;
     if (!ed || !this.isSupportedDoc(ed.document)) { vscode.window.showInformationMessage('请选择 Markdown/纯文本文件'); return; }
     const panel = this.ensurePanel();
-    await this.bindPanelToDoc(ed.document);
+    await this.bindToDoc(ed.document);
     panel.reveal(undefined, true);
   }
 
   private async bindPanelToDoc(doc: vscode.TextDocument) {
-    const panel = this.ensurePanel();
+    this.ensurePanel();
+    await this.bindToDoc(doc);
+  }
+
+  private async bindToDoc(doc: vscode.TextDocument) {
+    if (!this.isSupportedDoc(doc)) return;
     this.activeDocUri = doc.uri.toString();
     // 设置活跃批注面板状态（无论面板是否当前活跃）
     setActiveCommentPanel(this.activeDocUri);
@@ -330,6 +404,28 @@ class CommentsController {
     this.postInit(doc, data);
     this.applyDecorations(doc);
     this.postEditorScroll(doc);
+  }
+
+  private async pickDocument(preferred?: string): Promise<vscode.TextDocument | undefined> {
+    const candidates: string[] = [];
+    if (this.activeDocUri) candidates.push(this.activeDocUri);
+    if (preferred) candidates.push(preferred);
+    const stored = this.context.workspaceState.get<string>(CommentsController.STATE_KEY);
+    if (stored) candidates.push(stored);
+
+    for (const cand of candidates) {
+      if (!cand) continue;
+      try {
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(cand));
+        if (this.isSupportedDoc(doc)) return doc;
+      } catch { /* ignore */ }
+    }
+
+    const editorDoc = vscode.window.activeTextEditor?.document;
+    if (editorDoc && this.isSupportedDoc(editorDoc)) {
+      return editorDoc;
+    }
+    return undefined;
   }
 
   private async addForSelection() {
@@ -541,14 +637,14 @@ class CommentsController {
   }
 
   private postInit(doc: vscode.TextDocument, threads: CommentThreadData[]) {
-    if (!this.panel) return;
-    this.panel.webview.postMessage({ type: 'init', docUri: doc.uri.toString() });
+    if (!this.hasAnyHost()) return;
+    this.postMessage({ type: 'init', docUri: doc.uri.toString() });
     this.postThreads(doc, threads);
     this.postEditorScroll(doc);
   }
 
   private postThreads(doc: vscode.TextDocument, threads: CommentThreadData[]) {
-    if (!this.panel) return;
+    if (!this.hasAnyHost()) return;
     const metrics = this.estimateEditorPixels(doc);
     const items = threads.map(t => ({
       id: t.id,
@@ -561,7 +657,7 @@ class CommentsController {
       updatedAt: t.updatedAt,
       messageCount: t.messages ? t.messages.length : 0
     }));
-    this.panel.webview.postMessage({ type: 'threads', lineHeight: metrics.lineHeight, items, totalLines: doc.lineCount, topPad: metrics.topPad || 0 });
+    this.postMessage({ type: 'threads', lineHeight: metrics.lineHeight, items, totalLines: doc.lineCount, topPad: metrics.topPad || 0 });
   }
 
   private debouncedPostEditorScroll(doc: vscode.TextDocument, topLine: number) {
@@ -593,7 +689,7 @@ class CommentsController {
   }
 
   private postEditorScroll(doc: vscode.TextDocument) {
-    if (!this.panel) return;
+    if (!this.hasAnyHost()) return;
 
     // 在面板驱动的 reveal 窗口内，抑制编辑器 -> 面板的滚动上报，避免回环导致“抽搐”
     if (this.suppressEditorToPanelUntil && Date.now() < this.suppressEditorToPanelUntil) {
@@ -620,7 +716,7 @@ class CommentsController {
     const ratio = maxTop > 0 ? Math.min(1, top / maxTop) : 0;
     const metrics = this.estimateEditorPixels(doc);
     console.log('Sending editor scroll:', { ratio, top, docUri: doc.uri.toString() });
-    this.panel.webview.postMessage({ type: 'editorScroll', ratio, meta: { top, maxTop, total, visibleApprox: vis, beyond }, lineHeight: metrics.lineHeight });
+    this.postMessage({ type: 'editorScroll', ratio, meta: { top, maxTop, total, visibleApprox: vis, beyond }, lineHeight: metrics.lineHeight });
   }
 
   private estimateEditorPixels(doc: vscode.TextDocument) {
@@ -669,11 +765,11 @@ class CommentsController {
     // 确保装饰
     if (!this.threadsByDoc.has(docUri)) { this.ensureCommentsLoaded(doc); }
     // 面板绑定
-    if (this.panel && this.activeDocUri !== docUri) { this.bindPanelToDoc(doc); }
+    if (this.hasAnyHost() && this.activeDocUri !== docUri) { this.bindToDoc(doc); }
     // 滚动同步（若面板已开且顶行变化）
     const vr = ed.visibleRanges[0];
     const top = vr ? vr.start.line : 0;
-    if (this.panel) {
+    if (this.hasAnyHost()) {
       const changed = (!this.lastTick || this.lastTick.docUri !== docUri || this.lastTick.topLine !== top);
       if (changed) { this.debouncedPostEditorScroll(doc, top); }
     }
@@ -1285,13 +1381,11 @@ class CommentsController {
         this.postThreads(targetDoc, updated);
         
         // 向面板发送垃圾回收结果
-        if (this.panel) {
-          this.panel.webview.postMessage({
-            type: 'garbageCollectResult',
-            deletedCount: result.deletedCount,
-            commentIds: result.commentIds
-          });
-        }
+        this.postMessage({
+          type: 'garbageCollectResult',
+          deletedCount: result.deletedCount,
+          commentIds: result.commentIds
+        });
       } catch (err) {
         console.error('[Controller] Garbage collection failed:', err);
       }
@@ -1328,13 +1422,11 @@ class CommentsController {
         }
         
         // 向面板发送恢复结果
-        if (this.panel) {
-          this.panel.webview.postMessage({
-            type: 'restoreCommentResult',
-            success,
-            commentId: msg.id
-          });
-        }
+        this.postMessage({
+          type: 'restoreCommentResult',
+          success,
+          commentId: msg.id
+        });
       } catch (err) {
         console.error('[Controller] Restore comment failed:', err);
       }

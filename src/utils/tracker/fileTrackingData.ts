@@ -127,6 +127,7 @@ export class FileTrackingDataManager {
     private snapshotDir: string; // 启动快照目录
     private trackerSnapshotPath: string; // 文件追踪快照文件
     private wcSnapshotPath: string; // WordCount 列表快照文件
+    private startupSnapshotLoaded = false;
     private useSharded: boolean = true; // 始终启用分片
     private lazyLoadShards: boolean = true; // 启动仅加载索引按需加载
     private trustCallerFilters: boolean = false; // 如果启用，则信任调用者已应用过滤，可跳过部分重复检查
@@ -363,11 +364,21 @@ export class FileTrackingDataManager {
         try { this.purgeGitEntries(); } catch (e) { console.warn('[FileTracking] purgeGitEntries 失败（忽略）', e); }
         // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
         this.migrateIfNeeded();
-        // 惰性：若存在 index 且开启惰性，则仅加载索引；否则全量加载分片
-        if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
-            this.loadIndexOnly();
+        const loadRoutine = () => {
+            try {
+                if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
+                    this.loadIndexOnly();
+                } else {
+                    this.loadShardedFiles();
+                }
+            } catch (e) {
+                console.warn('[FileTracking] 启动快照后的后台加载失败', e);
+            }
+        };
+        if (this.startupSnapshotLoaded) {
+            setTimeout(loadRoutine, 0);
         } else {
-            this.loadShardedFiles();
+            loadRoutine();
         }
         // 同步初始化数据库后端（确保后端的path2uuid在使用前已加载）
         this.initializeBackendSync();
@@ -383,8 +394,8 @@ export class FileTrackingDataManager {
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.startupSnapshot');
             const enabled = cfg.get<boolean>('enabled', true);
             if (!enabled) {
-                const cleanup = cfg.get<boolean>('deleteOnDisable', true);
-                if (cleanup) { this.deleteSnapshotsSafe(); }
+                if (cfg.get<boolean>('deleteOnDisable', true)) { this.deleteSnapshotsSafe(); }
+                this.startupSnapshotLoaded = false;
                 return;
             }
             if (!fs.existsSync(this.trackerSnapshotPath)) return;
@@ -400,6 +411,7 @@ export class FileTrackingDataManager {
                     if (m?.isDirectory) { this.indexDirFlag.add(uuid); }
                 }
                 console.log('[FileTracking] 启动：已载入追踪快照');
+                this.startupSnapshotLoaded = true;
                 // 在 UI 上提示用户已载入启动快照，并提供打开快照文件夹的快捷操作
                 try {
                     // 在某些非 UI 环境 vscode.window 可能不存在，故用 try/catch 保护
