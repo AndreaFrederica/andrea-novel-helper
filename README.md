@@ -1,8 +1,7 @@
 # Andrea Novel Helper (小说助手)
 
-> **最新版本：0.4.4 (2025-09-28)**  
-> 🔗 **重大更新：新增角色关系图编辑器，支持可视化角色关系管理**  
-> 📄 **格式支持：新增 .rjson5 和 .ojson5 文件格式支持**  
+> **最新版本：0.4.5 (2025-10-01)**  
+> 🔗 **重大更新：支持快速启动和SQLite后端**  
 > 📝 近期已大幅重构异步加载与性能管线，若从老版本升级，建议阅读"近期版本速览"。
 
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)
