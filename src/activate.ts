@@ -42,6 +42,7 @@ import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
 import { PreviewManager, registerPreviewPane, stopAllPreviewTTS } from './Provider/view/previewPane';
 import { registerCommentsFeature } from './comments/controller';
+import { CommentsPanelSidebarProvider } from './Provider/view/commentsPanelSidebar';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
 import { forwardEnterToMaioOrNative } from './typeset/core/maioRoute';
@@ -333,7 +334,15 @@ export async function activate(context: vscode.ExtensionContext) {
         (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
         _previewManager = previewManager; // 模块级保存
         // 批注专用面板与装饰
-        try { registerCommentsFeature(context); } catch (e) { console.warn('[ANH] registerCommentsFeature failed', e); }
+        let commentsController: any;
+        try { commentsController = registerCommentsFeature(context); } catch (e) { console.warn('[ANH] registerCommentsFeature failed', e); }
+        if (commentsController) {
+            try {
+                context.subscriptions.push(vscode.window.registerWebviewViewProvider('andrea.commentsPanelView', new CommentsPanelSidebarProvider(commentsController)));
+            } catch (e) {
+                console.warn('[ANH] register comments sidebar view failed', e);
+            }
+        }
 
         // 启动完成后，若非惰性模式或已有大纲编辑器可见，再做一次初始刷新
         setTimeout(() => {

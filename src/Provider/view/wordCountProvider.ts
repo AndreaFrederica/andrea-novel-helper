@@ -1255,6 +1255,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     /** 非递归聚合目录：依赖子目录已更新的聚合值 + 文件最新值（支持祖先目录强制） */
     private async recomputeDirAggregate(dir: string) {
         let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+        const processedFiles = new Set<string>();
         try {
             const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
             const exts = getSupportedExtensions();
@@ -1287,6 +1288,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     if (cached) {
                         // 用旧值占位（避免 UI 抖动），但若是强制刷新，仍然派发精算
                         agg = mergeStats(agg, cached);
+                        processedFiles.add(path.resolve(full));
                         if (forcedHere) {
                             this.scheduleFileStat(full); // ⬅ 即便有缓存也派发后台重算
                         }
@@ -1308,7 +1310,38 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             wcDebug('dirAgg:forced-cleared', dir);
         }
 
+        if (wcDebugEnabled()) {
+            this.reportAggregateDiff(dir, agg, processedFiles);
+        }
+
         wcDebug('dirAgg:update:eventChain', dir, 'total', agg.total);
+    }
+
+    private reportAggregateDiff(dir: string, agg: TextStats, processedFiles: Set<string>) {
+        try {
+            const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+            if (!root) return;
+            const normalizedDir = path.resolve(dir);
+            let realSum: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+            const missing: string[] = [];
+            for (const [fp, entry] of this.statsCache.entries()) {
+                const abs = path.resolve(fp);
+                if (abs === normalizedDir || abs.startsWith(normalizedDir + path.sep)) {
+                    realSum = mergeStats(realSum, entry.stats);
+                    if (!processedFiles.has(abs) && missing.length < 10) missing.push(abs);
+                }
+            }
+            const diff = realSum.total - agg.total;
+            if (Math.abs(diff) > 1000) {
+                wcDebug('dirAgg:diff-detected', {
+                    dir: normalizedDir,
+                    aggregateTotal: agg.total,
+                    realTotal: realSum.total,
+                    diff,
+                    missingSamples: missing
+                });
+            }
+        } catch { /* ignore */ }
     }
 
 

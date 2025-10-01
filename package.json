@@ -2310,12 +2310,12 @@
         "AndreaNovelHelper.startupSnapshot.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "启用启动快照：关闭 VS Code 时保存文件追踪数据库与字数文件列表的紧凑缓存；下次启动在初始化早期载入以加速启动。"
+          "markdownDescription": "%config.startupSnapshot.enabled.description%"
         },
         "AndreaNovelHelper.startupSnapshot.deleteOnDisable": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "当关闭启动快照开关时，自动删除 novel-helper/.anh-fsdb/snapshots 目录下的快照文件。"
+          "markdownDescription": "%config.startupSnapshot.deleteOnDisable.description%"
         }
       }
     },
@@ -2355,6 +2355,12 @@
           "id": "andrea.commentsExplorer",
           "name": "%view.comments.explorer.name%",
           "icon": "comment-discussion"
+        },
+        {
+          "id": "andrea.commentsPanelView",
+          "type": "webview",
+          "name": "%view.comments.panel.name%",
+          "icon": "comment"
         }
       ],
       "AndreaWebDAVSidebar": [
