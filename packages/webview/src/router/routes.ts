@@ -24,6 +24,11 @@ const routes: RouteRecordRaw[] = [
   },
 
   {
+    path: '/timeline',
+    component: () => import('pages/TimelinePage.vue'),
+  },
+
+  {
     path: '/editor-settings',
     component: () => import('pages/EditorSettingsPage.vue'),
   },
