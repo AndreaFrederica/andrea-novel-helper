@@ -398,7 +398,7 @@ export class FileTrackingDataManager {
                 this.startupSnapshotLoaded = false;
                 return;
             }
-            if (!fs.existsSync(this.trackerSnapshotPath)) return;
+            if (!fs.existsSync(this.trackerSnapshotPath)) {return;}
             const raw = fs.readFileSync(this.trackerSnapshotPath, 'utf8');
             const snap = JSON.parse(raw);
             if (snap && snap.files && snap.pathToUuid) {

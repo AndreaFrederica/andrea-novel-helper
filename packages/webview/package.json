@@ -17,6 +17,7 @@
   "dependencies": {
     "@he-tree/vue": "^2.9.4",
     "@quasar/extras": "^1.16.4",
+    "@vue-flow/core": "^1.46.5",
     "monaco-editor": "^0.53.0",
     "pinia": "^3.0.1",
     "quasar": "^2.16.0",
