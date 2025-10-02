@@ -1,52 +1,65 @@
 <template>
-  <section v-if="timelineItems.length" class="timeline-view">
-    <d-timeline direction="horizontal" mode="alternative" class="timeline-view__timeline">
-      <d-timeline-item
-        v-for="(item, index) in timelineItems"
-        :key="item.id"
-        :dot-color="item.dotColor"
-        line-style="dashed"
-      >
-        <template #time>
-          <div class="timeline-view__time">{{ item.displayDate }}</div>
-        </template>
-        <template #default="slotProps">
-          <div class="timeline-view__card-wrapper">
-            <div
-              v-if="slotProps.position === 'bottom'"
-              class="timeline-view__connector timeline-view__connector--before"
-            ></div>
-            <article
-              class="timeline-view__card"
-              :style="{ backgroundColor: item.cardBg, color: item.textColor, borderLeftColor: 'rgba(255,255,255,0.95)' }"
-            >
-              <header class="timeline-view__card-header">
-                <h3 class="timeline-view__card-title">{{ item.title }}</h3>
-                <d-tag
-                  size="sm"
-                  class="timeline-status-tag"
-                  :style="{ color: item.cardBg, backgroundColor: '#ffffff' }"
-                >
-                  {{ item.statusLabel }}
-                </d-tag>
-              </header>
-              <p v-if="item.description" class="timeline-view__card-description">{{ item.description }}</p>
-              <footer class="timeline-view__card-footer">
-                <span v-if="item.group" class="timeline-view__meta">所属分组：{{ item.group }}</span>
-                <span v-if="item.isTimeless" class="timeline-view__meta">时间未定</span>
-              </footer>
-            </article>
-            <div
-              v-if="slotProps.position === 'top'"
-              class="timeline-view__connector timeline-view__connector--after"
-            ></div>
-          </div>
-        </template>
-        <template #extra v-if="index === 0 && item.yearLabel">
-          <div class="timeline-view__extra">{{ item.yearLabel }}</div>
-        </template>
-      </d-timeline-item>
-    </d-timeline>
+  <section
+    v-if="groupedTimelineItems.length"
+    class="timeline-view"
+    ref="containerRef"
+    @wheel="handleWheel"
+    @mousedown="handleMouseDown"
+    @mousemove="handleMouseMove"
+    @mouseup="handleMouseUp"
+    @mouseleave="handleMouseUp"
+    @dblclick="resetView"
+  >
+    <div
+      class="timeline-view__content"
+      :style="{
+        transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+        transformOrigin: 'left top'
+      }"
+    >
+      <d-timeline direction="horizontal" class="timeline-view__timeline">
+        <d-timeline-item
+          v-for="group in groupedTimelineItems"
+          :key="group.dateKey"
+          :dot-color="group.items[0]?.dotColor || 'var(--devui-link)'"
+          line-style="dashed"
+        >
+          <template #time>
+            <div class="timeline-view__time">{{ group.displayDate }}</div>
+          </template>
+          <template #default>
+            <div class="timeline-view__card-group">
+              <article
+                v-for="item in group.items"
+                :key="item.id"
+                class="timeline-view__card"
+                :style="{ backgroundColor: item.cardBg, color: item.textColor, borderLeftColor: 'rgba(255,255,255,0.95)' }"
+              >
+                <header class="timeline-view__card-header">
+                  <h3 class="timeline-view__card-title">{{ item.title }}</h3>
+                  <d-tag
+                    size="sm"
+                    class="timeline-status-tag"
+                    :style="{ color: item.cardBg, backgroundColor: '#ffffff' }"
+                  >
+                    {{ item.statusLabel }}
+                  </d-tag>
+                </header>
+                <div class="timeline-view__card-date">{{ item.displayDate }}</div>
+                <p v-if="item.description" class="timeline-view__card-description">{{ item.description }}</p>
+                <footer class="timeline-view__card-footer">
+                  <span v-if="item.group" class="timeline-view__meta">所属分组：{{ item.group }}</span>
+                  <span v-if="item.isTimeless" class="timeline-view__meta">时间未定</span>
+                </footer>
+              </article>
+            </div>
+          </template>
+          <template #extra v-if="group.yearLabel">
+            <div class="timeline-view__extra">{{ group.yearLabel }}</div>
+          </template>
+        </d-timeline-item>
+      </d-timeline>
+    </div>
   </section>
   <div v-else class="timeline-view__empty">
     <span>暂无可展示的事件</span>
@@ -54,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, reactive } from 'vue';
 
 type KnownTimelineType = 'main' | 'side';
 type CustomTimelineType = string & { __customTimelineTypeBrand?: never };
@@ -77,8 +90,8 @@ interface NormalizedTimelineItem {
   statusLabel: string;
   dotColor: string;
   backgroundColor: string;
-  cardBg?: string;
-  textColor?: string;
+  cardBg: string;
+  textColor: string;
   displayDate: string;
   yearLabel: string;
   isTimeless: boolean;
@@ -87,6 +100,74 @@ interface NormalizedTimelineItem {
 }
 
 const props = defineProps<{ events: TimelineViewEvent[] }>();
+
+// 缩放和拖拽状态
+const containerRef = ref<HTMLElement | null>(null);
+const zoom = ref(1);
+const pan = reactive({ x: 0, y: 0 });
+const isDragging = ref(false);
+const dragStart = reactive({ x: 0, y: 0 });
+
+// 滚轮缩放 - 以鼠标位置为中心
+function handleWheel(event: WheelEvent) {
+  event.preventDefault();
+
+  if (!containerRef.value) return;
+
+  const delta = event.deltaY * -0.001;
+  const newZoom = Math.min(Math.max(0.5, zoom.value + delta), 3);
+
+  // 获取鼠标相对于容器的位置
+  const rect = containerRef.value.getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+  const mouseY = event.clientY - rect.top;
+
+  // 计算鼠标在内容坐标系中的位置（缩放前）
+  const contentX = (mouseX - pan.x) / zoom.value;
+  const contentY = (mouseY - pan.y) / zoom.value;
+
+  // 更新缩放
+  zoom.value = newZoom;
+
+  // 调整平移，使鼠标指向的内容点保持不变
+  pan.x = mouseX - contentX * newZoom;
+  pan.y = mouseY - contentY * newZoom;
+}
+
+// 鼠标拖拽
+function handleMouseDown(event: MouseEvent) {
+  // 只响应左键
+  if (event.button !== 0) return;
+
+  isDragging.value = true;
+  dragStart.x = event.clientX - pan.x;
+  dragStart.y = event.clientY - pan.y;
+
+  if (containerRef.value) {
+    containerRef.value.style.cursor = 'grabbing';
+  }
+}
+
+function handleMouseMove(event: MouseEvent) {
+  if (!isDragging.value) return;
+
+  pan.x = event.clientX - dragStart.x;
+  pan.y = event.clientY - dragStart.y;
+}
+
+function handleMouseUp() {
+  isDragging.value = false;
+  if (containerRef.value) {
+    containerRef.value.style.cursor = 'grab';
+  }
+}
+
+// 双击重置视图
+function resetView() {
+  zoom.value = 1;
+  pan.x = 0;
+  pan.y = 0;
+}
 
 const TIMELINE_TYPE_META: Record<
   KnownTimelineType | 'default',
@@ -217,17 +298,85 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
     rawDate: item.rawDate,
   }));
 });
+
+// 按日期分组的时间线项
+interface GroupedTimelineItem {
+  dateKey: string;
+  displayDate: string;
+  yearLabel: string;
+  items: NormalizedTimelineItem[];
+}
+
+const groupedTimelineItems = computed<GroupedTimelineItem[]>(() => {
+  const items = timelineItems.value;
+  if (items.length === 0) {
+    return [];
+  }
+
+  // 按日期分组
+  const groupMap = new Map<string, NormalizedTimelineItem[]>();
+
+  items.forEach((item) => {
+    const key = item.displayDate;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, []);
+    }
+    const group = groupMap.get(key);
+    if (group) {
+      group.push(item);
+    }
+  });
+
+  // 转换为数组并保持时间顺序
+  const groups: GroupedTimelineItem[] = [];
+  const sortedDates = Array.from(groupMap.keys()).sort((a, b) => {
+    const itemsA = groupMap.get(a);
+    const itemsB = groupMap.get(b);
+    if (!itemsA || !itemsB || !itemsA[0] || !itemsB[0]) return 0;
+    return itemsA[0].sortKey - itemsB[0].sortKey;
+  });
+
+  sortedDates.forEach((dateKey, index) => {
+    const groupItems = groupMap.get(dateKey);
+    if (!groupItems || groupItems.length === 0) return;
+
+    const firstItem = groupItems[0];
+    if (!firstItem) return;
+
+    groups.push({
+      dateKey,
+      displayDate: firstItem.displayDate,
+      yearLabel: index === 0 && firstItem.rawDate ? `${firstItem.rawDate.getFullYear()}` : '',
+      items: groupItems,
+    });
+  });
+
+  return groups;
+});
 </script>
 
 <style scoped>
 .timeline-view {
   width: 100%;
   height: 100%;
-  padding: 24px 16px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  padding: 0;
+  overflow: hidden;
   display: block;
   background: var(--q-dark, #1d1d1d);
+  position: relative;
+  cursor: grab;
+  user-select: none;
+}
+
+.timeline-view:active {
+  cursor: grabbing;
+}
+
+/* 内容容器 */
+.timeline-view__content {
+  padding: 24px 16px;
+  transition: transform 0.1s ease-out;
+  will-change: transform;
 }
 
 /* 美化滚动条 */
@@ -262,38 +411,27 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
   color: rgba(255, 255, 255, 0.87);
 }
 
-.timeline-view__card-wrapper {
+/* 卡片组容器 - 垂直排列 */
+.timeline-view__card-group {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 12px;
   min-width: 260px;
-  position: relative;
-}
-
-.timeline-view__connector {
-  width: 2px;
-  height: 40px;
-  background-color: #dfe1e6;
-}
-
-.timeline-view__connector--before {
-  margin-bottom: 4px;
-}
-
-.timeline-view__connector--after {
-  margin-top: 4px;
+  pointer-events: auto;
 }
 
 .timeline-view__card {
   box-shadow: 0 2px 6px rgba(15, 40, 77, 0.08);
   border-radius: 4px;
-  padding: 10px;
+  padding: 10px 10px 10px 22px;
   background-color: rgba(255, 255, 255, 0.05);
   width: 100%;
   min-width: 150px;
   box-sizing: border-box;
   transition: box-shadow 0.18s ease, background-color 0.18s ease;
   position: relative;
+  cursor: pointer;
+  user-select: text;
 }
 
 .timeline-view__card:hover {
@@ -310,23 +448,30 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
 }
 
 .timeline-view__card-title {
-  font-size: 1em;
+  font-size: 1.5em;
   font-weight: 700;
   margin: 0;
   color: inherit;
   flex: 1;
 }
 
+/* date display in card */
+.timeline-view__card-date {
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 5px;
+}
+
 /* left white stripe like editor node */
 .timeline-view__card::before {
   content: '';
   position: absolute;
-  left: 8px;
-  top: 8px;
-  bottom: 8px;
-  width: 6px;
+  left: 4px;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
   background: #ffffff;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .timeline-view__card-description {
@@ -357,14 +502,14 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
   width: 36px;
   height: 36px;
   border-radius: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.87);
+  color: #1f1f1f;
   margin: 0 auto;
 }
 

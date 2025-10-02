@@ -881,10 +881,13 @@ function loadInitialData() {
           type: 'main',
           date: '2024-01-01',
           description: '主角出场',
-          position: { x: 0, y: 100 },
-          data: {
-            type: 'main',
+          position: {
+            x: 0,
+            y: 100
           },
+          data: {
+            type: 'main'
+          }
         },
         {
           id: '2',
@@ -893,10 +896,13 @@ function loadInitialData() {
           type: 'main',
           date: '2024-01-05',
           description: '主角面临第一个挑战',
-          position: { x: 400, y: 100 },
-          data: {
-            type: 'main',
+          position: {
+            x: 497.60239227170297,
+            y: 97.73017692391389
           },
+          data: {
+            type: 'main'
+          }
         },
         {
           id: '3',
@@ -905,11 +911,46 @@ function loadInitialData() {
           type: 'side',
           date: '2024-01-03',
           description: '配角的过去经历',
-          position: { x: 200, y: 250 },
-          data: {
-            type: 'side',
+          position: {
+            x: 200,
+            y: 250
           },
+          data: {
+            type: 'side'
+          }
         },
+        {
+          id: '0199a58a-a956-78-91be-a0ff2331baf1',
+          title: '测试事件',
+          group: '1',
+          type: 'main',
+          date: '2024-01-03',
+          description: '11111',
+          data: {
+            type: 'main'
+          },
+          position: {
+            x: 221.79481815404694,
+            y: -13.245630938334294
+          },
+          bindings: []
+        },
+        {
+          id: '0199a58c-b0ba-7c-996d-d79d07134fcc',
+          title: '主角背景',
+          group: '故事背景',
+          type: 'side',
+          date: '2024-01-03',
+          description: '主角的背景',
+          data: {
+            type: 'side'
+          },
+          bindings: [],
+          position: {
+            x: 203.33007671711712,
+            y: 381.29720194882486
+          }
+        }
       ];
 
       // 添加示例连线
@@ -917,18 +958,36 @@ function loadInitialData() {
         {
           id: 'conn-1',
           source: '1',
-          target: '2',
+          target: '2'
         },
         {
           id: 'conn-2',
           source: '1',
-          target: '3',
+          target: '3'
         },
         {
           id: 'conn-3',
           source: '3',
-          target: '2', // 这个会标红，因为日期不符合（01-03 -> 01-05 不对）
+          target: '2'
         },
+        {
+          id: 'conn-0199a58a-f4ac-70-80d4-3b351e54a383',
+          source: '1',
+          target: '0199a58a-a956-78-91be-a0ff2331baf1',
+          connectionType: 'normal'
+        },
+        {
+          id: 'conn-0199a58b-0738-77-9821-cd628e9caa77',
+          source: '0199a58a-a956-78-91be-a0ff2331baf1',
+          target: '2',
+          connectionType: 'normal'
+        },
+        {
+          id: 'conn-0199a58d-2ad3-7e-adf8-5c76fb6cc6c5',
+          source: '0199a58c-b0ba-7c-996d-d79d07134fcc',
+          target: '2',
+          connectionType: 'normal'
+        }
       ];
 
       void updateFlowElements();
