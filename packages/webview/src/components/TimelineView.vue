@@ -12,12 +12,13 @@
   >
     <div
       class="timeline-view__content"
+      ref="contentRef"
       :style="{
         transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
         transformOrigin: 'left top'
       }"
     >
-      <d-timeline direction="horizontal" class="timeline-view__timeline">
+      <d-timeline direction="horizontal" class="timeline-view__timeline" ref="timelineRef">
         <d-timeline-item
           v-for="group in groupedTimelineItems"
           :key="group.dateKey"
@@ -32,6 +33,8 @@
               <article
                 v-for="item in group.items"
                 :key="item.id"
+                :ref="el => setCardRef(item.id, el as HTMLElement)"
+                :data-card-id="item.id"
                 class="timeline-view__card"
                 :style="{ backgroundColor: item.cardBg, color: item.textColor, borderLeftColor: 'rgba(255,255,255,0.95)' }"
               >
@@ -59,6 +62,114 @@
           </template>
         </d-timeline-item>
       </d-timeline>
+
+      <!-- SVG 连接线层 - 绝对定位在内容之上 -->
+      <svg
+        v-if="props.connections && props.connections.length > 0 && renderedConnections.length > 0"
+        class="timeline-view__connections"
+        :style="{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          overflow: 'visible'
+        }"
+      >
+        <defs>
+          <!-- 箭头标记（每种连线类型都有对应颜色的箭头） -->
+          <marker
+            id="arrowhead-time-travel"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill="#8b5cf6" />
+          </marker>
+          <marker
+            id="arrowhead-reincarnation"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill="#06b6d4" />
+          </marker>
+          <marker
+            id="arrowhead-parallel"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill="#f59e0b" />
+          </marker>
+          <marker
+            id="arrowhead-dream"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill="#ec4899" />
+          </marker>
+          <marker
+            id="arrowhead-flashback"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill="#10b981" />
+          </marker>
+          <marker
+            id="arrowhead-other"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill="#6b7280" />
+          </marker>
+        </defs>
+        <g>
+          <path
+            v-for="conn in renderedConnections"
+            :key="conn.id"
+            :d="conn.path"
+            :stroke="conn.color"
+            :stroke-width="conn.width"
+            :stroke-dasharray="conn.dashArray"
+            fill="none"
+            :marker-end="conn.markerEnd"
+            opacity="0.8"
+          />
+        </g>
+        <g>
+          <text
+            v-for="conn in renderedConnections"
+            :key="`label-${conn.id}`"
+            :x="conn.labelX"
+            :y="conn.labelY"
+            :fill="conn.color"
+            font-size="13"
+            font-weight="bold"
+            text-anchor="middle"
+            dominant-baseline="middle"
+            class="timeline-view__connection-label"
+          >
+            {{ conn.label }}
+          </text>
+        </g>
+      </svg>
     </div>
   </section>
   <div v-else class="timeline-view__empty">
@@ -67,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive } from 'vue';
+import { computed, ref, reactive, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 
 type KnownTimelineType = 'main' | 'side';
 type CustomTimelineType = string & { __customTimelineTypeBrand?: never };
@@ -80,6 +191,14 @@ interface TimelineViewEvent {
   group?: string;
   type?: KnownTimelineType | CustomTimelineType;
   timeless?: boolean;
+}
+
+interface TimelineViewConnection {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+  connectionType?: 'normal' | 'time-travel' | 'reincarnation' | 'parallel' | 'dream' | 'flashback' | 'other';
 }
 
 interface NormalizedTimelineItem {
@@ -99,14 +218,22 @@ interface NormalizedTimelineItem {
   rawDate: Date | null;
 }
 
-const props = defineProps<{ events: TimelineViewEvent[] }>();
+const props = defineProps<{
+  events: TimelineViewEvent[];
+  connections?: TimelineViewConnection[];
+}>();
 
 // 缩放和拖拽状态
 const containerRef = ref<HTMLElement | null>(null);
+const contentRef = ref<HTMLElement | null>(null);
+const timelineRef = ref<HTMLElement | null>(null);
 const zoom = ref(1);
 const pan = reactive({ x: 0, y: 0 });
 const isDragging = ref(false);
 const dragStart = reactive({ x: 0, y: 0 });
+
+// 存储卡片元素的引用
+const cardRefs = ref<Map<string, HTMLElement>>(new Map());
 
 // 滚轮缩放 - 以鼠标位置为中心
 function handleWheel(event: WheelEvent) {
@@ -132,6 +259,9 @@ function handleWheel(event: WheelEvent) {
   // 调整平移，使鼠标指向的内容点保持不变
   pan.x = mouseX - contentX * newZoom;
   pan.y = mouseY - contentY * newZoom;
+
+  // 立即触发连线重新测量
+  scheduleConnectionMeasurement();
 }
 
 // 鼠标拖拽
@@ -153,6 +283,9 @@ function handleMouseMove(event: MouseEvent) {
 
   pan.x = event.clientX - dragStart.x;
   pan.y = event.clientY - dragStart.y;
+
+  // 拖拽时实时更新连线位置
+  scheduleConnectionMeasurement();
 }
 
 function handleMouseUp() {
@@ -160,6 +293,9 @@ function handleMouseUp() {
   if (containerRef.value) {
     containerRef.value.style.cursor = 'grab';
   }
+
+  // 拖拽结束后再次更新，确保最终位置准确
+  scheduleConnectionMeasurement();
 }
 
 // 双击重置视图
@@ -167,7 +303,168 @@ function resetView() {
   zoom.value = 1;
   pan.x = 0;
   pan.y = 0;
+
+  // 重置后更新连线
+  scheduleConnectionMeasurement();
 }
+
+// 设置卡片引用
+function setCardRef(id: string, el: HTMLElement | null) {
+  if (el) {
+    cardRefs.value.set(id, el);
+  } else {
+    cardRefs.value.delete(id);
+  }
+}
+
+// 获取连线类型的显示标签
+function getConnectionTypeLabel(type: string): string {
+  const labelMap: Record<string, string> = {
+    normal: '正常',
+    'time-travel': '⏰时间穿越',
+    reincarnation: '♻️轮回转世',
+    parallel: '🔀平行时空',
+    dream: '💭梦境',
+    flashback: '⏮️回忆',
+    other: '⚡特殊',
+  };
+
+  return labelMap[type] || '';
+}
+
+// 连接线类型的样式配置（与 TimelinePage.vue 的 getConnectionColor 一致）
+const CONNECTION_TYPE_STYLES: Record<string, { color: string; width: number; dashArray: string; markerEnd: string }> = {
+  'time-travel': { color: '#8b5cf6', width: 3, dashArray: '', markerEnd: 'url(#arrowhead-time-travel)' }, // 紫色
+  'reincarnation': { color: '#06b6d4', width: 3, dashArray: '', markerEnd: 'url(#arrowhead-reincarnation)' }, // 青色
+  'parallel': { color: '#f59e0b', width: 3, dashArray: '', markerEnd: 'url(#arrowhead-parallel)' }, // 橙色
+  'dream': { color: '#ec4899', width: 2, dashArray: '5,5', markerEnd: 'url(#arrowhead-dream)' }, // 粉色，虚线
+  'flashback': { color: '#10b981', width: 2, dashArray: '5,5', markerEnd: 'url(#arrowhead-flashback)' }, // 绿色，虚线
+  'other': { color: '#6b7280', width: 2, dashArray: '5,5', markerEnd: 'url(#arrowhead-other)' }, // 灰色
+  'normal': { color: 'transparent', width: 0, dashArray: '', markerEnd: '' }, // 不显示
+};
+
+// 连接线渲染数据接口
+interface RenderedConnection {
+  id: string;
+  path: string;
+  color: string;
+  width: number;
+  dashArray: string;
+  markerEnd: string;
+  label: string;
+  labelX: number;
+  labelY: number;
+}
+
+// 计算渲染的连接线
+const renderedConnections = computed<RenderedConnection[]>(() => {
+  if (!props.connections || props.connections.length === 0 || !containerRef.value) {
+    return [];
+  }
+
+  // 强制依赖 connectionUpdateKey 以触发重新计算
+  const _ = connectionUpdateKey.value;
+
+  return props.connections
+    .filter(conn => {
+      // 只渲染明确标记的特殊连线
+      const type = conn.connectionType ?? 'normal';
+      return type !== 'normal';
+    })
+    .map(conn => {
+      const sourceEl = cardRefs.value.get(conn.source);
+      const targetEl = cardRefs.value.get(conn.target);
+
+      if (!sourceEl || !targetEl || !contentRef.value) {
+        return null;
+      }
+
+      const scale = zoom.value || 1;
+
+      // 获取 content 容器和卡片的位置（转换为未缩放时的本地坐标）
+      const contentRect = contentRef.value.getBoundingClientRect();
+      const sourceRect = sourceEl.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+
+      // 计算相对于 content 容器的边界和中心坐标
+      const sourceBounds = {
+        left: (sourceRect.left - contentRect.left) / scale,
+        right: (sourceRect.right - contentRect.left) / scale,
+        top: (sourceRect.top - contentRect.top) / scale,
+        bottom: (sourceRect.bottom - contentRect.top) / scale,
+        width: sourceRect.width / scale,
+        height: sourceRect.height / scale,
+      };
+      const targetBounds = {
+        left: (targetRect.left - contentRect.left) / scale,
+        right: (targetRect.right - contentRect.left) / scale,
+        top: (targetRect.top - contentRect.top) / scale,
+        bottom: (targetRect.bottom - contentRect.top) / scale,
+        width: targetRect.width / scale,
+        height: targetRect.height / scale,
+      };
+
+      const sourceAnchor = {
+        x: sourceBounds.right,
+        y: sourceBounds.top + sourceBounds.height / 2,
+      };
+      const targetAnchor = {
+        x: targetBounds.left,
+        y: targetBounds.top + targetBounds.height / 2,
+      };
+
+      const deltaX = targetAnchor.x - sourceAnchor.x;
+      const deltaY = targetAnchor.y - sourceAnchor.y;
+      const absDeltaX = Math.abs(deltaX);
+      const absDeltaY = Math.abs(deltaY);
+
+  const horizontalOffset = Math.max(absDeltaX * 0.5, 80);
+  const verticalDirection = deltaY === 0 ? 0 : Math.sign(deltaY);
+  const verticalOffset = verticalDirection === 0 ? 0 : Math.max(absDeltaY * 0.2, 20);
+
+      const control1 = {
+        x: sourceAnchor.x + horizontalOffset,
+  y: sourceAnchor.y + verticalDirection * verticalOffset,
+      };
+      const control2 = {
+        x: targetAnchor.x - horizontalOffset,
+  y: targetAnchor.y - verticalDirection * verticalOffset,
+      };
+
+      const path = `M ${sourceAnchor.x} ${sourceAnchor.y} C ${control1.x} ${control1.y}, ${control2.x} ${control2.y}, ${targetAnchor.x} ${targetAnchor.y}`;
+
+      // 计算标签位置（在贝塞尔曲线的中点）
+      // 使用 t=0.5 计算三次贝塞尔曲线上的点
+      const t = 0.5;
+      const labelX = Math.pow(1-t, 3) * sourceAnchor.x +
+                     3 * Math.pow(1-t, 2) * t * control1.x +
+                     3 * (1-t) * Math.pow(t, 2) * control2.x +
+                     Math.pow(t, 3) * targetAnchor.x;
+      const labelY = Math.pow(1-t, 3) * sourceAnchor.y +
+                     3 * Math.pow(1-t, 2) * t * control1.y +
+                     3 * (1-t) * Math.pow(t, 2) * control2.y +
+                     Math.pow(t, 3) * targetAnchor.y;
+
+      // 获取样式（确保总是有默认值）
+  const connectionType = conn.connectionType && conn.connectionType !== 'normal' ? conn.connectionType : 'other';
+  const styleConfig = (CONNECTION_TYPE_STYLES[connectionType] || CONNECTION_TYPE_STYLES.other) as { color: string; width: number; dashArray: string; markerEnd: string };
+
+      const result: RenderedConnection = {
+        id: conn.id,
+        path,
+        color: styleConfig.color,
+        width: styleConfig.width,
+        dashArray: styleConfig.dashArray,
+        markerEnd: styleConfig.markerEnd,
+        label: getConnectionTypeLabel(connectionType),
+        labelX,
+        labelY,
+      };
+
+      return result;
+    })
+    .filter((conn): conn is RenderedConnection => conn !== null);
+});
 
 const TIMELINE_TYPE_META: Record<
   KnownTimelineType | 'default',
@@ -353,6 +650,59 @@ const groupedTimelineItems = computed<GroupedTimelineItem[]>(() => {
 
   return groups;
 });
+
+// 强制重新渲染连接线（当卡片位置变化时）
+const connectionUpdateKey = ref(0);
+const pendingMeasureFrame = ref<number | null>(null);
+
+function scheduleConnectionMeasurement() {
+  void nextTick(() => {
+    if (pendingMeasureFrame.value !== null) {
+      cancelAnimationFrame(pendingMeasureFrame.value);
+    }
+    pendingMeasureFrame.value = requestAnimationFrame(() => {
+      pendingMeasureFrame.value = null;
+      connectionUpdateKey.value++;
+    });
+  });
+}
+
+watch(
+  () => props.connections,
+  () => {
+    scheduleConnectionMeasurement();
+  },
+  { deep: true }
+);
+
+watch(
+  () => groupedTimelineItems.value,
+  () => {
+    scheduleConnectionMeasurement();
+  },
+  { deep: true }
+);
+
+onMounted(() => {
+  scheduleConnectionMeasurement();
+  window.addEventListener('resize', scheduleConnectionMeasurement, { passive: true });
+
+  // 监听容器滚动事件，确保滚动后重新测量连线位置
+  if (containerRef.value) {
+    containerRef.value.addEventListener('scroll', scheduleConnectionMeasurement, { passive: true });
+  }
+});
+
+onBeforeUnmount(() => {
+  if (pendingMeasureFrame.value !== null) {
+    cancelAnimationFrame(pendingMeasureFrame.value);
+  }
+  window.removeEventListener('resize', scheduleConnectionMeasurement);
+
+  if (containerRef.value) {
+    containerRef.value.removeEventListener('scroll', scheduleConnectionMeasurement);
+  }
+});
 </script>
 
 <style scoped>
@@ -403,6 +753,30 @@ const groupedTimelineItems = computed<GroupedTimelineItem[]>(() => {
   height: 100%;
   display: inline-flex;
   align-items: center;
+  position: relative;
+}
+
+/* 连接线层 */
+.timeline-view__connections {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  overflow: visible;
+}
+
+/* 连接线标签样式 */
+.timeline-view__connection-label {
+  pointer-events: none;
+  user-select: none;
+  paint-order: stroke fill;
+  stroke: rgba(0, 0, 0, 0.8);
+  stroke-width: 3px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .timeline-view__time {

@@ -389,7 +389,7 @@
           </div>
           <q-slide-transition>
             <div v-show="timelineDrawerOpen" class="timeline-panel-body">
-              <TimelineView :events="events" />
+              <TimelineView :events="events" :connections="connections" />
             </div>
           </q-slide-transition>
         </div>
@@ -1256,6 +1256,69 @@ function handleTimelineNodeUpdate() {
 /* 确保滚动区域正确工作 */
 .q-scrollarea__content {
   height: auto !important;
+}
+
+/* VueFlow 控制面板深度样式 - 暗色主题适配 */
+:deep(.vue-flow__controls) {
+  background: rgba(30, 30, 30, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.vue-flow__controls-button) {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+  transition: all 0.2s ease !important;
+}
+
+:deep(.vue-flow__controls-button:hover) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+:deep(.vue-flow__controls-button svg) {
+  fill: currentColor !important;
+}
+
+:deep(.vue-flow__controls-button:last-child) {
+  border-bottom: none !important;
+}
+
+/* MiniMap 深度样式 - 暗色主题适配 */
+:deep(.vue-flow__minimap) {
+  background: rgba(30, 30, 30, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+:deep(.vue-flow__minimap-mask) {
+  fill: rgba(66, 184, 131, 0.15) !important;
+  stroke: rgba(66, 184, 131, 0.6) !important;
+  stroke-width: 2 !important;
+}
+
+:deep(.vue-flow__minimap-node) {
+  fill: rgba(255, 255, 255, 0.2) !important;
+  stroke: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Panel 深度样式 */
+:deep(.vue-flow__panel) {
+  background: rgba(30, 30, 30, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  color: rgba(255, 255, 255, 0.87) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+:deep(.vue-flow__panel.bottom.left) {
+  margin-bottom: 16px !important;
+  margin-left: 16px !important;
 }
 </style>
 
