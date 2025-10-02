@@ -23,7 +23,7 @@
     "onFileSystem:andrea-outline",
     "onStartupFinished"
   ],
-  "main": "./dist/extension.js",
+  "main": "./out/extension.js",
   "contributes": {
     "localizations": [
       {

@@ -1,9 +1,9 @@
-# ============= VSCodeIgnore for Webpack Mode =============
-# 使用 webpack 打包时,排除 out/ 目录和不必要的依赖
+# ============= VSCodeIgnore for TypeScript Mode =============
+# 使用 TypeScript 编译时,保留 out/ 目录和所有 node_modules
 
 .vscode/**
 .vscode-test/**
-out/**
+dist/**
 src/**
 .gitignore
 .yarnrc
@@ -49,12 +49,6 @@ packages/webview/**
 !packages/webview/dist/
 !packages/webview/dist/spa/
 !packages/webview/dist/spa/**
-
-# ============= Node modules (webpack 已打包,可以排除大部分) =============
-# 保留少数运行时必需的 native 模块
-node_modules/**
-!node_modules/@vscode/sqlite3/**
-!node_modules/iconv-lite/encodings/**
 
 # ============= 其它管理文件夹 =============
 .vscode/
