@@ -246,7 +246,18 @@
       <!-- 右上角工具栏 -->
       <div class="toolbar-top-right">
         <q-btn
-          v-if="!settingsDrawerOpen && !snapshotDrawerOpen"
+          v-if="!timelineDrawerOpen && !settingsDrawerOpen && !snapshotDrawerOpen"
+          dense
+          flat
+          round
+          icon="timeline"
+          @click="timelineDrawerOpen = true"
+          class="q-mr-sm"
+        >
+          <q-tooltip>打开时间线视图</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="!settingsDrawerOpen && !snapshotDrawerOpen && !timelineDrawerOpen"
           dense
           flat
           round
@@ -257,7 +268,7 @@
           <q-tooltip>打开设置</q-tooltip>
         </q-btn>
         <q-btn
-          v-if="!snapshotDrawerOpen && !settingsDrawerOpen"
+          v-if="!snapshotDrawerOpen && !settingsDrawerOpen && !timelineDrawerOpen"
           dense
           flat
           round
@@ -360,27 +371,51 @@
         @delete="handleConnectionDelete"
       />
 
-      <!-- Vue Flow画布 -->
-      <q-page class="fit">
-        <VueFlow
-          :nodes="nodes"
-          :edges="edges"
-          fit-view-on-init
-          class="w-full h-full"
-          :class="{ 'edges-on-top': renderSettings.edgesOnTop }"
-          :node-types="nodeTypes"
-          :connection-radius="30"
-          :edges-updatable="true"
-          :nodes-draggable="true"
-          :node-drag-threshold="0"
-          :snap-to-grid="false"
-          no-drag-class-name="no-drag"
-          @edges-change="onEdgesChange"
-        >
-          <Background v-if="renderSettings.showBackground" />
-          <Controls v-if="renderSettings.showControls" />
-          <MiniMap v-if="renderSettings.showMiniMap" />
-        </VueFlow>
+      <!-- 时间轴可视化与画布 -->
+      <q-page class="timeline-workspace column no-wrap">
+        <!-- 顶部时间线面板（可折叠） -->
+        <div class="timeline-top-panel" :class="{ 'timeline-top-panel--open': timelineDrawerOpen }">
+          <div class="timeline-panel-header">
+            <div class="text-subtitle1 text-weight-medium">时间线视图</div>
+            <q-btn
+              dense
+              flat
+              round
+              :icon="timelineDrawerOpen ? 'expand_less' : 'expand_more'"
+              @click="timelineDrawerOpen = !timelineDrawerOpen"
+            >
+              <q-tooltip>{{ timelineDrawerOpen ? '收起' : '展开' }}时间线</q-tooltip>
+            </q-btn>
+          </div>
+          <q-slide-transition>
+            <div v-show="timelineDrawerOpen" class="timeline-panel-body">
+              <TimelineView :events="events" />
+            </div>
+          </q-slide-transition>
+        </div>
+
+        <!-- 流程图画布区域 -->
+        <div class="timeline-flow">
+          <VueFlow
+            class="timeline-flow__canvas w-full h-full"
+            :class="{ 'edges-on-top': renderSettings.edgesOnTop }"
+            :nodes="nodes"
+            :edges="edges"
+            fit-view-on-init
+            :node-types="nodeTypes"
+            :connection-radius="30"
+            :edges-updatable="true"
+            :nodes-draggable="true"
+            :node-drag-threshold="0"
+            :snap-to-grid="false"
+            no-drag-class-name="no-drag"
+            @edges-change="onEdgesChange"
+          >
+            <Background v-if="renderSettings.showBackground" />
+            <Controls v-if="renderSettings.showControls" />
+            <MiniMap v-if="renderSettings.showMiniMap" />
+          </VueFlow>
+        </div>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -400,6 +435,7 @@ import { generateUUIDv7 } from '../utils/uuid';
 import EditableEventNode from '../components/EditableEventNode.vue';
 import TimelineEventEditor from '../components/TimelineEventEditor.vue';
 import ConnectionEditor from '../components/ConnectionEditor.vue';
+import TimelineView from '../components/TimelineView.vue';
 
 interface RenderSettings {
   edgesOnTop: boolean; // 连线显示在节点上方
@@ -453,6 +489,7 @@ const connections = ref<TimelineConnection[]>([]);
 const nodes = ref<any[]>([]);
 const edges = ref<any[]>([]);
 const drawerOpen = ref(true);
+const timelineDrawerOpen = ref(false); // 时间线抽屉默认收起
 const snapshotDrawerOpen = ref(false);
 const settingsDrawerOpen = ref(false);
 const isAddDialogOpen = ref(false);
@@ -1069,6 +1106,69 @@ function handleTimelineNodeUpdate() {
 </script>
 
 <style scoped>
+.timeline-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 顶部时间线面板 */
+.timeline-top-panel {
+  flex-shrink: 0;
+  background: var(--q-dark, #1d1d1d);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 100;
+  transition: all 0.3s ease;
+}
+
+.timeline-top-panel--open {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.timeline-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  user-select: none;
+  min-height: 48px;
+}
+
+.timeline-panel-header:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.timeline-panel-body {
+  height: 50vh;
+  overflow: hidden;
+  padding: 0;
+  background: var(--q-dark, #1d1d1d);
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-flow {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+.timeline-flow__canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.timeline-flow__canvas {
+  width: 100%;
+  height: 100%;
+}
+
 /* 左上角工具栏 */
 .toolbar-top-left {
   position: fixed;
@@ -1099,3 +1199,4 @@ function handleTimelineNodeUpdate() {
   height: auto !important;
 }
 </style>
+

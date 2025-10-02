@@ -15,6 +15,7 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@devui-design/icons": "^1.4.0",
     "@he-tree/vue": "^2.9.4",
     "@quasar/extras": "^1.16.4",
     "@vue-flow/background": "^1.3.2",
@@ -27,6 +28,7 @@
     "relation-graph-vue3": "^2.2.11",
     "vditor": "^3.11.2",
     "vue": "^3.4.18",
+    "vue-devui": "^1.6.34",
     "vue-i18n": "^11.0.0",
     "vue-router": "^4.0.12",
     "webview": "^0.0.1"
@@ -45,6 +47,7 @@
     "prettier": "^3.3.3",
     "sass-embedded": "^1.93.2",
     "typescript": "^5.8.0",
+    "unplugin-vue-components": "^29.1.0",
     "vite-plugin-checker": "^0.9.0",
     "vue-tsc": "^2.1.0"
   },
