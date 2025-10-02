@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as vscode from 'vscode';
 import { IDatabaseBackend } from '../../database/IDatabaseBackend';
 import { DatabaseFactory } from '../../database/DatabaseFactory';
-import { getFileMetadataFromCache } from '../WordCount/asyncWordCounter.js';
+import { getFileMetadataFromCache } from '../WordCount/asyncWordCounter';
 // 文件级数据库对象，供外部直接访问和读写
 export let fileTrackingDatabase: FileTrackingDatabase | undefined = undefined;
 

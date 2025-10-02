@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { Worker } from 'worker_threads';
 
 interface SyncMessage {
@@ -39,7 +40,10 @@ export class WebDAVAccountManager {
   private get secrets() { return this.context.secrets; }
 
   private initWorker(): void {
-    const workerPath = path.join(__dirname, '../workers/syncWorker.js');
+    // 支持 webpack (dist) 和 tsc (out) 两种模式
+    const distPath = vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'workers', 'syncWorker.js');
+    const outPath = vscode.Uri.joinPath(this.context.extensionUri, 'out', 'workers', 'syncWorker.js');
+    const workerPath = (fs.existsSync(distPath.fsPath) ? distPath : outPath).fsPath;
     
     // 获取配置数据传递给worker
      const config = vscode.workspace.getConfiguration('AndreaNovelHelper.webdav.sync');

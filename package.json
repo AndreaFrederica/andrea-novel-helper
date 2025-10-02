@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -23,7 +23,7 @@
     "onFileSystem:andrea-outline",
     "onStartupFinished"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "localizations": [
       {
@@ -2402,12 +2402,19 @@
     "bundle:ext": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --main-fields=module,main --outfile=out/extension.js --sourcemap",
     "build:webview": "npm --workspace=packages/webview run build",
     "dev:webview": "npm --workspace=packages/webview run dev",
-    "vscode:prepublish": "npm run build:webview && npm run compile",
+    "webpack": "webpack --mode development",
+    "webpack:prod": "webpack --mode production",
+    "webpack:watch": "webpack --mode development --watch",
+    "build:extension": "webpack --mode production",
+    "watch:extension": "webpack --mode development --watch",
+    "vscode:prepublish": "npm run build:webview && npm run build:extension",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "use:webpack": "node -e \"const fs=require('fs');const pkg=JSON.parse(fs.readFileSync('package.json'));pkg.main='./dist/extension.js';fs.writeFileSync('package.json',JSON.stringify(pkg,null,2))\"",
+    "use:tsc": "node -e \"const fs=require('fs');const pkg=JSON.parse(fs.readFileSync('package.json'));pkg.main='./out/extension.js';fs.writeFileSync('package.json',JSON.stringify(pkg,null,2))\""
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -2419,8 +2426,12 @@
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.25.9",
     "eslint": "^9.25.1",
+    "node-loader": "^2.1.0",
+    "ts-loader": "^9.5.4",
     "ts-node": "^10.9.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "webpack": "^5.102.0",
+    "webpack-cli": "^6.0.1"
   },
   "dependencies": {
     "@types/uuid": "^10.0.0",

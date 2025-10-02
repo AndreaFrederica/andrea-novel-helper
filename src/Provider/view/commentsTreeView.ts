@@ -83,6 +83,7 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
     private refreshTimer: NodeJS.Timeout | null = null;
     private registeredGlobalCb = false;
     private mapRetryAttempts = 0;
+    private context: vscode.ExtensionContext;
     
     // 搜索和过滤状态
     private searchQuery: string = '';
@@ -91,7 +92,8 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
     // 已发现的v2批注目录缓存（用于构造正确的索引路径）
     private commentsDirs: string[] = [];
 
-    constructor() {
+    constructor(context: vscode.ExtensionContext) {
+        this.context = context;
         this.initWorker();
         this.watchCommentChanges();
         this.registerGlobalTrackerListener();
@@ -185,7 +187,10 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
      */
     private initWorker() {
         try {
-            const workerPath = path.join(__dirname, '../../workers/commentsWorker.js');
+            // 支持 webpack (dist) 和 tsc (out) 两种模式
+            const distPath = vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'workers', 'commentsWorker.js');
+            const outPath = vscode.Uri.joinPath(this.context.extensionUri, 'out', 'workers', 'commentsWorker.js');
+            const workerPath = (fs.existsSync(distPath.fsPath) ? distPath : outPath).fsPath;
             this.worker = new Worker(workerPath);
             
             // 初始化后立即发送路径映射表
@@ -1679,7 +1684,7 @@ export class CommentsTreeDataProvider implements vscode.TreeDataProvider<Comment
  * 注册批注TreeView
  */
 export function registerCommentsTreeView(context: vscode.ExtensionContext) {
-    const provider = new CommentsTreeDataProvider();
+    const provider = new CommentsTreeDataProvider(context);
     const treeView = vscode.window.createTreeView('andrea.commentsExplorer', {
         treeDataProvider: provider,
         showCollapseAll: true

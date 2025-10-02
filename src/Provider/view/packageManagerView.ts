@@ -9,6 +9,7 @@ import { loadRoles } from '../../utils/utils';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
+import { generateCustomFileName, generateDefaultFileName } from '../../utils/Parser/markdownParser';
 
 // 解析文件名冲突：如果同名存在，则追加 _YYYYMMDD_HHmmss 或递增索引
 function resolveFileConflict(dir: string, baseName: string, ext: string): { path: string; conflicted: boolean; } {
@@ -831,10 +832,8 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
         detectedType = '角色';
     }
 
-    // 如果是 .md 文件，使用完整的重命名流程
     if (ext === '.md') {
-        // 导入 Markdown 解析器函数
-        const { generateCustomFileName, generateDefaultFileName } = await import('../../utils/Parser/markdownParser.js');
+        // 导入 Markdown 解析器函数（已在文件顶部使用静态导入）
         
         // 选择文件类型
         const roleType = await vscode.window.showQuickPick(

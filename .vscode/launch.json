@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Extension",
+      "name": "Run Extension (TypeScript)",
       "type": "extensionHost",
       "request": "launch",
       "trace": true,
@@ -13,7 +13,34 @@
         "${workspaceFolder}/out/**/*.js"
       ],
       "port": 9229,
-      "preLaunchTask": "${defaultBuildTask}"
+      "preLaunchTask": "npm: watch"
+    },
+    {
+      "name": "Run Extension (Webpack)",
+      "type": "extensionHost",
+      "request": "launch",
+      "trace": true,
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "port": 9229,
+      "preLaunchTask": "npm: webpack:watch"
+    },
+    {
+      "name": "Extension Tests (TypeScript)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionTestsPath=${workspaceFolder}/out/test/suite/index"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/test/**/*.js"
+      ],
+      "preLaunchTask": "npm: watch"
     },
     {
       "name": "C/C++ Runner: Debug Session",

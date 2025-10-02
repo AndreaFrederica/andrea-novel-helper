@@ -36,4 +36,11 @@ export default [{
         }
     ],
     },
+}, {
+    // Webpack配置文件例外：允许使用CommonJS require
+    files: ["webpack.config.js", "*.config.js"],
+    rules: {
+        "@typescript-eslint/no-var-requires": "off",
+        "@typescript-eslint/no-require-imports": "off",
+    },
 }];

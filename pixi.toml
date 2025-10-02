@@ -6,6 +6,7 @@ platforms = ["win-64"]
 version = "0.1.0"
 
 [tasks]
+# ============= 静态服务器 =============
 server = { cmd = [
     "python",
     "static_server.py",
@@ -15,19 +16,73 @@ server = { cmd = [
     "5173",
 ] }
 
+# ============= 编译扩展 - TypeScript 模式 =============
 build = { cmd = ["npm", "run", "compile"] }
+watch = { cmd = ["npm", "run", "watch"] }
 
+# ============= 编译扩展 - Webpack 模式 =============
+build_webpack = { cmd = ["npm", "run", "build:extension"] }
+build_webpack_dev = { cmd = ["npm", "run", "webpack"] }
+watch_webpack = { cmd = ["npm", "run", "watch:extension"] }
+
+# ============= 编译 Webview =============
 build_web = { cmd = ["npm", "run", "build:webview"] }
-
-build_all = { depends-on = ["build_web", "build"] }
-
 web_dev = { cmd = ["npm", "run", "dev:webview"] }
 
+# ============= 完整编译 =============
+build_all = { depends-on = ["build_web", "build"] }
+build_all_webpack = { depends-on = ["build_web", "build_webpack"] }
+
+# ============= 切换编译模式 =============
+# 切换到 Webpack 模式
+use_webpack = { cmd = [
+    "pwsh",
+    "-Command",
+    "(Get-Content package.json -Raw | ConvertFrom-Json) | ForEach-Object { $_.main = './dist/extension.js'; $_ } | ConvertTo-Json -Depth 100 | Set-Content package.json; Copy-Item .vscodeignore.webpack .vscodeignore -Force",
+] }
+
+# 切换到 TypeScript 模式
+use_tsc = { cmd = [
+    "pwsh",
+    "-Command",
+    "(Get-Content package.json -Raw | ConvertFrom-Json) | ForEach-Object { $_.main = './out/extension.js'; $_ } | ConvertTo-Json -Depth 100 | Set-Content package.json; Copy-Item .vscodeignore.tsc .vscodeignore -Force",
+] }
+
+# ============= 打包 VSIX =============
+# TypeScript 模式打包
+package_tsc = { cmd = [
+    "pwsh",
+    "-File",
+    "package.ps1",
+    "-TypeScript",
+] }
+
+# Webpack 模式打包 (推荐用于发布)
+package_webpack = { cmd = ["pwsh", "-File", "package.ps1", "-Webpack"] }
+
+# 默认打包 (使用 webpack)
+package = { depends-on = ["package_webpack"] }
+
+# 清理后打包
+package_clean = { cmd = [
+    "pwsh",
+    "-File",
+    "package.ps1",
+    "-Webpack",
+    "-Clean",
+] }
+
+# ============= 发布 =============
 publish = { cmd = ["npx", "vsce", "publish"] }
-
 publish_ovsx = { cmd = ["npx", "ovsx", "publish"] }
-
 publish_all = { depends-on = ["publish", "publish_ovsx"] }
+
+# ============= 清理 =============
+clean = { cmd = [
+    "pwsh",
+    "-Command",
+    "Remove-Item -Recurse -Force out,dist -ErrorAction SilentlyContinue",
+] }
 
 
 [dependencies]

@@ -199,7 +199,10 @@ class PersistentCacheClient {
 
   private async ensureWorker(): Promise<void> {
     if (this.worker) { return; }
-    const wpath = vscode.Uri.joinPath(this.ctx.extensionUri, 'out', 'workers', 'persistentCache.worker.js');
+    // 支持 webpack (dist) 和 tsc (out) 两种模式
+    const distPath = vscode.Uri.joinPath(this.ctx.extensionUri, 'dist', 'workers', 'persistentCache.worker.js');
+    const outPath = vscode.Uri.joinPath(this.ctx.extensionUri, 'out', 'workers', 'persistentCache.worker.js');
+    const wpath = fs.existsSync(distPath.fsPath) ? distPath : outPath;
     const w = new Worker(wpath.fsPath);
     this.worker = w;
 
@@ -429,7 +432,10 @@ class AsyncWordCounter {
     if (theContext === undefined) {
       throw new Error('AsyncWordCounter context not set');
     }
-    const workerPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'wordCountWorker.js');
+    // 支持 webpack (dist) 和 tsc (out) 两种模式
+    const distPath = vscode.Uri.joinPath(theContext.extensionUri, 'dist', 'workers', 'wordCountWorker.js');
+    const outPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'wordCountWorker.js');
+    const workerPath = fs.existsSync(distPath.fsPath) ? distPath : outPath;
     try {
       const worker = new Worker(workerPath.fsPath);
       const info: WorkerInfo = { worker, ready: false, queue: [] };

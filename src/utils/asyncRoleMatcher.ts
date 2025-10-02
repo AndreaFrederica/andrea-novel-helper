@@ -1,5 +1,6 @@
 import { Worker } from 'worker_threads';
 import * as path from 'path';
+import * as fs from 'fs';
 import { roles, onDidChangeRoles } from '../activate';
 import * as vscode from 'vscode';
 
@@ -45,7 +46,10 @@ class AsyncRoleMatcher {
       if (!theContext) {
         throw new Error('AsyncRoleMatcher context not set');
       }
-      const workerPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'roleAcWorker.js').fsPath;
+      // 支持 webpack (dist) 和 tsc (out) 两种模式
+      const distPath = vscode.Uri.joinPath(theContext.extensionUri, 'dist', 'workers', 'roleAcWorker.js');
+      const outPath = vscode.Uri.joinPath(theContext.extensionUri, 'out', 'workers', 'roleAcWorker.js');
+      const workerPath = (fs.existsSync(distPath.fsPath) ? distPath : outPath).fsPath;
       // const workerPath = path.join(__dirname, '..', 'workers', 'roleAcWorker.js');
       this.worker = new Worker(workerPath);
       this.worker.on('message', (msg: any)=> this.onMessage(msg));
