@@ -25,6 +25,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TimelineEventEditor: typeof import('./src/components/TimelineEventEditor.vue')['default']
+    TimelineRenderSettings: typeof import('./src/components/TimelineRenderSettings.vue')['default']
     TimelineView: typeof import('./src/components/TimelineView.vue')['default']
     UniversalEditor: typeof import('./src/components/UniversalEditor.vue')['default']
     UniversalEditorModal: typeof import('./src/components/UniversalEditorModal.vue')['default']

@@ -100,97 +100,7 @@
             </q-btn>
           </div>
 
-          <!-- 显示设置 -->
-          <q-card flat bordered class="q-mb-md">
-            <q-card-section>
-              <div class="text-subtitle2 q-mb-md">显示组件</div>
-
-              <q-toggle
-                v-model="renderSettings.showBackground"
-                label="显示背景网格"
-                color="primary"
-                @update:model-value="updateFlowElements"
-              />
-
-              <q-toggle
-                v-model="renderSettings.showMiniMap"
-                label="显示小地图"
-                color="primary"
-                @update:model-value="updateFlowElements"
-              />
-
-              <q-toggle
-                v-model="renderSettings.showControls"
-                label="显示控制按钮"
-                color="primary"
-                @update:model-value="updateFlowElements"
-              />
-            </q-card-section>
-          </q-card>
-
-          <!-- 连线设置 -->
-          <q-card flat bordered class="q-mb-md">
-            <q-card-section>
-              <div class="text-subtitle2 q-mb-sm">连线设置</div>
-
-              <q-toggle
-                v-model="renderSettings.edgesOnTop"
-                label="连线显示在节点上方"
-                color="primary"
-                @update:model-value="updateFlowElements"
-              >
-                <q-tooltip>启用后，连线会绘制在节点上方，更容易看清连接关系</q-tooltip>
-              </q-toggle>
-
-              <div class="q-mt-md">
-                <div class="text-body2 q-mb-sm">
-                  动画速度: {{ renderSettings.edgeAnimationSpeed }}
-                </div>
-                <q-slider
-                  v-model="renderSettings.edgeAnimationSpeed"
-                  :min="1"
-                  :max="5"
-                  :step="1"
-                  label
-                  color="primary"
-                  markers
-                  @update:model-value="updateFlowElements"
-                />
-              </div>
-            </q-card-section>
-          </q-card>
-
-          <!-- 布局设置 -->
-          <q-card flat bordered class="q-mb-md">
-            <q-card-section>
-              <div class="text-subtitle2 q-mb-sm">布局设置</div>
-
-              <div class="q-mb-md">
-                <div class="text-body2 q-mb-sm">
-                  节点默认间距: {{ renderSettings.nodeSpacing }}px
-                </div>
-                <q-slider
-                  v-model="renderSettings.nodeSpacing"
-                  :min="100"
-                  :max="400"
-                  :step="50"
-                  label
-                  color="primary"
-                  markers
-                  @update:model-value="updateFlowElements"
-                />
-              </div>
-            </q-card-section>
-          </q-card>
-
-          <!-- 重置按钮 -->
-          <q-btn
-            label="重置为默认设置"
-            color="grey"
-            outline
-            class="full-width"
-            @click="resetSettings"
-          />
+          <TimelineRenderSettings />
         </div>
       </q-scroll-area>
     </q-drawer>
@@ -229,56 +139,6 @@
 
     <!-- 右侧主体：100vh 可滚动 -->
     <q-page-container class="layout-no-size" style="height: 100vh; overflow: hidden">
-      <!-- 左上角工具栏 -->
-      <div class="toolbar-top-left">
-        <q-btn
-          v-if="!drawerOpen"
-          dense
-          flat
-          round
-          icon="menu"
-          @click="drawerOpen = true"
-        >
-          <q-tooltip>打开事件列表</q-tooltip>
-        </q-btn>
-      </div>
-
-      <!-- 右上角工具栏 -->
-      <div class="toolbar-top-right">
-        <q-btn
-          v-if="!timelineDrawerOpen && !settingsDrawerOpen && !snapshotDrawerOpen"
-          dense
-          flat
-          round
-          icon="timeline"
-          @click="timelineDrawerOpen = true"
-          class="q-mr-sm"
-        >
-          <q-tooltip>打开时间线视图</q-tooltip>
-        </q-btn>
-        <q-btn
-          v-if="!settingsDrawerOpen && !snapshotDrawerOpen && !timelineDrawerOpen"
-          dense
-          flat
-          round
-          icon="settings"
-          @click="settingsDrawerOpen = true"
-          class="q-mr-sm"
-        >
-          <q-tooltip>打开设置</q-tooltip>
-        </q-btn>
-        <q-btn
-          v-if="!snapshotDrawerOpen && !settingsDrawerOpen && !timelineDrawerOpen"
-          dense
-          flat
-          round
-          icon="visibility"
-          @click="snapshotDrawerOpen = true"
-        >
-          <q-tooltip>打开数据快照</q-tooltip>
-        </q-btn>
-      </div>
-
       <!-- 添加事件对话框 -->
       <q-dialog v-model="isAddDialogOpen" persistent>
         <q-card style="max-width: 500px; width: 90vw">
@@ -375,30 +235,89 @@
       <q-page class="timeline-workspace column no-wrap">
         <!-- 顶部时间线面板（可折叠） -->
         <div class="timeline-top-panel" :class="{ 'timeline-top-panel--open': timelineDrawerOpen }">
-          <div class="timeline-panel-header">
+          <div class="timeline-panel-header" @click="toggleTimelinePanel">
             <div class="text-subtitle1 text-weight-medium">时间线视图</div>
             <q-btn
               dense
               flat
               round
               :icon="timelineDrawerOpen ? 'expand_less' : 'expand_more'"
-              @click="timelineDrawerOpen = !timelineDrawerOpen"
+              @click.stop="toggleTimelinePanel"
             >
               <q-tooltip>{{ timelineDrawerOpen ? '收起' : '展开' }}时间线</q-tooltip>
             </q-btn>
           </div>
           <q-slide-transition>
-            <div v-show="timelineDrawerOpen" class="timeline-panel-body">
-              <TimelineView :events="events" :connections="connections" />
+            <div v-show="timelineDrawerOpen" class="timeline-panel-body-wrapper">
+              <div class="timeline-panel-body" :style="{ height: `${timelinePanelHeight}px` }">
+                <TimelineView :events="events" :connections="connections" />
+                <!-- 底部拖动调整条 -->
+                <div
+                  class="timeline-resize-handle"
+                  @mousedown="startResize"
+                >
+                  <div class="timeline-resize-indicator"></div>
+                </div>
+              </div>
             </div>
           </q-slide-transition>
         </div>
 
         <!-- 流程图画布区域 -->
         <div class="timeline-flow">
+          <!-- 左上角工具栏 -->
+          <div class="toolbar-top-left">
+            <q-btn
+              v-if="!drawerOpen"
+              dense
+              flat
+              round
+              icon="menu"
+              @click="drawerOpen = true"
+            >
+              <q-tooltip>打开事件列表</q-tooltip>
+            </q-btn>
+          </div>
+
+          <!-- 右上角工具栏 -->
+          <div class="toolbar-top-right">
+            <q-btn
+              v-if="!timelineDrawerOpen && !settingsDrawerOpen && !snapshotDrawerOpen"
+              dense
+              flat
+              round
+              icon="timeline"
+              @click="timelineDrawerOpen = true"
+              class="q-mr-sm"
+            >
+              <q-tooltip>打开时间线视图</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="!settingsDrawerOpen && !snapshotDrawerOpen && !timelineDrawerOpen"
+              dense
+              flat
+              round
+              icon="settings"
+              @click="settingsDrawerOpen = true"
+              class="q-mr-sm"
+            >
+              <q-tooltip>打开设置</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="!snapshotDrawerOpen && !settingsDrawerOpen && !timelineDrawerOpen"
+              dense
+              flat
+              round
+              icon="visibility"
+              @click="snapshotDrawerOpen = true"
+            >
+              <q-tooltip>打开数据快照</q-tooltip>
+            </q-btn>
+          </div>
+
           <VueFlow
             class="timeline-flow__canvas w-full h-full"
-            :class="{ 'edges-on-top': renderSettings.edgesOnTop }"
+            :class="{ 'edges-on-top': settingsStore.edgesOnTop }"
             :nodes="nodes"
             :edges="edges"
             fit-view-on-init
@@ -411,9 +330,9 @@
             no-drag-class-name="no-drag"
             @edges-change="onEdgesChange"
           >
-            <Background v-if="renderSettings.showBackground" />
-            <Controls v-if="renderSettings.showControls" />
-            <MiniMap v-if="renderSettings.showMiniMap" />
+            <Background v-if="settingsStore.showBackground" />
+            <Controls v-if="settingsStore.showControls" />
+            <MiniMap v-if="settingsStore.showMiniMap" />
           </VueFlow>
         </div>
       </q-page>
@@ -436,15 +355,8 @@ import EditableEventNode from '../components/EditableEventNode.vue';
 import TimelineEventEditor from '../components/TimelineEventEditor.vue';
 import ConnectionEditor from '../components/ConnectionEditor.vue';
 import TimelineView from '../components/TimelineView.vue';
-
-interface RenderSettings {
-  edgesOnTop: boolean; // 连线显示在节点上方
-  showMiniMap: boolean; // 显示小地图
-  showBackground: boolean; // 显示背景网格
-  showControls: boolean; // 显示控制按钮
-  edgeAnimationSpeed: number; // 连线动画速度 (1-5)
-  nodeSpacing: number; // 节点默认间距
-}
+import TimelineRenderSettings from '../components/TimelineRenderSettings.vue';
+import { useTimelineSettingsStore } from '../stores/timeline-settings';
 
 interface BindingReference {
   uuid: string;
@@ -483,6 +395,9 @@ interface TimelineData {
 // 使用VueFlow组合式函数
 const { onInit, onNodeDragStop, onConnect, onEdgeClick, onNodesChange, addEdges, removeEdges, toObject } = useVueFlow();
 
+// 使用 Pinia store
+const settingsStore = useTimelineSettingsStore();
+
 // 响应式状态
 const events = ref<TimelineEvent[]>([]);
 const connections = ref<TimelineConnection[]>([]);
@@ -490,6 +405,7 @@ const nodes = ref<any[]>([]);
 const edges = ref<any[]>([]);
 const drawerOpen = ref(true);
 const timelineDrawerOpen = ref(false); // 时间线抽屉默认收起
+const timelinePanelHeight = ref(400); // 时间线面板高度（px）
 const snapshotDrawerOpen = ref(false);
 const settingsDrawerOpen = ref(false);
 const isAddDialogOpen = ref(false);
@@ -501,15 +417,69 @@ const isLoading = ref(false);
 const deleteConnectionDialog = ref(false);
 const connectionToDelete = ref<string | null>(null);
 
-// 渲染设置
-const renderSettings = ref<RenderSettings>({
-  edgesOnTop: false,
-  showMiniMap: true,
-  showBackground: true,
-  showControls: true,
-  edgeAnimationSpeed: 3,
-  nodeSpacing: 200,
-});
+// 时间线面板调整相关
+const isResizing = ref(false);
+const resizeStartY = ref(0);
+const resizeStartHeight = ref(0);
+
+function startResize(event: MouseEvent) {
+  isResizing.value = true;
+  resizeStartY.value = event.clientY;
+  resizeStartHeight.value = timelinePanelHeight.value;
+
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+  event.preventDefault();
+}
+
+function handleResize(event: MouseEvent) {
+  if (!isResizing.value) return;
+
+  const deltaY = event.clientY - resizeStartY.value;
+  const newHeight = resizeStartHeight.value + deltaY;
+
+  // 限制最小和最大高度
+  const minHeight = 200;
+  const maxHeight = window.innerHeight * 0.8;
+  timelinePanelHeight.value = Math.max(minHeight, Math.min(maxHeight, newHeight));
+}
+
+function stopResize() {
+  if (isResizing.value) {
+    isResizing.value = false;
+    document.removeEventListener('mousemove', handleResize);
+    document.removeEventListener('mouseup', stopResize);
+    saveTimelineViewState();
+  }
+}
+
+// 切换时间线面板展开/收起
+function toggleTimelinePanel() {
+  timelineDrawerOpen.value = !timelineDrawerOpen.value;
+}
+
+// 保存时间线视图状态
+function saveTimelineViewState() {
+  const state = {
+    isOpen: timelineDrawerOpen.value,
+    height: timelinePanelHeight.value,
+  };
+  localStorage.setItem('timeline-view-state', JSON.stringify(state));
+}
+
+// 加载时间线视图状态
+function loadTimelineViewState() {
+  try {
+    const saved = localStorage.getItem('timeline-view-state');
+    if (saved) {
+      const state = JSON.parse(saved);
+      timelineDrawerOpen.value = state.isOpen ?? false;
+      timelinePanelHeight.value = state.height ?? 400;
+    }
+  } catch (error) {
+    console.error('加载时间线视图状态失败:', error);
+  }
+}
 
 // 计算属性：完整数据快照
 const timelineData = computed<TimelineData>(() => ({
@@ -643,7 +613,17 @@ function addEvent() {
   events.value.push(newEvent);
   updateFlowElements();
   void saveTimelineData();
-  isAddDialogOpen.value = false;
+
+  // 根据设置决定是否关闭弹窗
+  if (settingsStore.closeAfterAdd) {
+    isAddDialogOpen.value = false;
+  } else {
+    // 不关闭弹窗，但清空表单以便继续添加
+    eventForm.title = '';
+    eventForm.description = '';
+    eventForm.group = '';
+    eventForm.date = new Date().toISOString().split('T')[0] || '';
+  }
 }
 
 // 更新事件
@@ -701,7 +681,12 @@ function handleEventSave(updatedEvent: Partial<TimelineEvent>) {
       void saveTimelineData();
     }
   }
-  editingEvent.value = null;
+
+  // 根据设置决定是否关闭弹窗
+  if (settingsStore.closeAfterEdit) {
+    editingEvent.value = null;
+  }
+  // 如果不关闭，保持 editingEvent 不变，弹窗会继续显示
 }
 
 // 删除连线
@@ -782,6 +767,11 @@ function handleConnectionSave(updatedConn: TimelineConnection) {
     updateFlowElements();
     void saveTimelineData();
   }
+
+  // 清空编辑状态（弹窗的关闭由组件自己根据 store 设置决定）
+  if (settingsStore.closeAfterEditConnection) {
+    editingConnection.value = null;
+  }
 }
 
 // 删除连线(从编辑器)
@@ -806,41 +796,8 @@ function editConnectionFromDialog() {
 
 // 重置设置为默认值
 function resetSettings() {
-  renderSettings.value = {
-    edgesOnTop: false,
-    showMiniMap: true,
-    showBackground: true,
-    showControls: true,
-    edgeAnimationSpeed: 3,
-    nodeSpacing: 200,
-  };
-  saveRenderSettings();
+  settingsStore.reset();
   updateFlowElements();
-}
-
-// 保存渲染设置到 localStorage
-function saveRenderSettings() {
-  try {
-    localStorage.setItem('timeline-render-settings', JSON.stringify(renderSettings.value));
-  } catch (error) {
-    console.error('保存渲染设置失败:', error);
-  }
-}
-
-// 从 localStorage 加载渲染设置
-function loadRenderSettings() {
-  try {
-    const saved = localStorage.getItem('timeline-render-settings');
-    if (saved) {
-      const parsed = JSON.parse(saved) as RenderSettings;
-      renderSettings.value = {
-        ...renderSettings.value,
-        ...parsed,
-      };
-    }
-  } catch (error) {
-    console.error('加载渲染设置失败:', error);
-  }
 }
 
 // 处理节点标题更新
@@ -1014,12 +971,38 @@ function handleMessage(event: MessageEvent) {
 
 // 保存数据到 VS Code
 function saveTimelineData() {
+  // 将响应式对象转换为纯 JavaScript 对象，避免 postMessage 序列化错误
+  const plainEvents = events.value.map(event => ({
+    id: event.id,
+    title: event.title,
+    group: event.group,
+    type: event.type,
+    date: event.date,
+    description: event.description,
+    timeless: event.timeless,
+    position: event.position ? { x: event.position.x, y: event.position.y } : undefined,
+    bindings: event.bindings ? event.bindings.map(b => ({
+      uuid: b.uuid,
+      type: b.type,
+      label: b.label,
+    })) : undefined,
+    data: event.data ? { type: event.data.type } : undefined,
+  }));
+
+  const plainConnections = connections.value.map(conn => ({
+    id: conn.id,
+    source: conn.source,
+    target: conn.target,
+    label: conn.label,
+    connectionType: conn.connectionType,
+  }));
+
   window.parent.postMessage(
     {
       command: 'saveTimelineData',
       data: {
-        events: events.value,
-        connections: connections.value,
+        events: plainEvents,
+        connections: plainConnections,
       },
     },
     '*',
@@ -1037,7 +1020,7 @@ function updateFlowElements() {
       type: 'editable',
       // 使用保存的坐标，或者根据设置的间距计算默认坐标
       position: event.position || {
-        x: index * renderSettings.value.nodeSpacing,
+        x: index * settingsStore.nodeSpacing,
         y: event.type === 'main' ? 100 : 250
       },
       draggable: true,
@@ -1089,7 +1072,7 @@ function updateFlowElements() {
         stroke: getConnectionColor(connectionType, isValid),
         strokeWidth: connectionType !== 'normal' ? 3 : 2, // 特殊连线更粗
         strokeDasharray: connectionType === 'dream' || connectionType === 'flashback' ? '5,5' : undefined, // 梦境和闪回用虚线
-        animationDuration: `${6 - renderSettings.value.edgeAnimationSpeed}s`, // 动画速度:1(慢)到5(快)
+        animationDuration: `${6 - settingsStore.edgeAnimationSpeed}s`, // 动画速度:1(慢)到5(快)
       },
       labelStyle: {
         fill: connectionType !== 'normal' ? getConnectionColor(connectionType, isValid) : '#666',
@@ -1111,17 +1094,25 @@ function updateFlowElements() {
 
 // 监听渲染设置变化,自动保存到 localStorage
 watch(
-  renderSettings,
+  () => settingsStore.$state,
   () => {
-    saveRenderSettings();
+    settingsStore.saveToLocalStorage();
   },
   { deep: true }
 );
 
+// 监听时间线展开状态变化
+watch(() => timelineDrawerOpen.value, () => {
+  saveTimelineViewState();
+});
+
 // 初始化数据
 onMounted(() => {
   // 加载渲染设置
-  loadRenderSettings();
+  settingsStore.loadFromLocalStorage();
+
+  // 加载时间线视图状态
+  loadTimelineViewState();
 
   loadInitialData();
 
@@ -1201,13 +1192,51 @@ function handleTimelineNodeUpdate() {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.timeline-panel-body-wrapper {
+  overflow: hidden;
+}
+
 .timeline-panel-body {
-  height: 50vh;
   overflow: hidden;
   padding: 0;
   background: var(--q-dark, #1d1d1d);
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+/* 拖动调整条 */
+.timeline-resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.timeline-resize-handle:hover {
+  background: rgba(66, 184, 131, 0.1);
+}
+
+.timeline-resize-indicator {
+  width: 40px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  transition: all 0.2s ease;
+}
+
+.timeline-resize-handle:hover .timeline-resize-indicator {
+  width: 60px;
+  height: 4px;
+  background: rgba(66, 184, 131, 0.6);
 }
 
 .timeline-flow {
@@ -1230,7 +1259,7 @@ function handleTimelineNodeUpdate() {
 
 /* 左上角工具栏 */
 .toolbar-top-left {
-  position: fixed;
+  position: absolute;
   top: 16px;
   left: 16px;
   z-index: 1000;
@@ -1238,7 +1267,7 @@ function handleTimelineNodeUpdate() {
 
 /* 右上角工具栏 */
 .toolbar-top-right {
-  position: fixed;
+  position: absolute;
   top: 16px;
   right: 16px;
   z-index: 1000;

@@ -51,6 +51,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
+import { useTimelineSettingsStore } from '../stores/timeline-settings';
 
 interface ConnectionData {
   id: string;
@@ -70,9 +71,12 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
-  'save': [connection: ConnectionData];
-  'delete': [id: string];
+  save: [connection: ConnectionData];
+  delete: [id: string];
 }>();
+
+// 使用 Pinia store
+const settingsStore = useTimelineSettingsStore();
 
 // 表单数据
 const formData = ref<Partial<ConnectionData>>({
@@ -142,7 +146,15 @@ function saveConnection() {
   }
 
   emit('save', updated);
-  closeDialog();
+
+  // 根据 store 中的设置决定是否关闭弹窗
+  console.log('ConnectionEditor - closeAfterEditConnection:', settingsStore.closeAfterEditConnection);
+  if (settingsStore.closeAfterEditConnection) {
+    console.log('ConnectionEditor - 正在关闭弹窗');
+    closeDialog();
+  } else {
+    console.log('ConnectionEditor - 保持弹窗打开');
+  }
 }
 
 // 删除连线
