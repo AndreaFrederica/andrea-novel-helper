@@ -1,15 +1,5 @@
 <template>
   <q-layout class="layout-no-size">
-    <!-- 右下角悬浮开关按钮 -->
-    <q-btn
-      round
-      dense
-      icon="menu"
-      class="drawer-toggle br"
-      @click="drawerOpen = !drawerOpen"
-      :aria-label="drawerOpen ? '关闭事件列表' : '打开事件列表'"
-    />
-
     <!-- 左侧边栏（由 q-layout 管理，框架将自动挤压主内容） -->
     <q-drawer
       v-model="drawerOpen"
@@ -23,6 +13,15 @@
         <div class="q-pa-md">
           <div class="row items-center justify-between q-mb-sm">
             <div class="text-subtitle1">事件（{{ events.length }}）</div>
+            <q-btn
+              dense
+              flat
+              round
+              icon="close"
+              @click="drawerOpen = false"
+            >
+              <q-tooltip>关闭事件列表</q-tooltip>
+            </q-btn>
           </div>
 
           <q-list separator>
@@ -76,8 +75,68 @@
       </q-scroll-area>
     </q-drawer>
 
+    <!-- 右侧边栏（数据快照） -->
+    <q-drawer
+      v-model="snapshotDrawerOpen"
+      side="right"
+      bordered
+      :breakpoint="0"
+      :class="['drawer-fullheight']"
+      style="height: 100vh; width: 400px"
+    >
+      <q-scroll-area class="fit">
+        <div class="q-pa-md">
+          <div class="row items-center justify-between q-mb-md">
+            <div class="text-h6">当前数据快照</div>
+            <q-btn
+              dense
+              flat
+              round
+              icon="close"
+              @click="snapshotDrawerOpen = false"
+            >
+              <q-tooltip>关闭数据快照</q-tooltip>
+            </q-btn>
+          </div>
+          <q-card flat bordered>
+            <q-card-section>
+              <pre style="white-space: pre-wrap; word-wrap: break-word;">{{ timelineData }}</pre>
+            </q-card-section>
+          </q-card>
+        </div>
+      </q-scroll-area>
+    </q-drawer>
+
     <!-- 右侧主体：100vh 可滚动 -->
     <q-page-container class="layout-no-size" style="height: 100vh; overflow: hidden">
+      <!-- 左上角工具栏 -->
+      <div class="toolbar-top-left">
+        <q-btn
+          v-if="!drawerOpen"
+          dense
+          flat
+          round
+          icon="menu"
+          @click="drawerOpen = true"
+        >
+          <q-tooltip>打开事件列表</q-tooltip>
+        </q-btn>
+      </div>
+
+      <!-- 右上角工具栏 -->
+      <div class="toolbar-top-right">
+        <q-btn
+          v-if="!snapshotDrawerOpen"
+          dense
+          flat
+          round
+          icon="visibility"
+          @click="snapshotDrawerOpen = true"
+        >
+          <q-tooltip>打开数据快照</q-tooltip>
+        </q-btn>
+      </div>
+
       <!-- 添加事件对话框 -->
       <q-dialog v-model="isAddDialogOpen" persistent>
         <q-card style="max-width: 500px; width: 90vw">
@@ -121,33 +180,40 @@
           </q-card-section>
         </q-card>
       </q-dialog>
-      <q-scroll-area class="fit">
-        <!-- Vue Flow画布 -->
-        <div class="flex-1" style="height: calc(100vh - 80px)">
-          <VueFlow
-            :nodes="nodes"
-            :edges="edges"
-            fit-view-on-init
-            class="w-full h-full"
-            :node-types="nodeTypes"
-            :connection-radius="30"
-          >
-            <Background />
-            <Controls />
-            <MiniMap />
-          </VueFlow>
-        </div>
 
-        <q-separator class="q-my-md" />
+      <!-- 删除连线确认对话框 -->
+      <q-dialog v-model="deleteConnectionDialog" persistent>
+        <q-card>
+          <q-card-section class="row items-center">
+            <q-avatar icon="warning" color="negative" text-color="white" />
+            <span class="q-ml-sm">确定要删除这条连线吗？</span>
+          </q-card-section>
 
-        <q-expansion-item label="当前数据快照" icon="visibility" expand-separator>
-          <q-card flat bordered>
-            <q-card-section>
-              <pre style="white-space: pre-wrap">{{ events }}</pre>
-            </q-card-section>
-          </q-card>
-        </q-expansion-item>
-      </q-scroll-area>
+          <q-card-actions align="right">
+            <q-btn flat label="取消" color="primary" v-close-popup />
+            <q-btn flat label="删除" color="negative" @click="deleteConnection" v-close-popup />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
+
+      <!-- Vue Flow画布 -->
+      <q-page class="fit">
+        <VueFlow
+          :nodes="nodes"
+          :edges="edges"
+          fit-view-on-init
+          class="w-full h-full"
+          :node-types="nodeTypes"
+          :connection-radius="30"
+          :edges-updatable="true"
+          :nodes-draggable="true"
+          @edges-change="onEdgesChange"
+        >
+          <Background />
+          <Controls />
+          <MiniMap />
+        </VueFlow>
+      </q-page>
     </q-page-container>
   </q-layout>
 </template>
@@ -172,22 +238,44 @@ interface TimelineEvent {
   type: 'main' | 'side';
   date: string;
   description: string;
+  position?: { x: number; y: number }; // 节点坐标
   data?: {
     type: 'main' | 'side';
   };
 }
 
+interface TimelineConnection {
+  id: string;
+  source: string;
+  target: string;
+}
+
+interface TimelineData {
+  events: TimelineEvent[];
+  connections: TimelineConnection[];
+}
+
 // 使用VueFlow组合式函数
-const { onInit, onNodeDragStop, onConnect, addEdges, toObject } = useVueFlow();
+const { onInit, onNodeDragStop, onConnect, onEdgeClick, onNodesChange, addEdges, removeEdges, toObject } = useVueFlow();
 
 // 响应式状态
 const events = ref<TimelineEvent[]>([]);
+const connections = ref<TimelineConnection[]>([]);
 const nodes = ref<any[]>([]);
 const edges = ref<any[]>([]);
 const drawerOpen = ref(true);
+const snapshotDrawerOpen = ref(false);
 const isAddDialogOpen = ref(false);
 const isEditDialogOpen = ref(false);
 const isLoading = ref(false);
+const deleteConnectionDialog = ref(false);
+const connectionToDelete = ref<string | null>(null);
+
+// 计算属性：完整数据快照
+const timelineData = computed<TimelineData>(() => ({
+  events: events.value,
+  connections: connections.value,
+}));
 
 // 新建/编辑事件表单
 const eventForm = reactive({
@@ -211,14 +299,69 @@ onInit((vueFlowInstance) => {
 
 onNodeDragStop(({ event, nodes: draggedNodes, node }) => {
   console.log('节点拖动停止', { event, nodes: draggedNodes, node });
-  // 这里可以添加拖动后的保存逻辑
+  // 保存节点位置
+  if (node && node.position) {
+    const eventIndex = events.value.findIndex((e) => e.id === node.id);
+    if (eventIndex !== -1 && events.value[eventIndex]) {
+      events.value[eventIndex].position = {
+        x: node.position.x,
+        y: node.position.y,
+      };
+      void saveTimelineData();
+    }
+  }
 });
 
-onConnect((connection) => {
-  console.log('新建连接', connection);
-  addEdges(connection);
-  void saveEvents();
+// 监听节点变化（包括位置变化）- 只更新位置，不重建节点
+onNodesChange((changes) => {
+  changes.forEach((change) => {
+    if (change.type === 'position' && change.position && change.id) {
+      const eventIndex = events.value.findIndex((e) => e.id === change.id);
+      if (eventIndex !== -1 && events.value[eventIndex] && change.position) {
+        // 只更新位置数据，不触发 updateFlowElements
+        events.value[eventIndex].position = {
+          x: change.position.x,
+          y: change.position.y,
+        };
+      }
+    }
+  });
 });
+
+onConnect((params) => {
+  console.log('新建连接', params);
+  // 添加到 connections 数组
+  const newConnection: TimelineConnection = {
+    id: `conn-${generateUUIDv7()}`,
+    source: params.source,
+    target: params.target,
+  };
+  connections.value.push(newConnection);
+  
+  // 更新显示
+  updateFlowElements();
+  void saveTimelineData();
+});
+
+// 点击边时显示确认对话框
+onEdgeClick(({ edge }) => {
+  console.log('点击边', edge);
+  connectionToDelete.value = edge.id;
+  deleteConnectionDialog.value = true;
+});
+
+// 处理边的变化（包括删除）
+function onEdgesChange(changes: any[]) {
+  console.log('边变化', changes);
+  // 处理删除操作
+  changes.forEach((change) => {
+    if (change.type === 'remove') {
+      const edgeId = change.id;
+      connections.value = connections.value.filter((conn) => conn.id !== edgeId);
+      void saveTimelineData();
+    }
+  });
+}
 
 // 打开添加事件对话框
 function openAddDialog() {
@@ -245,7 +388,7 @@ function addEvent() {
 
   events.value.push(newEvent);
   updateFlowElements();
-  void saveEvents();
+  void saveTimelineData();
   isAddDialogOpen.value = false;
 }
 
@@ -260,7 +403,7 @@ function updateEvent() {
       },
     };
     updateFlowElements();
-    void saveEvents();
+    void saveTimelineData();
     isEditDialogOpen.value = false;
   }
 }
@@ -268,8 +411,38 @@ function updateEvent() {
 // 删除事件
 function deleteEvent(id: string) {
   events.value = events.value.filter((event) => event.id !== id);
+  // 同时删除相关的连线
+  connections.value = connections.value.filter(
+    (conn) => conn.source !== id && conn.target !== id
+  );
   updateFlowElements();
-  void saveEvents();
+  void saveTimelineData();
+}
+
+// 删除连线
+function deleteConnection() {
+  if (connectionToDelete.value) {
+    connections.value = connections.value.filter(
+      (conn) => conn.id !== connectionToDelete.value
+    );
+    updateFlowElements();
+    void saveTimelineData();
+    connectionToDelete.value = null;
+  }
+}
+
+// 检查连线是否符合时间顺序
+function isConnectionValid(conn: TimelineConnection): boolean {
+  const sourceEvent = events.value.find((e) => e.id === conn.source);
+  const targetEvent = events.value.find((e) => e.id === conn.target);
+  
+  if (!sourceEvent || !targetEvent) return true; // 如果找不到事件，默认有效
+  
+  const sourceDate = new Date(sourceEvent.date);
+  const targetDate = new Date(targetEvent.date);
+  
+  // 源事件的日期应该早于或等于目标事件
+  return sourceDate <= targetDate;
 }
 
 // 处理节点标题更新
@@ -280,7 +453,7 @@ function handleNodeUpdate({ id, label }: { id: string; label: string }) {
       events.value[eventIndex].title = label;
     }
     updateFlowElements();
-      void saveEvents();
+    void saveTimelineData();
   }
 }
 
@@ -310,6 +483,7 @@ function loadInitialData() {
           type: 'main',
           date: '2024-01-01',
           description: '主角出场',
+          position: { x: 0, y: 100 },
           data: {
             type: 'main',
           },
@@ -321,6 +495,7 @@ function loadInitialData() {
           type: 'main',
           date: '2024-01-05',
           description: '主角面临第一个挑战',
+          position: { x: 400, y: 100 },
           data: {
             type: 'main',
           },
@@ -332,22 +507,45 @@ function loadInitialData() {
           type: 'side',
           date: '2024-01-03',
           description: '配角的过去经历',
+          position: { x: 200, y: 250 },
           data: {
             type: 'side',
           },
         },
       ];
+      
+      // 添加示例连线
+      connections.value = [
+        {
+          id: 'conn-1',
+          source: '1',
+          target: '2',
+        },
+        {
+          id: 'conn-2',
+          source: '1',
+          target: '3',
+        },
+        {
+          id: 'conn-3',
+          source: '3',
+          target: '2', // 这个会标红，因为日期不符合（01-03 -> 01-05 不对）
+        },
+      ];
+      
       void updateFlowElements();
     }
     isLoading.value = false;
   }, 500);
 }
 
-// 处理从VS Code收到的消息
+// 处理从 VS Code 收到的消息
 function handleMessage(event: MessageEvent) {
   if (event.data && event.data.command === 'timelineData') {
     try {
-      events.value = event.data.data || [];
+      const data = event.data.data as TimelineData;
+      events.value = data.events || [];
+      connections.value = data.connections || [];
       void updateFlowElements();
     } catch (error) {
       console.error('解析时间线数据失败:', error);
@@ -357,12 +555,15 @@ function handleMessage(event: MessageEvent) {
   }
 }
 
-// 保存数据到VS Code
-function saveEvents() {
+// 保存数据到 VS Code
+function saveTimelineData() {
   window.parent.postMessage(
     {
       command: 'saveTimelineData',
-      data: events.value,
+      data: {
+        events: events.value,
+        connections: connections.value,
+      },
     },
     '*',
   );
@@ -370,38 +571,45 @@ function saveEvents() {
 
 // 更新流元素
 function updateFlowElements() {
-  // 按日期排序事件
-  const sortedEvents = [...events.value].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  );
-
-  // 创建节点
+  // 创建节点 - 使用保存的坐标
   const newNodes: any[] = [];
-  const newEdges: any[] = [];
-
-  sortedEvents.forEach((event, index) => {
+  
+  events.value.forEach((event, index) => {
     newNodes.push({
       id: event.id,
       type: 'editable',
-      position: { x: index * 200, y: event.type === 'main' ? 100 : 250 },
+      // 使用保存的坐标，或者默认坐标
+      position: event.position || { x: index * 200, y: event.type === 'main' ? 100 : 250 },
       data: {
         label: event.title,
         date: event.date,
         description: event.description,
         type: event.type,
+        group: event.group, // 添加分组信息
       },
     });
+  });
 
-    // 创建连线（连接到下一个事件）
-    if (index < sortedEvents.length - 1 && sortedEvents[index + 1]) {
-      newEdges.push({
-        id: `edge-${event.id}-${sortedEvents[index + 1]!.id}`,
-        source: event.id,
-        target: sortedEvents[index + 1]!.id,
-        type: 'smoothstep',
-        markerEnd: MarkerType.Arrow,
-      });
-    }
+  // 创建连线 - 根据 connections 数组
+  const newEdges: any[] = [];
+  
+  connections.value.forEach((conn) => {
+    const isValid = isConnectionValid(conn);
+    
+    newEdges.push({
+      id: conn.id,
+      source: conn.source,
+      target: conn.target,
+      type: 'smoothstep',
+      markerEnd: MarkerType.Arrow,
+      animated: !isValid, // 不符合时间顺序的连线加上动画效果
+      selectable: true, // 可选中
+      deletable: true, // 可删除
+      style: {
+        stroke: isValid ? '#b1b1b7' : '#ef4444', // 不符合时间顺序的用红色
+        strokeWidth: 2,
+      },
+    });
   });
 
   nodes.value = newNodes;
@@ -434,23 +642,22 @@ function handleTimelineNodeUpdate() {
     console.error('解析节点更新数据失败:', error);
   }
 }
-
-// 监听事件变化，自动更新流元素
-watch(
-  events,
-  () => {
-    void updateFlowElements();
-  },
-  { deep: true },
-);
 </script>
 
 <style scoped>
-/* 自定义样式 */
-.drawer-toggle {
+/* 左上角工具栏 */
+.toolbar-top-left {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  top: 16px;
+  left: 16px;
+  z-index: 1000;
+}
+
+/* 右上角工具栏 */
+.toolbar-top-right {
+  position: fixed;
+  top: 16px;
+  right: 16px;
   z-index: 1000;
 }
 

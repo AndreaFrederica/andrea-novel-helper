@@ -1,16 +1,34 @@
 <template>
-  <div
-    class="custom-node"
-    :style="{
-      background: data.type === 'main' ? '#42b883' : '#64748b',
-      color: 'white',
-      padding: '10px',
-      borderRadius: '4px',
-      minWidth: '150px',
-      position: 'relative',
-    }"
-  >
+  <div class="custom-node" :style="nodeStyle">
+    <Handle
+      class="handle handle-left"
+      type="target"
+      :position="Position.Left"
+      :style="{
+        top: '50%',
+        left: '0',
+        transform: 'translate(-50%, -50%)',
+        background: '#555'
+      }"
+    />
+    <Handle
+      class="handle handle-right"
+      type="source"
+      :position="Position.Right"
+      :style="{
+        top: '50%',
+        right: '0',
+        transform: 'translate(50%, -50%)',
+        background: '#555'
+      }"
+    />
+
     <div class="node-content">
+      <!-- 分组标签 -->
+      <div v-if="data.group" class="group-badge">
+        <q-badge color="white" text-color="primary" :label="data.group" />
+      </div>
+
       <!-- 标题编辑区域 -->
       <div v-if="isEditing" class="title-edit-container">
         <input
@@ -56,15 +74,12 @@
       />
     </div>
   </div>
-
-  <!-- <Handle type="source" :position="Position.Right" :connectable="false" />
-  <Handle id="target-a" type="target" :position="Position.Left" :connectable="false" />
-  <Handle id="target-b" type="target" :position="Position.Left" :connectable="false" /> -->
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
-import { QBtn } from 'quasar';
+import { ref, nextTick, computed } from 'vue';
+import { Handle, Position } from '@vue-flow/core';
+import { QBtn, QBadge } from 'quasar';
 
 // 定义props
 interface Props {
@@ -74,6 +89,7 @@ interface Props {
     date: string;
     description: string;
     type: 'main' | 'side';
+    group?: string;
   };
 }
 
@@ -110,6 +126,15 @@ function saveTitle() {
 function cancelEdit() {
   isEditing.value = false;
 }
+
+const nodeStyle = computed(() => ({
+  background: props.data.type === 'main' ? '#42b883' : '#64748b',
+  color: 'white',
+  padding: '10px',
+  borderRadius: '4px',
+  minWidth: '150px',
+  position: 'relative' as const,
+}));
 </script>
 
 <style scoped>
@@ -119,6 +144,10 @@ function cancelEdit() {
 
 .node-content {
   margin-right: 20px; /* 为右侧按钮留出空间 */
+}
+
+.group-badge {
+  margin-bottom: 6px;
 }
 
 .title-edit-container {
@@ -145,6 +174,14 @@ function cancelEdit() {
   position: absolute;
   top: 0;
   right: 0;
+}
+
+.handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  cursor: crosshair;
 }
 
 /* 确保节点在编辑时不会影响连线位置 */
