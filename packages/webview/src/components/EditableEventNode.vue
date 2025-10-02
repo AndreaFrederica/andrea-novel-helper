@@ -1,29 +1,25 @@
 <template>
   <div class="custom-node" :style="nodeStyle">
+    <!-- Handles - 不可拖动 -->
     <Handle
-      class="handle handle-left"
       type="target"
       :position="Position.Left"
-      :style="{
-        top: '50%',
-        left: '0',
-        transform: 'translate(-50%, -50%)',
-        background: '#555'
-      }"
+      class="custom-handle no-drag"
+      @mousedown.stop
     />
     <Handle
-      class="handle handle-right"
       type="source"
       :position="Position.Right"
-      :style="{
-        top: '50%',
-        right: '0',
-        transform: 'translate(50%, -50%)',
-        background: '#555'
-      }"
+      class="custom-handle no-drag"
+      @mousedown.stop
     />
 
-    <div class="node-content">
+    <!-- 拖动把手区域 - 只有这个区域可以拖动节点 -->
+    <div class="drag-handle">
+      <q-icon name="drag_indicator" size="xs" style="color: rgba(255,255,255,0.6)" />
+    </div>
+
+    <div class="node-content no-drag">
       <!-- 分组标签 -->
       <div v-if="data.group" class="group-badge">
         <q-badge color="white" text-color="primary" :label="data.group" />
@@ -38,40 +34,33 @@
           @blur="saveTitle"
           @keyup.enter="saveTitle"
           @keyup.escape="cancelEdit"
+          @mousedown.stop
           ref="titleInput"
         />
       </div>
-      <div v-else class="title-display">
+      <div v-else class="title-display" @mousedown.stop>
         <div style="font-weight: bold; cursor: pointer" @click="startEdit">
           {{ data.label || '未命名事件' }}
         </div>
       </div>
 
       <!-- 日期和描述 -->
-      <div style="font-size: 0.9em">{{ data.date }}</div>
-      <div style="font-size: 0.8em; margin-top: 5px">{{ data.description }}</div>
+      <div style="font-size: 0.9em" @mousedown.stop>{{ data.date }}</div>
+      <div style="font-size: 0.8em; margin-top: 5px" @mousedown.stop>{{ data.description }}</div>
     </div>
 
-    <!-- 编辑/保存按钮 -->
-    <div class="node-actions">
+    <!-- 编辑/保存按钮 - 不可拖动 -->
+    <div class="node-actions no-drag" @mousedown.stop @click.stop>
       <q-btn
-        v-if="!isEditing"
-        @click="startEdit"
-        icon="edit"
+        @click="openFullEditor"
+        icon="settings"
         size="xs"
         dense
         flat
-        style="color: white; position: absolute; top: 5px; right: 5px"
-      />
-      <q-btn
-        v-else
-        @click="saveTitle"
-        icon="save"
-        size="xs"
-        dense
-        flat
-        style="color: white; position: absolute; top: 5px; right: 5px"
-      />
+        style="color: white"
+      >
+        <q-tooltip>完整编辑</q-tooltip>
+      </q-btn>
     </div>
   </div>
 </template>
@@ -79,7 +68,7 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
-import { QBtn, QBadge } from 'quasar';
+import { QBtn, QBadge, QIcon } from 'quasar';
 
 // 定义props
 interface Props {
@@ -95,10 +84,22 @@ interface Props {
 
 const props = defineProps<Props>();
 
+// 发射事件给父组件
+const emit = defineEmits<{
+  'open-editor': [id: string];
+}>();
+
 // 编辑状态
 const isEditing = ref(false);
 const editingTitle = ref('');
 const titleInput = ref<HTMLInputElement | null>(null);
+
+// 打开完整编辑器
+function openFullEditor() {
+  // 通过全局事件通知父组件打开编辑器
+  localStorage.setItem('openNodeEditor', props.id);
+  window.dispatchEvent(new Event('timeline-open-editor'));
+}
 
 // 开始编辑
 function startEdit() {
@@ -140,10 +141,48 @@ const nodeStyle = computed(() => ({
 <style scoped>
 .custom-node {
   user-select: none;
+  cursor: default; /* 默认鼠标样式 */
+  position: relative;
+}
+
+/* 拖动把手 - 只有这个区域可以拖动节点 */
+.drag-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 28px; /* 固定高度 */
+  cursor: move;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px 4px 0 0;
+  z-index: 5; /* 低于编辑按钮 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0; /* 默认隐藏 */
+  transition: opacity 0.2s ease;
+  pointer-events: none; /* 默认不拦截事件 */
+}
+
+/* 悬停时启用拖动把手的事件响应 */
+.custom-node:hover .drag-handle {
+  pointer-events: auto;
+}
+
+/* 鼠标悬停节点时显示拖动把手 */
+.custom-node:hover .drag-handle {
+  opacity: 1;
+}
+
+/* 确保 VueFlow 只在 drag-handle 上启用拖动 */
+.custom-node :deep(.vue-flow__node-drag-handle) {
+  cursor: move;
 }
 
 .node-content {
   margin-right: 20px; /* 为右侧按钮留出空间 */
+  cursor: default;
+  pointer-events: auto;
 }
 
 .group-badge {
@@ -164,6 +203,7 @@ const nodeStyle = computed(() => ({
   font-weight: bold;
   font-size: 1em;
   outline: none;
+  cursor: text;
 }
 
 .title-input::placeholder {
@@ -174,18 +214,29 @@ const nodeStyle = computed(() => ({
   position: absolute;
   top: 0;
   right: 0;
+  cursor: pointer;
+  z-index: 15; /* 确保在拖动把手上方 */
 }
 
-.handle {
+.custom-handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #555;
+  border: 2px solid #fff;
+  cursor: crosshair !important;
+  pointer-events: all;
+  z-index: 20; /* 确保 handle 在最上层 */
+}
+
+.custom-handle:hover {
+  background: #777;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
-  border: 2px solid #fff;
-  cursor: crosshair;
 }
 
-/* 确保节点在编辑时不会影响连线位置 */
-:deep(.vf-node-connect-handle) {
-  z-index: 10;
+/* 阻止 handle 触发节点拖动 */
+:deep(.vue-flow__handle) {
+  pointer-events: all !important;
 }
 </style>

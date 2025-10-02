@@ -75,6 +75,126 @@
       </q-scroll-area>
     </q-drawer>
 
+    <!-- 设置侧边栏 -->
+    <q-drawer
+      v-model="settingsDrawerOpen"
+      side="right"
+      bordered
+      :breakpoint="0"
+      :class="['drawer-fullheight']"
+      style="height: 100vh; width: 380px; z-index: 2000"
+    >
+      <q-scroll-area class="fit">
+        <div class="q-pa-md">
+          <div class="row items-center justify-between q-mb-md" style="min-height: 40px;">
+            <div class="text-h6">渲染设置</div>
+            <q-btn
+              dense
+              flat
+              round
+              icon="close"
+              @click="settingsDrawerOpen = false"
+              style="flex-shrink: 0;"
+            >
+              <q-tooltip>关闭设置</q-tooltip>
+            </q-btn>
+          </div>
+
+          <!-- 显示设置 -->
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle2 q-mb-md">显示组件</div>
+
+              <q-toggle
+                v-model="renderSettings.showBackground"
+                label="显示背景网格"
+                color="primary"
+                @update:model-value="updateFlowElements"
+              />
+
+              <q-toggle
+                v-model="renderSettings.showMiniMap"
+                label="显示小地图"
+                color="primary"
+                @update:model-value="updateFlowElements"
+              />
+
+              <q-toggle
+                v-model="renderSettings.showControls"
+                label="显示控制按钮"
+                color="primary"
+                @update:model-value="updateFlowElements"
+              />
+            </q-card-section>
+          </q-card>
+
+          <!-- 连线设置 -->
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle2 q-mb-sm">连线设置</div>
+
+              <q-toggle
+                v-model="renderSettings.edgesOnTop"
+                label="连线显示在节点上方"
+                color="primary"
+                @update:model-value="updateFlowElements"
+              >
+                <q-tooltip>启用后，连线会绘制在节点上方，更容易看清连接关系</q-tooltip>
+              </q-toggle>
+
+              <div class="q-mt-md">
+                <div class="text-body2 q-mb-sm">
+                  动画速度: {{ renderSettings.edgeAnimationSpeed }}
+                </div>
+                <q-slider
+                  v-model="renderSettings.edgeAnimationSpeed"
+                  :min="1"
+                  :max="5"
+                  :step="1"
+                  label
+                  color="primary"
+                  markers
+                  @update:model-value="updateFlowElements"
+                />
+              </div>
+            </q-card-section>
+          </q-card>
+
+          <!-- 布局设置 -->
+          <q-card flat bordered class="q-mb-md">
+            <q-card-section>
+              <div class="text-subtitle2 q-mb-sm">布局设置</div>
+
+              <div class="q-mb-md">
+                <div class="text-body2 q-mb-sm">
+                  节点默认间距: {{ renderSettings.nodeSpacing }}px
+                </div>
+                <q-slider
+                  v-model="renderSettings.nodeSpacing"
+                  :min="100"
+                  :max="400"
+                  :step="50"
+                  label
+                  color="primary"
+                  markers
+                  @update:model-value="updateFlowElements"
+                />
+              </div>
+            </q-card-section>
+          </q-card>
+
+          <!-- 重置按钮 -->
+          <q-btn
+            label="重置为默认设置"
+            color="grey"
+            outline
+            class="full-width"
+            @click="resetSettings"
+          />
+        </div>
+      </q-scroll-area>
+    </q-drawer>
+
     <!-- 右侧边栏（数据快照） -->
     <q-drawer
       v-model="snapshotDrawerOpen"
@@ -82,7 +202,7 @@
       bordered
       :breakpoint="0"
       :class="['drawer-fullheight']"
-      style="height: 100vh; width: 400px"
+      style="height: 100vh; width: 400px; z-index: 2000"
     >
       <q-scroll-area class="fit">
         <div class="q-pa-md">
@@ -126,7 +246,18 @@
       <!-- 右上角工具栏 -->
       <div class="toolbar-top-right">
         <q-btn
-          v-if="!snapshotDrawerOpen"
+          v-if="!settingsDrawerOpen && !snapshotDrawerOpen"
+          dense
+          flat
+          round
+          icon="settings"
+          @click="settingsDrawerOpen = true"
+          class="q-mr-sm"
+        >
+          <q-tooltip>打开设置</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="!snapshotDrawerOpen && !settingsDrawerOpen"
           dense
           flat
           round
@@ -181,20 +312,53 @@
         </q-card>
       </q-dialog>
 
-      <!-- 删除连线确认对话框 -->
+      <!-- 删除/编辑连线对话框 -->
       <q-dialog v-model="deleteConnectionDialog" persistent>
         <q-card>
           <q-card-section class="row items-center">
-            <q-avatar icon="warning" color="negative" text-color="white" />
-            <span class="q-ml-sm">确定要删除这条连线吗？</span>
+            <q-avatar icon="link" color="primary" text-color="white" />
+            <span class="q-ml-sm">要对这条连线进行什么操作？</span>
+          </q-card-section>
+
+          <q-card-section class="text-caption text-grey-6">
+            提示：右键点击连线可直接打开编辑器
           </q-card-section>
 
           <q-card-actions align="right">
             <q-btn flat label="取消" color="primary" v-close-popup />
-            <q-btn flat label="删除" color="negative" @click="deleteConnection" v-close-popup />
+            <q-btn
+              flat
+              label="编辑"
+              color="primary"
+              @click="editConnectionFromDialog"
+            />
+            <q-btn
+              flat
+              label="删除"
+              color="negative"
+              @click="deleteConnection"
+              v-close-popup
+            />
           </q-card-actions>
         </q-card>
       </q-dialog>
+
+      <!-- 节点编辑器对话框 -->
+      <TimelineEventEditor
+        v-model="isEditDialogOpen"
+        :event="editingEvent"
+        @save="handleEventSave"
+      />
+
+      <!-- 连线编辑器对话框 -->
+      <ConnectionEditor
+        v-model="isConnectionEditDialogOpen"
+        :connection="editingConnection"
+        :source-event-title="getEventTitle(editingConnection?.source)"
+        :target-event-title="getEventTitle(editingConnection?.target)"
+        @save="handleConnectionSave"
+        @delete="handleConnectionDelete"
+      />
 
       <!-- Vue Flow画布 -->
       <q-page class="fit">
@@ -203,15 +367,19 @@
           :edges="edges"
           fit-view-on-init
           class="w-full h-full"
+          :class="{ 'edges-on-top': renderSettings.edgesOnTop }"
           :node-types="nodeTypes"
           :connection-radius="30"
           :edges-updatable="true"
           :nodes-draggable="true"
+          :node-drag-threshold="0"
+          :snap-to-grid="false"
+          no-drag-class-name="no-drag"
           @edges-change="onEdgesChange"
         >
-          <Background />
-          <Controls />
-          <MiniMap />
+          <Background v-if="renderSettings.showBackground" />
+          <Controls v-if="renderSettings.showControls" />
+          <MiniMap v-if="renderSettings.showMiniMap" />
         </VueFlow>
       </q-page>
     </q-page-container>
@@ -230,6 +398,23 @@ import '@vue-flow/controls/dist/style.css';
 import '@vue-flow/minimap/dist/style.css';
 import { generateUUIDv7 } from '../utils/uuid';
 import EditableEventNode from '../components/EditableEventNode.vue';
+import TimelineEventEditor from '../components/TimelineEventEditor.vue';
+import ConnectionEditor from '../components/ConnectionEditor.vue';
+
+interface RenderSettings {
+  edgesOnTop: boolean; // 连线显示在节点上方
+  showMiniMap: boolean; // 显示小地图
+  showBackground: boolean; // 显示背景网格
+  showControls: boolean; // 显示控制按钮
+  edgeAnimationSpeed: number; // 连线动画速度 (1-5)
+  nodeSpacing: number; // 节点默认间距
+}
+
+interface BindingReference {
+  uuid: string;
+  type: 'character' | 'article' | 'location' | 'item' | 'other';
+  label?: string; // 显示名称
+}
 
 interface TimelineEvent {
   id: string;
@@ -238,7 +423,9 @@ interface TimelineEvent {
   type: 'main' | 'side';
   date: string;
   description: string;
+  timeless?: boolean; // 是否与时间无关
   position?: { x: number; y: number }; // 节点坐标
+  bindings?: BindingReference[]; // 绑定的资源引用
   data?: {
     type: 'main' | 'side';
   };
@@ -248,6 +435,8 @@ interface TimelineConnection {
   id: string;
   source: string;
   target: string;
+  label?: string; // 连线注解
+  connectionType?: 'normal' | 'time-travel' | 'reincarnation' | 'parallel' | 'dream' | 'flashback' | 'other'; // 连线类型
 }
 
 interface TimelineData {
@@ -265,11 +454,25 @@ const nodes = ref<any[]>([]);
 const edges = ref<any[]>([]);
 const drawerOpen = ref(true);
 const snapshotDrawerOpen = ref(false);
+const settingsDrawerOpen = ref(false);
 const isAddDialogOpen = ref(false);
 const isEditDialogOpen = ref(false);
+const editingEvent = ref<TimelineEvent | null>(null);
+const isConnectionEditDialogOpen = ref(false);
+const editingConnection = ref<TimelineConnection | null>(null);
 const isLoading = ref(false);
 const deleteConnectionDialog = ref(false);
 const connectionToDelete = ref<string | null>(null);
+
+// 渲染设置
+const renderSettings = ref<RenderSettings>({
+  edgesOnTop: false,
+  showMiniMap: true,
+  showBackground: true,
+  showControls: true,
+  edgeAnimationSpeed: 3,
+  nodeSpacing: 200,
+});
 
 // 计算属性：完整数据快照
 const timelineData = computed<TimelineData>(() => ({
@@ -330,24 +533,38 @@ onNodesChange((changes) => {
 
 onConnect((params) => {
   console.log('新建连接', params);
-  // 添加到 connections 数组
+  // 添加到 connections 数组,默认为 normal 类型
   const newConnection: TimelineConnection = {
     id: `conn-${generateUUIDv7()}`,
     source: params.source,
     target: params.target,
+    connectionType: 'normal', // 默认为正常顺序
   };
   connections.value.push(newConnection);
-  
+
   // 更新显示
   updateFlowElements();
   void saveTimelineData();
 });
 
-// 点击边时显示确认对话框
-onEdgeClick(({ edge }) => {
+// 点击边时打开编辑器
+onEdgeClick(({ edge, event }) => {
   console.log('点击边', edge);
-  connectionToDelete.value = edge.id;
-  deleteConnectionDialog.value = true;
+
+  // 检查是否是右键点击
+  const mouseEvent = event as MouseEvent;
+  if (mouseEvent.button === 2 || mouseEvent.ctrlKey) {
+    // 右键或 Ctrl+左键: 打开编辑器
+    const conn = connections.value.find((c) => c.id === edge.id);
+    if (conn) {
+      editingConnection.value = { ...conn };
+      isConnectionEditDialogOpen.value = true;
+    }
+  } else {
+    // 左键: 显示删除对话框
+    connectionToDelete.value = edge.id;
+    deleteConnectionDialog.value = true;
+  }
 });
 
 // 处理边的变化（包括删除）
@@ -419,6 +636,37 @@ function deleteEvent(id: string) {
   void saveTimelineData();
 }
 
+// 打开节点编辑器
+function openNodeEditor(id: string) {
+  const event = events.value.find((e) => e.id === id);
+  if (event) {
+    editingEvent.value = { ...event };
+    isEditDialogOpen.value = true;
+  }
+}
+
+// 处理事件保存
+function handleEventSave(updatedEvent: Partial<TimelineEvent>) {
+  if (!editingEvent.value?.id) return;
+
+  const index = events.value.findIndex((e) => e.id === editingEvent.value?.id);
+  if (index !== -1) {
+    const existingEvent = events.value[index];
+    if (existingEvent) {
+      // 直接更新,使用对象展开保持类型安全
+      events.value[index] = {
+        ...existingEvent,
+        ...updatedEvent,
+        id: existingEvent.id, // ID永不变
+      } as TimelineEvent;
+
+      updateFlowElements();
+      void saveTimelineData();
+    }
+  }
+  editingEvent.value = null;
+}
+
 // 删除连线
 function deleteConnection() {
   if (connectionToDelete.value) {
@@ -435,14 +683,127 @@ function deleteConnection() {
 function isConnectionValid(conn: TimelineConnection): boolean {
   const sourceEvent = events.value.find((e) => e.id === conn.source);
   const targetEvent = events.value.find((e) => e.id === conn.target);
-  
-  if (!sourceEvent || !targetEvent) return true; // 如果找不到事件，默认有效
-  
+
+  if (!sourceEvent || !targetEvent) return true;
+
+  // 如果任一事件是无时间的,或连线类型不是normal,则不进行时间验证
+  if (sourceEvent.timeless || targetEvent.timeless || conn.connectionType !== 'normal') {
+    return true;
+  }
+
   const sourceDate = new Date(sourceEvent.date);
   const targetDate = new Date(targetEvent.date);
-  
+
   // 源事件的日期应该早于或等于目标事件
   return sourceDate <= targetDate;
+}
+
+// 获取连线颜色
+function getConnectionColor(type: string, isValid: boolean): string {
+  if (!isValid) return '#ef4444'; // 无效的连线用红色
+
+  const colorMap: Record<string, string> = {
+    normal: '#b1b1b7',
+    'time-travel': '#8b5cf6', // 紫色
+    reincarnation: '#06b6d4', // 青色
+    parallel: '#f59e0b', // 橙色
+    dream: '#ec4899', // 粉色
+    flashback: '#10b981', // 绿色
+    other: '#6b7280', // 灰色
+  };
+
+  return colorMap[type] || '#b1b1b7';
+}
+
+// 获取连线类型的显示标签
+function getConnectionTypeLabel(type: string): string {
+  const labelMap: Record<string, string> = {
+    normal: '正常',
+    'time-travel': '⏰时间穿越',
+    reincarnation: '♻️轮回转世',
+    parallel: '🔀平行时空',
+    dream: '💭梦境',
+    flashback: '⏮️回忆',
+    other: '⚡特殊',
+  };
+
+  return labelMap[type] || '';
+}
+
+// 获取事件标题(用于连线编辑器)
+function getEventTitle(eventId: string | undefined): string {
+  if (!eventId) return '';
+  const event = events.value.find((e) => e.id === eventId);
+  return event?.title || '未知事件';
+}
+
+// 保存连线更新
+function handleConnectionSave(updatedConn: TimelineConnection) {
+  const index = connections.value.findIndex((c) => c.id === updatedConn.id);
+  if (index !== -1) {
+    connections.value[index] = updatedConn;
+    updateFlowElements();
+    void saveTimelineData();
+  }
+}
+
+// 删除连线(从编辑器)
+function handleConnectionDelete(connId: string) {
+  connections.value = connections.value.filter((c) => c.id !== connId);
+  updateFlowElements();
+  void saveTimelineData();
+}
+
+// 从对话框打开连线编辑器
+function editConnectionFromDialog() {
+  if (connectionToDelete.value) {
+    const conn = connections.value.find((c) => c.id === connectionToDelete.value);
+    if (conn) {
+      editingConnection.value = { ...conn };
+      isConnectionEditDialogOpen.value = true;
+    }
+  }
+  deleteConnectionDialog.value = false;
+  connectionToDelete.value = null;
+}
+
+// 重置设置为默认值
+function resetSettings() {
+  renderSettings.value = {
+    edgesOnTop: false,
+    showMiniMap: true,
+    showBackground: true,
+    showControls: true,
+    edgeAnimationSpeed: 3,
+    nodeSpacing: 200,
+  };
+  saveRenderSettings();
+  updateFlowElements();
+}
+
+// 保存渲染设置到 localStorage
+function saveRenderSettings() {
+  try {
+    localStorage.setItem('timeline-render-settings', JSON.stringify(renderSettings.value));
+  } catch (error) {
+    console.error('保存渲染设置失败:', error);
+  }
+}
+
+// 从 localStorage 加载渲染设置
+function loadRenderSettings() {
+  try {
+    const saved = localStorage.getItem('timeline-render-settings');
+    if (saved) {
+      const parsed = JSON.parse(saved) as RenderSettings;
+      renderSettings.value = {
+        ...renderSettings.value,
+        ...parsed,
+      };
+    }
+  } catch (error) {
+    console.error('加载渲染设置失败:', error);
+  }
 }
 
 // 处理节点标题更新
@@ -513,7 +874,7 @@ function loadInitialData() {
           },
         },
       ];
-      
+
       // 添加示例连线
       connections.value = [
         {
@@ -532,7 +893,7 @@ function loadInitialData() {
           target: '2', // 这个会标红，因为日期不符合（01-03 -> 01-05 不对）
         },
       ];
-      
+
       void updateFlowElements();
     }
     isLoading.value = false;
@@ -573,42 +934,78 @@ function saveTimelineData() {
 function updateFlowElements() {
   // 创建节点 - 使用保存的坐标
   const newNodes: any[] = [];
-  
+
   events.value.forEach((event, index) => {
     newNodes.push({
       id: event.id,
       type: 'editable',
-      // 使用保存的坐标，或者默认坐标
-      position: event.position || { x: index * 200, y: event.type === 'main' ? 100 : 250 },
+      // 使用保存的坐标，或者根据设置的间距计算默认坐标
+      position: event.position || {
+        x: index * renderSettings.value.nodeSpacing,
+        y: event.type === 'main' ? 100 : 250
+      },
+      draggable: true,
+      selectable: true,
       data: {
-        label: event.title,
+        label: event.title, // 关键:这里要同步最新的 title
         date: event.date,
         description: event.description,
         type: event.type,
-        group: event.group, // 添加分组信息
+        group: event.group,
+        timeless: event.timeless,
+        bindings: event.bindings,
       },
     });
   });
 
   // 创建连线 - 根据 connections 数组
   const newEdges: any[] = [];
-  
+
   connections.value.forEach((conn) => {
     const isValid = isConnectionValid(conn);
-    
+    const connectionType = conn.connectionType || 'normal';
+
+    // 获取连线类型的显示标签
+    const typeLabel = getConnectionTypeLabel(connectionType);
+
+    // 组合显示文本:类型标签 + 用户注解
+    let displayLabel = '';
+    if (connectionType !== 'normal') {
+      displayLabel = typeLabel;
+      if (conn.label) {
+        displayLabel += `: ${conn.label}`;
+      }
+    } else if (conn.label) {
+      displayLabel = conn.label;
+    }
+
     newEdges.push({
       id: conn.id,
       source: conn.source,
       target: conn.target,
       type: 'smoothstep',
+      label: displayLabel, // 显示类型标签和注解
       markerEnd: MarkerType.Arrow,
-      animated: !isValid, // 不符合时间顺序的连线加上动画效果
-      selectable: true, // 可选中
-      deletable: true, // 可删除
+      animated: !isValid || connectionType !== 'normal', // 特殊连线或无效连线加动画
+      selectable: true,
+      deletable: true,
       style: {
-        stroke: isValid ? '#b1b1b7' : '#ef4444', // 不符合时间顺序的用红色
-        strokeWidth: 2,
+        stroke: getConnectionColor(connectionType, isValid),
+        strokeWidth: connectionType !== 'normal' ? 3 : 2, // 特殊连线更粗
+        strokeDasharray: connectionType === 'dream' || connectionType === 'flashback' ? '5,5' : undefined, // 梦境和闪回用虚线
+        animationDuration: `${6 - renderSettings.value.edgeAnimationSpeed}s`, // 动画速度:1(慢)到5(快)
       },
+      labelStyle: {
+        fill: connectionType !== 'normal' ? getConnectionColor(connectionType, isValid) : '#666',
+        fontSize: connectionType !== 'normal' ? 13 : 12,
+        fontWeight: connectionType !== 'normal' ? 'bold' : 'normal',
+      },
+      labelBgStyle: {
+        fill: '#fff',
+        fillOpacity: 0.9,
+      },
+      labelBgPadding: [4, 6],
+      labelBgBorderRadius: 3,
     });
   });
 
@@ -616,18 +1013,45 @@ function updateFlowElements() {
   edges.value = newEdges;
 }
 
+// 监听渲染设置变化,自动保存到 localStorage
+watch(
+  renderSettings,
+  () => {
+    saveRenderSettings();
+  },
+  { deep: true }
+);
+
 // 初始化数据
 onMounted(() => {
+  // 加载渲染设置
+  loadRenderSettings();
+
   loadInitialData();
 
   // 添加全局事件监听器
   window.addEventListener('timeline-node-update', handleTimelineNodeUpdate);
+  window.addEventListener('timeline-open-editor', handleOpenEditor);
 });
 
 // 清理事件监听器
 onUnmounted(() => {
   window.removeEventListener('timeline-node-update', handleTimelineNodeUpdate);
+  window.removeEventListener('timeline-open-editor', handleOpenEditor);
 });
+
+// 处理打开编辑器事件
+function handleOpenEditor() {
+  try {
+    const nodeId = localStorage.getItem('openNodeEditor');
+    if (nodeId) {
+      openNodeEditor(nodeId);
+      localStorage.removeItem('openNodeEditor');
+    }
+  } catch (error) {
+    console.error('打开节点编辑器失败:', error);
+  }
+}
 
 // 处理时间线节点更新事件
 function handleTimelineNodeUpdate() {
@@ -659,6 +1083,15 @@ function handleTimelineNodeUpdate() {
   top: 16px;
   right: 16px;
   z-index: 1000;
+}
+
+/* 连线显示在节点上方 */
+.edges-on-top :deep(.vue-flow__edges) {
+  z-index: 1000 !important;
+}
+
+.edges-on-top :deep(.vue-flow__nodes) {
+  z-index: 1 !important;
 }
 
 /* 确保滚动区域正确工作 */
