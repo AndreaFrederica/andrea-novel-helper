@@ -37,36 +37,57 @@
                 class="timeline-view__parent-span"
                 :class="{
                   'timeline-view__parent-span--start': group.dateKey === span.startDateKey,
-                  'timeline-view__parent-span--end': group.dateKey === span.endDateKey,
-                  'timeline-view__parent-span--middle': group.dateKey !== span.startDateKey && group.dateKey !== span.endDateKey
+                  'timeline-view__parent-span--continuation': group.dateKey !== span.startDateKey
                 }"
-                :style="{ 
-                  backgroundColor: span.parent.cardBg + '40',
-                  borderColor: span.parent.cardBg
-                }"
-                :ref="el => setCardRef(span.parent.id, el as HTMLElement)"
-                :data-card-id="span.parent.id"
               >
-                <!-- 亲代节点标题 (只在开始位置显示) -->
-                <div v-if="group.dateKey === span.startDateKey" class="timeline-view__parent-header">
-                  <h3 class="timeline-view__parent-title" :style="{ color: span.parent.cardBg }">
-                    {{ span.parent.title }}
-                  </h3>
-                  <div class="timeline-view__parent-date-range">
-                    <span class="timeline-view__parent-date-start">{{ span.parent.displayDate }}</span>
-                    <span class="timeline-view__parent-date-separator">~</span>
-                    <span class="timeline-view__parent-date-end">{{ span.parent.endDateDisplay }}</span>
+                <!-- 亲代节点主卡片 (只在开始位置显示) -->
+                <article
+                  v-if="group.dateKey === span.startDateKey"
+                  :ref="el => setCardRef(span.parent.id, el as HTMLElement)"
+                  :data-card-id="span.parent.id"
+                  class="timeline-view__parent-card"
+                  :style="{ backgroundColor: span.parent.cardBg, color: span.parent.textColor }"
+                >
+                  <header class="timeline-view__card-header">
+                    <h3 class="timeline-view__card-title">{{ span.parent.title }}</h3>
+                    <d-tag
+                      size="sm"
+                      class="timeline-status-tag"
+                      :style="{ color: span.parent.cardBg, backgroundColor: '#ffffff' }"
+                    >
+                      {{ span.parent.statusLabel }}
+                    </d-tag>
+                  </header>
+                  <div class="timeline-view__card-date">
+                    <span class="timeline-view__card-date-start">{{ span.parent.displayDate }}</span>
+                    <span class="timeline-view__card-date-separator">~</span>
+                    <span class="timeline-view__card-date-end">{{ span.parent.endDateDisplay }}</span>
                   </div>
-                  <p v-if="span.parent.description" class="timeline-view__parent-description">
-                    {{ span.parent.description }}
-                  </p>
+                  <p v-if="span.parent.description" class="timeline-view__card-description">{{ span.parent.description }}</p>
+                  <footer class="timeline-view__card-footer">
+                    <span v-if="span.parent.group" class="timeline-view__meta">所属分组：{{ span.parent.group }}</span>
+                    <span class="timeline-view__meta timeline-view__span-indicator">
+                      跨时间段 ({{ span.spanWidth }} 天)
+                    </span>
+                  </footer>
+                </article>
+                
+                <!-- 跨时间段连接指示器 (非开始位置显示) -->
+                <div
+                  v-else
+                  class="timeline-view__span-continuation"
+                  :style="{ borderColor: span.parent.cardBg }"
+                >
+                  <div class="timeline-view__span-label" :style="{ color: span.parent.cardBg }">
+                    {{ span.parent.title }} (继续)
+                  </div>
                 </div>
                 
-                <!-- 子节点 (在所有跨越的时间段中显示) -->
+                <!-- 子节点 (只在子节点自己的日期显示) -->
                 <div v-if="span.children.length > 0" class="timeline-view__children">
                   <article
-                    v-for="child in span.children"
-                    :key="child.id"
+                    v-for="child in span.children.filter(child => child.displayDate.startsWith(group.dateKey))"
+                    :key="`${child.id}-${group.dateKey}`"
                     :ref="el => setCardRef(child.id, el as HTMLElement)"
                     :data-card-id="child.id"
                     class="timeline-view__child-card"
@@ -1024,67 +1045,68 @@ onBeforeUnmount(() => {
 
 /* 亲代节点跨时间段样式 */
 .timeline-view__parent-spans {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .timeline-view__parent-span {
-  border: 2px solid;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  padding: 16px;
-  position: relative;
-  min-height: 120px;
+  margin-bottom: 8px;
   min-width: 260px;
   pointer-events: auto;
 }
 
 .timeline-view__parent-span--start {
-  border-top-left-radius: 8px;
-  border-bottom-left-radius: 8px;
+  /* 开始位置的样式在 parent-card 中定义 */
+  position: relative;
 }
 
-.timeline-view__parent-span--end {
-  border-top-right-radius: 8px;
-  border-bottom-right-radius: 8px;
+.timeline-view__parent-span--continuation {
+  /* 继续位置的样式 */
+  position: relative;
 }
 
-.timeline-view__parent-span--middle {
-  border-radius: 0;
-  border-left: none;
-  border-right: none;
+.timeline-view__parent-card {
+  position: relative;
+  background-color: var(--card-bg, #1976d2);
+  color: var(--card-text, #ffffff);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid rgba(255, 255, 255, 0.95);
+  transition: all 0.2s ease;
 }
 
-.timeline-view__parent-header {
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+.timeline-view__parent-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
-.timeline-view__parent-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-  line-height: 1.4;
-}
-
-.timeline-view__parent-date-range {
+.timeline-view__span-continuation {
+  border-left: 3px solid;
+  border-right: 3px solid;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: 2px;
+  opacity: 0.6;
+  min-height: 24px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.8);
-  margin-bottom: 8px;
+  justify-content: center;
 }
 
-.timeline-view__parent-date-separator {
-  font-weight: 500;
+.timeline-view__span-label {
+  font-size: 12px;
+  font-weight: 400;
+  text-align: center;
+  opacity: 0.6;
+  color: inherit;
+  line-height: 1.2;
 }
 
-.timeline-view__parent-description {
-  font-size: 14px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.9);
-  margin: 0;
+.timeline-view__span-indicator {
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-style: italic;
 }
 
 .timeline-view__children {
