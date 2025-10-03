@@ -1,37 +1,49 @@
 <template>
-  <div class="custom-node" :style="nodeStyle" @contextmenu="handleContextMenu">
-    <!-- NodeResizer - 所有节点都可以调整大小 -->
+  <div class="condition-node" :style="nodeStyle" @contextmenu="handleContextMenu">
+    <!-- NodeResizer - 条件节点也可以调整大小 -->
     <NodeResizer
       :min-width="150"
       :min-height="100"
       @resize="handleResize"
-      :color="props.data.type === 'main' ? '#42b883' : '#64748b'"
+      :color="'#f59e0b'"
       :handle-class-name="'resizer-handle'"
     />
 
-    <!-- Handles - 不可拖动 -->
+    <!-- Handles -->
     <Handle
       type="target"
-      :position="Position.Left"
+      :position="Position.Top"
       class="custom-handle no-drag"
       @mousedown.stop
     />
+    
+    <!-- 条件节点通常有两个输出：true 和 false，都在底部 -->
     <Handle
+      id="true"
       type="source"
-      :position="Position.Right"
-      class="custom-handle no-drag"
+      :position="Position.Bottom"
+      :style="{ left: '30%' }"
+      class="custom-handle no-drag handle-true"
+      @mousedown.stop
+    />
+    <Handle
+      id="false"
+      type="source"
+      :position="Position.Bottom"
+      :style="{ left: '70%' }"
+      class="custom-handle no-drag handle-false"
       @mousedown.stop
     />
 
-    <!-- 拖动把手区域 - 只有这个区域可以拖动节点 -->
+    <!-- 拖动把手区域 -->
     <div class="drag-handle">
       <q-icon name="drag_indicator" size="xs" style="color: rgba(255,255,255,0.6)" />
     </div>
 
     <div class="node-content no-drag">
-      <!-- 分组标签 -->
-      <div v-if="data.group" class="group-badge">
-        <q-badge color="white" text-color="primary" :label="data.group" />
+      <!-- 条件图标 -->
+      <div class="condition-icon">
+        <q-icon name="help" size="md" />
       </div>
 
       <!-- 标题编辑区域 -->
@@ -40,6 +52,7 @@
           v-model="editingTitle"
           type="text"
           class="title-input"
+          placeholder="条件表达式"
           @blur="saveTitle"
           @keyup.enter="saveTitle"
           @keyup.escape="cancelEdit"
@@ -49,23 +62,23 @@
       </div>
       <div v-else class="title-display" @mousedown.stop>
         <div style="font-weight: bold; cursor: pointer" @click="startEdit">
-          {{ data.label || '未命名事件' }}
+          {{ data.label || '未命名条件' }}
         </div>
       </div>
 
-      <!-- 日期和描述 -->
-      <div style="font-size: 0.9em" @mousedown.stop>
-        <template v-if="data.endDate">
-          {{ formatDateTime(data.date) }} ~ {{ formatDateTime(data.endDate) }}
-        </template>
-        <template v-else>
-          {{ formatDateTime(data.date) }}
-        </template>
+      <!-- 条件说明 -->
+      <div style="font-size: 0.8em; margin-top: 5px; opacity: 0.9" @mousedown.stop>
+        {{ data.description || '点击编辑条件' }}
       </div>
-      <div style="font-size: 0.8em; margin-top: 5px" @mousedown.stop>{{ data.description }}</div>
     </div>
 
-    <!-- 编辑/保存按钮 - 不可拖动 -->
+    <!-- 分支标签 - 绝对定位在底部 -->
+    <div class="branch-labels no-drag" @mousedown.stop>
+      <span class="branch-label branch-true">True</span>
+      <span class="branch-label branch-false">False</span>
+    </div>
+
+    <!-- 编辑按钮 -->
     <div class="node-actions no-drag" @mousedown.stop @click.stop>
       <q-btn
         @click="openFullEditor"
@@ -85,20 +98,15 @@
 import { ref, nextTick, computed } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import { NodeResizer, type OnResize } from '@vue-flow/node-resizer';
-import { QBtn, QBadge, QIcon } from 'quasar';
+import { QBtn, QIcon } from 'quasar';
 
 // 定义props
 interface Props {
   id: string;
   data: {
     label?: string;
-    date: string;
-    endDate?: string;
-    description: string;
-    type: 'main' | 'side';
-    group?: string;
-    parentNode?: string; // 添加到 data 中
-    hasChildren?: boolean; // 是否有子节点
+    description?: string;
+    hasChildren?: boolean;
     color?: string; // 自定义颜色
   };
 }
@@ -113,27 +121,17 @@ const emit = defineEmits<{
 
 // 处理大小调整
 function handleResize(params: OnResize) {
-  // console.log('[EditableEventNode handleResize] 触发', params);
+  // console.log('[ConditionNode handleResize] 触发', params);
   
-  // OnResize 的实际数据在 params.params 中
   const resizeParams = (params as any).params;
-  // console.log('[EditableEventNode handleResize] resizeParams:', resizeParams);
-  
   const width = resizeParams?.width;
   const height = resizeParams?.height;
   
-  // console.log('[EditableEventNode handleResize] 提取的尺寸:', { width, height });
-  
   if (typeof width === 'number' && typeof height === 'number') {
     emit('resize', { width, height });
-    // 通过全局事件通知父组件更新节点尺寸
     const eventData = { id: props.id, width, height };
-  // console.log('[EditableEventNode handleResize] 保存到 localStorage:', eventData);
     localStorage.setItem('tempNodeResize', JSON.stringify(eventData));
     window.dispatchEvent(new Event('timeline-node-resize'));
-  // console.log('[EditableEventNode handleResize] 已触发全局事件');
-  } else {
-    // console.warn('[EditableEventNode handleResize] 宽高类型不正确:', typeof width, typeof height);
   }
 }
 
@@ -144,7 +142,6 @@ const titleInput = ref<HTMLInputElement | null>(null);
 
 // 打开完整编辑器
 function openFullEditor() {
-  // 通过全局事件通知父组件打开编辑器
   localStorage.setItem('openNodeEditor', props.id);
   window.dispatchEvent(new Event('timeline-open-editor'));
 }
@@ -153,7 +150,6 @@ function openFullEditor() {
 function startEdit() {
   isEditing.value = true;
   editingTitle.value = props.data.label || '';
-  // 确保输入框获得焦点
   void nextTick(() => {
     titleInput.value?.focus();
     titleInput.value?.select();
@@ -163,7 +159,6 @@ function startEdit() {
 // 保存标题
 function saveTitle() {
   if (editingTitle.value.trim()) {
-    // 使用全局事件总线来传递更新
     const eventData = { id: props.id, label: editingTitle.value.trim() };
     localStorage.setItem('tempNodeUpdate', JSON.stringify(eventData));
     window.dispatchEvent(new Event('timeline-node-update'));
@@ -184,60 +179,21 @@ function handleContextMenu(event: MouseEvent) {
   window.dispatchEvent(new Event('timeline-node-contextmenu'));
 }
 
-// 格式化日期时间显示
-function formatDateTime(dateStr: string): string {
-  try {
-    const date = new Date(dateStr);
-    // 如果包含时间(不是00:00:00),则显示时间
-    if (dateStr.includes('T') && !dateStr.endsWith('T00:00:00')) {
-      return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    }
-    // 否则只显示日期
-    return date.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
 const nodeStyle = computed(() => {
+  // 条件节点使用圆角矩形样式
   let background: string;
   let border: string | undefined;
+  const defaultColor = '#f59e0b'; // 默认橙色
+  const baseColor = props.data.color || defaultColor;
   
-  // 如果有自定义颜色，优先使用自定义颜色
-  if (props.data.color) {
-    if (props.data.hasChildren) {
-      // 将自定义颜色转为半透明（简单处理：如果是 hex，转为 rgba；如果已经是 rgba，保持）
-      background = props.data.color.startsWith('#') 
-        ? `${props.data.color}4D` // 添加 30% 透明度 (4D = 77/255 ≈ 30%)
-        : props.data.color.replace('rgb(', 'rgba(').replace(')', ', 0.3)');
-      border = `2px dashed ${props.data.color}`;
-    } else {
-      background = props.data.color;
-    }
+  if (props.data.hasChildren) {
+    // 如果有子节点，使用半透明
+    background = baseColor.startsWith('#') 
+      ? `${baseColor}4D` // 添加 30% 透明度
+      : baseColor.replace('rgb(', 'rgba(').replace(')', ', 0.3)');
+    border = `2px dashed ${baseColor}`;
   } else {
-    // 使用默认颜色
-    const baseColor = props.data.type === 'main' ? '#42b883' : '#64748b';
-    
-    if (props.data.hasChildren) {
-      // 父节点：半透明背景 + 虚线边框
-      background = props.data.type === 'main' 
-        ? 'rgba(66, 184, 131, 0.3)' // 主线父节点
-        : 'rgba(100, 116, 139, 0.3)'; // 支线父节点
-      border = `2px dashed ${baseColor}`;
-    } else {
-      // 普通节点：完全不透明
-      background = baseColor;
-    }
+    background = baseColor;
   }
   
   return {
@@ -245,7 +201,7 @@ const nodeStyle = computed(() => {
     border,
     color: 'white',
     padding: '10px',
-    borderRadius: '4px',
+    borderRadius: '8px',
     width: '100%',
     height: '100%',
     boxSizing: 'border-box' as const,
@@ -255,9 +211,9 @@ const nodeStyle = computed(() => {
 </script>
 
 <style scoped>
-.custom-node {
+.condition-node {
   user-select: none;
-  cursor: default; /* 默认鼠标样式 */
+  cursor: default;
   position: relative;
   min-width: 150px;
   min-height: 100px;
@@ -265,52 +221,53 @@ const nodeStyle = computed(() => {
   flex-direction: column;
 }
 
-/* 拖动把手 - 只有这个区域可以拖动节点 */
+/* 拖动把手 */
 .drag-handle {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   top: 0;
-  height: 28px; /* 固定高度 */
+  transform: translateX(-50%);
+  height: 28px;
   cursor: move;
   background: rgba(0, 0, 0, 0.5);
-  border-radius: 4px 4px 0 0;
-  z-index: 5; /* 低于编辑按钮 */
+  border-radius: 4px;
+  z-index: 5;
   display: flex;
   justify-content: center;
   align-items: center;
-  opacity: 0; /* 默认隐藏 */
+  opacity: 0;
   transition: opacity 0.2s ease;
-  pointer-events: none; /* 默认不拦截事件 */
+  pointer-events: none;
+  padding: 0 8px;
 }
 
-/* 悬停时启用拖动把手的事件响应 */
-.custom-node:hover .drag-handle {
+.condition-node:hover .drag-handle {
   pointer-events: auto;
-}
-
-/* 鼠标悬停节点时显示拖动把手 */
-.custom-node:hover .drag-handle {
   opacity: 1;
 }
 
-/* 确保 VueFlow 只在 drag-handle 上启用拖动 */
-.custom-node :deep(.vue-flow__node-drag-handle) {
-  cursor: move;
-}
-
 .node-content {
-  margin-right: 20px; /* 为右侧按钮留出空间 */
+  margin-right: 20px;
   cursor: default;
   pointer-events: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 15px;
 }
 
-.group-badge {
-  margin-bottom: 6px;
+.condition-icon {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .title-edit-container {
   margin-bottom: 8px;
+  width: 100%;
 }
 
 .title-input {
@@ -324,10 +281,16 @@ const nodeStyle = computed(() => {
   font-size: 1em;
   outline: none;
   cursor: text;
+  text-align: center;
 }
 
 .title-input::placeholder {
   color: rgba(255, 255, 255, 0.6);
+}
+
+.title-display {
+  text-align: center;
+  margin-bottom: 8px;
 }
 
 .node-actions {
@@ -335,7 +298,7 @@ const nodeStyle = computed(() => {
   top: 0;
   right: 0;
   cursor: pointer;
-  z-index: 15; /* 确保在拖动把手上方 */
+  z-index: 15;
 }
 
 .custom-handle {
@@ -346,7 +309,7 @@ const nodeStyle = computed(() => {
   border: 2px solid #fff;
   cursor: crosshair !important;
   pointer-events: all;
-  z-index: 20; /* 确保 handle 在最上层 */
+  z-index: 20;
 }
 
 .custom-handle:hover {
@@ -355,7 +318,41 @@ const nodeStyle = computed(() => {
   height: 12px;
 }
 
-/* 阻止 handle 触发节点拖动 */
+.handle-true {
+  background: #10b981; /* 绿色表示 true */
+}
+
+.handle-false {
+  background: #ef4444; /* 红色表示 false */
+}
+
+.branch-labels {
+  display: flex;
+  justify-content: space-around;
+  width: 100%;
+  margin-top: 8px;
+  font-size: 0.7em;
+  font-weight: bold;
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  right: 0;
+}
+
+.branch-label {
+  padding: 2px 6px;
+  border-radius: 3px;
+  opacity: 0.8;
+}
+
+.branch-true {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.branch-false {
+  background: rgba(239, 68, 68, 0.3);
+}
+
 :deep(.vue-flow__handle) {
   pointer-events: all !important;
 }

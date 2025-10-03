@@ -8,6 +8,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ConditionNode: typeof import('./src/components/ConditionNode.vue')['default']
     ConnectionEditor: typeof import('./src/components/ConnectionEditor.vue')['default']
     DTag: typeof import('vue-devui/tag/index.es.js')['Tag']
     DTimeline: typeof import('vue-devui/timeline/index.es.js')['Timeline']
@@ -17,6 +18,7 @@ declare module 'vue' {
     EssentialLink: typeof import('./src/components/EssentialLink.vue')['default']
     ExampleComponent: typeof import('./src/components/ExampleComponent.vue')['default']
     ExplorerTree: typeof import('./src/components/ExplorerTree.vue')['default']
+    LoopbackEdge: typeof import('./src/components/LoopbackEdge.vue')['default']
     NodeEditDialog: typeof import('./src/components/NodeEditDialog.vue')['default']
     NodeHoverTooltip: typeof import('./src/components/NodeHoverTooltip.vue')['default']
     RelationGraphToolBar: typeof import('./src/components/RelationGraphToolBar.vue')['default']

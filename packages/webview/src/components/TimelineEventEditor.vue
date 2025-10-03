@@ -109,6 +109,40 @@
             class="q-mb-md"
           />
 
+          <!-- 自定义颜色 -->
+          <div class="q-mb-md">
+            <div class="text-caption q-mb-xs">节点颜色（可选）</div>
+            <div class="row items-center q-gutter-sm">
+              <q-input
+                v-model="formData.color"
+                label="自定义颜色"
+                filled
+                dense
+                placeholder="#42b883 或 rgb(66, 184, 131)"
+                style="flex: 1"
+                clearable
+              >
+                <template v-slot:append>
+                  <q-icon name="colorize" class="cursor-pointer">
+                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                      <q-color v-model="formData.color" />
+                    </q-popup-proxy>
+                  </q-icon>
+                </template>
+              </q-input>
+              <div
+                v-if="formData.color"
+                :style="{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '4px',
+                  backgroundColor: formData.color,
+                  border: '1px solid #ccc'
+                }"
+              />
+            </div>
+          </div>
+
           <!-- 资源绑定 -->
           <div class="text-subtitle2 q-mt-lg q-mb-md">资源绑定</div>
 
@@ -297,6 +331,7 @@ interface TimelineEvent {
   timeless?: boolean;
   position?: { x: number; y: number };
   bindings?: BindingReference[];
+  color?: string; // 自定义颜色
   parentNode?: string;
   width?: number;
   height?: number;

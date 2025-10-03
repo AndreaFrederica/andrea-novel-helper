@@ -258,62 +258,98 @@
         @delete="handleConnectionDelete"
       />
 
-      <!-- 右键菜单 -->
+      <!-- Quasar 右键菜单：用 ref + show(event) 打开，内容根据上下文切换 -->
       <q-menu
-        v-model="contextMenu.show"
+        ref="contextMenuRef"
         context-menu
-        auto-close
-        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px', position: 'fixed' }"
+        no-parent-event
+        persistent
+        touch-position
+        anchor="top left"
+        self="top left"
+        transition-show="jump-down"
+        transition-hide="jump-up"
+        separate-close-popup
+        :content-class="'timeline-context-menu z-topmost'"
+        :content-style="{ zIndex: 200000 }"
       >
-        <q-list dense style="min-width: 180px">
+        <q-list dense style="min-width: 200px" class="timeline-context-menu">
           <!-- 画布右键菜单 -->
           <template v-if="contextMenu.canvasClick">
-            <q-item clickable @click="createNodeAtPosition">
+            <q-item clickable v-close-popup @click="createNodeAtPosition">
               <q-item-section avatar>
                 <q-icon name="add_circle" color="primary" />
               </q-item-section>
-              <q-item-section>创建节点</q-item-section>
+              <q-item-section>
+                <q-item-label>创建普通节点</q-item-label>
+                <q-item-label caption>在此位置创建新的时间线节点</q-item-label>
+              </q-item-section>
             </q-item>
-            <q-separator v-if="clipboard.event" />
-            <q-item v-if="clipboard.event" clickable @click="pasteNode">
+            <q-item clickable v-close-popup @click="createConditionNodeAtPosition">
               <q-item-section avatar>
-                <q-icon name="content_paste" color="primary" />
+                <q-icon name="help" color="warning" />
               </q-item-section>
-              <q-item-section>粘贴</q-item-section>
-              <q-item-section side>
-                <q-badge color="grey">{{ clipboard.type === 'cut' ? '剪切' : '复制' }}</q-badge>
+              <q-item-section>
+                <q-item-label>创建条件节点</q-item-label>
+                <q-item-label caption>在此位置创建条件判断节点</q-item-label>
               </q-item-section>
             </q-item>
+            <template v-if="clipboard.event">
+              <q-separator spaced />
+              <q-item clickable v-close-popup @click="pasteNode">
+                <q-item-section avatar>
+                  <q-icon name="content_paste" color="positive" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>粘贴节点</q-item-label>
+                  <q-item-label caption>
+                    {{ clipboard.type === 'cut' ? '粘贴（剪切）' : '粘贴（复制）' }}
+                  </q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-icon :name="clipboard.type === 'cut' ? 'content_cut' : 'content_copy'" size="xs" :color="clipboard.type === 'cut' ? 'orange' : 'grey'" />
+                </q-item-section>
+              </q-item>
+            </template>
           </template>
 
           <!-- 节点右键菜单 -->
           <template v-else>
-            <q-item clickable @click="copyNode">
+            <q-item clickable v-close-popup @click="copyNode">
               <q-item-section avatar>
                 <q-icon name="content_copy" color="primary" />
               </q-item-section>
-              <q-item-section>复制</q-item-section>
+              <q-item-section>
+                <q-item-label>复制</q-item-label>
+                <q-item-label caption>复制此节点</q-item-label>
+              </q-item-section>
               <q-item-section side>
-                <q-badge color="grey">Ctrl+C</q-badge>
+                <q-badge color="grey-7" text-color="white">Ctrl+C</q-badge>
               </q-item-section>
             </q-item>
-            <q-item clickable @click="cutNode">
+            <q-item clickable v-close-popup @click="cutNode">
               <q-item-section avatar>
                 <q-icon name="content_cut" color="orange" />
               </q-item-section>
-              <q-item-section>剪切</q-item-section>
+              <q-item-section>
+                <q-item-label>剪切</q-item-label>
+                <q-item-label caption>剪切此节点</q-item-label>
+              </q-item-section>
               <q-item-section side>
-                <q-badge color="grey">Ctrl+X</q-badge>
+                <q-badge color="grey-7" text-color="white">Ctrl+X</q-badge>
               </q-item-section>
             </q-item>
-            <q-separator />
-            <q-item clickable @click="deleteNodeFromContext">
+            <q-separator spaced />
+            <q-item clickable v-close-popup @click="deleteNodeFromContext">
               <q-item-section avatar>
                 <q-icon name="delete" color="negative" />
               </q-item-section>
-              <q-item-section>删除</q-item-section>
+              <q-item-section>
+                <q-item-label>删除</q-item-label>
+                <q-item-label caption>删除此节点</q-item-label>
+              </q-item-section>
               <q-item-section side>
-                <q-badge color="grey">Del</q-badge>
+                <q-badge color="grey-7" text-color="white">Del</q-badge>
               </q-item-section>
             </q-item>
           </template>
@@ -404,28 +440,34 @@
             </q-btn>
           </div>
 
-          <VueFlow
-            class="timeline-flow__canvas w-full h-full"
-            :class="{ 'edges-on-top': settingsStore.edgesOnTop }"
-            :nodes="nodes"
-            :edges="edges"
-            fit-view-on-init
-            :node-types="nodeTypes"
-            :connection-radius="30"
-            :edges-updatable="true"
-            :nodes-draggable="true"
-            :node-drag-threshold="0"
-            :snap-to-grid="false"
-            :elevate-edges-on-select="true"
-            :allow-self-loops="true"
-            no-drag-class-name="no-drag"
-            @edges-change="onEdgesChange"
-            @pane-context-menu="showCanvasContextMenu"
-          >
-            <Background v-if="settingsStore.showBackground" />
-            <Controls v-if="settingsStore.showControls" />
-            <MiniMap v-if="settingsStore.showMiniMap" />
-          </VueFlow>
+          <div class="timeline-flow-wrapper">
+            <VueFlow
+              class="timeline-flow__canvas w-full h-full"
+              :class="{ 'edges-on-top': settingsStore.edgesOnTop }"
+              :nodes="nodes"
+              :edges="edges"
+              fit-view-on-init
+              :node-types="nodeTypes"
+              :edge-types="edgeTypes"
+              :connection-radius="30"
+              :edges-updatable="true"
+              :nodes-draggable="true"
+              :node-drag-threshold="0"
+              :snap-to-grid="false"
+              :elevate-edges-on-select="true"
+              :allow-self-loops="true"
+              no-drag-class-name="no-drag"
+              @edges-change="onEdgesChange"
+              @pane-click="onPaneClick"
+              @pane-context-menu="onPaneContextMenu"
+              @node-context-menu="onNodeContextMenu"
+              @edge-context-menu="onEdgeContextMenu"
+            >
+              <Background v-if="settingsStore.showBackground" />
+              <Controls v-if="settingsStore.showControls" />
+              <MiniMap v-if="settingsStore.showMiniMap" />
+            </VueFlow>
+          </div>
         </div>
       </q-page>
     </q-page-container>
@@ -433,7 +475,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, reactive, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, reactive, nextTick, markRaw } from 'vue';
 import { MarkerType, VueFlow, useVueFlow, Position } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
@@ -442,18 +484,23 @@ import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import '@vue-flow/controls/dist/style.css';
 import '@vue-flow/minimap/dist/style.css';
+import '@vue-flow/node-resizer/dist/style.css';
 import { generateUUIDv7 } from '../utils/uuid';
 import EditableEventNode from '../components/EditableEventNode.vue';
+import ConditionNode from '../components/ConditionNode.vue';
+import LoopbackEdge from '../components/LoopbackEdge.vue';
 import TimelineEventEditor from '../components/TimelineEventEditor.vue';
 import ConnectionEditor from '../components/ConnectionEditor.vue';
 import TimelineView from '../components/TimelineView.vue';
 import TimelineRenderSettings from '../components/TimelineRenderSettings.vue';
 import { useTimelineSettingsStore } from '../stores/timeline-settings';
 import type { TimelineEvent, TimelineConnection, TimelineData, BindingReference } from '../types/timeline';
-import { sampleEvents, sampleConnections } from '../data/timelineSampleData';
+import timelineSampleData from '../data/timelineSampleData';
+// timelineSampleData 使用默认导出，解构出 events 和 connections 以兼容原来的命名变量
+const { events: sampleEvents, connections: sampleConnections } = timelineSampleData;
 
 // 使用VueFlow组合式函数
-const { onInit, onNodeDragStop, onConnect, onEdgeClick, onNodesChange, addEdges, removeEdges, toObject } = useVueFlow();
+const { onInit, onNodeDragStop, onConnect, onEdgeClick, onNodesChange, addEdges, removeEdges, toObject, project, vueFlowRef } = useVueFlow();
 
 // 使用 Pinia store
 const settingsStore = useTimelineSettingsStore();
@@ -535,8 +582,100 @@ const contextMenu = ref({
   x: 0,
   y: 0,
   nodeId: null as string | null,
-  canvasClick: false, // 是否是画布右键
+  canvasClick: false,
 });
+const contextMenuRef = ref<unknown>(null);
+
+function openQuasarMenuFromMouseEvent(evt: MouseEvent, opts: { nodeId: string | null; canvasClick: boolean }) {
+  // console.log('[CTX] openQuasarMenuFromMouseEvent', {
+  //   x: evt?.clientX,
+  //   y: evt?.clientY,
+  //   nodeId: opts.nodeId,
+  //   canvasClick: opts.canvasClick,
+  //   target: (evt?.target as HTMLElement)?.className,
+  // });
+  evt.stopPropagation?.();
+  
+  // 先隐藏旧菜单（如果存在）
+  const menu = (contextMenuRef.value as unknown as { hide?: () => void; show?: (e: MouseEvent) => void });
+  if (menu?.hide) {
+    menu.hide();
+  }
+  
+  // 计算相对于 Vue Flow 容器的坐标
+  let relativeX = evt.clientX;
+  let relativeY = evt.clientY;
+  
+  if (vueFlowRef.value) {
+    const rect = vueFlowRef.value.getBoundingClientRect();
+    relativeX = evt.clientX - rect.left;
+    relativeY = evt.clientY - rect.top;
+  }
+  
+  // 更新上下文状态（保存相对坐标）
+  contextMenu.value = {
+    show: true,
+    x: relativeX,
+    y: relativeY,
+    nodeId: opts.nodeId,
+    canvasClick: opts.canvasClick,
+  };
+  
+  // 在新位置打开菜单（使用原始屏幕坐标）
+  if (menu?.show) {
+    menu.show(evt);
+    // console.log('[CTX] quasar menu show() invoked at new position');
+    // Debug: check menu dom existence after render
+    // void nextTick(() => {
+    //   const el = document.querySelector('.q-menu');
+    //   if (el instanceof HTMLElement) {
+    //     const rect = el.getBoundingClientRect();
+    //     console.log('[CTX] q-menu present', { rect });
+    //   } else {
+    //     console.warn('[CTX] q-menu not found in DOM');
+    //   }
+    // });
+  } else {
+    console.warn('[CTX] quasar menu ref missing show()');
+  }
+}
+
+// VueFlow 右键：节点
+function onNodeContextMenu(e: any) {
+  const ev: MouseEvent | undefined = 'event' in e ? (e.event as MouseEvent) : e;
+  ev?.preventDefault?.();
+  ev?.stopPropagation?.();
+  // console.log('[CTX] onNodeContextMenu', { hasEvent: !!ev, id: e?.node?.id, target: (ev?.target as HTMLElement)?.className });
+  if (!ev) return;
+  const id = e?.node?.id ?? null;
+  openQuasarMenuFromMouseEvent(ev, { nodeId: id, canvasClick: false });
+}
+
+// VueFlow 右键：边
+function onEdgeContextMenu(e: any) {
+  const ev: MouseEvent | undefined = 'event' in e ? (e.event as MouseEvent) : e;
+  ev?.preventDefault?.();
+  ev?.stopPropagation?.();
+  // console.log('[CTX] onEdgeContextMenu', { hasEvent: !!ev, id: e?.edge?.id, target: (ev?.target as HTMLElement)?.className });
+  if (!ev) return;
+  // 暂不针对边做专菜单，按画布处理或可扩展
+  openQuasarMenuFromMouseEvent(ev, { nodeId: null, canvasClick: true });
+}
+
+// VueFlow 左键：画布（点击空白处）
+function onPaneClick(e: MouseEvent) {
+  // console.log('[CTX] onPaneClick', { x: e.clientX, y: e.clientY });
+  // 点击空白处关闭右键菜单
+  hideContextMenu();
+}
+
+// VueFlow 右键：画布
+function onPaneContextMenu(e: MouseEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  // console.log('[CTX] onPaneContextMenu', { x: e.clientX, y: e.clientY, target: (e.target as HTMLElement)?.className });
+  openQuasarMenuFromMouseEvent(e, { nodeId: null, canvasClick: true });
+}
 
 // 剪贴板
 const clipboard = ref<{
@@ -629,7 +768,12 @@ const eventForm = reactive({
 
 // Vue Flow相关
 const nodeTypes = ref<any>({
-  editable: EditableEventNode,
+  editable: markRaw(EditableEventNode),
+  condition: markRaw(ConditionNode),
+});
+
+const edgeTypes = ref<any>({
+  loopback: markRaw(LoopbackEdge),
 });
 
 // VueFlow事件钩子
@@ -677,6 +821,15 @@ onConnect((params) => {
     target: params.target,
     connectionType: 'normal', // 默认为正常顺序
   };
+  
+  // 保存手柄 ID (如果存在)
+  if (params.sourceHandle) {
+    newConnection.sourceHandle = params.sourceHandle;
+  }
+  if (params.targetHandle) {
+    newConnection.targetHandle = params.targetHandle;
+  }
+  
   connections.value.push(newConnection);
 
   // 更新显示
@@ -735,6 +888,9 @@ function addEvent() {
   const newEvent: TimelineEvent = {
     ...eventForm,
     id: generateUUIDv7(),
+    // 设置默认尺寸
+    width: 200,
+    height: 120,
     data: {
       type: eventForm.type,
     },
@@ -947,29 +1103,40 @@ function handleNodeUpdate({ id, label }: { id: string; label: string }) {
 // 显示节点右键菜单
 function showNodeContextMenu(event: MouseEvent, nodeId: string) {
   event.preventDefault();
-  contextMenu.value = {
-    show: true,
-    x: event.clientX,
-    y: event.clientY,
-    nodeId,
-    canvasClick: false,
-  };
+  event.stopPropagation();
+  // console.log('[CTX] showNodeContextMenu (legacy path)', { nodeId, x: event.clientX, y: event.clientY });
+  openQuasarMenuFromMouseEvent(event, { nodeId, canvasClick: false });
 }
 
 // 显示画布右键菜单
 function showCanvasContextMenu(event: MouseEvent) {
   event.preventDefault();
-  contextMenu.value = {
-    show: true,
-    x: event.clientX,
-    y: event.clientY,
-    nodeId: null,
-    canvasClick: true,
-  };
+  // console.log('[CTX] showCanvasContextMenu (legacy path)', { x: event.clientX, y: event.clientY });
+  openQuasarMenuFromMouseEvent(event, { nodeId: null, canvasClick: true });
+}
+
+// 处理画布右键菜单（备用方法，防止 VueFlow 阻止）
+function handleCanvasContextMenu(event: MouseEvent) {
+  // 检查是否点击在节点上
+  const target = event.target as HTMLElement;
+  if (target.closest('.custom-node') || target.closest('.vue-flow__node')) {
+    return; // 如果点击在节点上，让节点自己处理
+  }
+  
+  // 否则显示画布菜单
+  event.preventDefault();
+  event.stopPropagation();
+  // console.log('[CTX] handleCanvasContextMenu (wrapper fallback)', { x: event.clientX, y: event.clientY });
+  openQuasarMenuFromMouseEvent(event, { nodeId: null, canvasClick: true });
 }
 
 // 隐藏右键菜单
 function hideContextMenu() {
+  const menu = (contextMenuRef.value as unknown as { hide?: () => void });
+  if (menu?.hide) {
+    menu.hide();
+    // console.log('[CTX] menu hidden via hide()');
+  }
   contextMenu.value.show = false;
 }
 
@@ -1003,15 +1170,21 @@ function cutNode() {
 function pasteNode() {
   if (!clipboard.value.event) return;
 
+  // 使用右键菜单的坐标，转换为画布坐标
+  const canvasPosition = project({ x: contextMenu.value.x, y: contextMenu.value.y });
+
   // 生成新的 UUID
   const newEvent: TimelineEvent = {
     ...clipboard.value.event,
     id: generateUUIDv7(),
     title: `${clipboard.value.event.title} (副本)`,
     position: {
-      x: (clipboard.value.event.position?.x || 0) + 50,
-      y: (clipboard.value.event.position?.y || 0) + 50,
+      x: canvasPosition.x,
+      y: canvasPosition.y,
     },
+    // 确保有默认尺寸
+    width: clipboard.value.event.width || 200,
+    height: clipboard.value.event.height || 120,
   };
 
   events.value.push(newEvent);
@@ -1036,7 +1209,9 @@ function deleteNodeFromContext() {
 
 // 在画布上创建新节点
 function createNodeAtPosition() {
-  // 将屏幕坐标转换为画布坐标（简化版）
+  // 将屏幕坐标转换为画布坐标
+  const canvasPosition = project({ x: contextMenu.value.x, y: contextMenu.value.y });
+  
   const newEvent: TimelineEvent = {
     id: generateUUIDv7(),
     title: '新事件',
@@ -1045,9 +1220,12 @@ function createNodeAtPosition() {
     date: new Date().toISOString().split('T')[0] || '',
     description: '',
     position: {
-      x: contextMenu.value.x,
-      y: contextMenu.value.y - 200, // 粗略调整
+      x: canvasPosition.x,
+      y: canvasPosition.y,
     },
+    // 设置默认尺寸
+    width: 200,
+    height: 120,
     data: {
       type: 'main',
     },
@@ -1059,10 +1237,47 @@ function createNodeAtPosition() {
   hideContextMenu();
 }
 
+// 在画布上创建条件节点
+function createConditionNodeAtPosition() {
+  // 将屏幕坐标转换为画布坐标
+  const canvasPosition = project({ x: contextMenu.value.x, y: contextMenu.value.y });
+  
+  const newEvent: TimelineEvent = {
+    id: generateUUIDv7(),
+    title: '新条件',
+    group: '条件分组',
+    type: 'main',
+    date: new Date().toISOString().split('T')[0] || '',
+    description: '点击编辑条件',
+    position: {
+      x: canvasPosition.x,
+      y: canvasPosition.y,
+    },
+    // 设置默认尺寸
+    width: 200,
+    height: 120,
+    data: {
+      type: 'condition', // 标记为条件节点
+    },
+  };
+
+  events.value.push(newEvent);
+  void updateFlowElements();
+  void saveTimelineData();
+  hideContextMenu();
+}
+
 // 确认使用示例数据
 function confirmUseSampleData() {
-  events.value = [...sampleEvents];
-  connections.value = [...sampleConnections];
+  events.value = sampleEvents;
+  connections.value = sampleConnections;
+  
+  // 为示例数据补全宽高
+  events.value.forEach((event) => {
+    if (!event.width) event.width = 200;
+    if (!event.height) event.height = 120;
+  });
+  
   void updateFlowElements();
   void saveTimelineData();
   showSampleDataDialog.value = false;
@@ -1103,7 +1318,27 @@ function handleMessage(event: MessageEvent) {
       const data = event.data.data as TimelineData;
       events.value = data.events || [];
       connections.value = data.connections || [];
+      
+      // 为所有没有宽高数据的节点补上默认值
+      let hasUpdates = false;
+      events.value.forEach((event) => {
+        if (!event.width) {
+          event.width = 200;
+          hasUpdates = true;
+        }
+        if (!event.height) {
+          event.height = 120;
+          hasUpdates = true;
+        }
+      });
+      
       void updateFlowElements();
+      
+      // 如果补全了数据，保存一次
+      if (hasUpdates) {
+        console.log('[TimelinePage] 补全了节点尺寸数据，保存中...');
+        void saveTimelineData();
+      }
     } catch (error) {
       console.error('解析时间线数据失败:', error);
     } finally {
@@ -1163,29 +1398,68 @@ function saveTimelineData() {
   }
 }
 
+// 节流辅助函数
+function throttle<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let lastRan: number | null = null;
+  
+  return function(this: any, ...args: Parameters<T>) {
+    const now = Date.now();
+    
+    if (lastRan === null || now - lastRan >= wait) {
+      // 立即执行
+      func.apply(this, args);
+      lastRan = now;
+      
+      // 清除pending的timeout
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+    } else {
+      // 延迟执行
+      if (timeout) clearTimeout(timeout);
+      
+      timeout = setTimeout(() => {
+        func.apply(this, args);
+        lastRan = Date.now();
+        timeout = null;
+      }, wait - (now - lastRan));
+    }
+  };
+}
+
+// 节流版本的保存函数（用于拖动调整大小时）
+const saveTimelineDataThrottled = throttle(saveTimelineData, 500);
+
 // 更新流元素
 function updateFlowElements() {
   // 创建节点 - 使用保存的坐标
   const newNodes: any[] = [];
 
   events.value.forEach((event, index) => {
+    // 确保所有节点都有默认尺寸
+    if (!event.width) event.width = 200;
+    if (!event.height) event.height = 120;
+    
     const nodeStyle: Record<string, any> = {};
     
-    // 如果节点有宽高设置,应用到样式
-    if (event.width) nodeStyle.width = `${event.width}px`;
-    if (event.height) nodeStyle.height = `${event.height}px`;
+    // 应用节点尺寸
+    nodeStyle.width = `${event.width}px`;
+    nodeStyle.height = `${event.height}px`;
     
-    // 如果是父节点(有宽高),添加半透明背景
-    if (event.width && event.height) {
-      nodeStyle.backgroundColor = 'rgba(16, 185, 129, 0.15)';
-      nodeStyle.border = '2px solid rgba(16, 185, 129, 0.5)';
-      nodeStyle.borderRadius = '8px';
-      nodeStyle.padding = '10px';
-    }
+    // 检查是否是父节点（有子节点）
+    const hasChildren = events.value.some(e => e.parentNode === event.id);
+    
+    // 根据 data.type 确定节点类型
+    const nodeType = event.data?.type === 'condition' ? 'condition' : 'editable';
     
     newNodes.push({
       id: event.id,
-      type: 'editable',
+      type: nodeType,
       // 使用保存的坐标，或者根据设置的间距计算默认坐标
       position: event.position || {
         x: index * settingsStore.nodeSpacing,
@@ -1207,6 +1481,9 @@ function updateFlowElements() {
         group: event.group,
         timeless: event.timeless,
         bindings: event.bindings,
+        parentNode: event.parentNode, // 传递 parentNode 信息给组件
+        hasChildren, // 传递是否有子节点的信息
+        color: event.color, // 传递自定义颜色
       },
     });
   });
@@ -1236,6 +1513,8 @@ function updateFlowElements() {
       id: conn.id,
       source: conn.source,
       target: conn.target,
+      sourceHandle: conn.sourceHandle, // 传递源手柄 ID
+      targetHandle: conn.targetHandle, // 传递目标手柄 ID
       type: 'smoothstep',
       label: displayLabel, // 显示类型标签和注解
       markerEnd: MarkerType.Arrow,
@@ -1303,11 +1582,13 @@ onMounted(() => {
 
   // 添加全局事件监听器
   window.addEventListener('timeline-node-update', handleTimelineNodeUpdate);
+  window.addEventListener('timeline-node-resize', handleTimelineNodeResize);
   window.addEventListener('timeline-open-editor', handleOpenEditor);
   window.addEventListener('timeline-node-contextmenu', handleNodeContextMenuEvent);
   
-  // 点击其他地方关闭右键菜单
-  document.addEventListener('click', hideContextMenu);
+  // 不再绑定全局 click 关闭，交由 Quasar 自己处理，避免刚打开就被关闭
+
+  // 菜单采用 contextmenu + show(event) 进行定位
 });
 
 // 清理事件监听器
@@ -1318,9 +1599,10 @@ onUnmounted(() => {
     window.removeEventListener('message', handleMessage);
   }
   window.removeEventListener('timeline-node-update', handleTimelineNodeUpdate);
+  window.removeEventListener('timeline-node-resize', handleTimelineNodeResize);
   window.removeEventListener('timeline-open-editor', handleOpenEditor);
   window.removeEventListener('timeline-node-contextmenu', handleNodeContextMenuEvent);
-  document.removeEventListener('click', hideContextMenu);
+  // 无全局 click 监听，无需移除
 });
 
 // 处理打开编辑器事件
@@ -1361,6 +1643,63 @@ function handleTimelineNodeUpdate() {
     }
   } catch (error) {
     console.error('解析节点更新数据失败:', error);
+  }
+}
+
+// 处理时间线节点大小调整事件
+function handleTimelineNodeResize() {
+  // console.log('[handleTimelineNodeResize] 事件触发');
+  try {
+    const eventDataStr = localStorage.getItem('tempNodeResize');
+    // console.log('[handleTimelineNodeResize] localStorage数据:', eventDataStr);
+    
+    if (eventDataStr) {
+      const eventData = JSON.parse(eventDataStr) as { id: string; width: number; height: number };
+      // console.log('[handleTimelineNodeResize] 解析后的数据:', eventData);
+      
+      const eventIndex = events.value.findIndex((e) => e.id === eventData.id);
+      // console.log('[handleTimelineNodeResize] 找到节点索引:', eventIndex);
+      
+      if (eventIndex !== -1 && events.value[eventIndex]) {
+        // console.log('[handleTimelineNodeResize] 更新前:', { 
+        //   width: events.value[eventIndex].width, 
+        //   height: events.value[eventIndex].height 
+        // });
+        
+        events.value[eventIndex].width = eventData.width;
+        events.value[eventIndex].height = eventData.height;
+        
+        // console.log('[handleTimelineNodeResize] 更新后:', { 
+        //   width: events.value[eventIndex].width, 
+        //   height: events.value[eventIndex].height 
+        // });
+      }
+      localStorage.removeItem('tempNodeResize');
+    }
+    
+    // 检查并补全所有节点的宽高数据
+    let hasUpdates = false;
+    events.value.forEach((event) => {
+      if (!event.width || !event.height) {
+        if (!event.width) {
+          event.width = 200;
+          hasUpdates = true;
+        }
+        if (!event.height) {
+          event.height = 120;
+          hasUpdates = true;
+        }
+      }
+    });
+    
+    // 如果有任何更新（调整大小或补全数据），刷新并保存
+    if (eventDataStr || hasUpdates) {
+      updateFlowElements();
+      // 使用节流版本避免拖动时频繁保存
+      void saveTimelineDataThrottled();
+    }
+  } catch (error) {
+    console.error('解析节点大小调整数据失败:', error);
   }
 }
 </script>
@@ -1457,6 +1796,12 @@ function handleTimelineNodeUpdate() {
   overflow: hidden;
 }
 
+.timeline-flow-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
 .timeline-flow__canvas {
   width: 100%;
   height: 100%;
@@ -1534,6 +1879,52 @@ function handleTimelineNodeUpdate() {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
 }
 
+/* 右键菜单美化样式 */
+:deep(.timeline-context-menu) {
+  background: rgba(30, 30, 30, 0.98) !important;
+  backdrop-filter: blur(10px);
+  border-radius: 8px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  padding: 4px !important;
+}
+
+:deep(.timeline-context-menu .q-item) {
+  border-radius: 6px !important;
+  margin: 2px 0 !important;
+  padding: 10px 12px !important;
+  transition: all 0.2s ease !important;
+}
+
+:deep(.timeline-context-menu .q-item:hover) {
+  background: rgba(66, 184, 131, 0.15) !important;
+}
+
+:deep(.timeline-context-menu .q-item__label) {
+  font-weight: 500 !important;
+}
+
+:deep(.timeline-context-menu .q-item__label--caption) {
+  font-size: 11px !important;
+  opacity: 0.7 !important;
+  margin-top: 2px !important;
+}
+
+:deep(.timeline-context-menu .q-separator) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  margin: 4px 8px !important;
+}
+
+:deep(.timeline-context-menu .q-badge) {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  font-weight: 500 !important;
+}
+
+:deep(.timeline-context-menu .q-icon) {
+  font-size: 20px !important;
+}
+
 :deep(.vue-flow__minimap-mask) {
   fill: rgba(66, 184, 131, 0.15) !important;
   stroke: rgba(66, 184, 131, 0.6) !important;
@@ -1558,6 +1949,45 @@ function handleTimelineNodeUpdate() {
 :deep(.vue-flow__panel.bottom.left) {
   margin-bottom: 16px !important;
   margin-left: 16px !important;
+}
+
+/* 移除 Vue Flow 默认给节点添加的边框 */
+:deep(.vue-flow__node) {
+  border: none !important;
+}
+
+/* NodeResizer 样式 - 默认隐藏，悬停时显示 */
+:deep(.vue-flow__resize-control) {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 100; /* 确保在最上层 */
+}
+
+:deep(.vue-flow__node:hover .vue-flow__resize-control) {
+  opacity: 1;
+}
+
+:deep(.vue-flow__resize-control.handle) {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #42b883;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  cursor: nwse-resize;
+}
+
+:deep(.vue-flow__resize-control.handle:hover) {
+  width: 14px;
+  height: 14px;
+  background: #42b883;
+  border-color: white;
+}
+
+:deep(.vue-flow__resize-control.line) {
+  border-color: #42b883;
+  border-width: 2px;
+  /* 不设置 opacity，继承父元素的 opacity */
 }
 </style>
 

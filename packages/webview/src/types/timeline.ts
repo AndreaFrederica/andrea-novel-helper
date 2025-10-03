@@ -18,8 +18,9 @@ export interface TimelineEvent {
   timeless?: boolean;
   position?: { x: number; y: number };
   bindings?: BindingReference[];
+  color?: string; // 自定义节点颜色 (支持 hex、rgb、rgba 等 CSS 颜色格式)
   data?: {
-    type: 'main' | 'side';
+    type: 'main' | 'side' | 'condition'; // 支持条件节点类型
   };
   // 嵌套节点支持
   parentNode?: string; // 父节点ID
@@ -33,6 +34,8 @@ export interface TimelineConnection {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string; // 源节点手柄 ID (例如条件节点的 'true' 或 'false')
+  targetHandle?: string; // 目标节点手柄 ID
   label?: string;
   connectionType?: 'normal' | 'time-travel' | 'reincarnation' | 'parallel' | 'dream' | 'flashback' | 'other';
 }

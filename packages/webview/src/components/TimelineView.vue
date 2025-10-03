@@ -728,7 +728,7 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
       rawDate,
       rawEndDate,
       ...(event.parentNode ? { parentNode: event.parentNode } : {}),
-      isParent: !event.parentNode && !!(event.width || event.height),
+      isParent: false, // 先设为 false，稍后根据实际子节点数量更新
       children: [] as NormalizedTimelineItem[],
       originalIndex: index,
     };
@@ -738,23 +738,28 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
   const parentMap = new Map<string, NormalizedTimelineItem>();
   const childrenMap = new Map<string, NormalizedTimelineItem[]>();
 
+  // 第一遍：收集所有潜在的父节点（没有 parentNode 的节点）
   enriched.forEach(item => {
-    if (item.isParent) {
+    if (!item.parentNode) {
       parentMap.set(item.id, item);
       childrenMap.set(item.id, []);
     }
   });
 
+  // 第二遍：将子节点分配给父节点
   enriched.forEach(item => {
     if (item.parentNode && childrenMap.has(item.parentNode)) {
       childrenMap.get(item.parentNode)!.push(item);
     }
   });
 
-  // 为亲代节点分配子节点
+  // 第三遍：为父节点分配子节点，并标记真正的父节点
   enriched.forEach(item => {
-    if (item.isParent && childrenMap.has(item.id)) {
-      item.children = childrenMap.get(item.id)!;
+    if (!item.parentNode && childrenMap.has(item.id)) {
+      const children = childrenMap.get(item.id)!;
+      item.children = children;
+      // 只有真正有子节点的才标记为父节点
+      item.isParent = children.length > 0;
     }
   });
 
