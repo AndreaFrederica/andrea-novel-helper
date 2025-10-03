@@ -9,6 +9,7 @@ import { loadRoles } from '../../utils/utils';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
+import { generateCustomFileName, generateDefaultFileName } from '../../utils/Parser/markdownParser';
 
 // 解析文件名冲突：如果同名存在，则追加 _YYYYMMDD_HHmmss 或递增索引
 function resolveFileConflict(dir: string, baseName: string, ext: string): { path: string; conflicted: boolean; } {
@@ -199,9 +200,10 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 } else {
                     const ext = path.extname(name).toLowerCase();
                     const isRoleOrRelationshipFile = ext === '.ojson5' || ext === '.rjson5' || ext === '.ojson' || ext === '.rjson';
+                    const isTimelineFile = ext === '.tjson5';
                     
-                    if (isRoleOrRelationshipFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
-                        const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5'];
+                    if (isRoleOrRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
+                        const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
                         const fileNode = new PackageNode(
                             vscode.Uri.file(full),
                             vscode.TreeItemCollapsibleState.None
@@ -244,10 +246,11 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 // 对于文件，分两类处理
                 const ext = path.extname(name).toLowerCase();
                 const isRoleOrRelationshipFile = ext === '.ojson5' || ext === '.rjson5' || ext === '.ojson' || ext === '.rjson';
+                const isTimelineFile = ext === '.tjson5';
                 
-                if (isRoleOrRelationshipFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
+                if (isRoleOrRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
-                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5'];
+                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.None
@@ -534,6 +537,10 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('AndreaNovelHelper.createRelationshipFile', async (node: PackageNode) => {
             const file = await createRelationshipFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.createTimelineFile', async (node: PackageNode) => {
+            const file = await createTimelineFile(node.resourceUri.fsPath);
+            if (file) provider.refresh();
         })
     );
 
@@ -631,14 +638,14 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         const fileName = path.basename(filePath);
         const ext = path.extname(fileName).toLowerCase();
         // 仅允许 .ojson5 和 .rjson5 在无关键词时也被识别为角色/关系文件
-        const autoExts = new Set(['.ojson5', '.rjson5']);
+        const autoExts = new Set(['.ojson5', '.rjson5' ,'tjson5']);
 
         if (autoExts.has(ext)) {
             return true;
         }
 
-        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(fileName);
-        const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5)$/i.test(fileName);
+        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(fileName);
+        const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5|tjson5)$/i.test(fileName);
 
         return hasKeywords && hasValidExtension;
     };
@@ -651,8 +658,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     if (autoExts.has(ext)) return true;
 
-    const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex/.test(fileName);
-    const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5)$/i.test(fileName);
+    const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|timeline|regex/.test(fileName);
+    const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5|tjson5)$/i.test(fileName);
 
     return hasKeywords && hasValidExtension;
     };
@@ -831,10 +838,8 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
         detectedType = '角色';
     }
 
-    // 如果是 .md 文件，使用完整的重命名流程
     if (ext === '.md') {
-        // 导入 Markdown 解析器函数
-        const { generateCustomFileName, generateDefaultFileName } = await import('../../utils/Parser/markdownParser.js');
+        // Markdown 解析器函数已静态导入
         
         // 选择文件类型
         const roleType = await vscode.window.showQuickPick(
@@ -844,6 +849,7 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
                 title: `重命名文件: ${oldName}`
             }
         );
+        if (!roleType) return;
         if (!roleType) return;
 
         // 询问自定义文件名
@@ -1079,5 +1085,47 @@ function generateRelationshipFileTemplate(): string {
             }
         }
     ]
+}`;
+}
+
+/** 创建时间线文件 (.tjson5) */
+async function createTimelineFile(dir: string): Promise<string | undefined> {
+    const name = await vscode.window.showInputBox({ 
+        prompt: '输入时间线文件名称',
+        placeHolder: '例如: story-timeline'
+    });
+    if (!name) return;
+
+    const fileName = name.endsWith('.tjson5') ? name : `${name}.tjson5`;
+    const filePath = path.join(dir, fileName);
+    
+    if (fs.existsSync(filePath)) {
+        vscode.window.showErrorMessage(`文件 ${fileName} 已存在`);
+        return;
+    }
+
+    // 生成时间线文件初始内容
+    const initialContent = generateTimelineFileTemplate();
+    
+    fs.writeFileSync(filePath, initialContent, 'utf8');
+    
+    // 自动打开新文件
+    try {
+        const doc = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (err) {
+        console.warn('自动打开新文件失败: ', err);
+    }
+    
+    vscode.window.showInformationMessage(`时间线文件 ${fileName} 创建成功`);
+    return filePath;
+}
+
+/** 生成时间线文件模板 */
+function generateTimelineFileTemplate(): string {
+    return `{
+    // === 时间线配置文件 ===
+    "events": [],
+    "connections": []
 }`;
 }

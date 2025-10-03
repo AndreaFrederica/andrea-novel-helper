@@ -75,6 +75,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "andrea.timelineJson5Editor",
+        "displayName": "时间线 JSON5 编辑器",
+        "selector": [
+          {
+            "filenamePattern": "**/*.tjson5"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "configurationDefaults": {
@@ -417,6 +427,10 @@
       {
         "command": "AndreaNovelHelper.createRelationshipFile",
         "title": "%command.createRelationshipFile.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.createTimelineFile",
+        "title": "%command.createTimelineFile.title%"
       },
       {
         "command": "AndreaNovelHelper.createSubPackage",
@@ -816,8 +830,13 @@
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createRegexPatterns",
+          "command": "AndreaNovelHelper.createTimelineFile",
           "group": "0_create@6"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createRegexPatterns",
+          "group": "0_create@7"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
@@ -2316,6 +2335,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.startupSnapshot.deleteOnDisable.description%"
+        },
+        "AndreaNovelHelper.startupSnapshot.showNotification": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.startupSnapshot.showNotification.description%"
         }
       }
     },

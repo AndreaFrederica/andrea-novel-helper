@@ -1,0 +1,105 @@
+{
+  "events": [
+    {
+      "id": "parent-1",
+      "title": "第一章:相遇",
+      "group": "主线",
+      "type": "main",
+      "date": "2024-01-01T08:00:00",
+      "endDate": "2024-01-01T18:00:00",
+      "description": "主角们第一次相遇的一天",
+      "width": 400,
+      "height": 300,
+      "position": { "x": 100, "y": 100 }
+    },
+    {
+      "id": "child-1-1",
+      "title": "早晨偶遇",
+      "group": "主线",
+      "type": "main",
+      "date": "2024-01-01T08:30:00",
+      "endDate": "2024-01-01T09:00:00",
+      "description": "在咖啡馆的第一次见面",
+      "parentNode": "parent-1",
+      "extent": "parent",
+      "expandParent": true,
+      "position": { "x": 20, "y": 50 }
+    },
+    {
+      "id": "child-1-2",
+      "title": "午后交谈",
+      "group": "主线",
+      "type": "main",
+      "date": "2024-01-01T14:00:00",
+      "endDate": "2024-01-01T16:00:00",
+      "description": "在公园深入交流",
+      "parentNode": "parent-1",
+      "extent": "parent",
+      "expandParent": true,
+      "position": { "x": 20, "y": 150 }
+    },
+    {
+      "id": "parent-2",
+      "title": "第二章:冲突",
+      "group": "主线",
+      "type": "main",
+      "date": "2024-01-05T10:00:00",
+      "endDate": "2024-01-05T20:00:00",
+      "description": "矛盾激化的一天",
+      "width": 400,
+      "height": 250,
+      "position": { "x": 600, "y": 100 }
+    },
+    {
+      "id": "child-2-1",
+      "title": "误会产生",
+      "group": "主线",
+      "type": "main",
+      "date": "2024-01-05T10:30:00",
+      "description": "因为一个小误会产生隔阂",
+      "parentNode": "parent-2",
+      "extent": "parent",
+      "position": { "x": 20, "y": 50 }
+    },
+    {
+      "id": "side-event-1",
+      "title": "配角的故事",
+      "group": "支线",
+      "type": "side",
+      "date": "2024-01-03T12:00:00",
+      "endDate": "2024-01-03T15:00:00",
+      "description": "配角独立的支线故事",
+      "position": { "x": 350, "y": 450 }
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn-1",
+      "source": "parent-1",
+      "target": "parent-2",
+      "label": "时间推进",
+      "connectionType": "normal"
+    },
+    {
+      "id": "conn-2",
+      "source": "child-1-1",
+      "target": "child-1-2",
+      "label": "同一天内",
+      "connectionType": "normal"
+    },
+    {
+      "id": "conn-3",
+      "source": "child-1-2",
+      "target": "child-2-1",
+      "label": "因果关系",
+      "connectionType": "causality"
+    },
+    {
+      "id": "conn-4",
+      "source": "side-event-1",
+      "target": "parent-2",
+      "label": "支线汇入主线",
+      "connectionType": "normal"
+    }
+  ]
+}

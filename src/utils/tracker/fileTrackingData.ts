@@ -416,19 +416,34 @@ export class FileTrackingDataManager {
                 try {
                     // 在某些非 UI 环境 vscode.window 可能不存在，故用 try/catch 保护
                     if (vscode && vscode.window && typeof vscode.window.showInformationMessage === 'function') {
-                        const prompt = '已载入写作追踪启动快照以加速启动。要打开快照目录查看文件吗？';
-                        // showInformationMessage 返回 Thenable（PromiseLike），直接调用 .catch 在某些环境会报类型问题
-                        Promise.resolve(vscode.window.showInformationMessage(prompt, '打开快照文件夹'))
-                            .then(selection => {
-                                if (selection === '打开快照文件夹') {
-                                    try {
-                                        const uri = vscode.Uri.file(this.snapshotDir);
-                                        // revealFileInOS 在 VS Code 中会在文件管理器中显示该路径
-                                        vscode.commands.executeCommand('revealFileInOS', uri);
-                                    } catch (e) { /* ignore */ }
-                                }
-                            })
-                            .catch(() => { /* ignore */ });
+                        // 检查是否显示通知
+                        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.startupSnapshot');
+                        const showNotification = cfg.get<boolean>('showNotification', true);
+                        
+                        if (showNotification) {
+                            const prompt = '已载入写作追踪启动快照以加速启动。要打开快照目录查看文件吗？';
+                            // showInformationMessage 返回 Thenable（PromiseLike），直接调用 .catch 在某些环境会报类型问题
+                            Promise.resolve(vscode.window.showInformationMessage(prompt, '打开快照文件夹', '不再提示'))
+                                .then(selection => {
+                                    if (selection === '打开快照文件夹') {
+                                        try {
+                                            const uri = vscode.Uri.file(this.snapshotDir);
+                                            // revealFileInOS 在 VS Code 中会在文件管理器中显示该路径
+                                            vscode.commands.executeCommand('revealFileInOS', uri);
+                                        } catch (e) { /* ignore */ }
+                                    } else if (selection === '不再提示') {
+                                        // 用户选择不再提示，更新配置
+                                        Promise.resolve(cfg.update('showNotification', false, vscode.ConfigurationTarget.Global))
+                                            .then(() => {
+                                                console.log('[FileTracking] 用户选择不再显示启动快照通知');
+                                            })
+                                            .catch(() => {
+                                                console.warn('[FileTracking] 更新配置失败');
+                                            });
+                                    }
+                                })
+                                .catch(() => { /* ignore */ });
+                        }
                     }
                 } catch (e) { /* ignore */ }
             }
@@ -463,8 +478,8 @@ export class FileTrackingDataManager {
         } catch (e) { console.warn('[FileTracking] 写出启动快照失败（忽略）', e); }
     }
     private deleteSnapshotsSafe(): void {
-        try { if (fs.existsSync(this.trackerSnapshotPath)) fs.unlinkSync(this.trackerSnapshotPath); } catch {}
-        try { if (fs.existsSync(this.wcSnapshotPath)) fs.unlinkSync(this.wcSnapshotPath); } catch {}
+        try { if (fs.existsSync(this.trackerSnapshotPath)) { fs.unlinkSync(this.trackerSnapshotPath); } } catch { /* ignore */ }
+        try { if (fs.existsSync(this.wcSnapshotPath)) { fs.unlinkSync(this.wcSnapshotPath); } } catch { /* ignore */ }
     }
 
     /**

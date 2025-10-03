@@ -46,16 +46,39 @@
 
           <q-input
             v-model="formData.date"
-            label="事件日期 *"
+            label="开始时间 *"
             filled
             dense
             class="q-mb-md"
-            :rules="[(val) => !!val || '日期不能为空']"
+            :rules="[(val) => !!val || '开始时间不能为空']"
+            hint="格式: YYYY-MM-DDTHH:mm:ss 或 YYYY-MM-DD"
           >
             <template v-slot:append>
               <q-icon name="event" class="cursor-pointer">
                 <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                  <q-date v-model="formData.date" mask="YYYY-MM-DD">
+                  <q-date v-model="formData.date" mask="YYYY-MM-DDTHH:mm:ss">
+                    <div class="row items-center justify-end">
+                      <q-btn v-close-popup label="确定" color="primary" flat />
+                    </div>
+                  </q-date>
+                </q-popup-proxy>
+              </q-icon>
+            </template>
+          </q-input>
+
+          <q-input
+            v-model="formData.endDate"
+            label="结束时间 (可选)"
+            filled
+            dense
+            class="q-mb-md"
+            hint="用于时间区间事件，格式同上"
+            clearable
+          >
+            <template v-slot:append>
+              <q-icon name="event" class="cursor-pointer">
+                <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+                  <q-date v-model="formData.endDate" mask="YYYY-MM-DDTHH:mm:ss">
                     <div class="row items-center justify-end">
                       <q-btn v-close-popup label="确定" color="primary" flat />
                     </div>
@@ -166,6 +189,83 @@
               />
             </div>
           </q-card>
+
+          <!-- 嵌套和布局配置 -->
+          <div class="text-subtitle2 q-mt-lg q-mb-md">嵌套和布局配置</div>
+
+          <q-select
+            v-model="formData.parentNode"
+            :options="availableParentNodes"
+            label="亲代节点 (可选)"
+            filled
+            dense
+            class="q-mb-md"
+            hint="选择亲代节点使此节点成为子节点"
+            clearable
+            emit-value
+            map-options
+            option-label="label"
+            option-value="value"
+          >
+            <template v-slot:no-option>
+              <q-item>
+                <q-item-section class="text-grey">
+                  无可用的亲代节点
+                </q-item-section>
+              </q-item>
+            </template>
+          </q-select>
+
+          <div class="row q-col-gutter-md q-mb-md">
+            <div class="col-6">
+              <q-input
+                v-model.number="formData.width"
+                label="节点宽度 (px)"
+                filled
+                dense
+                type="number"
+                min="150"
+                hint="用于亲代节点，最小150px"
+                clearable
+              />
+            </div>
+            <div class="col-6">
+              <q-input
+                v-model.number="formData.height"
+                label="节点高度 (px)"
+                filled
+                dense
+                type="number"
+                min="100"
+                hint="用于亲代节点，最小100px"
+                clearable
+              />
+            </div>
+          </div>
+
+          <div class="row items-center q-mb-md">
+            <q-checkbox
+              v-model="formData.extent"
+              true-value="parent"
+              false-value=""
+              label="限制在亲代节点内移动"
+              dense
+            />
+            <q-icon name="help_outline" size="xs" class="q-ml-xs" color="grey-6">
+              <q-tooltip>子节点无法拖动到亲代节点范围外</q-tooltip>
+            </q-icon>
+          </div>
+
+          <div class="row items-center q-mb-md">
+            <q-checkbox
+              v-model="formData.expandParent"
+              label="拖动时自动扩展亲代节点"
+              dense
+            />
+            <q-icon name="help_outline" size="xs" class="q-ml-xs" color="grey-6">
+              <q-tooltip>拖动子节点接近边缘时，自动扩大亲代节点</q-tooltip>
+            </q-icon>
+          </div>
         </q-form>
       </q-card-section>
 
@@ -178,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 
 interface BindingReference {
   uuid: string;
@@ -192,15 +292,22 @@ interface TimelineEvent {
   group: string;
   type: 'main' | 'side';
   date: string;
+  endDate?: string;
   description: string;
   timeless?: boolean;
   position?: { x: number; y: number };
   bindings?: BindingReference[];
+  parentNode?: string;
+  width?: number;
+  height?: number;
+  extent?: 'parent';
+  expandParent?: boolean;
 }
 
 interface Props {
   modelValue: boolean;
   event?: TimelineEvent | null;
+  allEvents?: TimelineEvent[];  // 所有事件列表，用于构建亲代节点选项
 }
 
 const props = defineProps<Props>();
@@ -217,6 +324,27 @@ const formData = ref<Partial<TimelineEvent>>({
   date: '',
   description: '',
   bindings: [],
+  expandParent: false,
+});
+
+// 可用的亲代节点选项
+const availableParentNodes = computed(() => {
+  if (!props.allEvents) return [];
+  
+  const currentEventId = props.event?.id;
+  
+  return props.allEvents
+    .filter(e => {
+      // 排除当前节点本身
+      if (e.id === currentEventId) return false;
+      // 排除已经是子节点的节点（避免嵌套过深）
+      if (e.parentNode) return false;
+      return true;
+    })
+    .map(e => ({
+      label: `${e.title} (${e.id.substring(0, 8)}...)`,
+      value: e.id,
+    }));
 });
 
 // 新绑定表单
@@ -246,10 +374,20 @@ watch(
   () => props.event,
   (newEvent) => {
     if (newEvent) {
-      formData.value = {
+      const data: Partial<TimelineEvent> = {
         ...newEvent,
         bindings: newEvent.bindings ? [...newEvent.bindings] : [],
+        expandParent: newEvent.expandParent ?? false,
       };
+      
+      // 只在有值时才设置可选字段
+      if (newEvent.endDate) data.endDate = newEvent.endDate;
+      if (newEvent.parentNode) data.parentNode = newEvent.parentNode;
+      if (newEvent.width !== undefined) data.width = newEvent.width;
+      if (newEvent.height !== undefined) data.height = newEvent.height;
+      if (newEvent.extent) data.extent = newEvent.extent;
+      
+      formData.value = data;
     } else {
       // 重置表单
       formData.value = {

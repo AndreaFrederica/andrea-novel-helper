@@ -71,7 +71,7 @@ function injectResourceMapper(html: string, webview: vscode.Webview, spaRoot: vs
 
 function fixAllAssetUrls(html: string, webview: vscode.Webview, spaRoot: vscode.Uri): string {
     const assetsPath = vscode.Uri.joinPath(spaRoot, 'assets').fsPath;
-    if (!fs.existsSync(assetsPath)) return html;
+    if (!fs.existsSync(assetsPath)) {return html;}
     try {
         for (const file of fs.readdirSync(assetsPath)) {
             const oldPath = `/assets/${file}`;
@@ -89,8 +89,8 @@ function fixAllAssetUrls(html: string, webview: vscode.Webview, spaRoot: vscode.
 }
 
 function applyCsp(html: string, webview: vscode.Webview, connectSrcExtra: string[] = []): string {
-    const connectSrc = ['https:', 'http:', ...connectSrcExtra].join(' ');
-    const csp = `default-src 'none'; script-src ${webview.cspSource} 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; connect-src ${connectSrc};`;
+    const connectSrc = [webview.cspSource, 'https:', 'http:', 'ws:', 'wss:', ...connectSrcExtra].join(' ');
+    const csp = `default-src 'none'; script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; connect-src ${connectSrc};`;
     return html.replace(/<head([^>]*)>/i, `<head$1>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`);
 }
 
@@ -98,11 +98,12 @@ function addBaseTag(html: string): string {
     return html.replace(/<head([^>]*)>/i, '<head$1>\n<base href="./">');
 }
 
-export function buildHtml(webview: vscode.Webview, opts: { spaRoot: vscode.Uri; connectSrc?: string[]; resourceMapperScriptUri?: string; route?: string }): string {
+export function buildHtml(webview: vscode.Webview, opts: { spaRoot: vscode.Uri; connectSrc?: string[]; resourceMapperScriptUri?: string; route?: string; editorTitle?: string }): string {
     const indexHtmlUri = vscode.Uri.joinPath(opts.spaRoot, 'index.html');
     const indexHtmlPath = indexHtmlUri.fsPath;
     if (!fs.existsSync(indexHtmlPath)) {
-        return `<html><body><h3>关系图编辑器</h3><p>未找到 index.html：<code>${indexHtmlPath}</code></p></body></html>`;
+        const title = opts.editorTitle || '编辑器';
+        return `<html><body><h3>${title}</h3><p>未找到 index.html：<code>${indexHtmlPath}</code></p></body></html>`;
     }
     let html = readFile(indexHtmlPath);
     html = rewriteHtmlToWebviewUris(html, webview, opts.spaRoot);

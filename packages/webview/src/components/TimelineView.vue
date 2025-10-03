@@ -29,7 +29,80 @@
             <div class="timeline-view__time">{{ group.displayDate }}</div>
           </template>
           <template #default>
-            <div class="timeline-view__card-group">
+            <!-- 亲代节点跨时间段卡片 -->
+            <div v-if="group.parentSpans.length > 0" class="timeline-view__parent-spans">
+              <div
+                v-for="span in group.parentSpans"
+                :key="`span-${span.parent.id}-${group.dateKey}`"
+                class="timeline-view__parent-span"
+                :class="{
+                  'timeline-view__parent-span--start': group.dateKey === span.startDateKey,
+                  'timeline-view__parent-span--end': group.dateKey === span.endDateKey,
+                  'timeline-view__parent-span--middle': group.dateKey !== span.startDateKey && group.dateKey !== span.endDateKey
+                }"
+                :style="{ 
+                  backgroundColor: span.parent.cardBg + '40',
+                  borderColor: span.parent.cardBg
+                }"
+                :ref="el => setCardRef(span.parent.id, el as HTMLElement)"
+                :data-card-id="span.parent.id"
+              >
+                <!-- 亲代节点标题 (只在开始位置显示) -->
+                <div v-if="group.dateKey === span.startDateKey" class="timeline-view__parent-header">
+                  <h3 class="timeline-view__parent-title" :style="{ color: span.parent.cardBg }">
+                    {{ span.parent.title }}
+                  </h3>
+                  <div class="timeline-view__parent-date-range">
+                    <span class="timeline-view__parent-date-start">{{ span.parent.displayDate }}</span>
+                    <span class="timeline-view__parent-date-separator">~</span>
+                    <span class="timeline-view__parent-date-end">{{ span.parent.endDateDisplay }}</span>
+                  </div>
+                  <p v-if="span.parent.description" class="timeline-view__parent-description">
+                    {{ span.parent.description }}
+                  </p>
+                </div>
+                
+                <!-- 子节点 (在所有跨越的时间段中显示) -->
+                <div v-if="span.children.length > 0" class="timeline-view__children">
+                  <article
+                    v-for="child in span.children"
+                    :key="child.id"
+                    :ref="el => setCardRef(child.id, el as HTMLElement)"
+                    :data-card-id="child.id"
+                    class="timeline-view__child-card"
+                    :style="{ backgroundColor: child.cardBg, color: child.textColor }"
+                  >
+                    <header class="timeline-view__card-header">
+                      <h4 class="timeline-view__child-title">{{ child.title }}</h4>
+                      <d-tag
+                        size="sm"
+                        class="timeline-status-tag"
+                        :style="{ color: child.cardBg, backgroundColor: '#ffffff' }"
+                      >
+                        {{ child.statusLabel }}
+                      </d-tag>
+                    </header>
+                    <div class="timeline-view__card-date">
+                      <template v-if="child.endDateDisplay">
+                        <span class="timeline-view__card-date-start">{{ child.displayDate }}</span>
+                        <span class="timeline-view__card-date-separator">~</span>
+                        <span class="timeline-view__card-date-end">{{ child.endDateDisplay }}</span>
+                      </template>
+                      <template v-else>
+                        {{ child.displayDate }}
+                      </template>
+                    </div>
+                    <p v-if="child.description" class="timeline-view__child-description">{{ child.description }}</p>
+                    <footer class="timeline-view__card-footer">
+                      <span v-if="child.group" class="timeline-view__meta">所属分组：{{ child.group }}</span>
+                    </footer>
+                  </article>
+                </div>
+              </div>
+            </div>
+
+            <!-- 普通节点卡片 -->
+            <div v-if="group.items.length > 0" class="timeline-view__card-group">
               <article
                 v-for="item in group.items"
                 :key="item.id"
@@ -48,7 +121,16 @@
                     {{ item.statusLabel }}
                   </d-tag>
                 </header>
-                <div class="timeline-view__card-date">{{ item.displayDate }}</div>
+                <div class="timeline-view__card-date">
+                  <template v-if="item.endDateDisplay">
+                    <span class="timeline-view__card-date-start">{{ item.displayDate }}</span>
+                    <span class="timeline-view__card-date-separator">~</span>
+                    <span class="timeline-view__card-date-end">{{ item.endDateDisplay }}</span>
+                  </template>
+                  <template v-else>
+                    {{ item.displayDate }}
+                  </template>
+                </div>
                 <p v-if="item.description" class="timeline-view__card-description">{{ item.description }}</p>
                 <footer class="timeline-view__card-footer">
                   <span v-if="item.group" class="timeline-view__meta">所属分组：{{ item.group }}</span>
@@ -187,10 +269,14 @@ interface TimelineViewEvent {
   id: string;
   title: string;
   date?: string;
+  endDate?: string;
   description?: string;
   group?: string;
   type?: KnownTimelineType | CustomTimelineType;
   timeless?: boolean;
+  parentNode?: string;
+  width?: number;
+  height?: number;
 }
 
 interface TimelineViewConnection {
@@ -212,10 +298,15 @@ interface NormalizedTimelineItem {
   cardBg: string;
   textColor: string;
   displayDate: string;
+  endDateDisplay?: string;
   yearLabel: string;
   isTimeless: boolean;
   sortKey: number;
   rawDate: Date | null;
+  rawEndDate: Date | null;
+  parentNode?: string;
+  isParent: boolean;
+  children: NormalizedTimelineItem[];
 }
 
 const props = defineProps<{
@@ -507,12 +598,41 @@ function formatDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function hasTimeComponent(dateStr: string): boolean {
+  if (!dateStr.includes('T')) {
+    return false;
+  }
+  return !dateStr.endsWith('T00:00:00');
+}
+
+function formatDateTimeLabel(dateStr: string) {
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) {
+    return { label: dateStr, date: null };
+  }
+
+  const year = parsed.getFullYear();
+  const month = `${parsed.getMonth() + 1}`.padStart(2, '0');
+  const day = `${parsed.getDate()}`.padStart(2, '0');
+
+  let label = `${year}-${month}-${day}`;
+  if (hasTimeComponent(dateStr)) {
+    const hours = `${parsed.getHours()}`.padStart(2, '0');
+    const minutes = `${parsed.getMinutes()}`.padStart(2, '0');
+    label = `${label} ${hours}:${minutes}`;
+  }
+
+  return { label, date: parsed };
+}
+
 function normalizeDate(event: TimelineViewEvent, fallbackIndex: number) {
   if (event.timeless) {
     return {
       displayDate: '未绑定日期',
       sortKey: Number.MAX_SAFE_INTEGER - 200 + fallbackIndex,
       rawDate: null,
+      rawEndDate: null,
+      endDateDisplay: undefined,
       isTimeless: true,
     };
   }
@@ -522,6 +642,8 @@ function normalizeDate(event: TimelineViewEvent, fallbackIndex: number) {
       displayDate: '未设置日期',
       sortKey: Number.MAX_SAFE_INTEGER - 150 + fallbackIndex,
       rawDate: null,
+      rawEndDate: null,
+      endDateDisplay: undefined,
       isTimeless: false,
     };
   }
@@ -532,14 +654,29 @@ function normalizeDate(event: TimelineViewEvent, fallbackIndex: number) {
       displayDate: event.date,
       sortKey: Number.MAX_SAFE_INTEGER - 175 + fallbackIndex,
       rawDate: null,
+      rawEndDate: null,
+      endDateDisplay: undefined,
       isTimeless: false,
     };
   }
 
+  const { label: startLabel, date: normalizedStart } = formatDateTimeLabel(event.date);
+
+  let endDateDisplay: string | undefined;
+  let rawEndDate: Date | null = null;
+
+  if (event.endDate) {
+    const { label: endLabel, date: normalizedEnd } = formatDateTimeLabel(event.endDate);
+    endDateDisplay = endLabel;
+    rawEndDate = normalizedEnd;
+  }
+
   return {
-    displayDate: formatDate(parsed),
+    displayDate: startLabel,
     sortKey: parsed.getTime(),
-    rawDate: parsed,
+    rawDate: normalizedStart ?? parsed,
+    rawEndDate,
+    ...(endDateDisplay ? { endDateDisplay } : {}),
     isTimeless: false,
   };
 }
@@ -551,34 +688,66 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
 
   const enriched = props.events.map((event, index) => {
     const meta = getTypeMeta(event.type);
-    const { displayDate, sortKey, rawDate, isTimeless } = normalizeDate(event, index);
+    const { displayDate, sortKey, rawDate, endDateDisplay, rawEndDate, isTimeless } = normalizeDate(event, index);
     return {
       id: event.id ?? `event-${index}`,
       title: event.title || `未命名事件 ${index + 1}`,
       description: event.description?.trim() || undefined,
       group: event.group?.trim() || undefined,
-    statusLabel: meta.label,
-    dotColor: meta.dotColor,
-    backgroundColor: meta.backgroundColor,
-    cardBg: meta.cardBg,
-    textColor: meta.textColor,
+      statusLabel: meta.label,
+      dotColor: meta.dotColor,
+      backgroundColor: meta.backgroundColor,
+      cardBg: meta.cardBg,
+      textColor: meta.textColor,
       displayDate,
+      ...(endDateDisplay ? { endDateDisplay } : {}),
       yearLabel: '',
       isTimeless,
       sortKey,
       rawDate,
+      rawEndDate,
+      ...(event.parentNode ? { parentNode: event.parentNode } : {}),
+      isParent: !event.parentNode && !!(event.width || event.height),
+      children: [] as NormalizedTimelineItem[],
       originalIndex: index,
     };
   });
 
-  enriched.sort((a, b) => {
+  // 建立亲代-子节点关系
+  const parentMap = new Map<string, NormalizedTimelineItem>();
+  const childrenMap = new Map<string, NormalizedTimelineItem[]>();
+
+  enriched.forEach(item => {
+    if (item.isParent) {
+      parentMap.set(item.id, item);
+      childrenMap.set(item.id, []);
+    }
+  });
+
+  enriched.forEach(item => {
+    if (item.parentNode && childrenMap.has(item.parentNode)) {
+      childrenMap.get(item.parentNode)!.push(item);
+    }
+  });
+
+  // 为亲代节点分配子节点
+  enriched.forEach(item => {
+    if (item.isParent && childrenMap.has(item.id)) {
+      item.children = childrenMap.get(item.id)!;
+    }
+  });
+
+  // 过滤掉已分配给亲代的子节点，只返回顶层节点
+  const topLevelItems = enriched.filter(item => !item.parentNode);
+
+  topLevelItems.sort((a, b) => {
     if (a.sortKey === b.sortKey) {
       return a.originalIndex - b.originalIndex;
     }
     return a.sortKey - b.sortKey;
   });
 
-  return enriched.map((item, index) => ({
+  return topLevelItems.map((item, index) => ({
     id: item.id,
     title: item.title,
     description: item.description,
@@ -589,19 +758,47 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
     cardBg: item.cardBg,
     textColor: item.textColor,
     displayDate: item.displayDate,
+    ...(item.endDateDisplay ? { endDateDisplay: item.endDateDisplay } : {}),
     yearLabel: index === 0 && item.rawDate ? `${item.rawDate.getFullYear()}` : '',
     isTimeless: item.isTimeless,
     sortKey: item.sortKey,
     rawDate: item.rawDate,
+    rawEndDate: item.rawEndDate,
+    ...(item.parentNode ? { parentNode: item.parentNode } : {}),
+    isParent: item.isParent,
+    children: item.children,
   }));
-});
-
-// 按日期分组的时间线项
+});// 按日期分组的时间线项
 interface GroupedTimelineItem {
   dateKey: string;
   displayDate: string;
   yearLabel: string;
   items: NormalizedTimelineItem[];
+  parentSpans: ParentSpanInfo[];
+}
+
+interface ParentSpanInfo {
+  parent: NormalizedTimelineItem;
+  startDateKey: string;
+  endDateKey: string;
+  spanWidth: number;
+  children: NormalizedTimelineItem[];
+}
+
+// 生成日期范围内的所有日期key
+function generateDateKeys(startDate: Date, endDate: Date): string[] {
+  const keys: string[] = [];
+  const current = new Date(startDate);
+  
+  while (current <= endDate) {
+    const year = current.getFullYear();
+    const month = `${current.getMonth() + 1}`.padStart(2, '0');
+    const day = `${current.getDate()}`.padStart(2, '0');
+    keys.push(`${year}-${month}-${day}`);
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return keys;
 }
 
 const groupedTimelineItems = computed<GroupedTimelineItem[]>(() => {
@@ -610,41 +807,72 @@ const groupedTimelineItems = computed<GroupedTimelineItem[]>(() => {
     return [];
   }
 
+  // 收集所有唯一的日期
+  const allDates = new Set<string>();
+  const parentSpans: ParentSpanInfo[] = [];
+
+  // 处理普通节点和亲代节点
+  items.forEach((item) => {
+    if (item.isParent && item.rawDate && item.rawEndDate) {
+      // 亲代节点：生成跨越的日期范围
+      const dateKeys = generateDateKeys(item.rawDate, item.rawEndDate);
+      dateKeys.forEach(key => allDates.add(key));
+      
+      parentSpans.push({
+        parent: item,
+        startDateKey: dateKeys[0]!,
+        endDateKey: dateKeys[dateKeys.length - 1]!,
+        spanWidth: dateKeys.length,
+        children: item.children,
+      });
+    } else if (!item.isParent) {
+      // 普通节点：只添加单个日期
+      allDates.add(item.displayDate);
+    }
+  });
+
   // 按日期分组
   const groupMap = new Map<string, NormalizedTimelineItem[]>();
+  const sortedDates = Array.from(allDates).sort((a, b) => {
+    const dateA = new Date(a);
+    const dateB = new Date(b);
+    return dateA.getTime() - dateB.getTime();
+  });
 
+  // 初始化所有日期组
+  sortedDates.forEach(dateKey => {
+    groupMap.set(dateKey, []);
+  });
+
+  // 将非亲代节点分配到相应日期组
   items.forEach((item) => {
-    const key = item.displayDate;
-    if (!groupMap.has(key)) {
-      groupMap.set(key, []);
-    }
-    const group = groupMap.get(key);
-    if (group) {
-      group.push(item);
+    if (!item.isParent) {
+      const group = groupMap.get(item.displayDate);
+      if (group) {
+        group.push(item);
+      }
     }
   });
 
-  // 转换为数组并保持时间顺序
+  // 转换为最终的分组结构
   const groups: GroupedTimelineItem[] = [];
-  const sortedDates = Array.from(groupMap.keys()).sort((a, b) => {
-    const itemsA = groupMap.get(a);
-    const itemsB = groupMap.get(b);
-    if (!itemsA || !itemsB || !itemsA[0] || !itemsB[0]) return 0;
-    return itemsA[0].sortKey - itemsB[0].sortKey;
-  });
-
   sortedDates.forEach((dateKey, index) => {
-    const groupItems = groupMap.get(dateKey);
-    if (!groupItems || groupItems.length === 0) return;
-
-    const firstItem = groupItems[0];
-    if (!firstItem) return;
+    const groupItems = groupMap.get(dateKey) || [];
+    
+    // 找到跨越当前日期的亲代节点
+    const relevantParentSpans = parentSpans.filter(span => {
+      const startDate = new Date(span.startDateKey);
+      const endDate = new Date(span.endDateKey);
+      const currentDate = new Date(dateKey);
+      return currentDate >= startDate && currentDate <= endDate;
+    });
 
     groups.push({
       dateKey,
-      displayDate: firstItem.displayDate,
-      yearLabel: index === 0 && firstItem.rawDate ? `${firstItem.rawDate.getFullYear()}` : '',
+      displayDate: dateKey,
+      yearLabel: index === 0 ? new Date(dateKey).getFullYear().toString() : '',
       items: groupItems,
+      parentSpans: relevantParentSpans,
     });
   });
 
@@ -794,6 +1022,106 @@ onBeforeUnmount(() => {
   pointer-events: auto;
 }
 
+/* 亲代节点跨时间段样式 */
+.timeline-view__parent-spans {
+  margin-bottom: 20px;
+}
+
+.timeline-view__parent-span {
+  border: 2px solid;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+  position: relative;
+  min-height: 120px;
+  min-width: 260px;
+  pointer-events: auto;
+}
+
+.timeline-view__parent-span--start {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.timeline-view__parent-span--end {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.timeline-view__parent-span--middle {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+
+.timeline-view__parent-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.timeline-view__parent-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.timeline-view__parent-date-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 8px;
+}
+
+.timeline-view__parent-date-separator {
+  font-weight: 500;
+}
+
+.timeline-view__parent-description {
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+}
+
+.timeline-view__children {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-view__child-card {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 12px;
+  margin-left: 20px;
+  transition: all 0.2s ease;
+}
+
+.timeline-view__child-card:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.timeline-view__child-title {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.timeline-view__child-description {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 8px 0 0 0;
+}
+
 .timeline-view__card {
   box-shadow: 0 2px 6px rgba(15, 40, 77, 0.08);
   border-radius: 4px;
@@ -834,6 +1162,18 @@ onBeforeUnmount(() => {
   font-size: 0.9em;
   color: rgba(255, 255, 255, 0.9);
   margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.timeline-view__card-date-separator {
+  opacity: 0.7;
+}
+
+.timeline-view__card-date-end {
+  font-weight: 600;
 }
 
 /* left white stripe like editor node */

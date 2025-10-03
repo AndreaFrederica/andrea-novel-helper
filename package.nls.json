@@ -112,6 +112,7 @@
   "command.createVocabularyTxt.title": "ANH:Create Vocabulary (.txt)",
   "command.createRoleFile.title": "ANH:Create Role File (.ojson5)",
   "command.createRelationshipFile.title": "ANH:Create Relationship File (.rjson5)",
+  "command.createTimelineFile.title": "ANH:Create Timeline File (.tjson5)",
   "command.createRegexPatterns.title": "ANH:Create Regex Patterns Config",
   "command.openWith.title": "ANH:Open With...",
   "command.revealInExplorer.title": "ANH:Reveal in Explorer",

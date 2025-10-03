@@ -598,7 +598,8 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
             spaRoot: this.opts.spaRoot,
             connectSrc: this.opts.connectSrc,
             resourceMapperScriptUri: this.opts.resourceMapperScriptUri,
-            route: '/relation-graph'  // 指向关系图页面
+            route: '/relation-graph',  // 指向关系图页面
+            editorTitle: this.opts.title || '关系图编辑器'
         });
     }
 }

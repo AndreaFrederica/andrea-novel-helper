@@ -1,5 +1,5 @@
 <template>
-  <div class="custom-node" :style="nodeStyle">
+  <div class="custom-node" :style="nodeStyle" @contextmenu="handleContextMenu">
     <!-- Handles - 不可拖动 -->
     <Handle
       type="target"
@@ -45,7 +45,14 @@
       </div>
 
       <!-- 日期和描述 -->
-      <div style="font-size: 0.9em" @mousedown.stop>{{ data.date }}</div>
+      <div style="font-size: 0.9em" @mousedown.stop>
+        <template v-if="data.endDate">
+          {{ formatDateTime(data.date) }} ~ {{ formatDateTime(data.endDate) }}
+        </template>
+        <template v-else>
+          {{ formatDateTime(data.date) }}
+        </template>
+      </div>
       <div style="font-size: 0.8em; margin-top: 5px" @mousedown.stop>{{ data.description }}</div>
     </div>
 
@@ -76,6 +83,7 @@ interface Props {
   data: {
     label?: string;
     date: string;
+    endDate?: string;
     description: string;
     type: 'main' | 'side';
     group?: string;
@@ -126,6 +134,39 @@ function saveTitle() {
 // 取消编辑
 function cancelEdit() {
   isEditing.value = false;
+}
+
+// 处理右键菜单
+function handleContextMenu(event: MouseEvent) {
+  event.preventDefault();
+  const eventData = { nodeId: props.id, x: event.clientX, y: event.clientY };
+  localStorage.setItem('nodeContextMenu', JSON.stringify(eventData));
+  window.dispatchEvent(new Event('timeline-node-contextmenu'));
+}
+
+// 格式化日期时间显示
+function formatDateTime(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    // 如果包含时间(不是00:00:00),则显示时间
+    if (dateStr.includes('T') && !dateStr.endsWith('T00:00:00')) {
+      return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+    // 否则只显示日期
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 const nodeStyle = computed(() => ({
