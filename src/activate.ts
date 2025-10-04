@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { Role } from './extension';
-import { getSupportedLanguages, loadRoles } from './utils/utils';
+import { getSupportedLanguages, getSupportedExtensions, loadRoles, isHugeFile } from './utils/utils';
 import { createRoleCompletionProvider } from './Provider/completionProvider';
 import { initAutomaton, registerDecorationWatchers, updateDecorations } from './events/updateDecorations';
 import { registerWordCountPlainTextCommands, WordCountProvider } from './Provider/view/wordCountProvider';
@@ -23,6 +23,7 @@ import { refreshOpenOutlines } from './events/refreshOpenOutlines';
 import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSProvider';
 import { activateHover } from './Provider/hoverProvider';
 import { activateDef } from './Provider/defProv';
+import { registerRoleReferenceProvider } from './Provider/roleReferenceProvider';
 import { registerPackageManagerView } from './Provider/view/packageManagerView';
 import { registerRoleTreeView } from './Provider/view/roleTreeView';
 import { registerDocRolesTreeView } from './Provider/view/docRolesTreeView';
@@ -30,13 +31,16 @@ import { registerDocRolesExplorerView } from './Provider/view/docRolesExplorerVi
 import { StatusBarProvider } from './Provider/statusBarProvider';
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
-import { initializeGlobalFileTracking } from './utils/tracker/globalFileTracking';
+import { initializeGlobalFileTracking, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent, getTrackedFileList } from './utils/tracker/globalFileTracking';
 import { setCutClipboard } from './utils/WordCount/wordCountCutHelper';
 import { getFileTracker } from './utils/tracker/fileTracker';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/Git/gitConfigWizard';
 import { projectInitWizardRunning, registerProjectInitWizard } from './wizard/projectInitWizard';
 import { clearAllRoleMatchCache } from './context/roleAsyncShared';
+import { initializeRoleUsageStore, disposeRoleUsageStore, renameRoleUsageDirectory, deleteRoleUsageDirectory, clearRoleUsageIndex, updateRoleUsageFromDocument } from './context/roleUsageStore';
+import { collectRoleUsageRanges } from './utils/roleUsageCollector';
+import { createRoleUsageIndexer } from './roleUsage/roleUsageIndexer';
 import { registerSetupWizardCommands } from './wizard/setupWalkthrough';
 import { maybePromptProjectInit } from './wizard/workspaceInitCheck';
 import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap';
@@ -139,6 +143,58 @@ export async function activate(context: vscode.ExtensionContext) {
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
     setWordCounterContext(context);
     setAsyncRoleMatcherContext(context);
+    initializeRoleUsageStore(context);
+
+    const renameWatcher = vscode.workspace.onDidRenameFiles(event => {
+        for (const file of event.files) {
+            try {
+                renameRoleUsageDirectory(file.oldUri.fsPath, file.newUri.fsPath);
+            } catch (err) {
+                console.warn('[RoleUsage] rename watcher failed', err);
+            }
+        }
+    });
+    context.subscriptions.push(renameWatcher);
+
+    const deleteWatcher = vscode.workspace.onDidDeleteFiles(event => {
+        for (const uri of event.files) {
+            try {
+                deleteRoleUsageDirectory(uri.fsPath);
+            } catch (err) {
+                console.warn('[RoleUsage] delete watcher failed', err);
+            }
+        }
+    });
+    context.subscriptions.push(deleteWatcher);
+
+    const roleUsageFileTrackerHandler = (event: FileChangeEvent) => {
+        try {
+            if (event.type === 'rename' && event.oldPath) {
+                renameRoleUsageDirectory(event.oldPath, event.filePath);
+            } else if (event.type === 'delete') {
+                deleteRoleUsageDirectory(event.filePath);
+            }
+        } catch (err) {
+            console.warn('[RoleUsage] file tracker handler failed', err);
+        }
+    };
+    registerFileChangeCallback('roleUsage', roleUsageFileTrackerHandler);
+    context.subscriptions.push({ dispose: () => unregisterFileChangeCallback('roleUsage', roleUsageFileTrackerHandler) });
+
+    async function rebuildRoleUsageIndex(): Promise<void> {
+        const indexer = createRoleUsageIndexer(roles);
+        await indexer.rebuildIndex();
+    }
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.roleUsage.rebuildIndex', async () => {
+            await rebuildRoleUsageIndex();
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.roleUsage.clearIndex', async () => {
+            clearRoleUsageIndex();
+            vscode.window.showInformationMessage('角色引用索引已清空。');
+        }),
+    );
     registerContextKeys(context);
     // registerTypeInterceptor(context);
     context.subscriptions.push(logChannel);
@@ -509,6 +565,16 @@ export async function activate(context: vscode.ExtensionContext) {
             try { clearAllRoleMatchCache(); } catch {/* ignore */ }
             // 直接调用而非 schedule，避免再等待 200ms
             updateDecorations();
+//todo 先注释掉，等测试稳定了再放开 自动加载角色调用索引
+            // // 角色加载完成后，自动构建角色引用索引
+            // setTimeout(async () => {
+            //     try {
+            //         console.log('[ANH] 角色加载完成，开始自动构建角色引用索引');
+            //         await rebuildRoleUsageIndex();
+            //     } catch (e) {
+            //         console.warn('[ANH] 自动构建角色引用索引失败', e);
+            //     }
+            // }, 500); // 延迟500ms，避免阻塞启动流程
         });
         context.subscriptions.push(onRolesFinishedDisp);
 
@@ -598,6 +664,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Hover 和 Definition 提供器
         activateHover(context);
         activateDef(context);
+        registerRoleReferenceProvider(context);
         activateDefLinks(context);
         registerDecorationWatchers(context);
         // 敏感词修复 CodeAction
@@ -1193,6 +1260,7 @@ export function deactivate() {
     deactivateMarkdownToolbar();
     deactivateTimeStats();
     try { stopAllPreviewTTS(_previewManager); } catch { }
+    try { disposeRoleUsageStore(); } catch { }
     
     // 清理智能标签组锁定管理器
     if (smartTabGroupLockManager) {

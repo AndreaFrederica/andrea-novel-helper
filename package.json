@@ -705,6 +705,16 @@
         "command": "AndreaNovelHelper.database.compare",
         "title": "比较数据库后端数据",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.roleUsage.rebuildIndex",
+        "title": "Andrea Novel Helper: 重新索引角色引用",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.roleUsage.clearIndex",
+        "title": "Andrea Novel Helper: 清除角色引用索引",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [

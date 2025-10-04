@@ -58,7 +58,7 @@ class AsyncRoleMatcher {
         this.worker = null;
         if (code !== 0) {
           console.warn('[AsyncRoleMatcher] worker exited, respawn');
-          setTimeout(()=> this.spawn(), 500);
+          setTimeout(()=> this.spawn(), 10000);
         }
       });
     } catch (e) {
@@ -126,13 +126,13 @@ class AsyncRoleMatcher {
       this.pending.set(id, { resolve, reject, ts: Date.now(), docVersion });
       try { this.worker!.postMessage({ type:'search', id, text }); }
       catch (e) { this.pending.delete(id); reject(e); }
-      // timeout
+      // timeout - 增加到 30 秒以处理大文件
       setTimeout(()=>{
         if (this.pending.has(id)) {
           this.pending.delete(id);
           reject(new Error('search timeout'));
         }
-      }, 5000);
+      }, 30000);
     });
   }
   dispose() {
