@@ -25,6 +25,8 @@ export interface TimelineEvent {
         uuid: string;
         type: 'character' | 'article' | 'location' | 'item' | 'other';
         label?: string;
+        status?: string;
+        documentTitle?: string;
     }>;
     color?: string; // 自定义节点颜色 (支持 hex、rgb、rgba 等 CSS 颜色格式)
     data?: {

@@ -1523,6 +1523,8 @@ function saveTimelineData() {
       uuid: b.uuid,
       type: b.type,
       label: b.label,
+      status: b.status,
+      documentTitle: b.documentTitle,
     })) : undefined,
     color: event.color, // 保存自定义颜色
     data: event.data ? { type: event.data.type } : undefined,
@@ -1603,6 +1605,25 @@ function throttle<T extends (...args: any[]) => any>(
 // 节流版本的保存函数（用于拖动调整大小时）
 const saveTimelineDataThrottled = throttle(saveTimelineData, 500);
 
+// 计算节点的最小高度（基于绑定数量）
+function calculateMinNodeHeight(event: TimelineEvent): number {
+  const baseHeight = 120; // 基础高度
+  const bindingsCount = event.bindings?.length || 0;
+
+  if (bindingsCount === 0) {
+    return baseHeight;
+  }
+
+  // 每个角色绑定大约需要 30px（头像+名称+状态）
+  // 每个文档绑定大约需要 24px
+  const characterBindings = event.bindings?.filter(b => b.type === 'character').length || 0;
+  const documentBindings = event.bindings?.filter(b => b.type === 'article').length || 0;
+
+  const bindingsHeight = (characterBindings * 30) + (documentBindings * 24) + 20; // 20px for padding/border
+
+  return baseHeight + bindingsHeight;
+}
+
 // 更新流元素
 function updateFlowElements() {
   // 创建节点 - 使用保存的坐标
@@ -1611,13 +1632,19 @@ function updateFlowElements() {
   events.value.forEach((event, index) => {
     // 确保所有节点都有默认尺寸
     if (!event.width) event.width = 200;
-    if (!event.height) event.height = 120;
+
+    // 根据绑定数量计算最小高度
+    const minHeight = calculateMinNodeHeight(event);
+    if (!event.height || event.height < minHeight) {
+      event.height = minHeight;
+    }
 
     const nodeStyle: Record<string, any> = {};
 
     // 应用节点尺寸
     nodeStyle.width = `${event.width}px`;
     nodeStyle.height = `${event.height}px`;
+    nodeStyle.minHeight = `${minHeight}px`; // 设置最小高度
 
     // 检查是否是父节点（有子节点）
     const hasChildren = events.value.some(e => e.parentNode === event.id);
@@ -1652,6 +1679,8 @@ function updateFlowElements() {
         parentNode: event.parentNode, // 传递 parentNode 信息给组件
         hasChildren, // 传递是否有子节点的信息
         color: event.color, // 传递自定义颜色
+        rolesList: rolesList.value, // 传递角色列表
+        articlesList: articlesList.value, // 传递文章列表
       },
     });
   });

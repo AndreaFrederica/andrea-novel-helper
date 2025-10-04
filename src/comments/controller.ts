@@ -327,17 +327,17 @@ export class CommentsController {
   private wrapHtml(webview: vscode.Webview): string {
     const nonce = String(Math.random()).slice(2);
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'comments.js'));
-    const style = `body{margin:0;background:var(--vscode-editor-background);color:var(--vscode-editor-foreground);font:13px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial}
-      .toolbar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #0002;position:sticky;top:0;background:inherit;z-index:10}
+    const style = `body{margin:0;padding:0;background:var(--vscode-editor-background);color:var(--vscode-editor-foreground);font:13px/1.6 system-ui,-apple-system,'Segoe UI',Roboto,Arial;overflow:hidden;height:100vh}
+      .toolbar{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #0002;background:inherit;z-index:10;flex-shrink:0}
       .toolbar input[type=text]{flex:1;min-width:120px;padding:4px 6px;border-radius:6px;border:1px solid #5557;background:#0003;color:inherit}
       .toolbar select{padding:4px 6px;border-radius:6px;border:1px solid #5557;background:#0003;color:inherit}
       .toolbar-btn{padding:4px 8px;border-radius:6px;border:1px solid #5557;background:var(--vscode-button-background);color:var(--vscode-button-foreground);cursor:pointer;font-size:12px;white-space:nowrap}
       .toolbar-btn:hover{background:var(--vscode-button-hoverBackground)}
       .toolbar-btn:active{background:var(--vscode-button-activeBackground)}
-      .root{position:relative;height:calc(100vh - 42px);overflow:auto}
-      .track{position:relative;margin:0;height:100%;padding:0 8px;box-sizing:border-box}
+      .root{position:relative;flex:1;overflow-y:auto;overflow-x:hidden}
+      .track{position:relative;margin:0;min-height:100%;padding:0 8px;box-sizing:border-box}
       .card{position:absolute;left:8px;right:8px;min-width:220px;max-width:calc(100% - 16px);padding:10px 12px;border-radius:8px;border:1px solid var(--vscode-editorWidget-border);
-            background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); box-shadow: 0 2px 6px rgba(0,0,0,.12)}
+            background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); box-shadow: 0 2px 6px rgba(0,0,0,.12);box-sizing:border-box}
       .card .actions{display:flex;flex-wrap:wrap;gap:8px}
       .vbtn{background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:1px solid var(--vscode-button-border);border-radius:6px;padding:4px 10px;cursor:pointer}
       .vbtn:hover{background:var(--vscode-button-hoverBackground)}
@@ -347,22 +347,23 @@ export class CommentsController {
       .caret{cursor:pointer;user-select:none;opacity:.9}
       .meta{opacity:.8;font-size:12px;margin-bottom:6px}
       .messages-container{margin-bottom:6px}
-      .message{border-left:3px solid var(--vscode-editorWidget-border);padding-left:8px}
+      .message{border-left:3px solid var(--vscode-editorWidget-border);padding-left:8px;margin-bottom:6px}
+      .message:last-child{margin-bottom:0}
       .message-header{font-size:11px;color:var(--vscode-descriptionForeground);margin-bottom:4px}
-      .message-body{line-height:1.5}
+      .message-body{line-height:1.5;word-wrap:break-word}
       .message-body code{background:var(--vscode-textCodeBlock-background);padding:2px 4px;border-radius:3px;font-size:12px}
       .message-body strong{font-weight:600}
       .message-body em{font-style:italic}
       .message-body del{text-decoration:line-through;opacity:0.7}
       .reply{margin-top:6px}
-      textarea{width:100%;min-height:48px;background:#0003;border:1px solid #5557;border-radius:6px;color:inherit;padding:6px}
+      textarea{width:100%;min-height:48px;background:#0003;border:1px solid #5557;border-radius:6px;color:inherit;padding:6px;box-sizing:border-box;resize:vertical}
       .card.collapsed .messages-container,.card.collapsed .actions,.card.collapsed .reply{display:none}
       .card.collapsed{padding:6px 8px}
     `;
     return `<!doctype html><html><head>
       <meta charset="UTF-8"/><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${nonce}';">
       <style>${style}</style></head>
-      <body>
+      <body style="display:flex;flex-direction:column">
         <div class="toolbar">
           <input id="search" type="text" placeholder="搜索批注..."/>
           <select id="filter">

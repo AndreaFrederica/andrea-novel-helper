@@ -5,6 +5,8 @@ export interface BindingReference {
   uuid: string;
   type: 'character' | 'article';
   label?: string;
+  status?: string;
+  documentTitle?: string;
 }
 
 export interface TimelineEvent {

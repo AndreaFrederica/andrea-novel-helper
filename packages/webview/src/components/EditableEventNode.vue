@@ -63,6 +63,15 @@
         </template>
       </div>
       <div style="font-size: 0.8em; margin-top: 5px" @mousedown.stop>{{ data.description }}</div>
+
+      <!-- 绑定信息显示 -->
+      <EventBindingsDisplay
+        v-if="data.bindings && data.bindings.length > 0"
+        :bindings="data.bindings"
+        :roles-list="data.rolesList"
+        :articles-list="data.articlesList"
+        @mousedown.stop
+      />
     </div>
 
     <!-- 编辑/保存按钮 - 不可拖动 -->
@@ -86,8 +95,24 @@ import { ref, nextTick, computed } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import { NodeResizer, type OnResize } from '@vue-flow/node-resizer';
 import { QBtn, QBadge, QIcon } from 'quasar';
+import EventBindingsDisplay from './EventBindingsDisplay.vue';
+import type { BindingReference } from '../types/timeline';
 
 // 定义props
+interface RoleInfo {
+  uuid: string;
+  name: string;
+  type: string;
+  color?: string;
+}
+
+interface ArticleInfo {
+  uuid: string;
+  title: string;
+  path: string;
+  fullPath?: string;
+}
+
 interface Props {
   id: string;
   data: {
@@ -100,6 +125,9 @@ interface Props {
     parentNode?: string; // 添加到 data 中
     hasChildren?: boolean; // 是否有子节点
     color?: string; // 自定义颜色
+    bindings?: BindingReference[]; // 绑定信息
+    rolesList?: RoleInfo[]; // 角色列表
+    articlesList?: ArticleInfo[]; // 文章列表
   };
 }
 
@@ -248,10 +276,9 @@ const nodeStyle = computed(() => {
     color: 'white',
     padding: '10px',
     borderRadius: '4px',
-    width: '100%',
-    height: '100%',
-    boxSizing: 'border-box' as const,
-    position: 'relative' as const,
+    minHeight: '100px',
+    display: 'flex',
+    flexDirection: 'column' as const,
   };
 });
 </script>
@@ -262,9 +289,9 @@ const nodeStyle = computed(() => {
   cursor: default; /* 默认鼠标样式 */
   position: relative;
   min-width: 150px;
-  min-height: 100px;
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 /* 拖动把手 - 只有这个区域可以拖动节点 */
@@ -302,9 +329,13 @@ const nodeStyle = computed(() => {
 }
 
 .node-content {
-  margin-right: 20px; /* 为右侧按钮留出空间 */
+  flex: 1;
+  padding-right: 40px; /* 为右侧按钮留出空间 */
   cursor: default;
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .group-badge {

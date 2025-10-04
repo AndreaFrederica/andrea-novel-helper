@@ -16,6 +16,7 @@ declare module 'vue' {
     EditableEventNode: typeof import('./src/components/EditableEventNode.vue')['default']
     EditorSettingsDialog: typeof import('./src/components/EditorSettingsDialog.vue')['default']
     EssentialLink: typeof import('./src/components/EssentialLink.vue')['default']
+    EventBindingsDisplay: typeof import('./src/components/EventBindingsDisplay.vue')['default']
     ExampleComponent: typeof import('./src/components/ExampleComponent.vue')['default']
     ExplorerTree: typeof import('./src/components/ExplorerTree.vue')['default']
     LoopbackEdge: typeof import('./src/components/LoopbackEdge.vue')['default']

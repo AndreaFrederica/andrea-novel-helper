@@ -220,7 +220,7 @@
                   dense
                   emit-value
                   map-options
-                  @update:model-value="newBinding.uuid = ''; newBinding.label = ''"
+                  @update:model-value="onBindingTypeChanged"
                 />
               </div>
               <div class="col-5">
@@ -387,6 +387,8 @@ interface BindingReference {
   uuid: string;
   type: 'character' | 'article';
   label?: string;
+  status?: string;
+  documentTitle?: string;
 }
 
 interface TimelineEvent {
@@ -479,6 +481,8 @@ const newBinding = ref<BindingReference>({
   uuid: '',
   type: 'character',
   label: '',
+  status: '',
+  documentTitle: '',
 });
 
 // 类型选项
@@ -557,6 +561,12 @@ function addBinding() {
   if (newBinding.value.label) {
     bindingToAdd.label = newBinding.value.label;
   }
+    if (newBinding.value.status) {
+      bindingToAdd.status = newBinding.value.status;
+    }
+    if (newBinding.value.documentTitle) {
+      bindingToAdd.documentTitle = newBinding.value.documentTitle;
+    }
   formData.value.bindings.push(bindingToAdd);
 
   // 重置新绑定表单
@@ -697,6 +707,14 @@ function filterBindingOptions(val: string, update: (fn: () => void) => void) {
   update(() => {
     // Quasar的filter会自动处理过滤逻辑，这里只需要调用update
   });
+}
+
+function onBindingTypeChanged(value: BindingReference['type']) {
+  newBinding.value.uuid = '';
+  newBinding.value.label = '';
+  newBinding.value.status = '';
+  newBinding.value.documentTitle = '';
+  newBinding.value.type = value;
 }
 
 // 转跳到定义
