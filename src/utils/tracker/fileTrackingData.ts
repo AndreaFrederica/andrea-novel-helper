@@ -896,6 +896,79 @@ export class FileTrackingDataManager {
         return this.database.files[uuid];
     }
 
+    // ===== 相对路径版本的接口（用于索引器等性能敏感场景） =====
+
+    /**
+     * 通过相对键直接获取文件 UUID（跳过路径转换）
+     * @param relKey 相对键（POSIX 格式，Windows 下小写）
+     */
+    public getFileUuidByRelKey(relKey: string): string | undefined {
+        return this.database.pathToUuid[relKey];
+    }
+
+    /**
+     * 通过相对键直接获取文件元数据（跳过路径转换）
+     * @param relKey 相对键（POSIX 格式，Windows 下小写）
+     * @returns 文件元数据（filePath 字段为相对路径，非绝对路径）
+     */
+    public getFileByRelKey(relKey: string): FileMetadata | undefined {
+        const uuid = this.database.pathToUuid[relKey];
+        if (!uuid) { return undefined; }
+        if (this.lazyLoadShards && !this.database.files[uuid]) {
+            this.ensureShardLoaded(uuid);
+        }
+        const meta = this.database.files[uuid];
+        if (!meta) { return undefined; }
+        
+        // 返回相对路径版本的元数据副本
+        return {
+            ...meta,
+            filePath: relKey  // 直接返回相对键而不是绝对路径
+        };
+    }
+
+    /**
+     * 获取所有被追踪文件的相对路径列表（不转换为绝对路径）
+     * @returns 相对路径数组（POSIX 格式，Windows 下小写）
+     */
+    public getAllRelativeKeys(): string[] {
+        return Object.keys(this.database.pathToUuid);
+    }
+
+    /**
+     * 批量通过相对键获取文件元数据（用于索引器批量处理）
+     * @param relKeys 相对键数组
+     * @returns 元数据数组（filePath 字段为相对路径）
+     */
+    public getFilesByRelKeys(relKeys: string[]): FileMetadata[] {
+        const results: FileMetadata[] = [];
+        for (const relKey of relKeys) {
+            const meta = this.getFileByRelKey(relKey);
+            if (meta) {
+                results.push(meta);
+            }
+        }
+        return results;
+    }
+
+    /**
+     * 将绝对路径转换为相对键（公开给外部使用）
+     * @param absolutePath 绝对路径
+     * @returns 相对键（POSIX 格式，Windows 下小写）
+     */
+    public toRelativeKey(absolutePath: string): string {
+        return this.toRelKey(absolutePath);
+    }
+
+    /**
+     * 将相对键转换为绝对路径（公开给外部使用）
+     * @param relKey 相对键
+     * @returns 绝对路径
+     */
+    public toAbsolutePath(relKey: string): string {
+        return this.toAbsPath(relKey);
+    }
+
     /**
      * 异步添加或更新文件
      * （pathToUuid 使用相对键；meta.filePath 仍保存为绝对路径）

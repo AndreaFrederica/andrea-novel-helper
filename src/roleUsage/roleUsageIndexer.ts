@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getSupportedLanguages, getSupportedExtensions, isHugeFile } from '../utils/utils';
-import { getTrackedFileList } from '../utils/tracker/globalFileTracking';
+import { getTrackedRelativeKeys, toAbsolutePath, toRelativeKey } from '../utils/tracker/globalFileTracking';
 import { collectRoleUsageRanges } from '../utils/roleUsageCollector';
 import { updateRoleUsageFromDocument, clearRoleUsageIndex, flushRoleUsageStore } from '../context/roleUsageStore';
 import { Role } from '../extension';
@@ -62,33 +62,35 @@ export class RoleUsageIndexer {
         }, async (progress, token) => {
             console.log('[RoleUsageIndexer] 进度条回调已执行');
             
-            // 第一步：获取追踪的文件列表
+            // 第一步：获取追踪的文件列表（使用相对路径版本，避免路径转换）
             progress.report({ message: '正在扫描文件...', increment: 0 });
             
             const tracked = new Set<string>();
             try {
-                const list = await getTrackedFileList();
-                console.log('[RoleUsageIndexer] 获取到追踪文件数量:', list.length);
-                for (const file of list) {
+                // 使用相对路径版本的接口，直接获取相对键列表
+                const relativeKeys = getTrackedRelativeKeys();
+                console.log('[RoleUsageIndexer] 获取到追踪文件数量:', relativeKeys.length);
+                for (const relKey of relativeKeys) {
                     // 过滤掉内部数据库文件和其他系统文件
-                    const fileName = path.basename(file).toLowerCase();
-                    
-                    // 检查路径中是否包含内部目录
-                    const normalizedPath = file.replace(/\\/g, '/').toLowerCase();
-                    if (normalizedPath.includes('/.anh-') || 
-                        normalizedPath.includes('/.git/') || 
-                        normalizedPath.includes('/node_modules/')) {
+                    // 相对键已经是小写的 POSIX 格式，直接检查
+                    if (relKey.includes('/.anh-') || 
+                        relKey.includes('/.git/') || 
+                        relKey.includes('/node_modules/')) {
                         continue;
                     }
                     
                     // 过滤文件名本身
+                    const fileName = relKey.split('/').pop()?.toLowerCase() || '';
                     if (fileName.startsWith('.anh-') || fileName === '.git' || fileName === 'node_modules') {
                         continue;
                     }
                     
+                    // 转换为绝对路径进行文件系统检查
+                    const absolutePath = toAbsolutePath(relKey);
+                    
                     // 检查是否存在且不是目录
                     try {
-                        const stat = fs.statSync(file);
+                        const stat = fs.statSync(absolutePath);
                         if (stat.isDirectory()) {
                             continue; // 跳过目录
                         }
@@ -105,9 +107,13 @@ export class RoleUsageIndexer {
                         continue;
                     }
                     
-                    tracked.add(path.resolve(file));
+                    // 存储相对键而不是绝对路径，避免大小写不一致问题
+                    tracked.add(relKey);
                 }
                 console.log('[RoleUsageIndexer] 过滤后追踪文件数量:', tracked.size);
+                // 输出前几个追踪文件的相对路径用于调试
+                const trackedSample = Array.from(tracked).slice(0, 5);
+                console.log('[RoleUsageIndexer] 追踪文件样本:', trackedSample);
             } catch (err) {
                 console.warn('[RoleUsageIndexer] 获取追踪文件列表失败', err);
             }
@@ -131,55 +137,77 @@ export class RoleUsageIndexer {
                     continue;
                 }
                 docsToProcess.push(doc);
+                // 从追踪列表中移除已打开的文档，避免重复处理
                 if (doc.uri.scheme === 'file') {
-                    tracked.delete(path.resolve(doc.uri.fsPath));
+                    // 转换为相对键进行比较，避免大小写不一致问题
+                    const relKey = toRelativeKey(doc.uri.fsPath);
+                    const wasTracked = tracked.has(relKey);
+                    tracked.delete(relKey);
+                    console.log(`[RoleUsageIndexer] 打开文档: ${doc.uri.fsPath}, 相对键: ${relKey}, 在追踪列表中: ${wasTracked}`);
                 }
             }
             console.log('[RoleUsageIndexer] 已打开文档数量:', docsToProcess.length);
+            console.log('[RoleUsageIndexer] 剩余追踪文件数量:', tracked.size);
 
             // 第三步：处理追踪的文件（不打开文档，直接读取内容）
             const trackedArray = Array.from(tracked);
             const totalFiles = trackedArray.length;
-            
-            if (totalFiles > 0) {
-                progress.report({ message: `正在处理追踪的文件 (0/${totalFiles})...`, increment: 0 });
-                
+
+            // overallTotal 包含后台文件和已打开文档，两部分进度合并显示
+            const overallTotal = totalFiles + docsToProcess.length;
+            let processedOverall = 0; // 全局已处理计数（包括后台 + 打开文档）
+
+            if (overallTotal > 0) {
+                progress.report({ message: `正在处理索引文件 (0/${overallTotal})...`, increment: 0 });
+
                 for (let i = 0; i < trackedArray.length; i++) {
                     if (token.isCancellationRequested) {
                         return;
                     }
-                    
-                    const file = trackedArray[i];
-                    const fileName = path.basename(file);
-                    
+
+                    // trackedArray 中现在存储的是相对键，需要转换为绝对路径
+                    const relKey = trackedArray[i];
+                    const absolutePath = toAbsolutePath(relKey);
+                    const fileName = relKey.split('/').pop() || '';
+
+                    // 增加全局已处理计数（包含跳过的文件）
+                    processedOverall++;
+
                     // 检查是否是目录，跳过目录
                     try {
-                        const stat = fs.statSync(file);
+                        const stat = fs.statSync(absolutePath);
                         if (stat.isDirectory()) {
-                            console.log('[RoleUsageIndexer] 跳过目录:', file);
+                            console.log('[RoleUsageIndexer] 跳过目录:', absolutePath);
+                            // 即使跳过也将进度推进
+                            progress.report({
+                                message: `正在处理: ${fileName} (${processedOverall}/${overallTotal})`,
+                                increment: 100 / overallTotal
+                            });
                             continue;
                         }
                     } catch (err) {
-                        console.warn('[RoleUsageIndexer] 检查文件状态失败:', file, err);
+                        console.warn('[RoleUsageIndexer] 检查文件状态失败:', absolutePath, err);
+                        progress.report({
+                            message: `正在处理: ${fileName} (${processedOverall}/${overallTotal})`,
+                            increment: 100 / overallTotal
+                        });
                         continue;
                     }
-                    
+
                     progress.report({ 
-                        message: `正在处理: ${fileName} (${i + 1}/${totalFiles})`,
+                        message: `正在处理: ${fileName} (${processedOverall}/${overallTotal})`,
                         increment: 0
                     });
-                    
+
                     try {
                         // 直接读取文件内容，避免触发文档打开事件（typo 服务等）
-                        await this.processFileWithoutOpening(file);
+                        await this.processFileWithoutOpening(absolutePath);
                     } catch (err) {
-                        console.warn('[RoleUsageIndexer] 处理文件失败', file, err);
+                        console.warn('[RoleUsageIndexer] 处理文件失败', absolutePath, err);
                     }
-                    
-                    // 处理文件占用 20% 的进度
-                    if (i % 10 === 0) {
-                        progress.report({ increment: 20 / totalFiles * 10 });
-                    }
+
+                    // 每个文件基于 overallTotal 平均推进进度
+                    progress.report({ increment: 100 / overallTotal });
                 }
             }
 
@@ -198,7 +226,8 @@ export class RoleUsageIndexer {
                     increment: 0
                 });
 
-                await this.processDocuments(docsToProcess, progress, token);
+                // 将已处理的后台文件计数传入，继续基于 overallTotal 更新进度
+                await this.processDocuments(docsToProcess, progress, token, processedOverall, overallTotal);
             }
             
             // 立即刷新存储，确保数据持久化
@@ -212,13 +241,16 @@ export class RoleUsageIndexer {
      */
     private async processDocuments(
         docsToProcess: vscode.TextDocument[],
-        progress: vscode.Progress<{ message?: string; increment?: number }>,
-        token: vscode.CancellationToken
+        progress: vscode.Progress<{ message?: string; increment?: number }> ,
+        token: vscode.CancellationToken,
+        startProcessed = 0,
+        overallTotal = docsToProcess.length
     ): Promise<void> {
         console.log('[RoleUsageIndexer] processDocuments 开始执行');
         let processed = 0;
         let errored = 0;
         const total = docsToProcess.length || 1;
+        let processedOverall = startProcessed; // 全局已处理计数（包含后台已处理）
 
         // 初始进度
         progress.report({
@@ -236,9 +268,10 @@ export class RoleUsageIndexer {
             const fileName = path.basename(doc.uri.fsPath || doc.uri.path);
             console.log(`[RoleUsageIndexer] 正在处理文件 [${processed + 1}/${total}]:`, fileName);
             
-            // 更新进度条显示当前文件
+            // 更新进度条显示当前文件以及整体进度
+            processedOverall++;
             progress.report({
-                message: `[${processed + 1}/${total}] ${fileName}`,
+                message: `[${processedOverall}/${overallTotal}] ${fileName}`,
                 increment: 0,
             });
 
@@ -253,9 +286,9 @@ export class RoleUsageIndexer {
 
             processed++;
             
-            // 更新增量进度
+            // 更新增量进度（按整体 total 推进）
             progress.report({
-                increment: 100 / total,
+                increment: 100 / overallTotal,
             });
         }
 
@@ -321,6 +354,9 @@ export class RoleUsageIndexer {
             // 读取文件内容
             const content = fs.readFileSync(filePath, 'utf8');
             const uri = vscode.Uri.file(filePath);
+            
+            console.log('[RoleUsageIndexer] 处理文件:', filePath);
+            console.log('[RoleUsageIndexer] URI:', uri.toString());
             
             // 使用异步角色匹配器
             const matcher = getAsyncRoleMatcher();

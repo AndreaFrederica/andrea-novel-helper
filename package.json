@@ -715,6 +715,11 @@
         "command": "AndreaNovelHelper.roleUsage.clearIndex",
         "title": "Andrea Novel Helper: 清除角色引用索引",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.fileTracking.cleanAbsolutePaths",
+        "title": "Andrea Novel Helper: 清理文件追踪数据库中的绝对路径",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [

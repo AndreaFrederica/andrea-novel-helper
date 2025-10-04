@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { FileChangeEvent, initializeFileTracker, disposeFileTracker, getFileTracker } from './fileTracker';
 export { getFileTracker, FileChangeEvent } from './fileTracker';
 import { FileMetadata } from './fileTrackingData';
@@ -194,6 +195,65 @@ export async function getTrackedFileList(): Promise<string[]> {
     const dataManager = tracker.getDataManager();
     const files = dataManager.getAllFiles();
     return files.map(file => file.filePath);
+}
+
+/**
+ * 获取所有被追踪文件的相对路径列表（性能优化版本，跳过绝对路径转换）
+ * @returns 相对路径数组（POSIX 格式，Windows 下小写）
+ */
+export function getTrackedRelativeKeys(): string[] {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return [];
+    }
+
+    const dataManager = tracker.getDataManager();
+    return dataManager.getAllRelativeKeys();
+}
+
+/**
+ * 通过相对键批量获取文件元数据（性能优化版本）
+ * @param relKeys 相对键数组
+ * @returns 文件元数据数组（filePath 字段为相对路径）
+ */
+export function getFilesByRelativeKeys(relKeys: string[]): FileMetadata[] {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return [];
+    }
+
+    const dataManager = tracker.getDataManager();
+    return dataManager.getFilesByRelKeys(relKeys);
+}
+
+/**
+ * 将绝对路径转换为相对键
+ * @param absolutePath 绝对路径
+ * @returns 相对键（POSIX 格式，Windows 下小写）
+ */
+export function toRelativeKey(absolutePath: string): string {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return '';
+    }
+
+    const dataManager = tracker.getDataManager();
+    return dataManager.toRelativeKey(absolutePath);
+}
+
+/**
+ * 将相对键转换为绝对路径
+ * @param relKey 相对键
+ * @returns 绝对路径
+ */
+export function toAbsolutePath(relKey: string): string {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return '';
+    }
+
+    const dataManager = tracker.getDataManager();
+    return dataManager.toAbsolutePath(relKey);
 }
 
 /**
@@ -550,4 +610,47 @@ export async function getGlobalFileTrackingAsync(): Promise<{
         markAsTemporary: (filePath: string) => dm.markAsTemporary(filePath),
         markAsSaved: (filePath: string) => dm.markAsSaved(filePath),
     };
+}
+
+/**
+ * 清理追踪数据库中的绝对路径条目
+ * 用于移除旧版本或错误产生的绝对路径记录
+ * @returns 清理的文件数量
+ */
+export async function cleanAbsolutePathEntries(): Promise<number> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        console.warn('[FileTracking] Tracker not initialized');
+        return 0;
+    }
+
+    const dataManager = tracker.getDataManager();
+    const allFiles = dataManager.getAllFiles();
+    
+    let cleanedCount = 0;
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    
+    if (!workspaceRoot) {
+        console.warn('[FileTracking] No workspace root found');
+        return 0;
+    }
+
+    const normalizedRoot = path.resolve(workspaceRoot).toLowerCase();
+    
+    for (const file of allFiles) {
+        const filePath = file.filePath;
+        
+        // 检查是否是绝对路径（包含工作区根路径）
+        const normalizedPath = path.resolve(filePath).toLowerCase();
+        
+        // 如果路径包含工作区根目录，说明是绝对路径
+        if (normalizedPath.startsWith(normalizedRoot) && path.isAbsolute(filePath)) {
+            console.log(`[FileTracking] Removing absolute path entry: ${filePath}`);
+            await dataManager.removeFile(filePath);
+            cleanedCount++;
+        }
+    }
+    
+    console.log(`[FileTracking] Cleaned ${cleanedCount} absolute path entries`);
+    return cleanedCount;
 }

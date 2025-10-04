@@ -31,7 +31,7 @@ import { registerDocRolesExplorerView } from './Provider/view/docRolesExplorerVi
 import { StatusBarProvider } from './Provider/statusBarProvider';
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
-import { initializeGlobalFileTracking, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent, getTrackedFileList } from './utils/tracker/globalFileTracking';
+import { initializeGlobalFileTracking, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent, getTrackedFileList, cleanAbsolutePathEntries } from './utils/tracker/globalFileTracking';
 import { setCutClipboard } from './utils/WordCount/wordCountCutHelper';
 import { getFileTracker } from './utils/tracker/fileTracker';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
@@ -193,6 +193,10 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('AndreaNovelHelper.roleUsage.clearIndex', async () => {
             clearRoleUsageIndex();
             vscode.window.showInformationMessage('角色引用索引已清空。');
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.fileTracking.cleanAbsolutePaths', async () => {
+            const count = await cleanAbsolutePathEntries();
+            vscode.window.showInformationMessage(`已清理 ${count} 个绝对路径条目。`);
         }),
     );
     registerContextKeys(context);
