@@ -2,6 +2,10 @@
 import * as vscode from 'vscode';
 import * as JSON5 from 'json5';
 import { buildHtml } from '../utils/html-builder';
+import { loadRoles } from '../../utils/utils';
+import { roles } from '../../activate';
+import { getAllTrackedFiles } from '../../utils/tracker/globalFileTracking';
+import * as path from 'path';
 
 /* =========================
    时间线数据类型定义
@@ -13,6 +17,7 @@ export interface TimelineEvent {
     group: string;
     type: 'main' | 'side';
     date: string;
+    endDate?: string; // 结束日期 (可选，用于时间区间)
     description: string;
     timeless?: boolean;
     position?: { x: number; y: number };
@@ -21,15 +26,24 @@ export interface TimelineEvent {
         type: 'character' | 'article' | 'location' | 'item' | 'other';
         label?: string;
     }>;
+    color?: string; // 自定义节点颜色 (支持 hex、rgb、rgba 等 CSS 颜色格式)
     data?: {
-        type: 'main' | 'side';
+        type: 'main' | 'side' | 'condition'; // 支持条件节点类型
     };
+    // 嵌套节点支持
+    parentNode?: string; // 父节点ID
+    width?: number; // 节点宽度 (仅对父节点有效)
+    height?: number; // 节点高度 (仅对父节点有效)
+    extent?: 'parent'; // 限制子节点在父节点内移动
+    expandParent?: boolean; // 拖动子节点时自动扩展父节点
 }
 
 export interface TimelineConnection {
     id: string;
     source: string;
     target: string;
+    sourceHandle?: string; // 源节点手柄 ID (例如条件节点的 'true' 或 'false')
+    targetHandle?: string; // 目标节点手柄 ID
     label?: string;
     connectionType?: 'normal' | 'time-travel' | 'reincarnation' | 'parallel' | 'dream' | 'flashback' | 'other';
 }
@@ -335,7 +349,31 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
             }
             
             try {
-                switch (message.type) {
+                    const jumpToRoleByUuid = async (roleUuid: string) => {
+                        console.log('[TimelineJson5EditorProvider] jumpToRoleByUuid invoked:', roleUuid);
+
+                        loadRoles(false);
+                        const allRoles = Array.from(roles.values());
+                        const targetRole = allRoles.find((role: any) => role.uuid === roleUuid);
+
+                        if (!targetRole) {
+                            console.warn('[TimelineJson5EditorProvider] Role not found for uuid:', roleUuid);
+                            vscode.window.showWarningMessage(`未找到UUID为 ${roleUuid} 的角色定义`);
+                            return;
+                        }
+
+                        console.log('[TimelineJson5EditorProvider] Found role:', (targetRole as any).name);
+
+                        if ((targetRole as any).sourcePath) {
+                            await vscode.commands.executeCommand('AndreaNovelHelper.openRoleSource', targetRole);
+                            console.log('[TimelineJson5EditorProvider] Successfully executed openRoleSource command');
+                        } else {
+                            console.warn('[TimelineJson5EditorProvider] Role has no sourcePath:', (targetRole as any).name);
+                            vscode.window.showWarningMessage(`角色 "${(targetRole as any).name}" 没有源文件路径信息`);
+                        }
+                    };
+
+                    switch (message.type) {
                     case 'requestTimelineData': {
                         // 前端请求时间线数据
                         console.log('[TimelineJson5EditorProvider] Received requestTimelineData');
@@ -376,6 +414,141 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
                         break;
                     }
                     
+                    case 'requestRolesAndArticles': {
+                        // 请求角色和文章列表
+                        console.log('[TimelineJson5EditorProvider] Received requestRolesAndArticles');
+                        
+                        try {
+                            // 确保角色数据已加载
+                            loadRoles(false);
+                            
+                            // 获取所有角色
+                            const allRoles = Array.from(roles.values());
+                            
+                            // 格式化角色列表
+                            const roleList = allRoles.map((role: any) => ({
+                                uuid: role.uuid,
+                                name: role.name,
+                                type: role.type || '未分类',
+                                color: role.color
+                            }));
+                            
+                            // 获取文章列表 - 从文件追踪系统获取所有 markdown 和文本文件
+                            const allFiles = getAllTrackedFiles();
+                            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                            
+                            const articleList = allFiles
+                                .filter(file => {
+                                    // 只包含 markdown 和纯文本文件
+                                    const ext = path.extname(file.filePath).toLowerCase();
+                                    if (ext !== '.md' && ext !== '.txt') {
+                                        return false;
+                                    }
+                                    
+                                    // 排除大纲文件
+                                    if (file.filePath.endsWith('_outline.md')) {
+                                        return false;
+                                    }
+                                    
+                                    // 排除 novel-helper 目录下的配置文件
+                                    if (workspaceRoot && file.filePath.includes(path.join(workspaceRoot, 'novel-helper'))) {
+                                        return false;
+                                    }
+                                    
+                                    return true;
+                                })
+                                .map(file => {
+                                    const fileName = path.basename(file.filePath);
+                                    const relativePath = workspaceRoot 
+                                        ? path.relative(workspaceRoot, file.filePath)
+                                        : file.filePath;
+                                    
+                                    return {
+                                        uuid: file.uuid,
+                                        title: fileName,
+                                        path: relativePath,
+                                        fullPath: file.filePath
+                                    };
+                                })
+                                // 按文件名排序
+                                .sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'));
+                            
+                            console.log(`[TimelineJson5EditorProvider] Sending ${roleList.length} roles and ${articleList.length} articles`);
+                            
+                            webviewPanel.webview.postMessage({
+                                type: 'rolesAndArticlesData',
+                                roles: roleList,
+                                articles: articleList
+                            });
+                        } catch (error) {
+                            console.error('[TimelineJson5EditorProvider] Error loading roles and articles:', error);
+                            webviewPanel.webview.postMessage({
+                                type: 'rolesAndArticlesData',
+                                roles: [],
+                                articles: []
+                            });
+                        }
+                        break;
+                    }
+
+                    case 'jumpToRoleDefinition': {
+                        const roleUuid = message.roleUuid;
+                        console.log('[TimelineJson5EditorProvider] Received jumpToRoleDefinition request:', roleUuid);
+
+                        if (!roleUuid) {
+                            console.warn('[TimelineJson5EditorProvider] Missing roleUuid');
+                            return;
+                        }
+
+                        try {
+                            await jumpToRoleByUuid(roleUuid);
+                        } catch (error) {
+                            console.error('[TimelineJson5EditorProvider] Error jumping to role definition:', error);
+                            vscode.window.showErrorMessage(`跳转失败: ${error}`);
+                        }
+                        break;
+                    }
+
+                    case 'jumpToDefinition': {
+                        // 处理转跳到定义的请求（保留角色兼容，同时支持文章）
+                        const resourceType = message.resourceType;
+                        const resourceUuid = message.resourceUuid;
+                        console.log('[TimelineJson5EditorProvider] Received jumpToDefinition request:', resourceType, resourceUuid);
+
+                        if (!resourceType || !resourceUuid) {
+                            console.warn('[TimelineJson5EditorProvider] Missing resourceType or resourceUuid');
+                            return;
+                        }
+
+                        try {
+                            if (resourceType === 'character') {
+                                // 向后兼容旧消息格式，转发到角色跳转逻辑
+                                await jumpToRoleByUuid(resourceUuid);
+                            } else if (resourceType === 'article') {
+                                // 跳转到文章定义
+                                const allFiles = getAllTrackedFiles();
+                                const targetFile = allFiles.find(file => file.uuid === resourceUuid);
+
+                                if (!targetFile) {
+                                    console.warn('[TimelineJson5EditorProvider] Article not found for uuid:', resourceUuid);
+                                    vscode.window.showWarningMessage(`未找到UUID为 ${resourceUuid} 的文章`);
+                                    return;
+                                }
+
+                                console.log('[TimelineJson5EditorProvider] Found article:', targetFile.filePath);
+
+                                // 打开文档
+                                const doc = await vscode.workspace.openTextDocument(targetFile.filePath);
+                                await vscode.window.showTextDocument(doc, { preview: false });
+                                console.log('[TimelineJson5EditorProvider] Successfully opened article');
+                            }
+                        } catch (error) {
+                            console.error('[TimelineJson5EditorProvider] Error jumping to definition:', error);
+                            vscode.window.showErrorMessage(`跳转失败: ${error}`);
+                        }
+                        break;
+                    }
+                    
                     default:
                         console.log('[Message] Unknown message type:', message.type);
                 }
@@ -384,8 +557,8 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
             }
         });
 
-        // 初始化
-        await updateWebview();
+        // 不再自动发送初始数据,等待前端主动请求
+        console.log('[TimelineJson5EditorProvider] Editor initialized, waiting for frontend requests...');
 
         // 清理
         webviewPanel.onDidDispose(() => {

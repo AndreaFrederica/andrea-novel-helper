@@ -3,7 +3,7 @@
 
 export interface BindingReference {
   uuid: string;
-  type: 'character' | 'article' | 'location' | 'item' | 'other';
+  type: 'character' | 'article';
   label?: string;
 }
 

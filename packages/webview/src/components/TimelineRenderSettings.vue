@@ -77,6 +77,21 @@
       </q-card-section>
     </q-card>
 
+    <!-- 资源过滤设置 -->
+    <q-card flat bordered class="q-mb-md">
+      <q-card-section>
+        <div class="text-subtitle2 q-mb-md">资源绑定</div>
+
+        <q-toggle
+          v-model="settingsStore.filterSensitiveRoles"
+          label="角色资源过滤敏感词"
+          color="primary"
+        >
+          <q-tooltip>默认隐藏类型为“敏感词”的角色，可在需要时关闭此过滤</q-tooltip>
+        </q-toggle>
+      </q-card-section>
+    </q-card>
+
     <!-- 交互行为设置 -->
     <q-card flat bordered class="q-mb-md">
       <q-card-section>

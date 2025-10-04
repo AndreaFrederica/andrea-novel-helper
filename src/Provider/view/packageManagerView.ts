@@ -30,6 +30,8 @@ function resolveFileConflict(dir: string, baseName: string, ext: string): { path
 }
 
 class NewFileNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+    
     /**
      * @param baseDir 完整的 novel-helper 根目录路径
      */
@@ -37,6 +39,7 @@ class NewFileNode extends vscode.TreeItem {
         // 让 TreeItem 也有 resourceUri，指向根目录
         super(vscode.Uri.file(baseDir), vscode.TreeItemCollapsibleState.None);
 
+        this.resourceUri = vscode.Uri.file(baseDir);
         this.contextValue = 'newFile';
         // 把 resourceUri 传给命令，就能在命令里直接用 node.resourceUri.fsPath
         this.command = {
@@ -514,15 +517,15 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // 统一创建命令：角色库 / 敏感词库 / 词汇库 （内部选择 json5 / txt / md）
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGallery', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGallery', async (node: PackageNode | NewFileNode) => {
             const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'character-gallery', kind: 'character' });
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWords', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWords', async (node: PackageNode | NewFileNode) => {
             const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'sensitive-words', kind: 'sensitive' });
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createVocabulary', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createVocabulary', async (node: PackageNode | NewFileNode) => {
             const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'vocabulary', kind: 'vocabulary' });
             if (file) provider.refresh();
         })
@@ -530,15 +533,15 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // 新增：创建 ojson5 和 rjson5 文件的命令
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createRoleFile', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createRoleFile', async (node: PackageNode | NewFileNode) => {
             const file = await createRoleFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createRelationshipFile', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createRelationshipFile', async (node: PackageNode | NewFileNode) => {
             const file = await createRelationshipFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createTimelineFile', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createTimelineFile', async (node: PackageNode | NewFileNode) => {
             const file = await createTimelineFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         })
@@ -546,7 +549,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // Command: create sub-package
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createSubPackage', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createSubPackage', async (node: PackageNode | NewFileNode) => {
             const name = await vscode.window.showInputBox({ prompt: 'Sub-package name' });
             if (!name) return;
             const newDir = path.join(node.resourceUri.fsPath, name);
@@ -602,7 +605,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // Command: create regex patterns file
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createRegexPatterns', async (node: PackageNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createRegexPatterns', async (node: PackageNode | NewFileNode) => {
             const file = await createRegexPatternsFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         })

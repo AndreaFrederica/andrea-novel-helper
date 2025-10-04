@@ -245,6 +245,8 @@
         v-model="isEditDialogOpen"
         :event="editingEvent"
         :all-events="events"
+        :roles-list="rolesList"
+        :articles-list="articlesList"
         @save="handleEventSave"
       />
 
@@ -315,6 +317,33 @@
 
           <!-- 节点右键菜单 -->
           <template v-else>
+            <template v-if="contextMenuBindings.length">
+              <q-item-label header>绑定资源</q-item-label>
+              <q-item
+                v-for="(binding, index) in contextMenuBindings"
+                :key="`${binding.uuid}-${index}`"
+                clickable
+                v-close-popup
+                @click="jumpToBinding(binding)"
+              >
+                <q-item-section avatar>
+                  <q-avatar size="sm" :color="getBindingColor(binding)" text-color="white">
+                    <q-icon :name="getBindingIcon(binding.type)" size="xs" />
+                  </q-avatar>
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ getBindingDisplayName(binding) }}</q-item-label>
+                  <q-item-label caption>{{ getBindingTypeLabel(binding.type) }}</q-item-label>
+                  <q-item-label caption v-if="getBindingAdditionalInfo(binding)">
+                    {{ getBindingAdditionalInfo(binding) }}
+                  </q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-icon name="open_in_new" color="primary" />
+                </q-item-section>
+              </q-item>
+              <q-separator spaced />
+            </template>
             <q-item clickable v-close-popup @click="copyNode">
               <q-item-section avatar>
                 <q-icon name="content_copy" color="primary" />
@@ -494,6 +523,7 @@ import ConnectionEditor from '../components/ConnectionEditor.vue';
 import TimelineView from '../components/TimelineView.vue';
 import TimelineRenderSettings from '../components/TimelineRenderSettings.vue';
 import { useTimelineSettingsStore } from '../stores/timeline-settings';
+import { useVsCodeApiStore } from '../stores/vscode';
 import type { TimelineEvent, TimelineConnection, TimelineData, BindingReference } from '../types/timeline';
 import timelineSampleData from '../data/timelineSampleData';
 // timelineSampleData 使用默认导出，解构出 events 和 connections 以兼容原来的命名变量
@@ -504,56 +534,10 @@ const { onInit, onNodeDragStop, onConnect, onEdgeClick, onNodesChange, addEdges,
 
 // 使用 Pinia store
 const settingsStore = useTimelineSettingsStore();
+const vsCodeApiStore = useVsCodeApiStore();
 
-// VSCode API 通信接口
-const vscodeApi = ref<{
-  postMessage: (message: any) => void;
-  addEventListener: (type: string, listener: (event: MessageEvent) => void) => void;
-  removeEventListener: (type: string, listener: (event: MessageEvent) => void) => void;
-} | null>(null);
-
-// 初始化VSCode API
-function initVSCodeApi() {
-  // 尝试获取VSCode webview API
-  const vscode = (globalThis as any).acquireVsCodeApi?.();
-
-  if (vscode) {
-    // 使用VSCode原生API
-    vscodeApi.value = {
-      postMessage: (message: any) => {
-        console.log('[VSCode API] Sending message:', message.type);
-        vscode.postMessage(message);
-      },
-      addEventListener: (type: string, listener: (event: MessageEvent) => void) => {
-        globalThis.addEventListener?.(type, listener as EventListener);
-      },
-      removeEventListener: (type: string, listener: (event: MessageEvent) => void) => {
-        globalThis.removeEventListener?.(type, listener as EventListener);
-      }
-    };
-    console.log('[VSCode API] Initialized with VSCode webview API');
-  } else {
-    // 降级方案：使用 window.parent
-    const global = globalThis as any;
-    if (global.parent?.postMessage) {
-      vscodeApi.value = {
-        postMessage: (message: any) => {
-          console.log('[VSCode API] Sending message via window.parent:', message.type);
-          global.parent.postMessage(message, '*');
-        },
-        addEventListener: (type: string, listener: (event: MessageEvent) => void) => {
-          global.addEventListener?.(type, listener as EventListener);
-        },
-        removeEventListener: (type: string, listener: (event: MessageEvent) => void) => {
-          global.removeEventListener?.(type, listener as EventListener);
-        }
-      };
-      console.log('[VSCode API] Initialized with window.parent fallback');
-    } else {
-      console.error('[VSCode API] Failed to initialize - no communication method available');
-    }
-  }
-}
+// 使用 store 中的 vscode 实例
+const vscodeApi = computed(() => vsCodeApiStore.vscode);
 
 
 // 响应式状态
@@ -576,6 +560,10 @@ const deleteConnectionDialog = ref(false);
 const connectionToDelete = ref<string | null>(null);
 const showSampleDataDialog = ref(false);
 
+// 角色和文章数据(从后端加载一次,传递给子组件)
+const rolesList = ref<Array<{ uuid: string; name: string; type: string; color?: string }>>([]);
+const articlesList = ref<Array<{ uuid: string; title: string; path: string; fullPath: string }>>([]);
+
 // 右键菜单相关
 const contextMenu = ref({
   show: false,
@@ -586,6 +574,17 @@ const contextMenu = ref({
 });
 const contextMenuRef = ref<unknown>(null);
 
+const contextMenuEvent = computed(() => {
+  if (!contextMenu.value.nodeId) {
+    return null;
+  }
+  return events.value.find(event => event.id === contextMenu.value.nodeId) ?? null;
+});
+
+const contextMenuBindings = computed<BindingReference[]>(() => {
+  return contextMenuEvent.value?.bindings ?? [];
+});
+
 function openQuasarMenuFromMouseEvent(evt: MouseEvent, opts: { nodeId: string | null; canvasClick: boolean }) {
   // console.log('[CTX] openQuasarMenuFromMouseEvent', {
   //   x: evt?.clientX,
@@ -595,23 +594,23 @@ function openQuasarMenuFromMouseEvent(evt: MouseEvent, opts: { nodeId: string | 
   //   target: (evt?.target as HTMLElement)?.className,
   // });
   evt.stopPropagation?.();
-  
+
   // 先隐藏旧菜单（如果存在）
   const menu = (contextMenuRef.value as unknown as { hide?: () => void; show?: (e: MouseEvent) => void });
   if (menu?.hide) {
     menu.hide();
   }
-  
+
   // 计算相对于 Vue Flow 容器的坐标
   let relativeX = evt.clientX;
   let relativeY = evt.clientY;
-  
+
   if (vueFlowRef.value) {
     const rect = vueFlowRef.value.getBoundingClientRect();
     relativeX = evt.clientX - rect.left;
     relativeY = evt.clientY - rect.top;
   }
-  
+
   // 更新上下文状态（保存相对坐标）
   contextMenu.value = {
     show: true,
@@ -620,7 +619,7 @@ function openQuasarMenuFromMouseEvent(evt: MouseEvent, opts: { nodeId: string | 
     nodeId: opts.nodeId,
     canvasClick: opts.canvasClick,
   };
-  
+
   // 在新位置打开菜单（使用原始屏幕坐标）
   if (menu?.show) {
     menu.show(evt);
@@ -637,6 +636,103 @@ function openQuasarMenuFromMouseEvent(evt: MouseEvent, opts: { nodeId: string | 
     // });
   } else {
     console.warn('[CTX] quasar menu ref missing show()');
+  }
+}
+
+function getRoleByUuid(uuid: string) {
+  return rolesList.value.find(role => role.uuid === uuid);
+}
+
+function getArticleByUuid(uuid: string) {
+  return articlesList.value.find(article => article.uuid === uuid);
+}
+
+function getBindingDisplayName(binding: BindingReference): string {
+  if (binding.label && binding.label.trim()) {
+    return binding.label;
+  }
+  if (binding.type === 'character') {
+    const role = getRoleByUuid(binding.uuid);
+    if (role?.name) {
+      return role.name;
+    }
+  } else if (binding.type === 'article') {
+    const article = getArticleByUuid(binding.uuid);
+    if (article?.title) {
+      return article.title;
+    }
+  }
+  return binding.uuid;
+}
+
+function getBindingColor(binding: BindingReference): string {
+  if (binding.type === 'character') {
+    const role = getRoleByUuid(binding.uuid);
+    if (typeof role?.color === 'string' && role.color.trim().length > 0) {
+      return role.color;
+    }
+    return 'purple';
+  }
+  if (binding.type === 'article') {
+    return 'blue';
+  }
+  return 'grey';
+}
+
+function getBindingIcon(type: string): string {
+  const iconMap: Record<string, string> = {
+    character: 'person',
+    article: 'description',
+  };
+  return iconMap[type] || 'label';
+}
+
+function getBindingTypeLabel(type: string): string {
+  const labelMap: Record<string, string> = {
+    character: '角色',
+    article: '文章/章节',
+  };
+  return labelMap[type] || '其他';
+}
+
+function getBindingAdditionalInfo(binding: BindingReference): string | undefined {
+  if (binding.type === 'character') {
+    const role = getRoleByUuid(binding.uuid);
+    if (role?.type) {
+      return role.type;
+    }
+  } else if (binding.type === 'article') {
+    const article = getArticleByUuid(binding.uuid);
+    if (article) {
+      return article.fullPath || article.path;
+    }
+  }
+  return undefined;
+}
+
+function jumpToBinding(binding: BindingReference) {
+  const api = vscodeApi.value;
+  if (!api?.postMessage) {
+    console.warn('[TimelinePage] VSCode API not available, cannot jump to definition');
+    return;
+  }
+
+  console.log('[TimelinePage] Jumping to definition via context menu:', binding.type, binding.uuid);
+
+  if (binding.type === 'character') {
+    api.postMessage({
+      type: 'jumpToRoleDefinition',
+      roleUuid: binding.uuid,
+    });
+    return;
+  }
+
+  if (binding.type === 'article') {
+    api.postMessage({
+      type: 'jumpToDefinition',
+      resourceType: binding.type,
+      resourceUuid: binding.uuid,
+    });
   }
 }
 
@@ -757,7 +853,18 @@ const timelineData = computed<TimelineData>(() => ({
 }));
 
 // 新建/编辑事件表单
-const eventForm = reactive({
+const eventForm = reactive<{
+  id: string;
+  title: string;
+  group: string;
+  type: 'main' | 'side';
+  date: string;
+  description: string;
+  color?: string; // 自定义颜色
+  data?: {
+    type: 'main' | 'side' | 'condition'; // 支持条件节点类型
+  };
+}>({
   id: '',
   title: '',
   group: '',
@@ -821,7 +928,7 @@ onConnect((params) => {
     target: params.target,
     connectionType: 'normal', // 默认为正常顺序
   };
-  
+
   // 保存手柄 ID (如果存在)
   if (params.sourceHandle) {
     newConnection.sourceHandle = params.sourceHandle;
@@ -829,7 +936,7 @@ onConnect((params) => {
   if (params.targetHandle) {
     newConnection.targetHandle = params.targetHandle;
   }
-  
+
   connections.value.push(newConnection);
 
   // 更新显示
@@ -918,7 +1025,8 @@ function updateEvent() {
   if (index !== -1) {
     events.value[index] = {
       ...eventForm,
-      data: {
+      // 保留 data.type，如果 eventForm.data 存在则使用，否则使用 eventForm.type
+      data: eventForm.data || {
         type: eventForm.type,
       },
     };
@@ -941,10 +1049,15 @@ function deleteEvent(id: string) {
 
 // 打开节点编辑器
 function openNodeEditor(id: string) {
+  console.log('[TimelinePage] openNodeEditor 被调用, id:', id);
   const event = events.value.find((e) => e.id === id);
+  console.log('[TimelinePage] 找到的事件:', event);
   if (event) {
     editingEvent.value = { ...event };
     isEditDialogOpen.value = true;
+    console.log('[TimelinePage] 已设置 isEditDialogOpen = true');
+  } else {
+    console.warn('[TimelinePage] 未找到事件, id:', id);
   }
 }
 
@@ -1122,7 +1235,7 @@ function handleCanvasContextMenu(event: MouseEvent) {
   if (target.closest('.custom-node') || target.closest('.vue-flow__node')) {
     return; // 如果点击在节点上，让节点自己处理
   }
-  
+
   // 否则显示画布菜单
   event.preventDefault();
   event.stopPropagation();
@@ -1211,7 +1324,7 @@ function deleteNodeFromContext() {
 function createNodeAtPosition() {
   // 将屏幕坐标转换为画布坐标
   const canvasPosition = project({ x: contextMenu.value.x, y: contextMenu.value.y });
-  
+
   const newEvent: TimelineEvent = {
     id: generateUUIDv7(),
     title: '新事件',
@@ -1241,7 +1354,7 @@ function createNodeAtPosition() {
 function createConditionNodeAtPosition() {
   // 将屏幕坐标转换为画布坐标
   const canvasPosition = project({ x: contextMenu.value.x, y: contextMenu.value.y });
-  
+
   const newEvent: TimelineEvent = {
     id: generateUUIDv7(),
     title: '新条件',
@@ -1269,15 +1382,15 @@ function createConditionNodeAtPosition() {
 
 // 确认使用示例数据
 function confirmUseSampleData() {
-  events.value = sampleEvents;
-  connections.value = sampleConnections;
-  
+  events.value = [...sampleEvents];
+  connections.value = [...sampleConnections];
+
   // 为示例数据补全宽高
   events.value.forEach((event) => {
     if (!event.width) event.width = 200;
     if (!event.height) event.height = 120;
   });
-  
+
   void updateFlowElements();
   void saveTimelineData();
   showSampleDataDialog.value = false;
@@ -1291,20 +1404,32 @@ function declineUseSampleData() {
 
 // 加载初始数据
 function loadInitialData() {
+  console.log('[loadInitialData] Starting...');
   isLoading.value = true;
 
-  // 向VS Code发送消息请求时间线数据
+  // 向VS Code发送消息请求时间线数据和角色文章数据
   if (vscodeApi.value?.postMessage) {
+    console.log('[loadInitialData] VSCode API available, requesting data...');
+
+    // 请求时间线数据
     vscodeApi.value.postMessage({
       type: 'requestTimelineData',
     });
+
+    // 请求角色和文章数据(只请求一次,后续传递给子组件)
+    vscodeApi.value.postMessage({
+      type: 'requestRolesAndArticles',
+    });
   } else {
-    console.error('[loadInitialData] VSCode API not available');
+    console.error('[loadInitialData] ❌ VSCode API not available');
+    console.error('[loadInitialData] vscodeApi.value:', vscodeApi.value);
+    console.error('[loadInitialData] Check if initVSCodeApi() was called and succeeded');
   }
 
   // 如果500ms后没有数据，询问是否使用示例数据初始化
   setTimeout(() => {
     if (events.value.length === 0) {
+      console.log('[loadInitialData] No data received after 500ms, showing sample data dialog');
       showSampleDataDialog.value = true;
     }
     isLoading.value = false;
@@ -1313,12 +1438,22 @@ function loadInitialData() {
 
 // 处理从 VS Code 收到的消息
 function handleMessage(event: MessageEvent) {
-  if (event.data && event.data.type === 'timelineData') {
+  const message = event.data;
+  if (!message || typeof message.type !== 'string') {
+    return;
+  }
+
+  console.log('[handleMessage] Received message:', message.type, message);
+
+  switch (message.type) {
+    case 'timelineData':
     try {
-      const data = event.data.data as TimelineData;
+      console.log('[handleMessage] Processing timeline data...');
+      const data = message.data as TimelineData;
       events.value = data.events || [];
       connections.value = data.connections || [];
-      
+      console.log('[handleMessage] Loaded', events.value.length, 'events and', connections.value.length, 'connections');
+
       // 为所有没有宽高数据的节点补上默认值
       let hasUpdates = false;
       events.value.forEach((event) => {
@@ -1331,24 +1466,48 @@ function handleMessage(event: MessageEvent) {
           hasUpdates = true;
         }
       });
-      
+
       void updateFlowElements();
-      
+
       // 如果补全了数据，保存一次
       if (hasUpdates) {
         console.log('[TimelinePage] 补全了节点尺寸数据，保存中...');
         void saveTimelineData();
       }
     } catch (error) {
-      console.error('解析时间线数据失败:', error);
+      console.error('[handleMessage] 解析时间线数据失败:', error);
     } finally {
       isLoading.value = false;
     }
+      break;
+
+    case 'rolesAndArticlesData':
+      console.log('[handleMessage] Processing roles and articles data...');
+      rolesList.value = message.roles || [];
+      articlesList.value = message.articles || [];
+      console.log('[handleMessage] Loaded', rolesList.value.length, 'roles and', articlesList.value.length, 'articles');
+      break;
+
+    case 'dataChangeAck':
+      console.log('[handleMessage] Received dataChangeAck from backend:', message);
+      break;
+
+    default:
+      console.log('[handleMessage] Ignoring unsupported message type:', message.type);
+      break;
   }
 }
 
 // 保存数据到 VS Code
 function saveTimelineData() {
+  console.log('[saveTimelineData] Starting save...');
+  console.log('[saveTimelineData] VSCode API status:', {
+    hasVscodeApi: !!vscodeApi.value,
+    hasPostMessage: !!vscodeApi.value?.postMessage,
+    eventsCount: events.value.length,
+    connectionsCount: connections.value.length
+  });
+
   // 将响应式对象转换为纯 JavaScript 对象，避免 postMessage 序列化错误
   const plainEvents = events.value.map(event => ({
     id: event.id,
@@ -1365,6 +1524,7 @@ function saveTimelineData() {
       type: b.type,
       label: b.label,
     })) : undefined,
+    color: event.color, // 保存自定义颜色
     data: event.data ? { type: event.data.type } : undefined,
     // 嵌套节点字段
     parentNode: event.parentNode,
@@ -1378,23 +1538,31 @@ function saveTimelineData() {
     id: conn.id,
     source: conn.source,
     target: conn.target,
+    sourceHandle: conn.sourceHandle, // 保存条件节点的源手柄（true/false）
+    targetHandle: conn.targetHandle, // 保存目标手柄
     label: conn.label,
     connectionType: conn.connectionType,
   }));
 
-  console.log('[TimelinePage] Sending dataChanged message to backend');
-  console.log('[TimelinePage] Events count:', plainEvents.length, 'Connections count:', plainConnections.length);
+  console.log('[saveTimelineData] Prepared data - Events:', plainEvents.length, 'Connections:', plainConnections.length);
 
   if (vscodeApi.value?.postMessage) {
-    vscodeApi.value.postMessage({
-      type: 'dataChanged',
-      data: {
-        events: plainEvents,
-        connections: plainConnections,
-      },
-    });
+    console.log('[saveTimelineData] Sending dataChanged message to backend...');
+    try {
+      vscodeApi.value.postMessage({
+        type: 'dataChanged',
+        data: {
+          events: plainEvents,
+          connections: plainConnections,
+        },
+      });
+      console.log('[saveTimelineData] ✅ Message sent successfully');
+    } catch (error) {
+      console.error('[saveTimelineData] ❌ Error sending message:', error);
+    }
   } else {
-    console.error('[saveTimelineData] VSCode API not available');
+    console.error('[saveTimelineData] ❌ VSCode API not available, cannot save!');
+    console.error('[saveTimelineData] vscodeApi.value:', vscodeApi.value);
   }
 }
 
@@ -1405,15 +1573,15 @@ function throttle<T extends (...args: any[]) => any>(
 ): (...args: Parameters<T>) => void {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   let lastRan: number | null = null;
-  
+
   return function(this: any, ...args: Parameters<T>) {
     const now = Date.now();
-    
+
     if (lastRan === null || now - lastRan >= wait) {
       // 立即执行
       func.apply(this, args);
       lastRan = now;
-      
+
       // 清除pending的timeout
       if (timeout) {
         clearTimeout(timeout);
@@ -1422,7 +1590,7 @@ function throttle<T extends (...args: any[]) => any>(
     } else {
       // 延迟执行
       if (timeout) clearTimeout(timeout);
-      
+
       timeout = setTimeout(() => {
         func.apply(this, args);
         lastRan = Date.now();
@@ -1444,19 +1612,19 @@ function updateFlowElements() {
     // 确保所有节点都有默认尺寸
     if (!event.width) event.width = 200;
     if (!event.height) event.height = 120;
-    
+
     const nodeStyle: Record<string, any> = {};
-    
+
     // 应用节点尺寸
     nodeStyle.width = `${event.width}px`;
     nodeStyle.height = `${event.height}px`;
-    
+
     // 检查是否是父节点（有子节点）
     const hasChildren = events.value.some(e => e.parentNode === event.id);
-    
+
     // 根据 data.type 确定节点类型
     const nodeType = event.data?.type === 'condition' ? 'condition' : 'editable';
-    
+
     newNodes.push({
       id: event.id,
       type: nodeType,
@@ -1561,31 +1729,33 @@ watch(() => timelineDrawerOpen.value, () => {
 
 // 初始化数据
 onMounted(() => {
-  // 初始化 VSCode API
-  initVSCodeApi();
+  void (() => {
+    if (!vscodeApi.value) {
+      console.error('[TimelinePage] VSCode API not available, using window fallback listeners');
+    }
 
-  // 加载渲染设置
-  settingsStore.loadFromLocalStorage();
+    // 加载渲染设置
+    settingsStore.loadFromLocalStorage();
 
-  // 加载时间线视图状态
-  loadTimelineViewState();
+    // 加载时间线视图状态
+    loadTimelineViewState();
 
-  // 添加全局消息监听器（持续监听来自 VSCode 的消息）
-  if (vscodeApi.value?.addEventListener) {
-    vscodeApi.value.addEventListener('message', handleMessage);
-  } else {
-    // 降级方案
-    window.addEventListener('message', handleMessage);
-  }
+    // 添加消息监听 - VS Code webview 中总是通过 window.addEventListener 监听消息
+    window.addEventListener('message', handleMessage as EventListener);
 
-  loadInitialData();
+    if (vscodeApi.value?.postMessage) {
+      loadInitialData();
+    } else {
+      console.error('[TimelinePage] Cannot request initial data - VSCode API unavailable');
+    }
 
-  // 添加全局事件监听器
-  window.addEventListener('timeline-node-update', handleTimelineNodeUpdate);
-  window.addEventListener('timeline-node-resize', handleTimelineNodeResize);
-  window.addEventListener('timeline-open-editor', handleOpenEditor);
-  window.addEventListener('timeline-node-contextmenu', handleNodeContextMenuEvent);
-  
+    // 添加全局事件监听器
+    window.addEventListener('timeline-node-update', handleTimelineNodeUpdate as EventListener);
+    window.addEventListener('timeline-node-resize', handleTimelineNodeResize as EventListener);
+    window.addEventListener('timeline-open-editor', handleOpenEditor as EventListener);
+    window.addEventListener('timeline-node-contextmenu', handleNodeContextMenuEvent as EventListener);
+  })();
+
   // 不再绑定全局 click 关闭，交由 Quasar 自己处理，避免刚打开就被关闭
 
   // 菜单采用 contextmenu + show(event) 进行定位
@@ -1593,11 +1763,7 @@ onMounted(() => {
 
 // 清理事件监听器
 onUnmounted(() => {
-  if (vscodeApi.value?.removeEventListener) {
-    vscodeApi.value.removeEventListener('message', handleMessage);
-  } else {
-    window.removeEventListener('message', handleMessage);
-  }
+  window.removeEventListener('message', handleMessage);
   window.removeEventListener('timeline-node-update', handleTimelineNodeUpdate);
   window.removeEventListener('timeline-node-resize', handleTimelineNodeResize);
   window.removeEventListener('timeline-open-editor', handleOpenEditor);
@@ -1607,14 +1773,19 @@ onUnmounted(() => {
 
 // 处理打开编辑器事件
 function handleOpenEditor() {
+  console.log('[TimelinePage] handleOpenEditor 被调用');
   try {
     const nodeId = localStorage.getItem('openNodeEditor');
+    console.log('[TimelinePage] 从 localStorage 获取 nodeId:', nodeId);
     if (nodeId) {
+      console.log('[TimelinePage] 调用 openNodeEditor');
       openNodeEditor(nodeId);
       localStorage.removeItem('openNodeEditor');
+    } else {
+      console.warn('[TimelinePage] nodeId 为空');
     }
   } catch (error) {
-    console.error('Failed to open editor:', error);
+    console.error('[TimelinePage] Failed to open editor:', error);
   }
 }
 
@@ -1652,31 +1823,31 @@ function handleTimelineNodeResize() {
   try {
     const eventDataStr = localStorage.getItem('tempNodeResize');
     // console.log('[handleTimelineNodeResize] localStorage数据:', eventDataStr);
-    
+
     if (eventDataStr) {
       const eventData = JSON.parse(eventDataStr) as { id: string; width: number; height: number };
       // console.log('[handleTimelineNodeResize] 解析后的数据:', eventData);
-      
+
       const eventIndex = events.value.findIndex((e) => e.id === eventData.id);
       // console.log('[handleTimelineNodeResize] 找到节点索引:', eventIndex);
-      
+
       if (eventIndex !== -1 && events.value[eventIndex]) {
-        // console.log('[handleTimelineNodeResize] 更新前:', { 
-        //   width: events.value[eventIndex].width, 
-        //   height: events.value[eventIndex].height 
+        // console.log('[handleTimelineNodeResize] 更新前:', {
+        //   width: events.value[eventIndex].width,
+        //   height: events.value[eventIndex].height
         // });
-        
+
         events.value[eventIndex].width = eventData.width;
         events.value[eventIndex].height = eventData.height;
-        
-        // console.log('[handleTimelineNodeResize] 更新后:', { 
-        //   width: events.value[eventIndex].width, 
-        //   height: events.value[eventIndex].height 
+
+        // console.log('[handleTimelineNodeResize] 更新后:', {
+        //   width: events.value[eventIndex].width,
+        //   height: events.value[eventIndex].height
         // });
       }
       localStorage.removeItem('tempNodeResize');
     }
-    
+
     // 检查并补全所有节点的宽高数据
     let hasUpdates = false;
     events.value.forEach((event) => {
@@ -1691,7 +1862,7 @@ function handleTimelineNodeResize() {
         }
       }
     });
-    
+
     // 如果有任何更新（调整大小或补全数据），刷新并保存
     if (eventDataStr || hasUpdates) {
       updateFlowElements();

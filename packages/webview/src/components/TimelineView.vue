@@ -71,7 +71,7 @@
                     </span>
                   </footer>
                 </article>
-                
+
                 <!-- 跨时间段连接指示器 (非开始位置显示) -->
                 <div
                   v-else
@@ -82,7 +82,7 @@
                     {{ span.parent.title }} (继续)
                   </div>
                 </div>
-                
+
                 <!-- 子节点 (只在子节点自己的日期显示) -->
                 <div v-if="span.children.length > 0" class="timeline-view__children">
                   <article
@@ -242,6 +242,16 @@
           >
             <polygon points="0 0, 10 3, 0 6" fill="#6b7280" />
           </marker>
+          <marker
+            id="arrowhead-condition"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="3"
+            orient="auto"
+          >
+            <polygon points="0 0, 10 3, 0 6" fill="#f59e0b" />
+          </marker>
         </defs>
         <g>
           <path
@@ -298,12 +308,18 @@ interface TimelineViewEvent {
   parentNode?: string;
   width?: number;
   height?: number;
+  color?: string; // 自定义颜色
+  data?: {
+    type?: 'main' | 'side' | 'condition'; // 节点类型（支持条件节点）
+  };
 }
 
 interface TimelineViewConnection {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string; // 源节点手柄（条件节点的'true'或'false'）
+  targetHandle?: string; // 目标节点手柄
   label?: string;
   connectionType?: 'normal' | 'time-travel' | 'reincarnation' | 'parallel' | 'dream' | 'flashback' | 'other';
 }
@@ -453,6 +469,7 @@ const CONNECTION_TYPE_STYLES: Record<string, { color: string; width: number; das
   'flashback': { color: '#10b981', width: 2, dashArray: '5,5', markerEnd: 'url(#arrowhead-flashback)' }, // 绿色，虚线
   'other': { color: '#6b7280', width: 2, dashArray: '5,5', markerEnd: 'url(#arrowhead-other)' }, // 灰色
   'normal': { color: 'transparent', width: 0, dashArray: '', markerEnd: '' }, // 不显示
+  'condition': { color: '#f59e0b', width: 2.5, dashArray: '', markerEnd: 'url(#arrowhead-condition)' }, // 条件节点连线（橙色）
 };
 
 // 连接线渲染数据接口
@@ -477,11 +494,18 @@ const renderedConnections = computed<RenderedConnection[]>(() => {
   // 强制依赖 connectionUpdateKey 以触发重新计算
   const _ = connectionUpdateKey.value;
 
+  // 检查源节点是否是条件节点
+  const isSourceConditionNode = (sourceId: string): boolean => {
+    const sourceEvent = props.events.find(e => e.id === sourceId);
+    return sourceEvent?.data?.type === 'condition';
+  };
+
   return props.connections
     .filter(conn => {
-      // 只渲染明确标记的特殊连线
+      // 渲染特殊连线或条件节点的连线
       const type = conn.connectionType ?? 'normal';
-      return type !== 'normal';
+      const isCondition = isSourceConditionNode(conn.source);
+      return type !== 'normal' || isCondition;
     })
     .map(conn => {
       const sourceEl = cardRefs.value.get(conn.source);
@@ -557,9 +581,50 @@ const renderedConnections = computed<RenderedConnection[]>(() => {
                      3 * (1-t) * Math.pow(t, 2) * control2.y +
                      Math.pow(t, 3) * targetAnchor.y;
 
-      // 获取样式（确保总是有默认值）
-  const connectionType = conn.connectionType && conn.connectionType !== 'normal' ? conn.connectionType : 'other';
-  const styleConfig = (CONNECTION_TYPE_STYLES[connectionType] || CONNECTION_TYPE_STYLES.other) as { color: string; width: number; dashArray: string; markerEnd: string };
+      // 检查是否是条件节点的连线
+      const isConditionConnection = isSourceConditionNode(conn.source);
+
+      // 获取原始连线类型
+      const originalConnectionType = conn.connectionType && conn.connectionType !== 'normal' ? conn.connectionType : null;
+
+      // 决定最终使用的连线类型和样式
+      let connectionType: string;
+      let styleConfig: { color: string; width: number; dashArray: string; markerEnd: string };
+
+      if (isConditionConnection && originalConnectionType) {
+        // 条件节点 + 特殊类型：使用特殊类型的样式
+        connectionType = originalConnectionType;
+        styleConfig = (CONNECTION_TYPE_STYLES[originalConnectionType] || CONNECTION_TYPE_STYLES.other) as { color: string; width: number; dashArray: string; markerEnd: string };
+      } else if (isConditionConnection) {
+        // 仅条件节点：使用条件节点样式
+        connectionType = 'condition';
+        styleConfig = CONNECTION_TYPE_STYLES.condition as { color: string; width: number; dashArray: string; markerEnd: string };
+      } else if (originalConnectionType) {
+        // 仅特殊类型：使用特殊类型样式
+        connectionType = originalConnectionType;
+        styleConfig = (CONNECTION_TYPE_STYLES[originalConnectionType] || CONNECTION_TYPE_STYLES.other) as { color: string; width: number; dashArray: string; markerEnd: string };
+      } else {
+        // 普通连线（兜底，理论上不会到这里因为已经过滤了）
+        connectionType = 'other';
+        styleConfig = CONNECTION_TYPE_STYLES.other as { color: string; width: number; dashArray: string; markerEnd: string };
+      }
+
+      // 生成标签：结合条件节点分支和连线类型
+      let label = '';
+      if (isConditionConnection && originalConnectionType) {
+        // 条件节点 + 特殊类型：组合标签，如 "⏰时间穿越 - ✓ True"
+        const handle = conn.sourceHandle || 'true';
+        const branchLabel = handle === 'true' ? '✓ True' : '✗ False';
+        const typeLabel = getConnectionTypeLabel(originalConnectionType);
+        label = `${typeLabel} - ${branchLabel}`;
+      } else if (isConditionConnection) {
+        // 仅条件节点：显示 true/false
+        const handle = conn.sourceHandle || 'true';
+        label = handle === 'true' ? '✓ True' : '✗ False';
+      } else {
+        // 仅特殊类型：显示连线类型
+        label = getConnectionTypeLabel(connectionType);
+      }
 
       const result: RenderedConnection = {
         id: conn.id,
@@ -568,7 +633,7 @@ const renderedConnections = computed<RenderedConnection[]>(() => {
         width: styleConfig.width,
         dashArray: styleConfig.dashArray,
         markerEnd: styleConfig.markerEnd,
-        label: getConnectionTypeLabel(connectionType),
+        label,
         labelX,
         labelY,
       };
@@ -579,7 +644,7 @@ const renderedConnections = computed<RenderedConnection[]>(() => {
 });
 
 const TIMELINE_TYPE_META: Record<
-  KnownTimelineType | 'default',
+  KnownTimelineType | 'condition' | 'default',
   { dotColor: string; backgroundColor: string; label: string; cardBg: string; textColor: string }
 > = {
   main: {
@@ -596,6 +661,13 @@ const TIMELINE_TYPE_META: Record<
     cardBg: '#64748b',
     textColor: '#ffffff',
   },
+  condition: {
+    dotColor: 'var(--devui-warning)',
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+    label: '条件节点',
+    cardBg: '#f59e0b',
+    textColor: '#ffffff',
+  },
   default: {
     dotColor: 'var(--devui-link)',
     backgroundColor: 'rgba(94, 124, 224, 0.12)',
@@ -605,11 +677,28 @@ const TIMELINE_TYPE_META: Record<
   },
 };
 
-function getTypeMeta(type?: string) {
-  if (type && (type === 'main' || type === 'side')) {
-    return TIMELINE_TYPE_META[type];
+function getTypeMeta(type?: string, dataType?: string, customColor?: string) {
+  // 优先使用 data.type（支持条件节点）
+  const nodeType = dataType || type;
+
+  // 获取基础元数据
+  let meta;
+  if (nodeType && (nodeType === 'main' || nodeType === 'side' || nodeType === 'condition')) {
+    meta = TIMELINE_TYPE_META[nodeType];
+  } else {
+    meta = TIMELINE_TYPE_META.default;
   }
-  return TIMELINE_TYPE_META.default;
+
+  // 如果有自定义颜色，覆盖cardBg
+  if (customColor) {
+    return {
+      ...meta,
+      cardBg: customColor,
+      dotColor: customColor,
+    };
+  }
+
+  return meta;
 }
 
 function formatDate(date: Date) {
@@ -708,7 +797,7 @@ const timelineItems = computed<NormalizedTimelineItem[]>(() => {
   }
 
   const enriched = props.events.map((event, index) => {
-    const meta = getTypeMeta(event.type);
+    const meta = getTypeMeta(event.type, event.data?.type, event.color);
     const { displayDate, sortKey, rawDate, endDateDisplay, rawEndDate, isTimeless } = normalizeDate(event, index);
     return {
       id: event.id ?? `event-${index}`,
@@ -815,7 +904,7 @@ interface ParentSpanInfo {
 function generateDateKeys(startDate: Date, endDate: Date): string[] {
   const keys: string[] = [];
   const current = new Date(startDate);
-  
+
   while (current <= endDate) {
     const year = current.getFullYear();
     const month = `${current.getMonth() + 1}`.padStart(2, '0');
@@ -823,7 +912,7 @@ function generateDateKeys(startDate: Date, endDate: Date): string[] {
     keys.push(`${year}-${month}-${day}`);
     current.setDate(current.getDate() + 1);
   }
-  
+
   return keys;
 }
 
@@ -843,7 +932,7 @@ const groupedTimelineItems = computed<GroupedTimelineItem[]>(() => {
       // 亲代节点：生成跨越的日期范围
       const dateKeys = generateDateKeys(item.rawDate, item.rawEndDate);
       dateKeys.forEach(key => allDates.add(key));
-      
+
       parentSpans.push({
         parent: item,
         startDateKey: dateKeys[0]!,
@@ -884,7 +973,7 @@ const groupedTimelineItems = computed<GroupedTimelineItem[]>(() => {
   const groups: GroupedTimelineItem[] = [];
   sortedDates.forEach((dateKey, index) => {
     const groupItems = groupMap.get(dateKey) || [];
-    
+
     // 找到跨越当前日期的亲代节点
     const relevantParentSpans = parentSpans.filter(span => {
       const startDate = new Date(span.startDateKey);

@@ -69,11 +69,11 @@
     <div class="node-actions no-drag" @mousedown.stop @click.stop>
       <q-btn
         @click="openFullEditor"
-        icon="settings"
-        size="xs"
-        dense
-        flat
-        style="color: white"
+        icon="edit"
+        size="sm"
+        round
+        color="primary"
+        style="opacity: 0.9"
       >
         <q-tooltip>完整编辑</q-tooltip>
       </q-btn>
@@ -114,16 +114,16 @@ const emit = defineEmits<{
 // 处理大小调整
 function handleResize(params: OnResize) {
   // console.log('[EditableEventNode handleResize] 触发', params);
-  
+
   // OnResize 的实际数据在 params.params 中
   const resizeParams = (params as any).params;
   // console.log('[EditableEventNode handleResize] resizeParams:', resizeParams);
-  
+
   const width = resizeParams?.width;
   const height = resizeParams?.height;
-  
+
   // console.log('[EditableEventNode handleResize] 提取的尺寸:', { width, height });
-  
+
   if (typeof width === 'number' && typeof height === 'number') {
     emit('resize', { width, height });
     // 通过全局事件通知父组件更新节点尺寸
@@ -144,9 +144,11 @@ const titleInput = ref<HTMLInputElement | null>(null);
 
 // 打开完整编辑器
 function openFullEditor() {
+  console.log('[EditableEventNode] 打开完整编辑器:', props.id);
   // 通过全局事件通知父组件打开编辑器
   localStorage.setItem('openNodeEditor', props.id);
   window.dispatchEvent(new Event('timeline-open-editor'));
+  console.log('[EditableEventNode] 已触发 timeline-open-editor 事件');
 }
 
 // 开始编辑
@@ -212,12 +214,12 @@ function formatDateTime(dateStr: string): string {
 const nodeStyle = computed(() => {
   let background: string;
   let border: string | undefined;
-  
+
   // 如果有自定义颜色，优先使用自定义颜色
   if (props.data.color) {
     if (props.data.hasChildren) {
       // 将自定义颜色转为半透明（简单处理：如果是 hex，转为 rgba；如果已经是 rgba，保持）
-      background = props.data.color.startsWith('#') 
+      background = props.data.color.startsWith('#')
         ? `${props.data.color}4D` // 添加 30% 透明度 (4D = 77/255 ≈ 30%)
         : props.data.color.replace('rgb(', 'rgba(').replace(')', ', 0.3)');
       border = `2px dashed ${props.data.color}`;
@@ -227,10 +229,10 @@ const nodeStyle = computed(() => {
   } else {
     // 使用默认颜色
     const baseColor = props.data.type === 'main' ? '#42b883' : '#64748b';
-    
+
     if (props.data.hasChildren) {
       // 父节点：半透明背景 + 虚线边框
-      background = props.data.type === 'main' 
+      background = props.data.type === 'main'
         ? 'rgba(66, 184, 131, 0.3)' // 主线父节点
         : 'rgba(100, 116, 139, 0.3)'; // 支线父节点
       border = `2px dashed ${baseColor}`;
@@ -239,7 +241,7 @@ const nodeStyle = computed(() => {
       background = baseColor;
     }
   }
-  
+
   return {
     background,
     border,
@@ -332,10 +334,11 @@ const nodeStyle = computed(() => {
 
 .node-actions {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 4px;
+  right: 4px;
   cursor: pointer;
   z-index: 15; /* 确保在拖动把手上方 */
+  padding: 2px;
 }
 
 .custom-handle {

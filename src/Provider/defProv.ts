@@ -25,6 +25,8 @@ export function findDefinitionInFile(role: Role, filePath: string): vscode.Locat
         const lines = content.split(/\r?\n/);
         const fileExt = path.extname(filePath).toLowerCase();
 
+        const json5LikeExts = new Set(['.json5', '.ojson5', '.rjson5']);
+
         if (fileExt === '.txt') {
             // TXT 文件：直接查找角色名
             const idx = lines.findIndex(l => l.trim() === role.name);
@@ -35,7 +37,7 @@ export function findDefinitionInFile(role: Role, filePath: string): vscode.Locat
                     new vscode.Position(idx, col)
                 );
             }
-        } else if (fileExt === '.json5') {
+        } else if (json5LikeExts.has(fileExt)) {
             // JSON5 文件：查找 name 字段
             const namePattern = new RegExp(`\\bname\\s*:\\s*["'\`]${escapeRegExp(role.name)}["'\`]`);
             const idx = lines.findIndex(l => namePattern.test(l));

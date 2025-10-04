@@ -10,6 +10,7 @@ export interface RenderSettings {
   closeAfterAdd: boolean; // 添加事件后关闭弹窗
   closeAfterEdit: boolean; // 编辑事件保存后关闭弹窗
   closeAfterEditConnection: boolean; // 编辑连线保存后关闭弹窗
+  filterSensitiveRoles: boolean; // 角色资源默认过滤敏感词
 }
 
 export const useTimelineSettingsStore = defineStore('timelineSettings', {
@@ -29,6 +30,7 @@ export const useTimelineSettingsStore = defineStore('timelineSettings', {
           closeAfterAdd: parsed.closeAfterAdd ?? true,
           closeAfterEdit: parsed.closeAfterEdit ?? true,
           closeAfterEditConnection: parsed.closeAfterEditConnection ?? true,
+          filterSensitiveRoles: parsed.filterSensitiveRoles ?? true,
         };
       }
     } catch (error) {
@@ -46,6 +48,7 @@ export const useTimelineSettingsStore = defineStore('timelineSettings', {
       closeAfterAdd: true,
       closeAfterEdit: true,
       closeAfterEditConnection: true,
+      filterSensitiveRoles: true,
     };
   },
 
@@ -76,6 +79,7 @@ export const useTimelineSettingsStore = defineStore('timelineSettings', {
         closeAfterAdd: true,
         closeAfterEdit: true,
         closeAfterEditConnection: true,
+        filterSensitiveRoles: true,
       };
       this._saveToLocalStorage();
     },
