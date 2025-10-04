@@ -213,7 +213,9 @@ export class RoleUsageIndexer {
 
             if (docsToProcess.length === 0 && totalFiles === 0) {
                 console.log('[RoleUsageIndexer] 没有可索引的文档');
-                vscode.window.showInformationMessage('没有可索引的角色文档，索引已清空。');
+                const overallTotal = totalFiles + docsToProcess.length;
+                const processedOverall = 0;
+                vscode.window.showInformationMessage(`没有可索引的角色文档，索引已清空。处理 ${processedOverall}/${overallTotal} 个文件。`);
                 return;
             }
 
@@ -294,13 +296,13 @@ export class RoleUsageIndexer {
 
         console.log(`[RoleUsageIndexer] 处理完成: ${processed}/${total}, 失败: ${errored}`);
 
-        // 显示完成消息
+        // 显示完成消息（使用整体计数）
         if (token.isCancellationRequested) {
-            vscode.window.showWarningMessage('角色引用索引已取消。');
+            vscode.window.showWarningMessage(`角色引用索引已取消：处理 ${processedOverall}/${overallTotal} 个文件，失败 ${errored} 个。`);
         } else {
             const summary = errored
-                ? `角色引用索引完成：处理 ${processed} 个文件，失败 ${errored} 个。`
-                : `角色引用索引完成：处理 ${processed} 个文件。`;
+                ? `角色引用索引完成：处理 ${processedOverall}/${overallTotal} 个文件，失败 ${errored} 个。`
+                : `角色引用索引完成：处理 ${processedOverall}/${overallTotal} 个文件。`;
             vscode.window.showInformationMessage(summary);
         }
     }

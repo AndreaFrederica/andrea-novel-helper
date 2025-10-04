@@ -1,7 +1,7 @@
 # Andrea Novel Helper (小说助手)
 
-> **最新版本：0.4.5 (2025-10-01)**  
-> 🔗 **重大更新：支持快速启动和SQLite后端**  
+> **最新版本：0.4.6 (2025-10-05)**  
+> 🔗 **重大更新：支持了时间线编辑器**  
 > 📝 近期已大幅重构异步加载与性能管线，若从老版本升级，建议阅读"近期版本速览"。
 
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)

@@ -36,8 +36,8 @@
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）",
     "config.markdownToolbarEnabled.description": "启用 Markdown 选区工具条",
     "config.markdownToolbarHeight.description": "Markdown 工具条高度（像素）",
-    "sidebar.anh.title":"小说助手:包管理器",
-    "sidebar.webdav.title":"小说助手:云同步",
+    "sidebar.anh.title": "小说助手:包管理器",
+    "sidebar.webdav.title": "小说助手:云同步",
     "sidebar.comments.title": "小说助手:批注管理",
     "command.comments.open.title": "打开批注面板",
     "command.comments.add.title": "添加批注（选区）",
@@ -87,10 +87,8 @@
     "config.fileTracker.respectWcignore.description": "（仅文件追踪）是否遵循 .wcignore 忽略规则（默认：false，只遵循 .gitignore；写作统计当前不读取此开关）。",
     "command.showFileTrackingStats.title": "显示文件追踪统计",
     "command.cleanupMissingFiles.title": "清理不存在的文件",
-    "command.exportTrackingData.title": "导出追踪数据"
-    ,
-    "command.gcFileTracking.title": "GC 清理文件追踪数据库"
-    ,
+    "command.exportTrackingData.title": "导出追踪数据",
+    "command.gcFileTracking.title": "GC 清理文件追踪数据库",
     "command.openFile.title": "打开",
     "command.deleteNode.title": "删除包/文件",
     "command.createCharacterGallery.title": "创建角色库 (MD/JSON5/TXT)",
@@ -176,13 +174,10 @@
     "config.wordCount.displayFormat.raw": "原始数字 (如 12345)",
     "config.wordCount.displayFormat.wan": ">=10000 显示 1.234万 (三位小数)",
     "config.wordCount.displayFormat.k": ">=1000 显示 12.345k (三位小数)",
-    "config.wordCount.displayFormat.qian": ">=1000 显示 12.345千 (三位小数)"
-    ,
-    "config.wordCount.debug.description": "WordCount: 启用详细调试日志 (输出到控制台)。仅用于诊断字数统计问题，可能略微影响性能。"
-    ,
+    "config.wordCount.displayFormat.qian": ">=1000 显示 12.345千 (三位小数)",
+    "config.wordCount.debug.description": "WordCount: 启用详细调试日志 (输出到控制台)。仅用于诊断字数统计问题，可能略微影响性能。",
     "command.wordCount.forceRecountAll.title": "强制重算全部字数缓存",
-    "command.wordCount.forceRecountHere.title": "强制重算此项(文件/文件夹)"
-    ,
+    "command.wordCount.forceRecountHere.title": "强制重算此项(文件/文件夹)",
     "config.typeset.enableAutoPairs.description": "开启智慧补齐括号/引号（自动补全与包裹选区）。",
     "config.typeset.enableSmartEnter.description": "开启智慧切段（回车：下一段，插入空行+缩进）。",
     "config.typeset.enableSmartExit.description": "开启智慧跳出括号/引号：当光标紧贴闭合符号左侧时，按 Enter 会先把光标移到闭合符号之后。",

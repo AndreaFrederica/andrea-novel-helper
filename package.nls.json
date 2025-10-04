@@ -13,6 +13,7 @@
     "config.title": "Andrea Novel Helper Settings",
     "config.startupSnapshot.enabled.description": "Enable startup snapshot: persist a compact cache of the file-tracking database and WordCount file list on shutdown for faster startup.",
     "config.startupSnapshot.deleteOnDisable.description": "When startup snapshot is disabled, automatically delete snapshot files from novel-helper/.anh-fsdb/snapshots.",
+  "config.startupSnapshot.showNotification.description": "Show a notification when a startup snapshot is loaded. When disabled, the 'Startup snapshot loaded' notification will not be shown.",
     "command.andrea.ensureEnterOverrides.title": "ANH: [WARNING] Override Enter (Markdown enter override)",
     "command.andrea.toggleSmartExit.title": "ANH:Toggle: Smart Exit for Brackets/Quotes",
     "command.andrea.smartEnter.title": "ANH:Smart Enter: Smart Paragraph Split",
