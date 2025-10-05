@@ -8,7 +8,8 @@
             :cx="n.x" :cy="n.y" :r="n.r"
             :fill="colorOf(n)"
             :fill-opacity="n.children ? 0.88 : 0.95"
-            stroke="rgba(0,0,0,0.25)" stroke-width="1"
+            :stroke="strokeColor"
+            stroke-width="1"
             :style="{ cursor: n.data.item ? 'pointer' : (n.children ? 'default' : 'default') }"
             @mouseenter="onMouseEnter(n)"
             @mouseleave="onMouseLeave"
@@ -18,7 +19,7 @@
             v-if="!n.children && n.r >= (minLabelRadius ?? 26)"
             :x="n.x" :y="n.y + 4"
             text-anchor="middle"
-            fill="#0f172a"
+            :fill="textColor"
             font-weight="700"
             :font-size="Math.min(22, n.r * 0.38)"
             style="pointer-events:none;"
@@ -29,7 +30,7 @@
             v-if="n.children && n.depth === 1 && n.r >= 40"
             :x="n.x" :y="n.y - n.r + 14"
             text-anchor="middle"
-            fill="rgba(255,255,255,0.8)"
+            :fill="groupLabelColor"
             font-size="12"
             font-weight="600"
             style="pointer-events:none;"
@@ -79,6 +80,27 @@ const defaultPalette = [
   '#a5b4fc', '#fbcfe8', '#fdba74', '#bef264', '#93c5fd',
   '#fca5a5', '#fde68a', '#86efac', '#c4b5fd', '#fcd34d'
 ]
+
+// 从 CSS 变量获取颜色
+const textColor = computed(() => {
+  if (typeof window === 'undefined') return '#0f172a'
+  const style = getComputedStyle(document.documentElement)
+  return style.getPropertyValue('#0f172a')
+})
+
+const groupLabelColor = computed(() => {
+  if (typeof window === 'undefined') return 'rgba(255,255,255,0.8)'
+  const style = getComputedStyle(document.documentElement)
+  // return style.getPropertyValue('--vscode-descriptionForeground') || 'rgba(255,255,255,0.8)'
+  return style.getPropertyValue('rgba(255,255,255,0.8)')
+})
+
+const strokeColor = computed(() => {
+  if (typeof window === 'undefined') return 'rgba(0,0,0,0.25)'
+  const style = getComputedStyle(document.documentElement)
+  const borderColor = style.getPropertyValue('--vscode-panel-border') || 'rgba(128,128,128,0.35)'
+  return borderColor
+})
 
 type HNode = {
   name: string
@@ -164,9 +186,27 @@ watch([width, height, rootData], layout)
 </script>
 
 <style scoped>
-.cp-wrapper { position: relative; width: 100%; height: 100%; background: #0b0b12; border-radius: 16px; overflow: hidden; }
+.cp-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--vscode-editor-background, #1e1e1e);
+  border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+  overflow: hidden;
+}
 .cp-svg { width: 100%; height: 100%; display: block; }
-.cp-tip { position: absolute; padding: 8px 10px; background: rgba(17,24,39,0.95); color: #e5e7eb; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; font-size: 12px; pointer-events: none; box-shadow: 0 6px 18px rgba(0,0,0,0.35); backdrop-filter: blur(4px); }
+.cp-tip {
+  position: absolute;
+  padding: 8px 10px;
+  background: var(--vscode-editorHoverWidget-background, rgba(37,37,38,0.95));
+  color: var(--vscode-editorHoverWidget-foreground, #cccccc);
+  border: 1px solid var(--vscode-editorHoverWidget-border, rgba(69,69,69,1));
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0,0,0,0.36));
+  backdrop-filter: blur(4px);
+}
 .cp-tip-title { font-weight: 700; margin-bottom: 2px; }
 .cp-tip-sub { opacity: 0.85; }
 </style>

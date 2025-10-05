@@ -88,7 +88,8 @@ export function validateDatasetConfig(dataset: any): dataset is DatasetConfig {
 
 // 数据转换工具函数
 export function convertToTimeSeriesData(points: TimeSeriesDataPoint[]): [string | number, number][] {
-  return points.map(point => [point.timestamp, point.value])
+  // 使用 label（文件名）作为 x 轴，如果没有 label 则使用 timestamp
+  return points.map(point => [point.label || point.timestamp, point.value])
 }
 
 export function generateTimeSeriesDataFromItem(

@@ -9,8 +9,12 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     CirclePackingFlat: typeof import('./src/components/CirclePackingFlat.vue')['default']
+    CirclePackingSettings: typeof import('./src/components/CirclePackingSettings.vue')['default']
     ConditionNode: typeof import('./src/components/ConditionNode.vue')['default']
     ConnectionEditor: typeof import('./src/components/ConnectionEditor.vue')['default']
+    DTag: typeof import('vue-devui/tag/index.es.js')['Tag']
+    DTimeline: typeof import('vue-devui/timeline/index.es.js')['Timeline']
+    DTimelineItem: typeof import('vue-devui/timeline/index.es.js')['TimelineItem']
     EditableEventNode: typeof import('./src/components/EditableEventNode.vue')['default']
     EditorSettingsDialog: typeof import('./src/components/EditorSettingsDialog.vue')['default']
     EssentialLink: typeof import('./src/components/EssentialLink.vue')['default']

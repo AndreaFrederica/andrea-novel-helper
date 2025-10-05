@@ -142,7 +142,7 @@ function extractWordCount(description: string): number {
   // 尝试从括号中提取字数
   const match = description.match(/\(([\d,]+)\)/)
   if (match && match[1]) {
-    return parseInt(match[1].replace(new RegExp(',', 'g'), ''), 10)
+    return parseInt(match[1].replace(/,/g, ''), 10)
   }
 
   // 尝试从描述中直接提取数字

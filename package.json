@@ -720,6 +720,36 @@
         "command": "AndreaNovelHelper.fileTracking.cleanAbsolutePaths",
         "title": "Andrea Novel Helper: 清理文件追踪数据库中的绝对路径",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.openRoleHeatmap",
+        "title": "打开角色引用热力图",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.circlePacking.getRoleReferenceData",
+        "title": "获取角色引用数据",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.circlePacking.getFileTimelineData",
+        "title": "获取文件时间线数据",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.circlePacking.getCompleteDataset",
+        "title": "获取完整数据集",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.circlePacking.exportToJson",
+        "title": "导出 Circle Packing 数据到 JSON",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "AndreaNovelHelper.circlePacking.debugPrintStats",
+        "title": "输出 Circle Packing 数据统计",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [

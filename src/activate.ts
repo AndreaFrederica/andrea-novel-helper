@@ -31,6 +31,7 @@ import { registerDocRolesExplorerView } from './Provider/view/docRolesExplorerVi
 import { StatusBarProvider } from './Provider/statusBarProvider';
 import { activateMarkdownToolbar, deactivateMarkdownToolbar } from './Provider/markdownToolbar';
 import { activateTimeStats, deactivateTimeStats } from './timeStats';
+import { activateHeatmap, deactivateHeatmap } from './heatmap/heatmapProvider';
 import { initializeGlobalFileTracking, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent, getTrackedFileList, cleanAbsolutePathEntries } from './utils/tracker/globalFileTracking';
 import { setCutClipboard } from './utils/WordCount/wordCountCutHelper';
 import { getFileTracker } from './utils/tracker/fileTracker';
@@ -85,6 +86,7 @@ import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCo
 import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
 import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
 import { registerFixsCodeAction } from './Provider/fixsCodeActionProvider';
+import { createCirclePackingDataProvider } from './data/circlePackingDataProvider';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -708,6 +710,88 @@ export async function activate(context: vscode.ExtensionContext) {
         const wordCountProvider = new WordCountProvider(context.workspaceState, orderManager || undefined);
         setWordCounterGitGuard(wordCountProvider.gitGuard);
 
+        // 创建 Circle Packing 数据提供者
+        const circlePackingDataProvider = createCirclePackingDataProvider(roles, wordCountProvider);
+        
+        // 注册 Circle Packing 数据获取命令（供 webview 调用）
+        context.subscriptions.push(
+            vscode.commands.registerCommand('AndreaNovelHelper.circlePacking.getRoleReferenceData', async () => {
+                try {
+                    const dataset = await circlePackingDataProvider.getRoleReferenceDataset();
+                    return dataset;
+                } catch (error) {
+                    vscode.window.showErrorMessage(`获取角色引用数据失败: ${error}`);
+                    console.error('[CirclePacking] Failed to get role reference data:', error);
+                    throw error;
+                }
+            }),
+            vscode.commands.registerCommand('AndreaNovelHelper.circlePacking.getFileTimelineData', async () => {
+                try {
+                    const timeline = await circlePackingDataProvider.getFileTimelineData();
+                    return timeline;
+                } catch (error) {
+                    vscode.window.showErrorMessage(`获取文件时间线数据失败: ${error}`);
+                    console.error('[CirclePacking] Failed to get file timeline data:', error);
+                    throw error;
+                }
+            }),
+            vscode.commands.registerCommand('AndreaNovelHelper.circlePacking.getCompleteDataset', async () => {
+                try {
+                    const completeData = await circlePackingDataProvider.getCompleteDataset();
+                    return completeData;
+                } catch (error) {
+                    vscode.window.showErrorMessage(`获取完整数据集失败: ${error}`);
+                    console.error('[CirclePacking] Failed to get complete dataset:', error);
+                    throw error;
+                }
+            }),
+            vscode.commands.registerCommand('AndreaNovelHelper.circlePacking.exportToJson', async () => {
+                try {
+                    const json = await circlePackingDataProvider.exportToJson();
+                    // 创建一个新的未命名文档显示 JSON
+                    const doc = await vscode.workspace.openTextDocument({
+                        content: json,
+                        language: 'json'
+                    });
+                    await vscode.window.showTextDocument(doc);
+                    vscode.window.showInformationMessage('数据已导出到新文档');
+                } catch (error) {
+                    vscode.window.showErrorMessage(`导出数据失败: ${error}`);
+                    console.error('[CirclePacking] Failed to export data:', error);
+                }
+            }),
+            // 调试命令：在控制台输出数据统计信息
+            vscode.commands.registerCommand('AndreaNovelHelper.circlePacking.debugPrintStats', async () => {
+                try {
+                    const completeData = await circlePackingDataProvider.getCompleteDataset();
+                    console.log('=== Circle Packing Data Stats ===');
+                    console.log('角色数量:', completeData.roleReferences.items.length);
+                    console.log('文件数量:', completeData.fileTimeline.totalFiles);
+                    
+                    // 输出前5个角色的详细信息
+                    console.log('\n前5个角色引用数据:');
+                    completeData.roleReferences.items.slice(0, 5).forEach((item, idx) => {
+                        console.log(`${idx + 1}. ${item.label} (${item.group}): ${item.count} 次引用`);
+                        if (item.timeSeriesData && item.timeSeriesData.length > 0) {
+                            const hasData = item.timeSeriesData.filter(d => d.value > 0).length;
+                            console.log(`   出现在 ${hasData} 个文件中`);
+                        }
+                    });
+                    
+                    // 输出前5个文件的信息
+                    console.log('\n前5个文件信息:');
+                    completeData.fileTimeline.files.slice(0, 5).forEach((file, idx) => {
+                        console.log(`${idx + 1}. [${file.order}] ${file.label} (${file.wordCount} 字)`);
+                    });
+                    
+                    vscode.window.showInformationMessage('数据统计已输出到控制台 (Developer Tools)');
+                } catch (error) {
+                    vscode.window.showErrorMessage(`输出数据统计失败: ${error}`);
+                    console.error('[CirclePacking] Failed to print stats:', error);
+                }
+            })
+        );
+
         // 拖拽排序控制器（需在 createTreeView 选项中声明才能真正启用）
         const dndController: vscode.TreeDragAndDropController<any> = {
             dragMimeTypes: ['application/vnd.andrea.wordcount.item'],
@@ -1065,6 +1149,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // initializeGlobalFileTracking(context);
 
         activateTimeStats(context);
+        activateHeatmap(context, circlePackingDataProvider);
 
 
         // 注册文件追踪相关命令
@@ -1263,6 +1348,7 @@ export function deactivate() {
     decorationTypes.forEach((d) => d.dispose());
     deactivateMarkdownToolbar();
     deactivateTimeStats();
+    deactivateHeatmap();
     try { stopAllPreviewTTS(_previewManager); } catch { }
     try { disposeRoleUsageStore(); } catch { }
     
