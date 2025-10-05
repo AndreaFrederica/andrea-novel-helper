@@ -23,6 +23,7 @@
     "@vue-flow/core": "^1.46.5",
     "@vue-flow/minimap": "^1.5.4",
     "@vue-flow/node-resizer": "^1.5.0",
+    "d3-hierarchy": "^3.1.2",
     "monaco-editor": "^0.53.0",
     "pinia": "^3.0.1",
     "quasar": "^2.16.0",
