@@ -2,6 +2,7 @@
     "extension.name": "Andrea 小說助手",
     "extension.description": "小說寫作輔助工具",
     "command.addRoleFromSelection.title": "從選中內容創建角色",
+    "config.fileTracker.enableVerboseLogging.description": "啟用檔案追蹤詳細日誌 (預設關閉, 用於除錯路徑清理問題)。",
     "command.refreshRoles.title": "刷新角色庫",
     "command.addSensitiveWord.title": "從選中內容創建敏感詞",
     "command.refreshSensitiveWords.title": "刷新敏感詞庫",

@@ -91,6 +91,7 @@
   "command.exportTrackingData.title": "ANH:Export Tracking Data"
   ,
   "config.fileTracker.writeLegacySnapshot.description": "Whether to emit legacy aggregated file-tracking.json snapshot (debug / external tools).",
+  "config.fileTracker.enableVerboseLogging.description": "Enable verbose logging for file tracking operations (useful for debugging path cleanup issues).",
   "config.outline.lazyMode.description": "Enable lazy outline generation: do not create/refresh outline files until an outline editor is opened.",
   "config.timeStats.persistReadOnlySessions.description": "Persist read-only sessions (no char changes). If false, pure reading won't touch the tracking DB.",
   "config.timeStats.statusBar.alignment.description": "Status bar location for time stats (left/right). Recreate item on change.",

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库管理、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则与补全、文件追踪等 (A full-featured assistant for novel writing: role/vocabulary/sensitive-word management, async highlight matching, dual outline & package management, writing time & word count stats, regex & completion, file tracking, etc.)",
-  "version": "0.4.6",
+  "version": "0.4.8",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -1806,6 +1806,11 @@
           "default": false,
           "description": "%config.fileTracker.writeLegacySnapshot.description%"
         },
+        "AndreaNovelHelper.fileTracker.enableVerboseLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.fileTracker.enableVerboseLogging.description%"
+        },
         "AndreaNovelHelper.wordCount.order.showIndexInLabel": {
           "type": "boolean",
           "default": true,
@@ -1948,6 +1953,11 @@
           "minimum": 0,
           "maximum": 2,
           "markdownDescription": "客户端直连模型的 temperature。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.enableThinking": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用深度思考模型的思考过程（如 GLM-4.5、DeepSeek-R1、Qwen-R 等支持推理的模型）。启用后会在请求中添加 `enable_thinking: true` 参数，并在日志中输出思考过程。\n\n✨ **智能提示**：如果模型不在已知支持列表中，系统会在调试日志中输出警告，但仍允许使用。\n\n📋 **已知支持的模型**：glm-4.5, deepseek-r1, deepseek-reasoner, qwen-max-r, qwen-r 等\n\n⚠️ **注意**：思考过程仅在支持 `reasoning_content` 的模型上有效，普通模型启用后可能无响应或报错。"
         },
         "AndreaNovelHelper.typo.debug.llmTrace": {
           "type": "boolean",

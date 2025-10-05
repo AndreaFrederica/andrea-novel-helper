@@ -257,6 +257,35 @@ export function toAbsolutePath(relKey: string): string {
 }
 
 /**
+ * 获取所有原始的 path 到 UUID 的映射（不进行路径转换）
+ * 用于诊断和清理绝对路径条目
+ * @returns Map<原始path键, uuid>
+ */
+export async function getRawPathMappings(): Promise<Map<string, string>> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return new Map();
+    }
+
+    const dataManager = tracker.getDataManager();
+    return await dataManager.getRawPathMappings();
+}
+
+/**
+ * 直接通过原始 path 键删除映射（不进行路径转换）
+ * @param rawPathKey 原始的 path 键
+ */
+export async function removePathMappingByRawKey(rawPathKey: string): Promise<void> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return;
+    }
+
+    const dataManager = tracker.getDataManager();
+    await dataManager.removePathMappingByRawKey(rawPathKey);
+}
+
+/**
  * 获取所有文件的元数据
  */
 export function getAllTrackedFiles(): FileMetadata[] {
@@ -618,16 +647,6 @@ export async function getGlobalFileTrackingAsync(): Promise<{
  * @returns 清理的文件数量
  */
 export async function cleanAbsolutePathEntries(): Promise<number> {
-    const tracker = getFileTracker();
-    if (!tracker) {
-        console.warn('[FileTracking] Tracker not initialized');
-        return 0;
-    }
-
-    const dataManager = tracker.getDataManager();
-    const allFiles = dataManager.getAllFiles();
-    
-    let cleanedCount = 0;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     
     if (!workspaceRoot) {
@@ -635,22 +654,144 @@ export async function cleanAbsolutePathEntries(): Promise<number> {
         return 0;
     }
 
-    const normalizedRoot = path.resolve(workspaceRoot).toLowerCase();
+    // 标准化为 POSIX 格式（统一使用正斜杠）并转小写（Windows 不区分大小写）
+    const normalizePathForComparison = (p: string): string => {
+        // 先转为绝对路径
+        const resolved = path.resolve(p);
+        // 统一使用正斜杠（POSIX 格式）
+        const posix = resolved.replace(/\\/g, '/');
+        // 移除末尾的斜杠（统一格式）
+        const cleaned = posix.replace(/\/+$/, '');
+        // Windows 下转小写（不区分大小写），Unix/Mac 保持原样
+        return process.platform === 'win32' ? cleaned.toLowerCase() : cleaned;
+    };
+
+    // 安全的路径包含判断（避免前缀误匹配）
+    const isInWorkspace = (filePath: string, root: string): boolean => {
+        const normalizedFile = normalizePathForComparison(filePath);
+        const normalizedRoot = root;
+        // 确保路径完全匹配或以 "root/" 开头
+        return normalizedFile === normalizedRoot || normalizedFile.startsWith(normalizedRoot + '/');
+    };
+
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
     
-    for (const file of allFiles) {
-        const filePath = file.filePath;
+    // 获取日志配置
+    const config = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker');
+    const verboseLogging = config.get<boolean>('enableVerboseLogging', false);
+    
+    // 获取所有原始的 path mappings（不进行路径转换）
+    const rawMappings = await getRawPathMappings();
+    
+    if (verboseLogging) {
+        console.log(`[FileTracking] Scanning ${rawMappings.size} path mappings for absolute paths...`);
+        console.log(`[FileTracking] Workspace root: ${workspaceRoot}`);
+        console.log(`[FileTracking] Normalized root (POSIX): ${normalizedRoot}`);
+    }
+    
+    // 第一遍扫描：统计需要清理的路径
+    const pathsToClean: { key: string; uuid: string; isInWorkspace: boolean }[] = [];
+    let scannedCount = 0;
+    let absolutePathCount = 0;
+    
+    for (const [pathKey, uuid] of rawMappings.entries()) {
+        scannedCount++;
         
-        // 检查是否是绝对路径（包含工作区根路径）
-        const normalizedPath = path.resolve(filePath).toLowerCase();
+        // 更全面的绝对路径检测
+        const isAbsolutePath = path.isAbsolute(pathKey) || 
+                              /^[a-zA-Z]:[/\\]/.test(pathKey) ||  // Windows 盘符: C:/ 或 C:\
+                              pathKey.startsWith('/');            // Unix 绝对路径
         
-        // 如果路径包含工作区根目录，说明是绝对路径
-        if (normalizedPath.startsWith(normalizedRoot) && path.isAbsolute(filePath)) {
-            console.log(`[FileTracking] Removing absolute path entry: ${filePath}`);
-            await dataManager.removeFile(filePath);
-            cleanedCount++;
+        if (isAbsolutePath) {
+            absolutePathCount++;
+            const inWorkspace = isInWorkspace(pathKey, normalizedRoot);
+            pathsToClean.push({ key: pathKey, uuid, isInWorkspace: inWorkspace });
         }
     }
     
-    console.log(`[FileTracking] Cleaned ${cleanedCount} absolute path entries`);
-    return cleanedCount;
+    const workspaceAbsolutePaths = pathsToClean.filter(p => p.isInWorkspace);
+    const outsideAbsolutePaths = pathsToClean.filter(p => !p.isInWorkspace);
+    
+    if (verboseLogging) {
+        console.log(`[FileTracking] Scan complete:`);
+        console.log(`[FileTracking]   Total mappings scanned: ${scannedCount}`);
+        console.log(`[FileTracking]   Absolute paths found: ${absolutePathCount}`);
+        console.log(`[FileTracking]   - In workspace: ${workspaceAbsolutePaths.length}`);
+        console.log(`[FileTracking]   - Outside workspace: ${outsideAbsolutePaths.length}`);
+    }
+    
+    if (pathsToClean.length === 0) {
+        vscode.window.showInformationMessage('没有发现需要清理的绝对路径');
+        return 0;
+    }
+    
+    // 询问用户是否要删除工作区外的文件
+    let shouldCleanOutside = false;
+    if (outsideAbsolutePaths.length > 0) {
+        const choice = await vscode.window.showWarningMessage(
+            `发现 ${outsideAbsolutePaths.length} 个工作区外的绝对路径记录，是否一并删除？`,
+            { modal: true },
+            '删除所有',
+            '仅删除工作区内',
+            '取消'
+        );
+        
+        if (choice === '取消') {
+            return 0;
+        }
+        shouldCleanOutside = choice === '删除所有';
+    }
+    
+    // 确定要清理的路径列表
+    const finalPathsToClean = shouldCleanOutside 
+        ? pathsToClean 
+        : workspaceAbsolutePaths;
+    
+    if (finalPathsToClean.length === 0) {
+        vscode.window.showInformationMessage('没有需要清理的路径');
+        return 0;
+    }
+    
+    // 使用进度条执行清理
+    return await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: "清理绝对路径",
+        cancellable: false
+    }, async (progress) => {
+        let cleanedCount = 0;
+        const total = finalPathsToClean.length;
+        
+        for (let i = 0; i < total; i++) {
+            const { key, uuid, isInWorkspace: inWorkspace } = finalPathsToClean[i];
+            
+            progress.report({
+                message: `正在清理 ${i + 1}/${total}`,
+                increment: (100 / total)
+            });
+            
+            try {
+                if (verboseLogging) {
+                    const normalizedPath = normalizePathForComparison(key);
+                    const location = inWorkspace ? '工作区内' : '工作区外';
+                    
+                    console.log(`[FileTracking] Removing absolute path (${location}): ${key}`);
+                    console.log(`[FileTracking]   Normalized to (POSIX): ${normalizedPath}`);
+                    console.log(`[FileTracking]   UUID: ${uuid}`);
+                }
+                
+                // 使用不转换路径的删除方法
+                await removePathMappingByRawKey(key);
+                cleanedCount++;
+            } catch (err) {
+                console.warn(`[FileTracking] Error processing path: ${key}`, err);
+            }
+        }
+        
+        if (verboseLogging) {
+            console.log(`[FileTracking] Cleanup complete: ${cleanedCount} paths removed`);
+        }
+        vscode.window.showInformationMessage(`成功清理 ${cleanedCount} 个绝对路径记录`);
+        
+        return cleanedCount;
+    });
 }

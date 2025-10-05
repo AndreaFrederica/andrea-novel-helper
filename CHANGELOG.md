@@ -1,5 +1,14 @@
 # Change Log
 
+## [0.4.8] - 2025-10-5
+### 🖋️ 更改
+- 支持了带思考过程的模型
+- 优化了文件追踪器的日志输出
+- 优化了文件追踪器的路径清理逻辑（AndreaNovelHelper.fileTracking.cleanAbsolutePaths）
+- 新增了文件追踪器的详细日志开关（AndreaNovelHelper.fileTracker.enableVerboseLogging）
+### ⚠️ TODO
+- 自动提示用户创建角色调用索引
+
 ## [0.4.6] - 2025-10-5 预发布
 ### ✨ 新增
 - **🔀 时间线编辑器嵌套节点支持**：全新的层级时间线管理系统

@@ -102,6 +102,7 @@
     "config.timeStats.statusBar.alignment.right": "ステータスバー右側に表示",
     "config.timeStats.statusBar.priority.description": "執筆統計ステータスバー優先度 (大きいほど端に近い; 負数可)。",
     "config.fileTracker.writeLegacySnapshot.description": "legacy file-tracking.json スナップショットを書き出すか (無効で起動時作成を抑止; デバッグ/確認用途のみ)。",
+    "config.fileTracker.enableVerboseLogging.description": "ファイル追跡の詳細ログを有効化 (デフォルトは無効, パスクリーンアップ問題のデバッグ用)。",
     "command.wordCount.createNewFile.title": "新規ファイル",
     "command.wordCount.createNewFolder.title": "新規フォルダ",
     "command.wordCount.insertFileAbove.title": "上にファイルを作成",

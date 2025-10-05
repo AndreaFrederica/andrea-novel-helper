@@ -970,6 +970,49 @@ export class FileTrackingDataManager {
     }
 
     /**
+     * 获取所有原始的 path 到 UUID 的映射（不进行路径转换）
+     * 用于诊断和清理绝对路径条目
+     * @returns Map<原始path键, uuid>
+     */
+    public async getRawPathMappings(): Promise<Map<string, string>> {
+        // 优先从后端获取（确保是最新的持久化数据）
+        if (this.backend && this.backendInitialized) {
+            return await this.backend.getAllPathMappings();
+        }
+        // 后备：返回内存中的 mapping
+        return new Map(Object.entries(this.database.pathToUuid));
+    }
+
+    /**
+     * 直接通过原始 path 键删除映射（不进行路径转换）
+     * 用于清理错误的绝对路径条目
+     * @param rawPathKey 原始的 path 键（可能是绝对路径或相对路径）
+     */
+    public async removePathMappingByRawKey(rawPathKey: string): Promise<void> {
+        const uuid = this.database.pathToUuid[rawPathKey];
+        if (uuid) {
+            // 删除内存中的映射
+            delete this.database.pathToUuid[rawPathKey];
+            
+            // 删除文件元数据
+            delete this.database.files[uuid];
+            
+            // 从后端删除
+            if (this.backend && this.backendInitialized) {
+                await this.backend.deletePathMapping(rawPathKey);
+                await this.backend.deleteFileMetadata(uuid);
+            } else {
+                // 后端未初始化时使用JSON分片
+                this.removedShardUuids.add(uuid);
+                this.markChanged();
+                this.scheduleSave();
+            }
+            
+            this.stats.removeFile++;
+        }
+    }
+
+    /**
      * 异步添加或更新文件
      * （pathToUuid 使用相对键；meta.filePath 仍保存为绝对路径）
      */

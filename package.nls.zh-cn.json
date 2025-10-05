@@ -119,6 +119,7 @@
     "config.timeStats.statusBar.alignment.right": "显示在状态栏右侧",
     "config.timeStats.statusBar.priority.description": "写作统计状态栏优先级 (数值越大越靠近边缘, 可负值)。",
     "config.fileTracker.writeLegacySnapshot.description": "是否写出 legacy file-tracking.json 快照 (禁用可减少启动时创建该文件; 仅用于调试/人工查看).",
+    "config.fileTracker.enableVerboseLogging.description": "启用文件追踪详细日志 (默认关闭, 用于调试路径清理问题).",
     "command.wordCount.createNewFile.title": "新建文章",
     "command.wordCount.createNewFolder.title": "新建文件夹",
     "command.wordCount.insertFileAbove.title": "在上方新建文件",
