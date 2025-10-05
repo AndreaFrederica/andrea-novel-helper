@@ -54,13 +54,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { hierarchy, pack } from 'd3-hierarchy'
+import type { BaseItem } from '../types/dataSchema'
 
-type Item = {
-  id: string
-  label: string
-  count: number
-  group?: string
-}
+type Item = BaseItem
 
 const props = defineProps<{
   items: Item[]

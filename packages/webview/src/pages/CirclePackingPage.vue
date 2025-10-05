@@ -13,14 +13,15 @@
     <!-- 时间序列图表区域 -->
     <div class="charts-section">
       <div class="section-header">
-        <h2>角色引用趋势</h2>
-        <p class="subtitle">各角色在不同章节中的出现次数变化</p>
+        <h2>{{ getChartSectionTitle() }}</h2>
+        <p class="subtitle">{{ getChartSectionSubtitle() }}</p>
       </div>
 
       <div class="charts-grid">
         <div
           v-for="item in items"
           :key="item.id"
+          :data-item-id="item.id"
           class="chart-card"
         >
           <TimeSeriesChart
@@ -36,62 +37,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import CirclePackingFlat from 'components/CirclePackingFlat.vue'
 import TimeSeriesChart from 'components/TimeSeriesChart.vue'
+import type { CompleteItem } from '../types/dataSchema'
+import { defaultItems, getColorForItem, generateTimeSeriesData } from '../data/circlePackingDefaultData'
 
-type Item = {
-  id: string
-  label: string
-  count: number
-  group?: string
+// 使用默认数据
+const items = ref<CompleteItem[]>(defaultItems)
+
+// 计算图表区域标题
+function getChartSectionTitle(): string {
+  return '角色引用趋势'
 }
 
-// 示例数据
-const items = ref<Item[]>([
-  { id: 'a', label: 'TimelinePage.vue', count: 22600, group: 'views' },
-  { id: 'b', label: 'wordCountProvider.ts', count: 13680, group: 'providers' },
-  { id: 'c', label: 'fileTrackingData.ts', count: 7020, group: 'data' },
-  { id: 'd', label: 'commentsTreeView.ts', count: 6800, group: 'views' },
-  { id: 'e', label: 'activate.ts', count: 2300, group: 'infra' }
-])
-
-// 为每个元素生成时间序列数据（模拟：不同文件中的引用次数）
-function generateTimeSeriesData(item: Item): [string, number][] {
-  const fileCount = 30 // 假设有30个文件
-  const data: [string, number][] = []
-
-  // 基础值：根据总引用次数计算平均值
-  const baseValue = Math.floor(item.count / fileCount)
-  const variance = baseValue * 0.5 // 变化幅度
-
-  for (let i = 1; i <= fileCount; i++) {
-    const fileName = `第${i}章`
-    // 添加随机波动
-    const value = Math.max(0, Math.round(
-      baseValue + (Math.random() - 0.5) * variance * 2
-    ))
-    data.push([fileName, value])
-  }
-
-  return data
+// 计算图表区域副标题
+function getChartSectionSubtitle(): string {
+  return '各角色在不同章节中的出现次数变化'
 }
 
-// 根据分组获取颜色
-const colorMap: Record<string, string> = {
-  views: '#a5b4fc',
-  providers: '#fbcfe8',
-  data: '#fdba74',
-  infra: '#bef264',
-  default: '#93c5fd'
-}
-
-function getColorForItem(item: Item): string {
-  const key = item.group || 'default'
-  return colorMap[key] ?? colorMap.default!
-}
-
-function onNodeClick(item: Item) {
+function onNodeClick(item: CompleteItem) {
   console.log('Node clicked:', item)
   // 可以滚动到对应的图表
   const chartElement = document.querySelector(`[data-item-id="${item.id}"]`)
@@ -100,7 +65,7 @@ function onNodeClick(item: Item) {
   }
 }
 
-function onNodeHover(item: Item | null) {
+function onNodeHover(item: CompleteItem | null) {
   console.log('Node hover:', item)
 }
 </script>

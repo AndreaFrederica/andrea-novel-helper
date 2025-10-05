@@ -5,12 +5,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
+import type { TimeSeriesDataPoint } from '../types/dataSchema'
+import { convertToTimeSeriesData } from '../types/dataSchema'
 
-type DataPoint = [number | string, number] // [timestamp/file, count]
+type DataPoint = [string, number] // [timestamp/file, count]
 
 const props = defineProps<{
   title: string
-  data: DataPoint[]
+  data: DataPoint[] | TimeSeriesDataPoint[]
   color?: string
   height?: number
 }>()
@@ -118,7 +120,9 @@ function initChart() {
             { offset: 1, color: 'rgba(96, 165, 250, 0.1)' }
           ])
         },
-        data: props.data
+        data: Array.isArray(props.data[0])
+          ? props.data as DataPoint[]
+          : convertToTimeSeriesData(props.data as TimeSeriesDataPoint[])
       }
     ]
   }
