@@ -53,7 +53,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
-// @ts-ignore: 忽略 d3-hierarchy 声明文件缺失
 import { hierarchy, pack } from 'd3-hierarchy'
 
 type Item = {
@@ -121,23 +120,15 @@ const nodes = ref<PackedNode[]>([])
 
 function layout() {
   const pad = props.padding ?? 3
-  // 布局：sum 和 sort 已忽略类型检查
-  // @ts-ignore
   const root = hierarchy(rootData.value)
-    // @ts-ignore
     .sum((d: any) => d.value ?? 0)
-    // @ts-ignore
     .sort((a: any, b: any) => (b.value ?? 0) - (a.value ?? 0))
 
-  // 忽略 pack 的类型参数
-  // @ts-ignore
   const p = pack().size([width.value, height.value]).padding(pad)
-  // 将 descendants 结果视为 any
-  // @ts-ignore
   nodes.value = (p(root) as any).descendants()
 }
 
-const hoverNode = ref<PackedNode | null>(null)
+const hoverNode = ref<any>(null)
 function onMouseEnter(n: PackedNode) { hoverNode.value = n; if (n.data.item) emit('nodeHover', n.data.item) }
 function onMouseLeave() { hoverNode.value = null; emit('nodeHover', null) }
 function onClick(n: PackedNode) { if (n.data.item) emit('nodeClick', n.data.item) }
@@ -167,7 +158,7 @@ function measure() {
   width.value = Math.max(200, rect.width)
   height.value = Math.max(200, rect.height)
   layout()
-  nextTick(() => { svgRef.value?.setAttribute('viewBox', `0 0 ${width.value} ${height.value}`) })
+  void nextTick(() => { svgRef.value?.setAttribute('viewBox', `0 0 ${width.value} ${height.value}`) })
 }
 
 onMounted(() => { measure(); ro = new ResizeObserver(measure); if (wrapperRef.value) ro.observe(wrapperRef.value) })

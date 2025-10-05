@@ -28,6 +28,7 @@ declare module 'vue' {
     TimelineEventEditor: typeof import('./src/components/TimelineEventEditor.vue')['default']
     TimelineRenderSettings: typeof import('./src/components/TimelineRenderSettings.vue')['default']
     TimelineView: typeof import('./src/components/TimelineView.vue')['default']
+    TimeSeriesChart: typeof import('./src/components/TimeSeriesChart.vue')['default']
     UniversalEditor: typeof import('./src/components/UniversalEditor.vue')['default']
     UniversalEditorModal: typeof import('./src/components/UniversalEditorModal.vue')['default']
   }
