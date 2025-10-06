@@ -154,6 +154,7 @@
   "command.projectInitWizard.title": "ANH:Project Init Wizard",
   "command.disableWorkspace.title": "ANH:Disable Novel Helper (Workspace)",
   "command.enableWorkspace.title": "ANH:Enable Novel Helper (Workspace)",
+  "command.refreshMaioStatus.title": "ANH:Refresh MAIO detection status",
   "walkthrough.andrea.setup.title": "Setup Walkthrough",
   "walkthrough.andrea.setup.description": "Complete these steps to ensure Git is available and your Git user info is configured.",
   "walkthrough.anh.step.open.title": "Get Started",

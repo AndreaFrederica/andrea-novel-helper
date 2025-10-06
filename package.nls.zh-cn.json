@@ -152,6 +152,7 @@
     "command.projectInitWizard.title": "项目初始化向导",
     "command.disableWorkspace.title": "禁用本工作区小说助手",
     "command.enableWorkspace.title": "启用本工作区小说助手",
+    "command.refreshMaioStatus.title": "刷新 Markdown All in One 检测状态",
     "walkthrough.andrea.setup.title": "小说助手配置向导",
     "walkthrough.andrea.setup.description": "通过这些步骤完成 Git 安装与用户信息配置。",
     "walkthrough.anh.step.open.title": "开始",

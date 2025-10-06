@@ -620,6 +620,11 @@
         "title": "%command.enableWorkspace.title%"
       },
       {
+        "command": "andrea.refreshMaioStatus",
+        "title": "%command.refreshMaioStatus.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
         "command": "andrea.typo.scanDocument",
         "title": "扫描错别字（未扫描段落）",
         "category": "Andrea Novel Helper"

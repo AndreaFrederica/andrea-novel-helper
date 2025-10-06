@@ -2,6 +2,21 @@
 import * as vscode from 'vscode';
 
 const MAIO_LANG = new Set(['markdown', 'rmd', 'quarto']); // 仅在这些语言才考虑转发给 MAIO
+const MAIO_EXTENSION_ID = 'yzhang.markdown-all-in-one';
+
+let cachedMaioAvailable: boolean | undefined;
+
+export function refreshMaioAvailability(): boolean {
+    cachedMaioAvailable = !!vscode.extensions.getExtension(MAIO_EXTENSION_ID);
+    return cachedMaioAvailable;
+}
+
+export function hasMaioAvailability(): boolean {
+    if (cachedMaioAvailable === undefined) {
+        return refreshMaioAvailability();
+    }
+    return cachedMaioAvailable;
+}
 
 export function isInFencedCodeBlock(doc: vscode.TextDocument, line: number): boolean {
     let fence = 0;
@@ -59,12 +74,14 @@ export function matchesMaioEnterContext(ed: vscode.TextEditor): boolean {
 }
 
 export async function forwardEnterToMaioOrNative(): Promise<void> {
-    try {
-        const ids = await vscode.commands.getCommands(true);
-        if (ids.includes('markdown.extension.onEnterKey')) {
-            await vscode.commands.executeCommand('markdown.extension.onEnterKey');
-            return;
-        }
-    } catch { }
+    if (hasMaioAvailability()) {
+        try {
+            const ids = await vscode.commands.getCommands(true);
+            if (ids.includes('markdown.extension.onEnterKey')) {
+                await vscode.commands.executeCommand('markdown.extension.onEnterKey');
+                return;
+            }
+        } catch { /* ignore and fallback */ }
+    }
     await vscode.commands.executeCommand('type', { text: '\n' });
 }
