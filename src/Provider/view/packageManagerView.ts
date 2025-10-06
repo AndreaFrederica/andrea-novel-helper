@@ -33,12 +33,12 @@ function resolveFileConflict(dir: string, baseName: string, ext: string): { path
 // 引用维护节点
 class ReferenceMaintenanceNode extends vscode.TreeItem {
     constructor(public readonly workspaceRoot: string) {
-        super('引用维护', vscode.TreeItemCollapsibleState.None);
+        super('引用维护和热力图', vscode.TreeItemCollapsibleState.None);
         this.contextValue = 'referenceMaintenance';
         this.iconPath = new vscode.ThemeIcon('tools');
         this.command = {
             command: 'AndreaNovelHelper.showReferenceMaintenance',
-            title: '打开引用维护',
+            title: '打开引用维护和热力图面板',
             arguments: []
         };
     }
@@ -1351,7 +1351,7 @@ async function executeReferenceMaintenanceAction(actionLabel: string, workspaceR
                 progress.report({ increment: 80, message: '引用索引重建完成' });
             } else if (actionLabel.includes('打开角色引用热力图')) {
                 progress.report({ increment: 20, message: '准备热力图数据...' });
-                await vscode.commands.executeCommand('AndreaNovelHelper.circlePacking.show');
+                await vscode.commands.executeCommand('AndreaNovelHelper.openRoleHeatmap');
                 progress.report({ increment: 80, message: '热力图已打开' });
             }
 
