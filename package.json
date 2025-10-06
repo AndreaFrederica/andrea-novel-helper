@@ -1957,6 +1957,11 @@
           "default": "macro",
           "markdownDescription": "错别字识别模式：macro 使用 /correct（规则）；llm 使用 /correct/llm（大语言模型）。\n\n⚠️ **数据安全提醒**：使用 llm 模式时，您的文档内容将发送至第三方服务或本地大模型进行处理。请确保您信任所使用的服务提供商，并自行承担数据安全责任。"
         },
+        "AndreaNovelHelper.typo.autoIdentifyOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "打开文档时是否自动进行错别字识别。关闭后需要手动点击重新识别按钮。"
+        },
         "AndreaNovelHelper.typo.clientLLM.enabled": {
           "type": "boolean",
           "default": false,
@@ -1987,7 +1992,53 @@
         "AndreaNovelHelper.typo.clientLLM.enableThinking": {
           "type": "boolean",
           "default": false,
-          "markdownDescription": "启用深度思考模型的思考过程（如 GLM-4.5、DeepSeek-R1、Qwen-R 等支持推理的模型）。启用后会在请求中添加 `enable_thinking: true` 参数，并在日志中输出思考过程。\n\n✨ **智能提示**：如果模型不在已知支持列表中，系统会在调试日志中输出警告，但仍允许使用。\n\n📋 **已知支持的模型**：glm-4.5, deepseek-r1, deepseek-reasoner, qwen-max-r, qwen-r 等\n\n⚠️ **注意**：思考过程仅在支持 `reasoning_content` 的模型上有效，普通模型启用后可能无响应或报错。"
+          "markdownDescription": "启用深度思考模型的思考过程（如 GLM-4.6、GLM-4.5、GLM-4.5-air、DeepSeek-R1、Qwen-R 等支持推理的模型）。\n\n🔧 **配置方式**：需要配合 `thinkingProvider` 配置项来指定参数格式。\n\n📋 **支持的供应商预设**：\n- `auto`：自动检测（默认）\n- `glm`：智谱 GLM 系列\n- `deepseek`：DeepSeek 系列\n- `qwen`：通义千问系列\n- `custom`：自定义配置\n\n⚠️ **注意**：思考过程仅在支持相应格式的模型上有效，请根据模型类型选择合适的预设。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.thinkingProvider": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "glm", "deepseek", "qwen", "custom"],
+          "markdownDescription": "选择思考过程的参数格式预设。\n\n📋 **预设说明**：\n- `auto`：根据模型名称自动选择合适的参数格式\n- `glm`：智谱 GLM 格式 - `\"thinking\": {\"type\": \"enabled|disabled\"}`\n- `deepseek`：DeepSeek 格式 - `\"extra_body\": {\"enable_thinking\": true}`\n- `qwen`：通义千问格式 - `\"reasoning_effort\": \"high|medium\"`\n- `custom`：使用自定义配置（需配置 `customThinking*` 选项）\n\n💡 **建议**：不确定时选择 `auto`，系统会根据模型名称自动匹配。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.customThinkingEnabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用自定义 thinking 字段配置。仅当 `thinkingProvider` 设置为 `custom` 时生效。\n\n⚙️ **配置**：启用后，可配置自定义的字段名和启用/禁用值。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.customThinkingEnabledValue": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "自定义 thinking 字段的启用值。当 `enableThinking` 为 true 时使用此值。\n\n📝 **示例**：如果字段为 `thinking`，启用值为 `true`，则请求中包含 `\"thinking\": true`。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.customThinkingDisabledValue": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "自定义 thinking 字段的禁用值。当 `enableThinking` 为 false 时使用此值。\n\n📝 **示例**：如果字段为 `thinking`，禁用值为 `false`，则请求中包含 `\"thinking\": false`。"
+        },
+        "AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod": {
+          "type": "string",
+          "enum": ["parameter", "suffix"],
+          "default": "parameter",
+          "markdownDescription": "通义千问模型的 thinking 控制方法选择。当 `thinkingProvider` 设置为 \"qwen\" 时生效。\n\n- **parameter**（默认）：使用 `extra_body.enable_thinking=False` 参数\n- **suffix**：使用模型名称后缀 `/no_think`\n\n📝 **示例**：\n- parameter 方法：`\"extra_body\": {\"enable_thinking\": false}`\n- suffix 方法：`\"model\": \"qwen2.5-72b-instruct/no_think\"`"
+        },
+        "AndreaNovelHelper.typo.clientLLM.geminiThinkingBudget": {
+          "type": "number",
+          "default": -1,
+          "markdownDescription": "Google Gemini 模型的思考预算配置。当 `thinkingProvider` 设置为 \"gemini\" 时生效。\n\n- **-1**（默认）：动态思考，模型根据任务复杂度自动调整预算\n- **0**：禁用思考功能\n- **正数**：指定具体的思考 token 预算（如 1024）\n\n📝 **模型支持**：\n- **Gemini 2.5 Pro**：动态思考（128-32768），无法禁用\n- **Gemini 2.5 Flash**：动态思考（0-24576），可禁用\n- **Gemini 2.5 Flash-Lite**：无思考（512-24576），可禁用\n\n📝 **示例请求**：\n```json\n{\n  \"extra_body\": {\n    \"thinking_config\": {\n      \"thinking_budget\": 1024,\n      \"include_thoughts\": true\n    }\n  }\n}\n```"
+        },
+        "AndreaNovelHelper.typo.clientLLM.geminiApiFormat": {
+          "type": "string",
+          "enum": ["openai", "native"],
+          "default": "openai",
+          "markdownDescription": "Google Gemini 模型的 API 调用格式。当 `thinkingProvider` 设置为 \"gemini\" 时生效。\n\n- **openai**（默认）：使用 OpenAI 兼容的 API 格式，适用于 OpenAI 兼容的代理服务\n- **native**：使用 Gemini 原生 API 格式，直接调用 Google GenerativeAI API\n\n📝 **OpenAI 兼容格式示例**：\n```json\n{\n  \"model\": \"gemini-2.5-flash\",\n  \"messages\": [...],\n  \"reasoning_effort\": \"low\"\n}\n```\n\n📝 **原生 API 格式示例**：\n```json\n{\n  \"contents\": [\n    {\"parts\": [{\"text\": \"...\"}]}\n  ],\n  \"generationConfig\": {\n    \"thinkingConfig\": {\n      \"thinkingBudget\": 1024\n    }\n  }\n}\n```\n\n⚠️ **注意**：使用原生 API 格式时，API Base URL 需要设置为 `https://generativelanguage.googleapis.com/v1beta`"
+        },
+        "AndreaNovelHelper.externalFolder.ignoredDirectories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [".git", ".vscode", ".idea", "node_modules", "dist", "build", "out", ".DS_Store", "Thumbs.db"],
+          "markdownDescription": "外部角色文件夹扫描时忽略的目录列表。系统会扫描工作区下所有包含 `__init__.ojson5` 的文件夹，但会跳过这些配置的目录。\n\n📝 **默认忽略**：\n- 版本控制：`.git`\n- 编辑器配置：`.vscode`, `.idea`\n- 依赖包：`node_modules`\n- 构建输出：`dist`, `build`, `out`\n- 系统文件：`.DS_Store`, `Thumbs.db`\n\n📝 **使用示例**：\n```json\n[\n  \".git\",\n  \".vscode\",\n  \"node_modules\",\n  \"dist\",\n  \"temp\",\n  \"logs\"\n]\n```"
         },
         "AndreaNovelHelper.typo.debug.llmTrace": {
           "type": "boolean",

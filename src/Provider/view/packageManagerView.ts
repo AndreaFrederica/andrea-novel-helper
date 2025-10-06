@@ -10,6 +10,7 @@ import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 import { generateCustomFileName, generateDefaultFileName } from '../../utils/Parser/markdownParser';
+import { globalRelationshipManager } from '../../utils/globalRelationshipManager';
 
 // 解析文件名冲突：如果同名存在，则追加 _YYYYMMDD_HHmmss 或递增索引
 function resolveFileConflict(dir: string, baseName: string, ext: string): { path: string; conflicted: boolean; } {
@@ -26,6 +27,20 @@ function resolveFileConflict(dir: string, baseName: string, ext: string): { path
         const candidate = path.join(dir, `${baseName}_${ts}_${idx}${ext}`);
         if (!fs.existsSync(candidate)) return { path: candidate, conflicted: true };
         idx++;
+    }
+}
+
+// 引用维护节点
+class ReferenceMaintenanceNode extends vscode.TreeItem {
+    constructor(public readonly workspaceRoot: string) {
+        super('引用维护', vscode.TreeItemCollapsibleState.None);
+        this.contextValue = 'referenceMaintenance';
+        this.iconPath = new vscode.ThemeIcon('tools');
+        this.command = {
+            command: 'AndreaNovelHelper.showReferenceMaintenance',
+            title: '打开引用维护',
+            arguments: []
+        };
     }
 }
 
@@ -103,6 +118,58 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
         this._onDidChange.fire();
     }
 
+    /**
+     * 扫描外部文件夹，查找包含 __init__.ojson5 的文件夹
+     */
+    private scanExternalRoleFolders(basePath: string, externalFolders: string[], workspaceRoot: string): void {
+        try {
+            if (!fs.existsSync(basePath)) return;
+
+            // 排除novel-helper目录（因为它会被单独处理）
+            if (path.relative(workspaceRoot, basePath).startsWith('novel-helper')) {
+                return;
+            }
+
+            // 获取忽略目录配置
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const ignoredDirectories = cfg.get<string[]>('externalFolder.ignoredDirectories', [
+                '.git', '.vscode', '.idea', 'node_modules', 'dist', 'build', 'out', '.DS_Store', 'Thumbs.db'
+            ]);
+
+            // 检查当前目录是否在忽略列表中
+            const dirName = path.basename(basePath);
+            if (ignoredDirectories.includes(dirName)) {
+                console.log(`[PackageManager][scan] 跳过忽略的目录: ${basePath}`);
+                return;
+            }
+
+            // 检查当前目录是否包含 __init__.ojson5
+            const initFilePath = path.join(basePath, '__init__.ojson5');
+            if (fs.existsSync(initFilePath)) {
+                externalFolders.push(basePath);
+                return; // 如果找到init文件，不再扫描子目录
+            }
+
+            // 递归扫描子目录
+            const entries = fs.readdirSync(basePath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    const fullPath = path.join(basePath, entry.name);
+
+                    // 跳过忽略的目录
+                    if (ignoredDirectories.includes(entry.name)) {
+                        console.log(`[PackageManager][scan] 跳过忽略的子目录: ${fullPath}`);
+                        continue;
+                    }
+
+                    this.scanExternalRoleFolders(fullPath, externalFolders, workspaceRoot);
+                }
+            }
+        } catch (error) {
+            console.warn(`[PackageManager] 扫描外部文件夹时出错: ${basePath}`, error);
+        }
+    }
+
     // —— 剪贴板操作 ——
     public setCopy(paths: string[] | null) { this.copyClipboard = paths && paths.length? [...paths]: null; }
     public setCut(paths: string[] | null) { this.cutClipboard = paths && paths.length? [...paths]: null; }
@@ -172,20 +239,49 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
     }
 
     async getChildren(node?: PackageNode): Promise<PackageNode[]> {
-        // 根节点：先展示“创建新文件”
+        // 根节点：先展示引用维护，然后外部文件夹，最后novel-helper
         if (!node) {
             // 1）算出 novel-helper 根目录
             const base = path.join(this.workspaceRoot, 'novel-helper');
-            // 2）用它来 new 一个带 resourceUri 的占位节点
+            // 2）创建引用维护节点
+            const refMaintenanceNode = new ReferenceMaintenanceNode(this.workspaceRoot);
+            // 3）创建占位节点
             const newNode = new NewFileNode(base);
 
+            // 4) 查找外部包含 __init__.ojson5 的文件夹
+            const externalRoleFolders: string[] = [];
+            const folders = vscode.workspace.workspaceFolders;
+            if (folders && folders.length) {
+                for (const folder of folders) {
+                    const folderPath = folder.uri.fsPath;
+                    this.scanExternalRoleFolders(folderPath, externalRoleFolders, folderPath);
+                }
+            }
+            console.log(`[PackageManager] 找到 ${externalRoleFolders.length} 个外部角色文件夹:`, externalRoleFolders);
+
+            const result: PackageNode[] = [refMaintenanceNode as any];
+
+            // 添加外部文件夹节点
+            for (const externalFolder of externalRoleFolders) {
+                const isExpanded = this.expandedNodes.has(externalFolder);
+                const externalNode = new PackageNode(
+                    vscode.Uri.file(externalFolder),
+                    isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
+                );
+                // 标记为外部文件夹，用于后续拖放处理
+                externalNode.contextValue = 'externalRoleFolder';
+                externalNode.tooltip = `外部角色文件夹: ${externalFolder}`;
+                result.push(externalNode as any);
+            }
+
             if (!fs.existsSync(base)) {
-                return [newNode as any];
+                result.push(newNode as any);
+                return result;
             }
 
             // 扫描真实子项
             const children = fs.readdirSync(base).reduce<PackageNode[]>((nodes, name) => {
-                if (name === 'outline' || name === '.anh-fsdb') {
+                if (name === 'outline' || name === '.anh-fsdb' || name === 'typo' || name === 'comments') {
                     return nodes;
                 }
                 const full = path.join(base, name);
@@ -222,8 +318,9 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 return nodes;
             }, []);
 
-            // 把占位节点放到最前面
-            return [newNode as any, ...children];
+            // 添加novel-helper占位节点和子节点
+            result.push(newNode as any);
+            return result.concat(children);
         }
 
         // 子节点：扫描目录内容
@@ -320,6 +417,29 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
                     const urisRaw = data.get('text/uri-list')?.value as string | undefined;
                     if (!urisRaw) return;
                     const uris = urisRaw.split(/\r?\n/).filter(Boolean).map(u=>vscode.Uri.parse(u));
+
+                    // 检查目标是否为外部文件夹
+                    if (target && target.contextValue === 'externalRoleFolder') {
+                        const result = await vscode.window.showWarningMessage(
+                            `您即将文件/文件夹拖拽到外部角色文件夹 "${path.basename(target.resourceUri.fsPath)}" 中。`,
+                            { modal: true },
+                            '继续操作',
+                            '取消'
+                        );
+
+                        if (result !== '继续操作') {
+                            return;
+                        }
+
+                        // 外部文件夹允许拖拽，但使用特殊逻辑
+                        const toDir = target.resourceUri.fsPath;
+                        const paths = uris.map(u=>u.fsPath);
+                        provider.setCut(paths);
+                        await provider.pasteInto(toDir);
+                        return;
+                    }
+
+                    // 默认逻辑：拖拽到novel-helper或其他目录
                     const toDir = target && fs.existsSync(target.resourceUri.fsPath) && fs.statSync(target.resourceUri.fsPath).isDirectory()? target.resourceUri.fsPath : path.join(rootFsPath,'novel-helper');
                     const paths = uris.map(u=>u.fsPath);
                     provider.setCut(paths);
@@ -361,6 +481,13 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         return context.workspaceState.get<Record<string, boolean>>(PER_FILE_KEY, {});
     }
 
+
+    // —— 引用维护命令 ——
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.showReferenceMaintenance', async () => {
+            showReferenceMaintenancePanel(rootFsPath);
+        })
+    );
 
     // —— 复制 / 剪切 / 粘贴 命令 ——
     context.subscriptions.push(
@@ -624,6 +751,11 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         }
         // 排除内部数据库目录
         if (relativePath === '.anh-fsdb' || relativePath.startsWith('.anh-fsdb' + path.sep)) {
+            return false;
+        }
+        // 排除 typo 和 comments 目录
+        if (relativePath.startsWith('typo' + path.sep) || relativePath === 'typo' ||
+            relativePath.startsWith('comments' + path.sep) || relativePath === 'comments') {
             return false;
         }
         
@@ -1131,4 +1263,103 @@ function generateTimelineFileTemplate(): string {
     "events": [],
     "connections": []
 }`;
+}
+
+// 显示引用维护面板
+async function showReferenceMaintenancePanel(workspaceRoot: string) {
+    try {
+        // 获取角色和引用统计信息
+        const stats = await getReferenceStats(workspaceRoot);
+
+        // 创建快速选择面板
+        const options: vscode.QuickPickItem[] = [
+            {
+                label: '$(database) 清理数据库中的绝对路径',
+                description: '清理角色文件中的绝对路径，避免路径依赖问题',
+                detail: '扫描所有角色文件，将绝对路径转换为相对路径'
+            },
+            {
+                label: '$(refresh) 重建角色引用索引',
+                description: '重新分析并建立角色之间的引用关系',
+                detail: '扫描角色文件，更新引用关系数据库'
+            },
+            {
+                label: '$(graph) 打开角色引用热力图',
+                description: '可视化查看角色之间的引用关系强度',
+                detail: '在图表中显示角色引用的热力分布'
+            }
+        ];
+
+        const selected = await vscode.window.showQuickPick(options, {
+            placeHolder: `当前统计：${stats.roleCount} 个角色，${stats.referenceCount} 个引用`,
+            title: '引用维护操作'
+        });
+
+        if (selected) {
+            await executeReferenceMaintenanceAction(selected.label, workspaceRoot);
+        }
+    } catch (error) {
+        vscode.window.showErrorMessage(`显示引用维护面板失败: ${error}`);
+    }
+}
+
+// 获取角色和引用统计信息
+async function getReferenceStats(workspaceRoot: string): Promise<{ roleCount: number; referenceCount: number }> {
+    try {
+        // 从全局关系管理器获取角色数量
+        const roleCount = globalRelationshipManager.getAllRoles().size;
+
+        // 执行命令获取角色引用数据统计
+        const roleReferenceData = await vscode.commands.executeCommand<any>('AndreaNovelHelper.circlePacking.getRoleReferenceData');
+        let referenceCount = 0;
+
+        if (roleReferenceData && roleReferenceData.items) {
+            referenceCount = roleReferenceData.items.reduce((total: number, item: any) => total + (item.count || 0), 0);
+        }
+
+        return { roleCount, referenceCount };
+    } catch (error) {
+        console.error('获取引用统计失败:', error);
+        // 如果获取引用统计失败，至少返回角色数量
+        try {
+            const roleCount = globalRelationshipManager.getAllRoles().size;
+            return { roleCount, referenceCount: 0 };
+        } catch (roleError) {
+            console.error('获取角色数量也失败:', roleError);
+            return { roleCount: 0, referenceCount: 0 };
+        }
+    }
+}
+
+// 执行引用维护操作
+async function executeReferenceMaintenanceAction(actionLabel: string, workspaceRoot: string): Promise<void> {
+    try {
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: '执行引用维护操作',
+            cancellable: true
+        }, async (progress, token) => {
+            progress.report({ increment: 0, message: `正在执行: ${actionLabel}` });
+
+            if (actionLabel.includes('清理数据库中的绝对路径')) {
+                progress.report({ increment: 20, message: '清理绝对路径...' });
+                await vscode.commands.executeCommand('AndreaNovelHelper.cleanAbsolutePaths');
+                progress.report({ increment: 80, message: '绝对路径清理完成' });
+            } else if (actionLabel.includes('重建角色引用索引')) {
+                progress.report({ increment: 20, message: '重建引用索引...' });
+                await vscode.commands.executeCommand('AndreaNovelHelper.rebuildRoleIndex');
+                progress.report({ increment: 80, message: '引用索引重建完成' });
+            } else if (actionLabel.includes('打开角色引用热力图')) {
+                progress.report({ increment: 20, message: '准备热力图数据...' });
+                await vscode.commands.executeCommand('AndreaNovelHelper.circlePacking.show');
+                progress.report({ increment: 80, message: '热力图已打开' });
+            }
+
+            progress.report({ increment: 100, message: '操作完成' });
+        });
+
+        vscode.window.showInformationMessage(`引用维护操作完成: ${actionLabel}`);
+    } catch (error) {
+        vscode.window.showErrorMessage(`执行引用维护操作失败: ${error}`);
+    }
 }

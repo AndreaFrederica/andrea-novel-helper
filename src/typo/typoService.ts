@@ -693,7 +693,16 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.workspace.onDidOpenTextDocument(doc => { if (supported(doc)) { scheduleScan(doc); updateStatusBar(); } }),
+        vscode.workspace.onDidOpenTextDocument(doc => {
+            if (supported(doc)) {
+                const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const autoIdentifyOnOpen = cfg.get<boolean>('typo.autoIdentifyOnOpen', true);
+                if (autoIdentifyOnOpen) {
+                    scheduleScan(doc);
+                }
+                updateStatusBar();
+            }
+        }),
         vscode.workspace.onDidChangeTextDocument(e => { if (supported(e.document)) { scheduleScan(e.document); updateStatusBar(); } }),
         vscode.workspace.onDidCloseTextDocument(async (doc) => {
             if (supported(doc)) {
@@ -744,8 +753,13 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
     );
 
     // On activation, schedule for all visible supported editors
-    for (const ed of vscode.window.visibleTextEditors) {
-        if (supported(ed.document)) scheduleScan(ed.document);
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const autoIdentifyOnOpen = cfg.get<boolean>('typo.autoIdentifyOnOpen', true);
+
+    if (autoIdentifyOnOpen) {
+        for (const ed of vscode.window.visibleTextEditors) {
+            if (supported(ed.document)) scheduleScan(ed.document);
+        }
     }
     updateStatusBar();
 }

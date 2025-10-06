@@ -306,6 +306,10 @@ export function activateHover(context: vscode.ExtensionContext) {
         [{ scheme: 'file' }, { scheme: 'andrea-outline' }, { scheme: 'untitled' }],
         {
             provideHover(doc, pos) {
+                // 跳过输出面板、调试控制台等非文件类型的文档
+                if (doc.uri.scheme === 'output' || doc.uri.scheme === 'debug' || doc.uri.scheme === 'vscode') {
+                    return;
+                }
                 if (!shouldScanDoc(doc)) return;
                 const supportedLangs = getSupportedLanguages();
                 const supportedExts = new Set(getSupportedExtensions().map(e => e.toLowerCase()));

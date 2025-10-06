@@ -210,6 +210,11 @@ export async function updateDecorations() {
         if (forceApplyForNewEditor) seenEditors.add(editor);
 
         const doc = editor.document;
+        
+        // 跳过输出面板、调试控制台等非文件类型的文档
+        if (doc.uri.scheme === 'output' || doc.uri.scheme === 'debug' || doc.uri.scheme === 'vscode') {
+            continue;
+        }
         const bigCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
         const hugeTh = bigCfg.get<number>('hugeFile.thresholdBytes', 50 * 1024)!;
         const suppress = bigCfg.get<boolean>('hugeFile.suppressWarning', false)!;

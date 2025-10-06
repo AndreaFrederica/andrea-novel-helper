@@ -1023,6 +1023,16 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
         return;
     }
 
+    // 跳过输出面板、调试控制台等非文件类型的文档
+    if (editor?.document?.uri.scheme === 'output' || 
+        editor?.document?.uri.scheme === 'debug' || 
+        editor?.document?.uri.scheme === 'vscode') {
+        currentDocPath = undefined;
+        currentDocUuid = undefined;
+        updateStatusBar();
+        return;
+    }
+
     const newPath = editor?.document?.uri.fsPath;
     const sameDoc = !!(newPath && currentDocPath && newPath === currentDocPath);
 

@@ -12,6 +12,7 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
     const getConfigDisplayName = (key: string): string => {
         const names: { [key: string]: string } = {
             'AndreaNovelHelper.typo.enabled': '错别字识别',
+            'AndreaNovelHelper.typo.autoIdentifyOnOpen': '打开文档自动识别',
             'AndreaNovelHelper.typo.clientLLM.enabled': '客户端直连大模型',
             'AndreaNovelHelper.typo.persistence.enabled': '数据持久化',
             'AndreaNovelHelper.typo.persistence.autoCleanup': '自动清理过期数据',
@@ -342,6 +343,7 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
     async function typoQuickSettings() {
         const cfg = vscode.workspace.getConfiguration();
         const enabled = cfg.get<boolean>('AndreaNovelHelper.typo.enabled', false);
+        const autoIdentifyOnOpen = cfg.get<boolean>('AndreaNovelHelper.typo.autoIdentifyOnOpen', true);
         const mode = cfg.get<string>('AndreaNovelHelper.typo.mode', 'macro');
         const clientLLMEnabled = cfg.get<boolean>('AndreaNovelHelper.typo.clientLLM.enabled', false);
         const persistenceEnabled = cfg.get<boolean>('AndreaNovelHelper.typo.persistence.enabled', false);
@@ -353,6 +355,11 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
                 label: `${enabled ? '$(check)' : '$(circle-slash)'} 启用错别字识别`,
                 description: enabled ? '当前已启用错别字识别功能' : '当前已禁用错别字识别功能',
                 cmd: 'andrea.typo.toggle'
+            },
+            {
+                label: `${autoIdentifyOnOpen ? '$(check)' : '$(circle-slash)'} 打开文档自动识别`,
+                description: autoIdentifyOnOpen ? '打开文档时自动进行错别字识别' : '需要手动点击重新识别按钮',
+                cmd: 'andrea.typo.toggleAutoIdentifyOnOpen'
             },
             {
                 label: `$(settings) 识别模式（当前：${mode}）`,
@@ -389,6 +396,7 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('andrea.typo.quickSettings', typoQuickSettings),
         vscode.commands.registerCommand('andrea.typo.toggle', () => toggle('AndreaNovelHelper.typo.enabled')),
+        vscode.commands.registerCommand('andrea.typo.toggleAutoIdentifyOnOpen', () => toggle('AndreaNovelHelper.typo.autoIdentifyOnOpen')),
         vscode.commands.registerCommand('andrea.typo.changeMode', changeTypoMode),
         vscode.commands.registerCommand('andrea.typo.configureClientLLM', configureClientLLM),
         vscode.commands.registerCommand('andrea.typo.configurePersistence', configurePersistence),

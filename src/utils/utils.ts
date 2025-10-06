@@ -16,6 +16,61 @@ import { ensureRoleUUIDs, fixInvalidRoleUUIDs } from './roleUuidManager';
 import { loadRelationships, updateRelationships } from './relationshipLoader';
 import { enhanceAllRolesWithRelationships, clearRelationshipProperties } from './roleRelationshipEnhancer';
 
+/**
+ * 扫描外部文件夹，查找包含 __init__.ojson5 的文件夹
+ * @param basePath 要扫描的基础路径
+ * @param externalFolders 存储找到的外部文件夹数组
+ * @param workspaceRoot 工作区根路径，用于排除novel-helper目录
+ */
+function scanExternalRoleFolders(basePath: string, externalFolders: string[], workspaceRoot: string): void {
+    try {
+        if (!fs.existsSync(basePath)) return;
+
+        // 排除novel-helper目录（因为它会被单独处理）
+        if (path.relative(workspaceRoot, basePath).startsWith('novel-helper')) {
+            return;
+        }
+
+        // 获取忽略目录配置
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const ignoredDirectories = cfg.get<string[]>('externalFolder.ignoredDirectories', [
+            '.git', '.vscode', '.idea', 'node_modules', 'dist', 'build', 'out', '.DS_Store', 'Thumbs.db'
+        ]);
+
+        // 检查当前目录是否在忽略列表中
+        const dirName = path.basename(basePath);
+        if (ignoredDirectories.includes(dirName)) {
+            console.log(`[loadRoles][scan] 跳过忽略的目录: ${basePath}`);
+            return;
+        }
+
+        // 检查当前目录是否包含 __init__.ojson5
+        const initFilePath = path.join(basePath, '__init__.ojson5');
+        if (fs.existsSync(initFilePath)) {
+            externalFolders.push(basePath);
+            return; // 如果找到init文件，不再扫描子目录
+        }
+
+        // 递归扫描子目录
+        const entries = fs.readdirSync(basePath, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                const fullPath = path.join(basePath, entry.name);
+
+                // 跳过忽略的目录
+                if (ignoredDirectories.includes(entry.name)) {
+                    console.log(`[loadRoles][scan] 跳过忽略的子目录: ${fullPath}`);
+                    continue;
+                }
+
+                scanExternalRoleFolders(fullPath, externalFolders, workspaceRoot);
+            }
+        }
+    } catch (error) {
+        console.warn(`扫描外部文件夹时出错: ${basePath}`, error);
+    }
+}
+
 export interface TextStats {
 	cjkChars: number;  // 中文字符
 	asciiChars: number;  // ASCII 字符（非 CJK 且 <128）
@@ -309,9 +364,17 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	}
 	const root = folders[0].uri.fsPath;
 	const novelHelperRoot = path.join(root, 'novel-helper');
-	
+
 	console.log(`loadRoles: workspace root = ${root}`);
 	console.log(`loadRoles: novel-helper root = ${novelHelperRoot}`);
+
+	// 查找外部包含 __init__.ojson5 的文件夹
+	const externalRoleFolders: string[] = [];
+	for (const folder of folders) {
+		const folderPath = folder.uri.fsPath;
+		scanExternalRoleFolders(folderPath, externalRoleFolders, folderPath);
+	}
+	console.log(`loadRoles: 找到 ${externalRoleFolders.length} 个外部角色文件夹:`, externalRoleFolders);
 
 	// 如果强制刷新，清空缓存
 	if (forceRefresh) {
@@ -399,6 +462,16 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		pendingDirs.push({ abs: novelHelperRoot, rel: '', index: 0 });
 	} else {
 		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot} (异步扫描暂停)`);
+	}
+
+	// 添加外部文件夹到扫描队列
+	for (const externalFolder of externalRoleFolders) {
+		const relPath = path.relative(root, externalFolder);
+		pendingDirs.push({ abs: externalFolder, rel: relPath, index: 0 });
+		console.log(`loadRoles: 添加外部文件夹到扫描队列: ${externalFolder} (rel: ${relPath})`);
+	}
+
+	if (!fs.existsSync(novelHelperRoot) && externalRoleFolders.length === 0) {
 		loadTraditionalRoles(forceRefresh, changedFiles); // 仍然尝试传统加载（同步）
 		_onDidChangeRoles.fire();
 		generateCSpellDictionary();
@@ -425,7 +498,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 				const entryPath = path.join(abs, entry.name);
 				console.log(`[loadRoles][scan] dir="${abs}" entry="${entry.name}" rel="${rel}" type=${entry.isDirectory()? 'dir':'file'}`);
 				if (entry.isDirectory()) {
-					if (entry.name === 'outline' || entry.name === '.anh-fsdb') continue;
+					if (entry.name === 'outline' || entry.name === '.anh-fsdb' || entry.name === 'typo' || entry.name === 'comments') continue;
 					pendingDirs.push({ abs: entryPath, rel: rel ? path.join(rel, entry.name) : entry.name, index: 0 });
 				} else if (entry.isFile()) {
 					// 需要传入完整路径以便 isRoleFile 进行内容嗅探（Markdown 无关键词场景）
