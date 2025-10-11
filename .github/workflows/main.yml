@@ -77,16 +77,16 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
         run: npm run compile
 
-      # 为目标 Electron + 平台/架构重建原生模块
-      - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
-        working-directory: ${{ env.WORKDIR }}
-        run: |
-          npm rebuild @vscode/sqlite3 \
-            --runtime=electron \
-            --target="$EV" \
-            --dist-url=https://electronjs.org/headers \
-            --platform=${{ matrix.platform }} \
-            --arch=${{ matrix.arch }}
+      # # 为目标 Electron + 平台/架构重建原生模块
+      # - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
+      #   working-directory: ${{ env.WORKDIR }}
+      #   run: |
+      #     npm rebuild @vscode/sqlite3 \
+      #       --runtime=electron \
+      #       --target="$EV" \
+      #       --dist-url=https://electronjs.org/headers \
+      #       --platform=${{ matrix.platform }} \
+      #       --arch=${{ matrix.arch }}
 
       # 确保 dist 目录存在，然后打包到固定文件名
       - name: Package VSIX
