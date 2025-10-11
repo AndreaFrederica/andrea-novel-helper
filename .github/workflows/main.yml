@@ -1,4 +1,4 @@
-name: build-vsix (npm + Electron headers via env)
+name: build-vsix (npm + --dist-url)
 
 on:
   workflow_dispatch:
@@ -34,18 +34,9 @@ jobs:
             target: darwin-x64
     runs-on: ${{ matrix.os }}
 
-    # 方法2：通过环境变量固定 node-gyp 的 headers 源与运行时/目标版本
     env:
-      # 你的扩展所在目录；若在仓库根目录就用 "."
+      # 如果你的扩展在子目录，把 "." 改成实际路径，比如 packages/extension
       WORKDIR: .
-      # 传入的 Electron 版本
-      ELECTRON_VERSION: ${{ inputs.electron_version }}
-      # 关键三项：告诉 node-gyp 我们是给 Electron x.y.z 重建，并改用 Electron 的 headers 源
-      npm_config_runtime: electron
-      npm_config_target: ${{ inputs.electron_version }}
-      npm_config_disturl: https://electronjs.org/headers
-      # 可选备用镜像（如网络不通时把上面一行换成这个）
-      # npm_config_disturl: https://artifacts.electronjs.org/headers/dist
 
     steps:
       - uses: actions/checkout@v4
@@ -54,13 +45,15 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          # 如为 monorepo，请指向锁文件路径（可多行通配）
+          # 如果是 monorepo，这里可指向锁文件路径（可多行）
           # cache-dependency-path: |
           #   package-lock.json
           #   packages/*/package-lock.json
 
-      - name: Install deps (npm ci)
+      # 用 bash 写法避免 Windows PowerShell 解析问题
+      - name: Install deps
         working-directory: ${{ env.WORKDIR }}
+        shell: bash
         run: |
           if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
@@ -69,15 +62,18 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
-      # 有构建脚本的话（如打 webview），建议放到 vscode:prepublish 里；vsce 会自动执行
-      # 例如：
+      # 如有前置构建（webview 等），建议放到 package.json 的 vscode:prepublish
       # - name: Build web assets
       #   working-directory: ${{ env.WORKDIR }}
       #   run: npm run bundle
 
-      - name: Rebuild native deps for Electron (env-driven)
+      - name: Rebuild native deps for Electron (explicit dist-url)
         working-directory: ${{ env.WORKDIR }}
-        run: npm rebuild @vscode/sqlite3
+        run: |
+          npm rebuild @vscode/sqlite3 \
+            --runtime=electron \
+            --target='${{ inputs.electron_version }}' \
+            --dist-url=https://electronjs.org/headers
 
       - name: Package VSIX
         working-directory: ${{ env.WORKDIR }}
@@ -102,11 +98,18 @@ jobs:
       - run: npm i -g @vscode/vsce
 
       - name: Publish all VSIX
+        shell: bash
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
-          set -e
-          for f in *.vsix; do
+          set -euo pipefail
+          shopt -s nullglob
+          files=( *.vsix )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No VSIX files found"; exit 1
+          fi
+
+          for f in "${files[@]}"; do
             if [ "${{ inputs.prerelease }}" = "true" ]; then
               echo "Publishing (pre-release) $f"
               vsce publish --packagePath "$f" --pre-release
