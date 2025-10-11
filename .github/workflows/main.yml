@@ -1,11 +1,26 @@
-name: build-vsix
-on: [push, workflow_dispatch]
+name: build-vsix (npm only)
 
-env:
-  ELECTRON_VERSION: "30.0.9" # 换成你当前 VS Code 的 Electron 版本
+on:
+  workflow_dispatch:
+    inputs:
+      electron_version:
+        description: "VS Code 的 Electron 版本（如 30.0.9）"
+        required: true
+        default: "30.0.9"
+      publish:
+        description: "打完是否立即发布到 Marketplace（需要 VSCE_PAT）"
+        type: boolean
+        required: true
+        default: false
+      prerelease:
+        description: "作为预发布版本发布（仅在 publish=true 时生效）"
+        type: boolean
+        required: true
+        default: false
 
 jobs:
   build:
+    name: Build ${{ matrix.target }}
     strategy:
       matrix:
         include:
@@ -18,22 +33,56 @@ jobs:
           - os: macos-latest
             target: darwin-x64
     runs-on: ${{ matrix.os }}
+    env:
+      ELECTRON_VERSION: ${{ inputs.electron_version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
+
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: pnpm i --frozen-lockfile
+        with:
+          node-version: 20
+          cache: npm
 
-      # 为 VS Code 的 Electron 重建/拉取对应平台的原生二进制
-      - run: pnpm rebuild @vscode/sqlite3 --runtime=electron --target=${{ env.ELECTRON_VERSION }}
+      - name: Install deps (npm)
+        run: npm ci
 
-      # 如需在 macOS 一台机器上出两种架构，可用 add 强制拉取另一种架构的预编译（仅当包提供预编译时）
-      # - run: pnpm add @vscode/sqlite3@latest --runtime=electron --target=${{ env.ELECTRON_VERSION }} --platform=darwin --arch=x64 --save-exact
+      # 为 VS Code 的 Electron 版本重建原生依赖（@vscode/sqlite3）
+      - name: Rebuild native deps for Electron
+        run: npm rebuild @vscode/sqlite3 --runtime=electron --target=${{ env.ELECTRON_VERSION }}
 
-      - run: npx vsce package --target ${{ matrix.target }} --out dist/anh-${{ matrix.target }}.vsix
+      # 打包 VSIX（vsce 会自动调用 `npm run vscode:prepublish` 如果你在 package.json 里定义了）
+      - name: Package VSIX
+        run: npx vsce package --target ${{ matrix.target }} --out dist/anh-${{ matrix.target }}.vsix
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}.vsix
           path: dist/*.vsix
+
+  publish:
+    name: Publish to Marketplace
+    needs: build
+    if: ${{ inputs.publish == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*.vsix"
+          merge-multiple: true
+
+      - run: npm i -g @vscode/vsce
+
+      - name: Publish all VSIX
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          set -e
+          for f in *.vsix; do
+            if [ "${{ inputs.prerelease }}" = "true" ]; then
+              echo "Publishing (pre-release) $f"
+              vsce publish --packagePath "$f" --pre-release
+            else
+              echo "Publishing $f"
+              vsce publish --packagePath "$f"
+            fi
+          done
