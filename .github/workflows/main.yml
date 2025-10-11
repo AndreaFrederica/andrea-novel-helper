@@ -1,0 +1,39 @@
+name: build-vsix
+on: [push, workflow_dispatch]
+
+env:
+  ELECTRON_VERSION: "30.0.9" # 换成你当前 VS Code 的 Electron 版本
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: win32-x64
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: macos-latest
+            target: darwin-arm64
+          - os: macos-latest
+            target: darwin-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: pnpm i --frozen-lockfile
+
+      # 为 VS Code 的 Electron 重建/拉取对应平台的原生二进制
+      - run: pnpm rebuild @vscode/sqlite3 --runtime=electron --target=${{ env.ELECTRON_VERSION }}
+
+      # 如需在 macOS 一台机器上出两种架构，可用 add 强制拉取另一种架构的预编译（仅当包提供预编译时）
+      # - run: pnpm add @vscode/sqlite3@latest --runtime=electron --target=${{ env.ELECTRON_VERSION }} --platform=darwin --arch=x64 --save-exact
+
+      - run: npx vsce package --target ${{ matrix.target }} --out dist/anh-${{ matrix.target }}.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}.vsix
+          path: dist/*.vsix
