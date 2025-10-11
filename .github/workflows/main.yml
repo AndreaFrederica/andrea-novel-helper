@@ -1,4 +1,4 @@
-name: build-vsix (npm only)
+name: build-vsix (npm + Electron headers via env)
 
 on:
   workflow_dispatch:
@@ -33,8 +33,20 @@ jobs:
           - os: macos-latest
             target: darwin-x64
     runs-on: ${{ matrix.os }}
+
+    # 方法2：通过环境变量固定 node-gyp 的 headers 源与运行时/目标版本
     env:
+      # 你的扩展所在目录；若在仓库根目录就用 "."
+      WORKDIR: .
+      # 传入的 Electron 版本
       ELECTRON_VERSION: ${{ inputs.electron_version }}
+      # 关键三项：告诉 node-gyp 我们是给 Electron x.y.z 重建，并改用 Electron 的 headers 源
+      npm_config_runtime: electron
+      npm_config_target: ${{ inputs.electron_version }}
+      npm_config_disturl: https://electronjs.org/headers
+      # 可选备用镜像（如网络不通时把上面一行换成这个）
+      # npm_config_disturl: https://artifacts.electronjs.org/headers/dist
+
     steps:
       - uses: actions/checkout@v4
 
@@ -42,22 +54,39 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          # 如为 monorepo，请指向锁文件路径（可多行通配）
+          # cache-dependency-path: |
+          #   package-lock.json
+          #   packages/*/package-lock.json
 
-      - name: Install deps (npm)
-        run: npm ci
+      - name: Install deps (npm ci)
+        working-directory: ${{ env.WORKDIR }}
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            echo "No lockfile found, falling back to npm install"
+            npm install --no-audit --no-fund
+          fi
 
-      # 为 VS Code 的 Electron 版本重建原生依赖（@vscode/sqlite3）
-      - name: Rebuild native deps for Electron
-        run: npm rebuild @vscode/sqlite3 --runtime=electron --target=${{ env.ELECTRON_VERSION }}
+      # 有构建脚本的话（如打 webview），建议放到 vscode:prepublish 里；vsce 会自动执行
+      # 例如：
+      # - name: Build web assets
+      #   working-directory: ${{ env.WORKDIR }}
+      #   run: npm run bundle
 
-      # 打包 VSIX（vsce 会自动调用 `npm run vscode:prepublish` 如果你在 package.json 里定义了）
+      - name: Rebuild native deps for Electron (env-driven)
+        working-directory: ${{ env.WORKDIR }}
+        run: npm rebuild @vscode/sqlite3
+
       - name: Package VSIX
+        working-directory: ${{ env.WORKDIR }}
         run: npx vsce package --target ${{ matrix.target }} --out dist/anh-${{ matrix.target }}.vsix
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}.vsix
-          path: dist/*.vsix
+          path: ${{ env.WORKDIR }}/dist/*.vsix
 
   publish:
     name: Publish to Marketplace
