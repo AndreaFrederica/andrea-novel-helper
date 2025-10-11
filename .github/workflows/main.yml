@@ -1,4 +1,4 @@
-name: build-vsix (npm + --dist-url)
+name: build-vsix (npm + --dist-url + arch-correct)
 
 on:
   workflow_dispatch:
@@ -26,17 +26,26 @@ jobs:
         include:
           - os: windows-latest
             target: win32-x64
+            platform: win32
+            arch: x64
           - os: ubuntu-latest
             target: linux-x64
+            platform: linux
+            arch: x64
           - os: macos-latest
             target: darwin-arm64
+            platform: darwin
+            arch: arm64
           - os: macos-latest
             target: darwin-x64
+            platform: darwin
+            arch: x64
     runs-on: ${{ matrix.os }}
 
     env:
-      # 如果你的扩展在子目录，把 "." 改成实际路径，比如 packages/extension
+      # 扩展根目录；若在子目录请改成实际路径，例如 packages/extension
       WORKDIR: .
+      EV: ${{ inputs.electron_version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -45,12 +54,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          # 如果是 monorepo，这里可指向锁文件路径（可多行）
-          # cache-dependency-path: |
-          #   package-lock.json
-          #   packages/*/package-lock.json
 
-      # 用 bash 写法避免 Windows PowerShell 解析问题
+      # 安装依赖
       - name: Install deps
         working-directory: ${{ env.WORKDIR }}
         shell: bash
@@ -62,23 +67,39 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
-      # 如有前置构建（webview 等），建议放到 package.json 的 vscode:prepublish
-      # - name: Build web assets
-      #   working-directory: ${{ env.WORKDIR }}
-      #   run: npm run bundle
+      # 先构建 webview（你 package.json 里也在 vscode:prepublish 里做了，但这里显式跑一次更直观）
+      - name: Build webview
+        working-directory: ${{ env.WORKDIR }}
+        run: npm run build:webview
 
-      - name: Rebuild native deps for Electron (explicit dist-url)
+      # TypeScript 编译（与 vscode:prepublish 一致）
+      - name: Compile extension
+        working-directory: ${{ env.WORKDIR }}
+        run: npm run compile
+
+      # 为目标 Electron + 平台/架构重建原生模块
+      - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
         working-directory: ${{ env.WORKDIR }}
         run: |
           npm rebuild @vscode/sqlite3 \
             --runtime=electron \
-            --target='${{ inputs.electron_version }}' \
-            --dist-url=https://electronjs.org/headers
+            --target="$EV" \
+            --dist-url=https://electronjs.org/headers \
+            --platform=${{ matrix.platform }} \
+            --arch=${{ matrix.arch }}
 
+      # 确保 dist 目录存在，然后打包到固定文件名
       - name: Package VSIX
         working-directory: ${{ env.WORKDIR }}
-        run: npx vsce package --target ${{ matrix.target }} --out dist/anh-${{ matrix.target }}.vsix
+        shell: bash
+        run: |
+          mkdir -p dist
+          OUT="dist/anh-${{ matrix.target }}.vsix"
+          echo "Packaging to $OUT"
+          npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          ls -al dist
 
+      # 上传 VSIX
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}.vsix
