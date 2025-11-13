@@ -782,12 +782,17 @@ export class CommentsController {
     const list = this.threadsByDoc.get(key); if (!list || list.length === 0) return;
     const text = doc.getText();
     const updated: CommentThreadData[] = [];
+    const deletions: string[] = [];
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.comments');
+    const strictRelink = cfg.get<boolean>('relink.strict', true);
+    const cleanupMode = cfg.get<'delete-thread'|'delete-range'|'mark-resolved'|'none'>('cleanup.mode', 'delete-thread');
+    const DIST_LIMIT = 2000;
     
     for (const t of list) {
-      const newRanges = [];
-      const newSelTexts = [];
-      const newContexts = [];
-      const newParas = [];
+      const newRanges: { start: { line: number; ch: number }; end: { line: number; ch: number } }[] = [];
+      const newSelTexts: string[] = [];
+      const newContexts: { before: string; after: string }[] = [];
+      const newParas: { startIndex: number; endIndex: number }[] = [];
       
       // 处理每个范围的重定位
       for (let i = 0; i < t.anchor.ranges.length; i++) {
@@ -795,67 +800,110 @@ export class CommentsController {
         const selText = t.anchor.selTexts[i];
         const context = t.anchor.contexts[i];
         const para = t.anchor.para?.[i];
-        
         const prevStart = doc.offsetAt(new vscode.Position(range.start.line, range.start.ch));
 
-        // 1) 精确匹配：原选中文本
-        const exact = this.findBestOccurrence(text, selText, prevStart);
-        if (exact !== undefined) {
-          const start = doc.positionAt(exact);
-          const end = doc.positionAt(exact + selText.length);
-          newRanges.push({ start: { line: start.line, ch: start.character }, end: { line: end.line, ch: end.character } });
-          newSelTexts.push(selText);
-          newContexts.push(context);
-          newParas.push(paragraphIndexOfRange(doc, new vscode.Selection(start, end)));
-          continue;
+        let accepted = false;
+        let startPos: vscode.Position | undefined;
+        let endPos: vscode.Position | undefined;
+
+        if (selText && text.indexOf(selText) !== -1) {
+          const exact = this.findBestOccurrence(text, selText, prevStart);
+          if (exact !== undefined) {
+            const distOk = Math.abs(exact - prevStart) <= DIST_LIMIT;
+            const beforeRaw = String(context?.before || '').slice(-24);
+            const afterRaw = String(context?.after || '').slice(0, 24);
+            const ctxOk = (() => {
+              const from = Math.max(0, exact - 64);
+              const to = Math.min(text.length, exact + selText.length + 64);
+              const windowText = text.slice(from, to);
+              const b = beforeRaw ? windowText.includes(beforeRaw) : true;
+              const a = afterRaw ? windowText.includes(afterRaw) : true;
+              return b && a;
+            })();
+            if (!strictRelink || distOk || ctxOk) {
+              const s = doc.positionAt(exact);
+              const e = doc.positionAt(exact + selText.length);
+              startPos = s; endPos = e; accepted = true;
+            }
+          }
         }
 
-        // 2) 上下文重定位（删除/移动中间段落时）
-        const ctxPos = this.rebindByContextMulti(text, selText, context, prevStart);
-        if (ctxPos !== undefined) {
-          const start = doc.positionAt(ctxPos);
-          const end = doc.positionAt(Math.min(text.length, ctxPos + Math.max(1, selText.length)));
-          newRanges.push({ start: { line: start.line, ch: start.character }, end: { line: end.line, ch: end.character } });
-          newSelTexts.push(selText);
-          newContexts.push(context);
-          newParas.push(paragraphIndexOfRange(doc, new vscode.Selection(start, end)));
-          continue;
+        if (!accepted) {
+          const ctxPos = this.rebindByContextMulti(text, selText, context, prevStart);
+          if (ctxPos !== undefined) {
+            const s = doc.positionAt(ctxPos);
+            const e = doc.positionAt(Math.min(text.length, ctxPos + Math.max(1, selText.length)));
+            startPos = s; endPos = e; accepted = true;
+          }
         }
 
-        // 3) 段落索引兜底：找原段落编号附近的起始行
-        if (para && typeof para.startIndex === 'number') {
-          const approx = this.approxStartOfParagraph(doc, para.startIndex);
-          const start = approx;
-          const end = doc.positionAt(Math.min(text.length, doc.offsetAt(start) + Math.max(1, selText.length)));
-          newRanges.push({ start: { line: start.line, ch: start.character }, end: { line: end.line, ch: end.character } });
+        if (!accepted) {
+          if (!strictRelink) {
+            if (para && typeof para.startIndex === 'number') {
+              const approx = this.approxStartOfParagraph(doc, para.startIndex);
+              const s = approx;
+              const e = doc.positionAt(Math.min(text.length, doc.offsetAt(s) + Math.max(1, selText.length)));
+              startPos = s; endPos = e; accepted = true;
+            }
+          }
+        }
+
+        if (accepted && startPos && endPos) {
+          newRanges.push({ start: { line: startPos.line, ch: startPos.character }, end: { line: endPos.line, ch: endPos.character } });
           newSelTexts.push(selText);
           newContexts.push(context);
-          newParas.push(para);
-        } else {
-          // 保持原范围
-          newRanges.push(range);
-          newSelTexts.push(selText);
-          newContexts.push(context);
-          newParas.push(para || { startIndex: 0, endIndex: 0 });
+          newParas.push(paragraphIndexOfRange(doc, new vscode.Selection(startPos, endPos)));
         }
       }
       
-      // 更新锚点信息
-      t.anchor.ranges = newRanges;
-      t.anchor.selTexts = newSelTexts;
-      t.anchor.contexts = newContexts;
-      t.anchor.para = newParas;
-      t.updatedAt = Date.now();
-      updated.push(t);
+      if (newRanges.length === 0) {
+        if (cleanupMode === 'delete-thread') {
+          deletions.push(t.id);
+        } else if (cleanupMode === 'mark-resolved') {
+          t.status = 'resolved';
+          t.updatedAt = Date.now();
+          updated.push(t);
+        } else if (cleanupMode === 'delete-range') {
+          t.anchor.ranges = [];
+          t.anchor.selTexts = [];
+          t.anchor.contexts = [];
+          t.anchor.para = [] as any;
+          t.updatedAt = Date.now();
+          updated.push(t);
+        } else {
+          t.updatedAt = Date.now();
+          updated.push(t);
+        }
+      } else {
+        t.anchor.ranges = newRanges;
+        t.anchor.selTexts = newSelTexts;
+        t.anchor.contexts = newContexts;
+        t.anchor.para = newParas;
+        t.updatedAt = Date.now();
+        updated.push(t);
+      }
     }
     const docUuid = getDocUuidForDocument(doc);
     if (docUuid) {
-      // 使用updateThreadsByDoc保存更新后的线程数据
-      await updateThreadsByDoc(docUuid, () => updated);
+      for (const id of deletions) { try { await deleteThread(id); } catch { } }
+      const finalList = await updateThreadsByDoc(docUuid, (threads: CommentThreadData[]) => {
+        for (const it of threads) {
+          const newer = updated.find(u => u.id === it.id);
+          if (newer) {
+            it.status = newer.status;
+            it.updatedAt = newer.updatedAt;
+            it.messages = newer.messages;
+            it.anchor = newer.anchor;
+          }
+        }
+      });
+      this.threadsByDoc.set(key, finalList);
+    } else {
+      this.threadsByDoc.set(key, updated);
     }
-    this.threadsByDoc.set(key, updated);
     this.applyDecorations(doc);
-    this.postThreads(doc, updated);
+    const postList = this.threadsByDoc.get(key) || updated;
+    this.postThreads(doc, postList);
   }
 
   private findBestOccurrence(haystack: string, needle: string, preferOffset: number): number | undefined {
