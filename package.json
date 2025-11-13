@@ -399,6 +399,22 @@
         }
       },
       {
+        "command": "AndreaNovelHelper.openOutlinePicker",
+        "title": "ANH:打开大纲 New",
+        "icon": {
+          "light": "images/checklist_light.svg",
+          "dark": "images/checklist_dark.svg"
+        }
+      },
+      {
+        "command": "AndreaNovelHelper.redirectOutlineHere",
+        "title": "ANH:打开新大纲窗体",
+        "icon": {
+          "light": "images/checklist_light.svg",
+          "dark": "images/checklist_dark.svg"
+        }
+      },
+      {
         "command": "AndreaNovelHelper.refreshOutlineDir",
         "title": "%command.refreshOutlineDir.title%"
       },
@@ -1155,6 +1171,18 @@
           "command": "AndreaNovelHelper.openDoubleOutline",
           "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
           "group": "navigation"
+        }
+        ,
+        {
+          "command": "AndreaNovelHelper.openOutlinePicker",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation@102"
+        }
+        ,
+        {
+          "command": "AndreaNovelHelper.redirectOutlineHere",
+          "when": "resourceScheme == andrea-outline",
+          "group": "navigation@103"
         }
       ],
       "editor/context": [

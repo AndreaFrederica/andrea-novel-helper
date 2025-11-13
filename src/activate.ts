@@ -19,6 +19,8 @@ import { addVocabulary } from './commands/addVocabulary';
 import { refreshRoles } from './commands/refreshRoles';
 import { OutlineFSProvider } from './Provider/fileSystem/outlineFSProvider';
 import { openDoubleOutline } from './commands/openDoubleOutline';
+import { openOutlinePicker } from './commands/openOutlinePicker';
+import { redirectOutlineHere } from './commands/redirectOutlineHere';
 import { refreshOpenOutlines } from './events/refreshOpenOutlines';
 import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSProvider';
 import { activateHover } from './Provider/hoverProvider';
@@ -155,10 +157,12 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.disableWorkspace', async () => {
             await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', true, vscode.ConfigurationTarget.Workspace);
+            await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', false);
             vscode.window.showInformationMessage('已禁用小说助手（本工作区），重新加载窗口后生效。');
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.enableWorkspace', async () => {
             await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
+            await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
             vscode.window.showInformationMessage('已启用小说助手（本工作区），重新加载窗口后生效。');
         })
     );
@@ -192,14 +196,17 @@ export async function activate(context: vscode.ExtensionContext) {
         );
         if (pick === '禁用本工作区') {
             await cfg1.update('workspaceDisabled', true, vscode.ConfigurationTarget.Workspace);
+            await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', false);
             vscode.window.showInformationMessage('已禁用小说助手（本工作区），重新加载窗口后生效。');
             return;
         } else {
             // 默认或选择“启用”都视为启用
             await cfg1.update('workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
+            await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
         }
     } else if (wsDisabled) {
         console.log('[ANH] workspaceDisabled=true 跳过激活主体');
+        await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', false);
 
         // 工作区禁用时，注册削弱版智能回车（转发给 Maio 或原生回车）
         context.subscriptions.push(
@@ -222,6 +229,7 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
     }
     
+    await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
     // 输出通道用于调试激活阶段错误/栈
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
     setWordCounterContext(context);
@@ -400,6 +408,20 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.commands.registerCommand(
                 'AndreaNovelHelper.openDoubleOutline',
                 openDoubleOutline
+            )
+        );
+
+        context.subscriptions.push(
+            vscode.commands.registerCommand(
+                'AndreaNovelHelper.openOutlinePicker',
+                openOutlinePicker
+            )
+        );
+
+        context.subscriptions.push(
+            vscode.commands.registerCommand(
+                'AndreaNovelHelper.redirectOutlineHere',
+                redirectOutlineHere
             )
         );
 

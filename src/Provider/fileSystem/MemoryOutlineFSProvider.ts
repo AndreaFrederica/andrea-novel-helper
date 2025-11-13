@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { Volume, createFsFromVolume } from 'memfs';
 import * as realFs from 'fs';
+import * as crypto from 'crypto';
 import { dir_outline_url, file_outline_url } from '../../activate';
 
 /**
@@ -16,25 +17,47 @@ export class MemoryOutlineFSProvider implements vscode.FileSystemProvider {
     // 保存最新的 rel
     private lastFolderRel: string | undefined;
     private lastFileRel: string | undefined;
+    private directMap: Map<string, string> = new Map();
 
     constructor(private outlineRoot: string) {
         this.vol.mkdirSync('/', { recursive: true });
+        this.vol.mkdirSync('/direct', { recursive: true });
         // 先创建空包装内容
         this.memfs.writeFileSync('/current_dir_outline.md', '# 文件夹大纲');
         this.memfs.writeFileSync('/current_file_outline.md', '# 当前文件大纲');
     }
 
-    /** 根据 alias 或 lastRel 计算内存盘路径 */
     private toMemPath(uri: vscode.Uri): string {
         const decodedPath = decodeURIComponent(uri.path);
-        console.log(`[MemoryOutlineFSProvider] 处理路径：${decodedPath}`);
         if (['/目录大纲.md', '/outline_dir.md'].includes(decodedPath)) {
-            console.log(`[MemoryOutlineFSProvider] 使用内存盘路径：/current_dir_outline.md`);
             return '/current_dir_outline.md';
         }
         if (['/文件大纲.md', '/outline_file.md'].includes(decodedPath)) {
-            console.log(`[MemoryOutlineFSProvider] 使用内存盘路径：/current_file_outline.md`);
             return '/current_file_outline.md';
+        }
+        let rel: string | undefined;
+        if (decodedPath.startsWith('/direct/')) {
+            rel = decodedPath.slice('/direct/'.length);
+        } else if (uri.query) {
+            const parts = uri.query.split('&');
+            for (const kv of parts) {
+                const [k, v] = kv.split('=');
+                if (k === 'rel' && v) { rel = decodeURIComponent(v); break; }
+            }
+        }
+        if (rel) {
+            if (rel.includes('..')) { throw vscode.FileSystemError.NoPermissions(); }
+            const disk = path.join(this.outlineRoot, rel);
+            if (!disk.startsWith(this.outlineRoot)) { throw vscode.FileSystemError.NoPermissions(); }
+            const memPath = `/direct/${rel.replace(/\\/g, '/').replace(/^\/+/, '')}`;
+            this.vol.mkdirSync(path.posix.dirname(memPath), { recursive: true });
+            if (!this.directMap.has(memPath)) {
+                const exists = realFs.existsSync(disk);
+                const buf = exists ? realFs.readFileSync(disk) : Buffer.from('');
+                this.memfs.writeFileSync(memPath, buf);
+                this.directMap.set(memPath, disk);
+            }
+            return memPath;
         }
         return decodedPath;
     }
@@ -69,13 +92,18 @@ export class MemoryOutlineFSProvider implements vscode.FileSystemProvider {
 
     writeFile(uri: vscode.Uri, content: Uint8Array): void {
         const p = this.toMemPath(uri);
-        // 写入内存
         this.memfs.writeFileSync(p, content);
-        // 同步到磁盘
-        const rel = uri.path === '/outline_dir'
-            ? this.lastFolderRel!
-            : this.lastFileRel!;
-        const disk = path.join(this.outlineRoot, rel);
+        let disk: string | undefined;
+        if (p === '/current_dir_outline.md') {
+            if (!this.lastFolderRel) { throw vscode.FileSystemError.FileNotFound(); }
+            disk = path.join(this.outlineRoot, this.lastFolderRel);
+        } else if (p === '/current_file_outline.md') {
+            if (!this.lastFileRel) { throw vscode.FileSystemError.FileNotFound(); }
+            disk = path.join(this.outlineRoot, this.lastFileRel);
+        } else if (this.directMap.has(p)) {
+            disk = this.directMap.get(p)!;
+        }
+        if (!disk) { throw vscode.FileSystemError.FileNotFound(); }
         realFs.mkdirSync(path.dirname(disk), { recursive: true });
         realFs.writeFileSync(disk, content);
         this._emitter.fire([{ type: vscode.FileChangeType.Changed, uri }]);
