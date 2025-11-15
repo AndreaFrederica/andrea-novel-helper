@@ -44,10 +44,6 @@ jobs:
             target: win32-x64
             platform: win32
             arch: x64
-          - os: windows-latest
-            target: win32-ia32
-            platform: win32
-            arch: ia32
           - os: macos-latest
             target: darwin-arm64
             platform: darwin
@@ -305,6 +301,11 @@ jobs:
           fi
 
           for f in "${files[@]}"; do
+            if [[ "$f" == *"win32-ia32"* ]]; then
+              echo "Skipping unsupported target for VSCE: $f";
+              # OpenVSX 也与 VS Code 平台标识保持一致，通常不接受 ia32；统一跳过
+              continue;
+            fi
             if [[ "$f" == *"exp"* ]]; then
               vsce publish --packagePath "$f" --pre-release
               ovsx publish "$f" --pre-release
