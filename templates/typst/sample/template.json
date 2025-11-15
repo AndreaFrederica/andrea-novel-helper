@@ -1,0 +1,9 @@
+{
+  "name": "sample",
+  "engine": "liquid",
+  "entry": "entry.typ.liquid",
+  "mapping": "inline",
+  "defaults": {
+    "ppi": 144
+  }
+}

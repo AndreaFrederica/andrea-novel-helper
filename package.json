@@ -146,6 +146,20 @@
         "language": "gitignore",
         "scopeName": "source.gitignore.andrea",
         "path": "./syntaxes/gitignore.tmLanguage.json"
+      },
+      {
+        "scopeName": "andrea.md.injection",
+        "path": "./syntaxes/andrea-md-injection.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "markdown",
+        "path": "./snippets/def-md.json"
+      },
+      {
+        "language": "plaintext",
+        "path": "./snippets/def-txt.json"
       }
     ],
     "viewsContainers": {
@@ -245,6 +259,10 @@
           "light": "images/preview_light.svg",
           "dark": "images/preview_dark.svg"
         }
+      },
+      {
+        "command": "andrea.typst.exportCurrent",
+        "title": "导出：使用Typst模板为PDF/图片"
       },
       {
         "command": "myPreview.copyPlainText",
@@ -541,6 +559,10 @@
       {
         "command": "AndreaNovelHelper.wordCount.delete",
         "title": "%command.wordCount.delete.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.wordCount.exportTypst",
+        "title": "导出：使用Typst模板"
       },
       {
         "command": "AndreaNovelHelper.wordCount.toggleManualOrdering",
@@ -854,394 +876,6 @@
         ]
       }
     ],
-    "menus": {
-      "explorer/context": [
-        {
-          "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
-          "when": "andrea.anh.enabled && resourceExtname == .json5",
-          "group": "navigation"
-        }
-      ],
-      "view/title": [
-        {
-          "command": "andrea.configureDocRoles",
-          "when": "view == docRolesView || view == docRolesExplorerView",
-          "group": "navigation@100"
-        },
-        {
-          "command": "andrea.configureAllRoles",
-          "when": "view == roleHierarchyView",
-          "group": "navigation@100"
-        }
-      ],
-      "view/item/context": [
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createCharacterGallery",
-          "group": "0_create@1"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createSensitiveWords",
-          "group": "0_create@2"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createVocabulary",
-          "group": "0_create@3"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createRoleFile",
-          "group": "0_create@4"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createRelationshipFile",
-          "group": "0_create@5"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createTimelineFile",
-          "group": "0_create@6"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createRegexPatterns",
-          "group": "0_create@7"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
-          "command": "AndreaNovelHelper.createSubPackage",
-          "group": "1_package@1"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile)",
-          "command": "AndreaNovelHelper.deleteNode",
-          "group": "2_deletion"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
-          "command": "AndreaNovelHelper.openFile",
-          "group": "3_open"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
-          "command": "AndreaNovelHelper.openWith",
-          "group": "3_open"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
-          "command": "AndreaNovelHelper.revealInExplorer",
-          "group": "3_open"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
-          "command": "AndreaNovelHelper.renamePackage",
-          "group": "1_package@2"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
-          "command": "AndreaNovelHelper.wordCount.insertFileAbove",
-          "group": "1_modification@1"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
-          "command": "AndreaNovelHelper.wordCount.insertFolderAbove",
-          "group": "1_modification@2"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
-          "command": "AndreaNovelHelper.wordCount.insertFileBelow",
-          "group": "1_modification@3"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
-          "command": "AndreaNovelHelper.wordCount.insertFolderBelow",
-          "group": "1_modification@4"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.open",
-          "group": "3_open@1"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.openWith",
-          "group": "3_open@2"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.revealInOS",
-          "group": "3_open@3"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.rename",
-          "group": "2_modification@1"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.delete",
-          "group": "2_deletion@9"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder)",
-          "command": "AndreaNovelHelper.wordCount.createNewFile",
-          "group": "0_create@1"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder)",
-          "command": "AndreaNovelHelper.wordCount.createNewFolder",
-          "group": "0_create@2"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
-          "command": "AndreaNovelHelper.wordCount.toggleManualOrdering",
-          "group": "4_order@1"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.generateIndexFromName",
-          "group": "4_order@2"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.clearIndex",
-          "group": "4_order@3"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.setIndexManual",
-          "group": "4_order@4"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
-          "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
-          "group": "4_order@5"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.forceRecountHere",
-          "group": "9_force@1"
-        },
-        {
-          "when": "view == wordCountExplorer",
-          "command": "AndreaNovelHelper.wordCount.forceRecountAll",
-          "group": "9_force@2"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.copy",
-          "group": "5_clip@1"
-        },
-        {
-          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
-          "command": "AndreaNovelHelper.wordCount.cut",
-          "group": "5_clip@2"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFile",
-          "command": "WordCount.copyPlainText",
-          "group": "5_clip@4"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFile",
-          "command": "WordCount.exportTxt",
-          "group": "5_clip@5"
-        },
-        {
-          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
-          "command": "AndreaNovelHelper.wordCount.paste",
-          "group": "5_clip@3"
-        },
-        {
-          "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
-          "when": "view == packageManagerView && ( viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
-          "group": "navigation"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
-          "command": "AndreaNovelHelper.package.copy",
-          "group": "6_clip@1"
-        },
-        {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
-          "command": "AndreaNovelHelper.package.cut",
-          "group": "6_clip@2"
-        },
-        {
-          "when": "view == packageManagerView && viewItem == package",
-          "command": "AndreaNovelHelper.package.paste",
-          "group": "6_clip@3"
-        },
-        {
-          "command": "andrea.webdav.openFile",
-          "when": "view == andrea.webdavFiles && viewItem == webdavFile",
-          "group": "navigation@1"
-        },
-        {
-          "command": "andrea.webdav.renameFile",
-          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
-          "group": "2_workspace@1"
-        },
-        {
-          "command": "andrea.webdav.copyFile",
-          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
-          "group": "2_workspace@2"
-        },
-        {
-          "command": "andrea.webdav.deleteFile",
-          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
-          "group": "2_workspace@3"
-        },
-        {
-          "command": "andrea.webdav.createFolder",
-          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
-          "group": "3_new@1"
-        },
-        {
-          "command": "andrea.webdav.uploadFile",
-          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
-          "group": "3_new@2"
-        },
-        {
-          "command": "andrea.commentsExplorer.openComment",
-          "when": "view == andrea.commentsExplorer && (viewItem == commentThread || viewItem == commentMessage)",
-          "group": "navigation@1"
-        },
-        {
-          "command": "andrea.commentsExplorer.toggleStatus",
-          "when": "view == andrea.commentsExplorer && viewItem == commentThread",
-          "group": "1_modification@1"
-        },
-        {
-          "command": "andrea.commentsExplorer.rebindFileToDocument",
-          "when": "view == andrea.commentsExplorer && viewItem == commentFile",
-          "group": "1_modification@1"
-        },
-        {
-          "command": "andrea.commentsExplorer.refresh",
-          "when": "view == andrea.commentsExplorer",
-          "group": "navigation@2"
-        },
-        {
-          "command": "andrea.commentsExplorer.search",
-          "when": "view == andrea.commentsExplorer",
-          "group": "navigation@3"
-        },
-        {
-          "command": "andrea.commentsExplorer.filterByStatus",
-          "when": "view == andrea.commentsExplorer",
-          "group": "2_filter@1"
-        },
-        {
-          "command": "andrea.commentsExplorer.clearFilter",
-          "when": "view == andrea.commentsExplorer",
-          "group": "2_filter@2"
-        },
-        {
-          "command": "andrea.commentsExplorer.exportComments",
-          "when": "view == andrea.commentsExplorer",
-          "group": "3_export@1"
-        },
-        {
-          "command": "andrea.commentsExplorer.exportToMarkdown",
-          "when": "view == andrea.commentsExplorer",
-          "group": "3_export@2"
-        },
-        {
-          "command": "andrea.commentsExplorer.exportToJson",
-          "when": "view == andrea.commentsExplorer",
-          "group": "3_export@3"
-        }
-      ],
-      "editor/title": [
-        {
-          "command": "myPreview.open",
-          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
-          "group": "navigation"
-        },
-        {
-          "command": "andrea.comments.open",
-          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
-          "group": "navigation@101"
-        },
-        {
-          "command": "AndreaNovelHelper.openDoubleOutline",
-          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
-          "group": "navigation"
-        }
-        ,
-        {
-          "command": "AndreaNovelHelper.openOutlinePicker",
-          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
-          "group": "navigation@102"
-        }
-        ,
-        {
-          "command": "AndreaNovelHelper.redirectOutlineHere",
-          "when": "resourceScheme == andrea-outline",
-          "group": "navigation@103"
-        }
-      ],
-      "editor/context": [
-        {
-          "command": "andrea.formatDocument",
-          "when": "andrea.anh.enabled && (editorLangId == markdown || editorLangId == plaintext || editorLangId == json5)",
-          "group": "navigation@9"
-        },
-        {
-          "when": "andrea.anh.enabled && editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",
-          "command": "andrea.comments.add",
-          "group": "1_modification@97"
-        },
-        {
-          "when": "andrea.anh.enabled && editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
-          "command": "andrea.comments.open",
-          "group": "navigation@97"
-        },
-        {
-          "when": "andrea.anh.enabled && editorHasSelection",
-          "command": "AndreaNovelHelper.addRoleFromSelection",
-          "group": "navigation"
-        },
-        {
-          "when": "andrea.anh.enabled && editorHasSelection",
-          "command": "AndreaNovelHelper.addSensitiveWord",
-          "group": "navigation"
-        },
-        {
-          "when": "andrea.anh.enabled && editorHasSelection",
-          "command": "AndreaNovelHelper.addVocabulary",
-          "group": "navigation"
-        },
-        {
-          "when": "andrea.anh.enabled && editorTextFocus && resourceExtname == .md && editorHasSelection",
-          "command": "AndreaNovelHelper.showMarkdownFormatMenu",
-          "group": "1_modification@1"
-        },
-        {
-          "when": "andrea.anh.enabled && editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
-          "command": "myPreview.copyPlainText",
-          "group": "navigation@8"
-        }
-      ],
-      "commandPalette": [
-        {
-          "command": "AndreaNovelHelper.refreshRoles",
-          "group": "navigation"
-        },
-        {
-          "command": "AndreaNovelHelper.refreshSensitiveWords",
-          "group": "navigation"
-        },
-        {
-          "command": "AndreaNovelHelper.refreshVocabulary",
-          "group": "navigation"
-        }
-      ]
-    },
     "configuration": {
       "type": "object",
       "title": "%config.title%",
@@ -2052,7 +1686,13 @@
         "AndreaNovelHelper.typo.clientLLM.thinkingProvider": {
           "type": "string",
           "default": "auto",
-          "enum": ["auto", "glm", "deepseek", "qwen", "custom"],
+          "enum": [
+            "auto",
+            "glm",
+            "deepseek",
+            "qwen",
+            "custom"
+          ],
           "markdownDescription": "选择思考过程的参数格式预设。\n\n📋 **预设说明**：\n- `auto`：根据模型名称自动选择合适的参数格式\n- `glm`：智谱 GLM 格式 - `\"thinking\": {\"type\": \"enabled|disabled\"}`\n- `deepseek`：DeepSeek 格式 - `\"extra_body\": {\"enable_thinking\": true}`\n- `qwen`：通义千问格式 - `\"reasoning_effort\": \"high|medium\"`\n- `custom`：使用自定义配置（需配置 `customThinking*` 选项）\n\n💡 **建议**：不确定时选择 `auto`，系统会根据模型名称自动匹配。"
         },
         "AndreaNovelHelper.typo.clientLLM.customThinkingEnabled": {
@@ -2072,7 +1712,10 @@
         },
         "AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod": {
           "type": "string",
-          "enum": ["parameter", "suffix"],
+          "enum": [
+            "parameter",
+            "suffix"
+          ],
           "default": "parameter",
           "markdownDescription": "通义千问模型的 thinking 控制方法选择。当 `thinkingProvider` 设置为 \"qwen\" 时生效。\n\n- **parameter**（默认）：使用 `extra_body.enable_thinking=False` 参数\n- **suffix**：使用模型名称后缀 `/no_think`\n\n📝 **示例**：\n- parameter 方法：`\"extra_body\": {\"enable_thinking\": false}`\n- suffix 方法：`\"model\": \"qwen2.5-72b-instruct/no_think\"`"
         },
@@ -2083,7 +1726,10 @@
         },
         "AndreaNovelHelper.typo.clientLLM.geminiApiFormat": {
           "type": "string",
-          "enum": ["openai", "native"],
+          "enum": [
+            "openai",
+            "native"
+          ],
           "default": "openai",
           "markdownDescription": "Google Gemini 模型的 API 调用格式。当 `thinkingProvider` 设置为 \"gemini\" 时生效。\n\n- **openai**（默认）：使用 OpenAI 兼容的 API 格式，适用于 OpenAI 兼容的代理服务\n- **native**：使用 Gemini 原生 API 格式，直接调用 Google GenerativeAI API\n\n📝 **OpenAI 兼容格式示例**：\n```json\n{\n  \"model\": \"gemini-2.5-flash\",\n  \"messages\": [...],\n  \"reasoning_effort\": \"low\"\n}\n```\n\n📝 **原生 API 格式示例**：\n```json\n{\n  \"contents\": [\n    {\"parts\": [{\"text\": \"...\"}]}\n  ],\n  \"generationConfig\": {\n    \"thinkingConfig\": {\n      \"thinkingBudget\": 1024\n    }\n  }\n}\n```\n\n⚠️ **注意**：使用原生 API 格式时，API Base URL 需要设置为 `https://generativelanguage.googleapis.com/v1beta`"
         },
@@ -2092,7 +1738,17 @@
           "items": {
             "type": "string"
           },
-          "default": [".git", ".vscode", ".idea", "node_modules", "dist", "build", "out", ".DS_Store", "Thumbs.db"],
+          "default": [
+            ".git",
+            ".vscode",
+            ".idea",
+            "node_modules",
+            "dist",
+            "build",
+            "out",
+            ".DS_Store",
+            "Thumbs.db"
+          ],
           "markdownDescription": "外部角色文件夹扫描时忽略的目录列表。系统会扫描工作区下所有包含 `__init__.ojson5` 的文件夹，但会跳过这些配置的目录。\n\n📝 **默认忽略**：\n- 版本控制：`.git`\n- 编辑器配置：`.vscode`, `.idea`\n- 依赖包：`node_modules`\n- 构建输出：`dist`, `build`, `out`\n- 系统文件：`.DS_Store`, `Thumbs.db`\n\n📝 **使用示例**：\n```json\n[\n  \".git\",\n  \".vscode\",\n  \"node_modules\",\n  \"dist\",\n  \"temp\",\n  \"logs\"\n]\n```"
         },
         "AndreaNovelHelper.typo.debug.llmTrace": {
@@ -2502,7 +2158,441 @@
           "default": true,
           "markdownDescription": "%config.startupSnapshot.showNotification.description%"
         }
+        ,
+        "andrea.typst.cliPath": {
+          "type": "string",
+          "default": "typst",
+          "description": "Typst CLI 可执行路径（留空使用 PATH）"
+        },
+        "andrea.typst.templatesDir": {
+          "type": "string",
+          "default": "${workspaceFolder}/templates/typst",
+          "description": "扩展外置模板默认目录"
+        },
+        "andrea.typst.externalTemplatesDir": {
+          "type": "string",
+          "default": "${workspaceFolder}/novel-helper/templates/typst",
+          "description": "项目 novel-helper 目录下模板路径"
+        },
+        "andrea.typst.defaultTemplate": {
+          "type": "string",
+          "default": "sample",
+          "description": "默认模板包名称"
+        },
+        "andrea.typst.output.format": {
+          "type": "string",
+          "enum": ["pdf","png","svg"],
+          "default": "pdf",
+          "description": "导出格式"
+        },
+        "andrea.typst.output.ppi": {
+          "type": "number",
+          "default": 144,
+          "description": "PNG 导出分辨率（PPI）"
+        },
+        "andrea.typst.pages": {
+          "type": "string",
+          "default": "",
+          "description": "导出页码范围（例如 2,3-6,8-）"
+        },
+        "andrea.typst.font.paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "额外字体搜索路径"
+        }
       }
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
+          "when": "andrea.anh.enabled && resourceExtname == .json5",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "andrea.configureDocRoles",
+          "when": "view == docRolesView || view == docRolesExplorerView",
+          "group": "navigation@100"
+        },
+        {
+          "command": "andrea.configureAllRoles",
+          "when": "view == roleHierarchyView",
+          "group": "navigation@100"
+        }
+      ],
+      "view/item/context": [
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createCharacterGallery",
+          "group": "0_create@1"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createSensitiveWords",
+          "group": "0_create@2"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createVocabulary",
+          "group": "0_create@3"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createRoleFile",
+          "group": "0_create@4"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createRelationshipFile",
+          "group": "0_create@5"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createTimelineFile",
+          "group": "0_create@6"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createRegexPatterns",
+          "group": "0_create@7"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "command": "AndreaNovelHelper.createSubPackage",
+          "group": "1_package@1"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile)",
+          "command": "AndreaNovelHelper.deleteNode",
+          "group": "2_deletion"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "command": "AndreaNovelHelper.openFile",
+          "group": "3_open"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "command": "AndreaNovelHelper.openWith",
+          "group": "3_open"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "command": "AndreaNovelHelper.revealInExplorer",
+          "group": "3_open"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "command": "AndreaNovelHelper.renamePackage",
+          "group": "1_package@2"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFileAbove",
+          "group": "1_modification@1"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFolderAbove",
+          "group": "1_modification@2"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFileBelow",
+          "group": "1_modification@3"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.insertFolderBelow",
+          "group": "1_modification@4"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.open",
+          "group": "3_open@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.openWith",
+          "group": "3_open@2"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.revealInOS",
+          "group": "3_open@3"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.rename",
+          "group": "2_modification@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.delete",
+          "group": "2_deletion@9"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder)",
+          "command": "AndreaNovelHelper.wordCount.createNewFile",
+          "group": "0_create@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder)",
+          "command": "AndreaNovelHelper.wordCount.createNewFolder",
+          "group": "0_create@2"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.toggleManualOrdering",
+          "group": "4_order@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.generateIndexFromName",
+          "group": "4_order@2"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.clearIndex",
+          "group": "4_order@3"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.setIndexManual",
+          "group": "4_order@4"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.bulkGenerateIndices",
+          "group": "4_order@5"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.forceRecountHere",
+          "group": "9_force@1"
+        },
+        {
+          "when": "view == wordCountExplorer",
+          "command": "AndreaNovelHelper.wordCount.forceRecountAll",
+          "group": "9_force@2"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.copy",
+          "group": "5_clip@1"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.cut",
+          "group": "5_clip@2"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFile",
+          "command": "WordCount.copyPlainText",
+          "group": "5_clip@4"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFile",
+          "command": "WordCount.exportTxt",
+          "group": "5_clip@5"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
+          "command": "AndreaNovelHelper.wordCount.exportTypst",
+          "group": "5_clip@6"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.paste",
+          "group": "5_clip@3"
+        },
+        {
+          "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
+          "when": "view == packageManagerView && ( viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "group": "navigation"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "command": "AndreaNovelHelper.package.copy",
+          "group": "6_clip@1"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "command": "AndreaNovelHelper.package.cut",
+          "group": "6_clip@2"
+        },
+        {
+          "when": "view == packageManagerView && viewItem == package",
+          "command": "AndreaNovelHelper.package.paste",
+          "group": "6_clip@3"
+        },
+        {
+          "command": "andrea.webdav.openFile",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFile",
+          "group": "navigation@1"
+        },
+        {
+          "command": "andrea.webdav.renameFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@1"
+        },
+        {
+          "command": "andrea.webdav.copyFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@2"
+        },
+        {
+          "command": "andrea.webdav.deleteFile",
+          "when": "view == andrea.webdavFiles && (viewItem == webdavFile || viewItem == webdavFolder)",
+          "group": "2_workspace@3"
+        },
+        {
+          "command": "andrea.webdav.createFolder",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
+          "group": "3_new@1"
+        },
+        {
+          "command": "andrea.webdav.uploadFile",
+          "when": "view == andrea.webdavFiles && viewItem == webdavFolder",
+          "group": "3_new@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.openComment",
+          "when": "view == andrea.commentsExplorer && (viewItem == commentThread || viewItem == commentMessage)",
+          "group": "navigation@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.toggleStatus",
+          "when": "view == andrea.commentsExplorer && viewItem == commentThread",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.rebindFileToDocument",
+          "when": "view == andrea.commentsExplorer && viewItem == commentFile",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.refresh",
+          "when": "view == andrea.commentsExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.search",
+          "when": "view == andrea.commentsExplorer",
+          "group": "navigation@3"
+        },
+        {
+          "command": "andrea.commentsExplorer.filterByStatus",
+          "when": "view == andrea.commentsExplorer",
+          "group": "2_filter@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.clearFilter",
+          "when": "view == andrea.commentsExplorer",
+          "group": "2_filter@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.exportComments",
+          "when": "view == andrea.commentsExplorer",
+          "group": "3_export@1"
+        },
+        {
+          "command": "andrea.commentsExplorer.exportToMarkdown",
+          "when": "view == andrea.commentsExplorer",
+          "group": "3_export@2"
+        },
+        {
+          "command": "andrea.commentsExplorer.exportToJson",
+          "when": "view == andrea.commentsExplorer",
+          "group": "3_export@3"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "myPreview.open",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation"
+        },
+        {
+          "command": "andrea.comments.open",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation@101"
+        },
+        {
+          "command": "AndreaNovelHelper.openDoubleOutline",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation"
+        },
+        {
+          "command": "AndreaNovelHelper.openOutlinePicker",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation@102"
+        },
+        {
+          "command": "AndreaNovelHelper.redirectOutlineHere",
+          "when": "resourceScheme == andrea-outline",
+          "group": "navigation@103"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "andrea.formatDocument",
+          "when": "andrea.anh.enabled && (editorLangId == markdown || editorLangId == plaintext || editorLangId == json5)",
+          "group": "navigation@9"
+        },
+        {
+          "when": "andrea.anh.enabled && editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "andrea.comments.add",
+          "group": "1_modification@97"
+        },
+        {
+          "when": "andrea.anh.enabled && editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "andrea.comments.open",
+          "group": "navigation@97"
+        },
+        {
+          "when": "andrea.anh.enabled && editorHasSelection",
+          "command": "AndreaNovelHelper.addRoleFromSelection",
+          "group": "navigation"
+        },
+        {
+          "when": "andrea.anh.enabled && editorHasSelection",
+          "command": "AndreaNovelHelper.addSensitiveWord",
+          "group": "navigation"
+        },
+        {
+          "when": "andrea.anh.enabled && editorHasSelection",
+          "command": "AndreaNovelHelper.addVocabulary",
+          "group": "navigation"
+        },
+        {
+          "when": "andrea.anh.enabled && editorTextFocus && resourceExtname == .md && editorHasSelection",
+          "command": "AndreaNovelHelper.showMarkdownFormatMenu",
+          "group": "1_modification@1"
+        },
+        {
+          "when": "andrea.anh.enabled && editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "myPreview.copyPlainText",
+          "group": "navigation@8"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "AndreaNovelHelper.refreshRoles",
+          "group": "navigation"
+        },
+        {
+          "command": "AndreaNovelHelper.refreshSensitiveWords",
+          "group": "navigation"
+        },
+        {
+          "command": "AndreaNovelHelper.refreshVocabulary",
+          "group": "navigation"
+        }
+      ]
     },
     "views": {
       "explorer": [
@@ -2621,6 +2711,7 @@
     "jschardet": "^3.1.4",
     "json5": "^2.2.3",
     "jsonc-parser": "^3.3.1",
+    "liquidjs": "^10.24.0",
     "memfs": "^4.17.2",
     "uuid": "^11.1.0",
     "webdav": "^5.7.0"

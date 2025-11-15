@@ -1,0 +1,139 @@
+/* eslint-disable semi */
+import * as vscode from 'vscode'
+import * as fs from 'fs'
+import * as path from 'path'
+import { Liquid } from 'liquidjs'
+import { spawn } from 'child_process'
+import { parseSingleFileTemplate } from './singleFileTemplate'
+import { templateRegistry } from './templateRegistry'
+
+export type TypstOpts = { format: 'pdf'|'png'|'svg'; ppi: number; pages?: string; fontPaths: string[] }
+
+function mdToTypstInline(s: string): string {
+  if (!s) return s
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, '#strong[$1]')
+    .replace(/__([^_]+)__/g, '#strong[$1]')
+    .replace(/\*([^*]+)\*/g, '#emph[$1]')
+    .replace(/_([^_]+)_/g, '#emph[$1]')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '#link("$2", [$1])')
+}
+
+function registerFilters(engine: Liquid) {
+  try { engine.registerFilter('md2typst', (v: any) => mdToTypstInline(String(v ?? ''))) } catch {}
+}
+
+export async function renderFromTemplate(templateName: string, fallbackTemplatesDir: string, ctx: any, channel?: vscode.OutputChannel): Promise<string> {
+  const pack = templateRegistry.resolve(templateName)
+  if (pack) {
+    if (channel) channel.appendLine(`template pack resolved: ${templateName}, singleFile=${!!pack.singleFile}`)
+    if (pack.singleFile) {
+      const rootDir = path.dirname(pack.root)
+      const engine = new Liquid({ root: rootDir, extname: '.liquid' })
+      registerFilters(engine)
+      const full = fs.readFileSync(pack.root, 'utf8')
+      if (channel) channel.appendLine(`render single-file: ${pack.root} (${full.length} chars)`) 
+      const parts = parseSingleFileTemplate(full)
+      const combined = [parts.prelude, parts.entry].filter(Boolean).join('\n')
+      if (channel) channel.appendLine(`combined length: ${combined.length}`)
+      try {
+        const out = await engine.parseAndRender(combined, ctx)
+        if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
+        return out
+      } catch (e) {
+        if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
+        return ''
+      }
+    } else {
+      const engine = new Liquid({ root: path.dirname(pack.root), extname: '.liquid' })
+      registerFilters(engine)
+      const entryRel = path.join(path.basename(pack.root), pack.entry)
+      if (channel) channel.appendLine(`render package: root=${path.dirname(pack.root)}, entry=${entryRel}`)
+      try {
+        const out = await engine.renderFile(entryRel, ctx)
+        if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
+        return out
+      } catch (e) {
+        if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
+        return ''
+      }
+    }
+  }
+  const dirPath = path.join(fallbackTemplatesDir, templateName)
+  const jsonPath = path.join(dirPath, 'template.json')
+  if (fs.existsSync(jsonPath)) {
+    const cfg = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+    const entry = path.join(templateName, cfg.entry)
+    const engine = new Liquid({ root: fallbackTemplatesDir, extname: '.liquid' })
+    registerFilters(engine)
+    if (channel) channel.appendLine(`render fallback dir: ${dirPath}, entry=${entry}, singleFile=${cfg.singleFile===true}`)
+    if (cfg.singleFile === true) {
+      const full = fs.readFileSync(path.join(fallbackTemplatesDir, entry), 'utf8')
+      const parts = parseSingleFileTemplate(full)
+      const combined = [parts.prelude, parts.entry].filter(Boolean).join('\n')
+      try {
+        const out = await engine.parseAndRender(combined, ctx)
+        if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
+        return out
+      } catch (e) {
+        if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
+        return ''
+      }
+    }
+    try {
+      const out = await engine.renderFile(entry, ctx)
+      if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
+      return out
+    } catch (e) {
+      if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
+      return ''
+    }
+  }
+  // direct single-file under dir
+  let file = ''
+  if (fs.existsSync(dirPath) && fs.statSync(dirPath).isFile()) file = dirPath
+  else {
+    const candidates = fs.existsSync(dirPath) ? fs.readdirSync(dirPath).filter(f => f.toLowerCase().endsWith('.typ.liquid')) : []
+    if (candidates.length) file = path.join(dirPath, candidates[0])
+  }
+  if (file) {
+    const engine = new Liquid({ root: path.dirname(file), extname: '.liquid' })
+    registerFilters(engine)
+    const full = fs.readFileSync(file, 'utf8')
+    if (channel) channel.appendLine(`render fallback single-file: ${file} (${full.length} chars)`) 
+    const parts = parseSingleFileTemplate(full)
+    const combined = [parts.prelude, parts.entry].filter(Boolean).join('\n')
+    if (channel) channel.appendLine(`combined length: ${combined.length}`)
+    try {
+      const out = await engine.parseAndRender(combined, ctx)
+      if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
+      return out
+    } catch (e) {
+      if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
+      return ''
+    }
+  }
+  if (channel) channel.appendLine(`template not found: ${templateName} in ${fallbackTemplatesDir}`)
+  return ''
+}
+
+export async function compileTypstWithLog(cli: string, typPath: string, out: vscode.Uri, opts: TypstOpts, channel: vscode.OutputChannel): Promise<{ ok: boolean; stderr?: string; stdout?: string }>{
+  return await new Promise(resolve => {
+    const args: string[] = []
+    if (opts.format !== 'pdf') { args.push('-f', opts.format) }
+    if (opts.format === 'png' && opts.ppi) { args.push('--ppi', String(opts.ppi)) }
+    if (opts.pages && String(opts.pages).trim()) { args.push('--pages', String(opts.pages).trim()) }
+    if (opts.fontPaths && opts.fontPaths.length) { args.push('--font-path', opts.fontPaths.join(path.delimiter)) }
+    args.push(typPath)
+    args.push(out.fsPath)
+    const cmd = `${cli} compile ${args.map(a => /\s/.test(a) ? '"'+a+'"' : a).join(' ')}`
+    channel.appendLine(`$ ${cmd}`)
+    const proc = spawn(cli, ['compile', ...args], { cwd: path.dirname(typPath), shell: process.platform === 'win32' })
+    let err = ''
+    let outBuf = ''
+    proc.stdout.on('data', d => { const s = String(d); outBuf += s; channel.append(s) })
+    proc.stderr.on('data', d => { err += String(d) })
+    proc.on('close', code => { channel.appendLine(`exit ${code}`); resolve({ ok: code === 0, stderr: err, stdout: outBuf }) })
+    proc.on('error', () => { resolve({ ok: false, stderr: 'failed to spawn typst' }) })
+  })
+}

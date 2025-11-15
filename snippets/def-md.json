@@ -1,0 +1,32 @@
+{
+  "Def Title": {
+    "prefix": "&Def Title",
+    "body": ["&Def Title = ${1:主标题}"],
+    "description": "定义主标题"
+  },
+  "Def Subtitle": {
+    "prefix": "&Def Subtitle",
+    "body": ["&Def Subtitle = ${1:副标题}"],
+    "description": "定义副标题"
+  },
+  "Def Category": {
+    "prefix": "&Def Category",
+    "body": ["&Def Category = ${1:分类}"],
+    "description": "定义分类"
+  },
+  "Def 主标题": {
+    "prefix": "&Def 主标题",
+    "body": ["&Def 主标题 = ${1:主标题}"],
+    "description": "定义主标题"
+  },
+  "Def 副标题": {
+    "prefix": "&Def 副标题",
+    "body": ["&Def 副标题 = ${1:副标题}"],
+    "description": "定义副标题"
+  },
+  "Def 分类": {
+    "prefix": "&Def 分类",
+    "body": ["&Def 分类 = ${1:分类}"],
+    "description": "定义分类"
+  }
+}

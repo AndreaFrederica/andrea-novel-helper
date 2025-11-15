@@ -1,0 +1,97 @@
+#set page(width: 21cm, height: 29.7cm, margin: 2cm)
+
+#let theme = (
+  text-font: "{{ meta.text_font | default: 'Noto Sans SC' }}",
+  heading-font: "{{ meta.heading_font | default: 'Noto Sans SC' }}",
+  text-size: {{ meta.text_size | default: 18 }}pt,
+  category-size: {{ meta.category_size | default: 28 }}pt,
+  title-size: {{ meta.title_size | default: 36 }}pt,
+  separator-size: {{ meta.separator_size | default: 36 }}pt,
+  sub-size: {{ meta.sub_size | default: 16 }}pt,
+  color: rgb("#111"),
+  gray: rgb("#6b7280"),
+  line-height: {{ meta.line_height | default: 1.3 }},
+  indent: 2em,
+  para-spacing: 1.2em,
+)
+
+#let zh-paragraph() = {
+  set par(justify: true, first-line-indent: theme.indent, leading: theme.line-height * 1em, spacing: theme.para-spacing)
+  set text(lang: "zh", font: theme.text-font, size: theme.text-size, fill: theme.color)
+}
+
+#let article-card(
+  title, body,
+  category: none, subtitle: none,
+  category-size: none, title-size: none, separator-size: none, body-size: none
+) = block(
+  fill: white,
+  inset: 22pt,
+  radius: 8pt,
+  stroke: none,
+  width: 440pt,
+  breakable: true,
+)[
+  #set text(font: theme.heading-font, weight: "bold")
+  #if (title != none and title != "") [
+    #if (category != none) [
+      #text(size: if category-size != none { category-size } else { theme.category-size })[#category]
+      #text(size: if separator-size != none { separator-size } else { theme.separator-size })[ ｜]
+    ]
+    #text(size: if title-size != none { title-size } else { theme.title-size })[#title]
+  ]
+  #if (subtitle != none) [
+    #v(6pt)
+    #set text(font: theme.heading-font, size: theme.sub-size, fill: theme.gray)
+    #subtitle
+  ]
+  #if (category != none) [
+    #v(6pt)
+    #set text(font: theme.heading-font, size: theme.sub-size, fill: theme.gray)
+    分类：#category
+  ]
+  #v(10pt)
+  #set par(justify: true, first-line-indent: theme.indent, leading: theme.line-height * 1em, spacing: theme.para-spacing)
+  #set text(lang: "zh", font: theme.text-font, size: if body-size != none { body-size } else { theme.text-size }, fill: theme.color)
+  #body
+]
+
+#article-card(
+  category: "{{ meta.category | default: '模板' }}",
+  subtitle: {% if meta.subtitle %}[{{ meta.subtitle }}]{% else %}none{% endif %},
+  "{{ meta.title }}",
+  [
+  {% for b in blocks %}
+    {% if b.type == 'heading' %}
+      {% if meta.main_title_text and b.level == 1 and b.text == meta.main_title_text %}
+      {% else %}
+      #heading(level: {{ b.level | default: 2 }}, [{{ b.text }}])
+      {% endif %}
+    {% elsif b.type == 'paragraph' %}
+      #zh-paragraph()
+      {{ b.text | md2typst }}
+    {% elsif b.type == 'code' %}
+      #set text(font: "{{ meta.mono_font | default: 'Consolas' }}", size: {{ meta.sub_size | default: 12 }}pt, fill: theme.color)
+      [{{ b.code }}]
+    {% elsif b.type == 'list' %}
+      #zh-paragraph()
+      {% if b.ordered %}
+        {% for it in b.items %}{{ forloop.index }}. {{ it | md2typst }}
+        {% endfor %}
+      {% else %}
+        {% for it in b.items %}• {{ it | md2typst }}
+        {% endfor %}
+      {% endif %}
+    {% elsif b.type == 'blockquote' %}
+      #box(inset: 8pt)[
+      #set text(fill: theme.gray)
+      {{ b.text | md2typst }}
+      ]
+    {% elsif b.type == 'image' %}
+      #image("{{ b.src }}")
+    {% elsif b.type == 'hr' %}
+      ---
+    {% endif %}
+  {% endfor %}
+  ],
+)

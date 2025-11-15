@@ -1,0 +1,14 @@
+{
+  "scopeName": "andrea.md.injection",
+  "injectionSelector": "L:text.html.markdown, L:text.plain",
+  "patterns": [
+    {
+      "name": "meta.definition.andrea",
+      "match": "^\\s*&Def\\s+([^=]+?)\\s*=\\s*(.+)\\s*$",
+      "captures": {
+        "1": { "name": "entity.name.type.definition.andrea" },
+        "2": { "name": "string.unquoted.definition.andrea" }
+      }
+    }
+  ]
+}

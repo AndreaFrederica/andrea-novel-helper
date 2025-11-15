@@ -1,4 +1,4 @@
-name: build-vsix (npm + --dist-url + arch-correct)
+name: build-vsix (std+exp)
 
 on:
   workflow_dispatch:
@@ -9,11 +9,6 @@ on:
         default: "30.0.9"
       publish:
         description: "打完是否立即发布到 Marketplace（需要 VSCE_PAT）"
-        type: boolean
-        required: true
-        default: false
-      prerelease:
-        description: "作为预发布版本发布（仅在 publish=true 时生效）"
         type: boolean
         required: true
         default: false
@@ -90,14 +85,42 @@ jobs:
             --arch='${{ matrix.arch }}'
 
 
-      # 确保 dist 目录存在，然后打包到固定文件名
-      - name: Package VSIX
+      - name: Package STD variant
         working-directory: ${{ env.WORKDIR }}
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
-          OUT="dist/anh-${{ matrix.target }}.vsix"
-          echo "Packaging to $OUT"
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          OUT="dist/anh-std-${{ matrix.target }}.vsix"
+          echo "Packaging STD to $OUT"
+          npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          ls -al dist
+
+      - name: Package EXP variant
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            const evs=new Set(pkg.activationEvents||[]);
+            evs.add("onStartupFinished");
+            pkg.activationEvents=[...evs];
+            const parts=pkg.version.split(".").map(Number);
+            if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
+            parts[2]+=1;
+            pkg.version=parts.join(".");
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          OUT="dist/anh-exp-${{ matrix.target }}.vsix"
+          echo "Packaging EXP (pre-release) to $OUT"
           npx vsce package --target ${{ matrix.target }} --out "$OUT"
           ls -al dist
 
@@ -120,7 +143,7 @@ jobs:
 
       - run: npm i -g @vscode/vsce
 
-      - name: Publish all VSIX
+      - name: Publish all VSIX (std stable, exp pre-release)
         shell: bash
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -133,7 +156,7 @@ jobs:
           fi
 
           for f in "${files[@]}"; do
-            if [ "${{ inputs.prerelease }}" = "true" ]; then
+            if [[ "$f" == *"exp"* ]]; then
               echo "Publishing (pre-release) $f"
               vsce publish --packagePath "$f" --pre-release
             else

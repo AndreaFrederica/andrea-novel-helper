@@ -1,4 +1,4 @@
-name: build-vsix (npm only)
+name: build-vsix (std+exp)
 
 on:
   workflow_dispatch:
@@ -9,11 +9,6 @@ on:
         default: "30.0.9"
       publish:
         description: "打完是否立即发布到 Marketplace（需要 VSCE_PAT）"
-        type: boolean
-        required: true
-        default: false
-      prerelease:
-        description: "作为预发布版本发布（仅在 publish=true 时生效）"
         type: boolean
         required: true
         default: false
@@ -46,13 +41,18 @@ jobs:
       - name: Install deps (npm)
         run: npm ci
 
-      # 为 VS Code 的 Electron 版本重建原生依赖（@vscode/sqlite3）
       - name: Rebuild native deps for Electron
         run: npm rebuild @vscode/sqlite3 --runtime=electron --target=${{ env.ELECTRON_VERSION }}
 
-      # 打包 VSIX（vsce 会自动调用 `npm run vscode:prepublish` 如果你在 package.json 里定义了）
-      - name: Package VSIX
-        run: npx vsce package --target ${{ matrix.target }} --out dist/anh-${{ matrix.target }}.vsix
+      - name: Package STD variant
+        run: |
+          node scripts/ci-variants.js std
+          npx vsce package --target ${{ matrix.target }} --out dist/anh-std-${{ matrix.target }}.vsix
+
+      - name: Package EXP variant
+        run: |
+          node scripts/ci-variants.js exp
+          npx vsce package --target ${{ matrix.target }} --out dist/anh-exp-${{ matrix.target }}.vsix
 
       - uses: actions/upload-artifact@v4
         with:
@@ -78,7 +78,7 @@ jobs:
         run: |
           set -e
           for f in *.vsix; do
-            if [ "${{ inputs.prerelease }}" = "true" ]; then
+            if echo "$f" | grep -q "exp"; then
               echo "Publishing (pre-release) $f"
               vsce publish --packagePath "$f" --pre-release
             else

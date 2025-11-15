@@ -61,6 +61,12 @@ import { registerContextKeys } from './typeset/contextKeys';
 import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOverride';
 import { registerTypoFeature } from './typo/typoService';
 import { registerTypoQuickSettings } from './typo/typoQuickSettings';
+import { registerTypstExport } from './commands/typstExport'
+import { templateRegistry } from './typst/templateRegistry'
+import * as os from 'os'
+import { registerWordCountTypstExport } from './commands/wordCountTypstExport'
+import { registerWordCountClipboard } from './commands/wordCountClipboard'
+import { registerDefCompletions } from './language/defCompletion'
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
@@ -89,6 +95,8 @@ import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
 import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
 import { registerFixsCodeAction } from './Provider/fixsCodeActionProvider';
 import { createCirclePackingDataProvider } from './data/circlePackingDataProvider';
+import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
+import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -272,24 +280,8 @@ export async function activate(context: vscode.ExtensionContext) {
     registerFileChangeCallback('roleUsage', roleUsageFileTrackerHandler);
     context.subscriptions.push({ dispose: () => unregisterFileChangeCallback('roleUsage', roleUsageFileTrackerHandler) });
 
-    async function rebuildRoleUsageIndex(): Promise<void> {
-        const indexer = createRoleUsageIndexer(roles);
-        await indexer.rebuildIndex();
-    }
-
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.roleUsage.rebuildIndex', async () => {
-            await rebuildRoleUsageIndex();
-        }),
-        vscode.commands.registerCommand('AndreaNovelHelper.roleUsage.clearIndex', async () => {
-            clearRoleUsageIndex();
-            vscode.window.showInformationMessage('角色引用索引已清空。');
-        }),
-        vscode.commands.registerCommand('AndreaNovelHelper.fileTracking.cleanAbsolutePaths', async () => {
-            const count = await cleanAbsolutePathEntries();
-            vscode.window.showInformationMessage(`已清理 ${count} 个绝对路径条目。`);
-        }),
-    );
+    registerRoleUsageIndexCommands(context, roles)
+    registerFileTrackingMaintenance(context)
     // registerTypeInterceptor(context);
     context.subscriptions.push(logChannel);
     const log = (msg: string, err?: any) => {
@@ -447,6 +439,9 @@ export async function activate(context: vscode.ExtensionContext) {
         const previewManager: PreviewManager = registerPreviewPane(context);
         (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
         _previewManager = previewManager; // 模块级保存
+        registerTypstExport(context)
+        try { templateRegistry.init(context) } catch {}
+        context.subscriptions.push(vscode.commands.registerCommand('andrea.typst.refreshTemplates', () => { try { (templateRegistry as any).scan?.() } catch {} }))
         // 批注专用面板与装饰
         let commentsController: any;
         try { commentsController = registerCommentsFeature(context); } catch (e) { console.warn('[ANH] registerCommentsFeature failed', e); }
@@ -945,135 +940,11 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(treeView);
 
         registerWordCountPlainTextCommands(context, wordCountProvider);
+        registerWordCountTypstExport(context, wordCountProvider, treeView)
+        registerWordCountClipboard(context, wordCountProvider, treeView)
+        registerDefCompletions(context)
 
-        // —— 文件/目录 复制 剪切 粘贴 ——
-        type ClipEntry = { source: string; isDir: boolean };
-        let clipboard: { entries: ClipEntry[]; cut: boolean } | null = null;
-
-        function collectSelectedWordCountPaths(): string[] {
-            const sel = (treeView as any).selection as any[] || [];
-            const paths = sel.filter(s => s?.resourceUri?.fsPath).map(s => s.resourceUri.fsPath);
-            return paths.length ? paths : [];
-        }
-
-        context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.copy', (node: any) => {
-            const primary = node?.resourceUri?.fsPath;
-            const paths = new Set<string>(collectSelectedWordCountPaths());
-            if (primary) paths.add(primary);
-            const entries: ClipEntry[] = Array.from(paths).map(p => ({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
-            clipboard = { entries, cut: false };
-            try { setCutClipboard(null); } catch { /* ignore */ }
-            vscode.window.setStatusBarMessage(`已复制 ${entries.length} 项`, 2000);
-        }));
-
-        context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.cut', (node: any) => {
-            const primary = node?.resourceUri?.fsPath;
-            const paths = new Set<string>(collectSelectedWordCountPaths());
-            if (primary) paths.add(primary);
-            const entries: ClipEntry[] = Array.from(paths).map(p => ({ source: p, isDir: fs.existsSync(p) && fs.statSync(p).isDirectory() }));
-            clipboard = { entries, cut: true };
-            try { setCutClipboard(entries.map(e => e.source)); } catch { /* ignore */ }
-            vscode.window.setStatusBarMessage(`已剪切 ${entries.length} 项`, 2000);
-            // 触发 TreeView 刷新以显示剪切视觉标记
-            wordCountProvider.refresh();
-        }));
-
-        context.subscriptions.push(vscode.commands.registerCommand('AndreaNovelHelper.wordCount.paste', async (targetNode: any) => {
-            if (!clipboard || clipboard.entries.length === 0) {
-                vscode.window.showInformationMessage('剪贴板为空');
-                return;
-            }
-            let targetPath = targetNode?.resourceUri?.fsPath;
-            // 支持在空白区域粘贴：默认工作区根
-            if (!targetPath) {
-                const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                if (!root) { vscode.window.showWarningMessage('没有工作区，无法粘贴'); return; }
-                targetPath = root;
-            }
-            if (!fs.existsSync(targetPath)) { vscode.window.showWarningMessage('目标不存在'); return; }
-            if (!fs.statSync(targetPath).isDirectory()) {
-                // 若是文件节点，则使用其父目录
-                targetPath = path.dirname(targetPath);
-            }
-            const om = (wordCountProvider as any).getOrderManager?.();
-            const isManual = om ? om.isManual(targetPath) : false;
-            const step = (om as any)?.options?.step || 10;
-            let seqBase = step;
-            if (om && isManual) {
-                // 获取现有 children 用于后续索引
-                const parentItem = wordCountProvider.getItemById?.(targetPath) || { resourceUri: vscode.Uri.file(targetPath) };
-                const children = await wordCountProvider.getChildren(parentItem as any) as any[];
-                const ordered = children.filter(c => c.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.id?.includes('__new'));
-                for (const c of ordered) {
-                    const idxVal = om.getIndex(c.resourceUri.fsPath);
-                    if (typeof idxVal === 'number' && idxVal >= seqBase) seqBase = idxVal + step;
-                }
-            }
-            const results: string[] = [];
-            for (const entry of clipboard.entries) {
-                const baseName = path.basename(entry.source);
-                let dest = path.join(targetPath, baseName);
-                if (dest === entry.source) {
-                    // 粘贴到自身目录避免覆盖：添加副本后缀
-                    const ext = path.extname(baseName);
-                    const stem = ext ? baseName.slice(0, -ext.length) : baseName;
-                    let i = 1;
-                    while (fs.existsSync(dest)) {
-                        const newName = `${stem}_copy${i}${ext}`;
-                        dest = path.join(targetPath, newName);
-                        i++;
-                    }
-                } else if (fs.existsSync(dest)) {
-                    // 目标存在：生成不重复名称
-                    const ext = path.extname(baseName);
-                    const stem = ext ? baseName.slice(0, -ext.length) : baseName;
-                    let i = 1; let variant = dest;
-                    while (fs.existsSync(variant)) {
-                        variant = path.join(targetPath, `${stem}_copy${i}${ext}`);
-                        i++;
-                    }
-                    dest = variant;
-                }
-                try {
-                    if (clipboard.cut) {
-                        fs.renameSync(entry.source, dest);
-                    } else {
-                        if (entry.isDir) {
-                            copyDirectoryRecursive(entry.source, dest);
-                        } else {
-                            fs.copyFileSync(entry.source, dest);
-                        }
-                    }
-                    results.push(dest);
-                    if (om && isManual) {
-                        om.setIndex(dest, seqBase);
-                        seqBase += step;
-                    }
-                } catch (e) {
-                    vscode.window.showErrorMessage(`粘贴失败: ${e}`);
-                }
-            }
-            if (clipboard.cut) {
-                clipboard = null; // 剪切后清空
-                try { setCutClipboard(null); } catch { /* ignore */ }
-            }
-            wordCountProvider.refresh();
-            vscode.window.setStatusBarMessage(`粘贴完成: ${results.length} 项`, 3000);
-        }));
-
-        function copyDirectoryRecursive(src: string, dest: string) {
-            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-            const entries = fs.readdirSync(src, { withFileTypes: true });
-            for (const e of entries) {
-                const s = path.join(src, e.name);
-                const d = path.join(dest, e.name);
-                if (e.isDirectory()) {
-                    copyDirectoryRecursive(s, d);
-                } else if (e.isFile()) {
-                    fs.copyFileSync(s, d);
-                }
-            }
-        }
+        // —— 文件/目录 复制 剪切 粘贴 —— 迁移至 src/commands/wordCountClipboard.ts
 
         // 监听配置变化动态更新排序参数
         context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {

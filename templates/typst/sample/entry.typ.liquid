@@ -1,0 +1,41 @@
+#set page(width: 21cm, height: 29.7cm, margin: 2cm)
+
+{% if meta.title %}
+#heading(level: 1, [{{ meta.title }}])
+#v(10pt)
+{% endif %}
+
+{% for b in blocks %}
+{% if b.type == 'heading' %}
+{% if meta.main_title_text and b.level == 1 and b.text == meta.main_title_text %}
+{% else %}
+#heading(level: {{ b.level | default: 1 }}, [{{ b.text }}])
+{% endif %}
+
+{% elsif b.type == 'paragraph' %}
+{{ b.text | md2typst }}
+
+{% elsif b.type == 'code' %}
+#set text(font: "{{ meta.mono_font | default: 'Consolas' }}", size: {{ meta.sub_size | default: 12 }}pt)
+[{{ b.code }}]
+
+{% elsif b.type == 'list' %}
+{% if b.ordered %}
+{% for it in b.items %}{{ forloop.index }}. {{ it | md2typst }}
+{% endfor %}
+{% else %}
+{% for it in b.items %}• {{ it | md2typst }}
+{% endfor %}
+{% endif %}
+
+{% elsif b.type == 'blockquote' %}
+#box(inset: 8pt)[{{ b.text | md2typst }}]
+
+{% elsif b.type == 'image' %}
+#image("{{ b.src }}")
+
+{% elsif b.type == 'hr' %}
+---
+
+{% endif %}
+{% endfor %}
