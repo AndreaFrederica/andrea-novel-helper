@@ -14,6 +14,27 @@ on:
         default: false
 
 jobs:
+  webview:
+    name: Build webview (Quasar) once
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps (workspace:webview)
+        run: |
+          npm ci
+          npm --workspace=packages/webview run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webview-dist
+          path: packages/webview/dist
+
   build:
     name: Build ${{ matrix.target }}
     strategy:
@@ -36,6 +57,7 @@ jobs:
             platform: darwin
             arch: x64
     runs-on: ${{ matrix.os }}
+    needs: webview
 
     env:
       # 扩展根目录；若在子目录请改成实际路径，例如 packages/extension
@@ -62,10 +84,11 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
-      # 先构建 webview（你 package.json 里也在 vscode:prepublish 里做了，但这里显式跑一次更直观）
-      - name: Build webview
-        working-directory: ${{ env.WORKDIR }}
-        run: npm run build:webview
+      - name: Download webview dist (reuse build)
+        uses: actions/download-artifact@v4
+        with:
+          name: webview-dist
+          path: packages/webview/dist
 
       # TypeScript 编译（与 vscode:prepublish 一致）
       - name: Compile extension
@@ -124,11 +147,16 @@ jobs:
           npx vsce package --target ${{ matrix.target }} --out "$OUT"
           ls -al dist
 
-      # 上传 VSIX
+      # 分别上传 STD/EXP 两个 VSIX 工件
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}.vsix
-          path: ${{ env.WORKDIR }}/dist/*.vsix
+          name: ${{ matrix.target }}-std.vsix
+          path: ${{ env.WORKDIR }}/dist/anh-std-${{ matrix.target }}.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-exp.vsix
+          path: ${{ env.WORKDIR }}/dist/anh-exp-${{ matrix.target }}.vsix
 
   publish:
     name: Publish to Marketplace
