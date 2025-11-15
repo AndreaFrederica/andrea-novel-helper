@@ -128,7 +128,7 @@ export async function compileTypstWithLog(cli: string, typPath: string, out: vsc
     args.push(out.fsPath)
     const cmd = `${cli} compile ${args.map(a => /\s/.test(a) ? '"'+a+'"' : a).join(' ')}`
     channel.appendLine(`$ ${cmd}`)
-    const proc = spawn(cli, ['compile', ...args], { cwd: path.dirname(typPath), shell: process.platform === 'win32' })
+    const proc = spawn(cli, ['compile', ...args], { cwd: path.dirname(typPath), shell: false })
     let err = ''
     let outBuf = ''
     proc.stdout.on('data', d => { const s = String(d); outBuf += s; channel.append(s) })

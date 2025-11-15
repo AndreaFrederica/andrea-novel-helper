@@ -75,7 +75,7 @@ function compileTypst(cli, typPath, outPath, opts) {
     if (opts.fontPaths && opts.fontPaths.length) { args.push('--font-path', opts.fontPaths.join(path.delimiter)) }
     args.push(typPath)
     args.push(outPath)
-    const proc = spawn(cli, ['compile', ...args], { cwd: path.dirname(typPath), shell: process.platform === 'win32' })
+    const proc = spawn(cli, ['compile', ...args], { cwd: path.dirname(typPath), shell: false })
     let err = ''
     proc.stderr.on('data', d => { err += String(d) })
     proc.on('close', code => { resolve({ ok: code === 0, stderr: err }) })
