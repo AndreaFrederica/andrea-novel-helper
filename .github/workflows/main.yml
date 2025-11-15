@@ -144,7 +144,7 @@ jobs:
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
           echo "Packaging EXP (pre-release) to $OUT"
-          npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
           ls -al dist
 
       # 分别上传 STD/EXP 两个 VSIX 工件
@@ -194,3 +194,42 @@ jobs:
               ovsx publish "$f"
             fi
           done
+
+      - uses: actions/checkout@v4
+
+      - name: Compute versions
+        id: ver
+        shell: bash
+        run: |
+          STD_VER=$(node -e 'console.log(require("./package.json").version)')
+          IFS='.' read -r MA MI PA <<< "$STD_VER"
+          EXP_VER="$MA.$MI.$((PA+1))"
+          echo "STD_VER=$STD_VER" >> "$GITHUB_ENV"
+          echo "EXP_VER=$EXP_VER" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release (std)
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.STD_VER }}
+          name: ANH v${{ env.STD_VER }} (std)
+          draft: false
+          prerelease: false
+          files: |
+            anh-std-*.vsix
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          make_latest: true
+          allow_updates: true
+
+      - name: Create GitHub Release (exp)
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.EXP_VER }}-exp
+          name: ANH v${{ env.EXP_VER }}-exp (exp)
+          draft: false
+          prerelease: true
+          files: |
+            anh-exp-*.vsix
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          allow_updates: true
