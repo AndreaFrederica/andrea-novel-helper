@@ -163,18 +163,20 @@ jobs:
     needs: build
     if: ${{ inputs.publish == true }}
     runs-on: ubuntu-latest
+    environment: publish
     steps:
       - uses: actions/download-artifact@v4
         with:
           pattern: "*.vsix"
           merge-multiple: true
 
-      - run: npm i -g @vscode/vsce
+      - run: npm i -g @vscode/vsce ovsx
 
-      - name: Publish all VSIX (std stable, exp pre-release)
+      - name: Publish to VSCode Marketplace & OpenVSX
         shell: bash
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -185,10 +187,10 @@ jobs:
 
           for f in "${files[@]}"; do
             if [[ "$f" == *"exp"* ]]; then
-              echo "Publishing (pre-release) $f"
               vsce publish --packagePath "$f" --pre-release
+              ovsx publish "$f" --pre-release
             else
-              echo "Publishing $f"
               vsce publish --packagePath "$f"
+              ovsx publish "$f"
             fi
           done
