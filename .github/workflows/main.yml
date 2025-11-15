@@ -44,10 +44,10 @@ jobs:
             target: win32-x64
             platform: win32
             arch: x64
-          - os: ubuntu-latest
-            target: linux-x64
-            platform: linux
-            arch: x64
+          - os: windows-latest
+            target: win32-ia32
+            platform: win32
+            arch: ia32
           - os: macos-latest
             target: darwin-arm64
             platform: darwin
@@ -160,9 +160,120 @@ jobs:
           name: ${{ matrix.target }}-exp.vsix
           path: ${{ env.WORKDIR }}/dist/anh-exp-${{ matrix.target }}.vsix
 
+  build-linux:
+    name: Build ${{ matrix.target }} (Linux glibc baseline)
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            platform: linux
+            arch: x64
+          - os: ubuntu-latest
+            target: linux-arm64
+            platform: linux
+            arch: arm64
+          - os: ubuntu-latest
+            target: linux-armhf
+            platform: linux
+            arch: arm
+    runs-on: ${{ matrix.os }}
+    needs: webview
+    container:
+      image: debian:buster
+    env:
+      WORKDIR: .
+      EV: ${{ inputs.electron_version }}
+    steps:
+      - run: apt-get update && apt-get install -y git curl python3 make g++
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Download webview dist (reuse build)
+        uses: actions/download-artifact@v4
+        with:
+          name: webview-dist
+          path: packages/webview/dist
+
+      - name: Compile extension
+        working-directory: ${{ env.WORKDIR }}
+        run: npm run compile
+
+      - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          npm rebuild @vscode/sqlite3 \
+            --runtime=electron \
+            --target='${{ inputs.electron_version }}' \
+            --dist-url=https://electronjs.org/headers \
+            --platform='${{ matrix.platform }}' \
+            --arch='${{ matrix.arch }}'
+
+      - name: Package STD variant
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          OUT="dist/anh-std-${{ matrix.target }}.vsix"
+          npx vsce package --target ${{ matrix.target }} --out "$OUT"
+
+      - name: Package EXP variant
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            const evs=new Set(pkg.activationEvents||[]);
+            evs.add("onStartupFinished");
+            pkg.activationEvents=[...evs];
+            const parts=pkg.version.split(".").map(Number);
+            parts[2]+=1;
+            pkg.version=parts.join(".");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          OUT="dist/anh-exp-${{ matrix.target }}.vsix"
+          npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-std.vsix
+          path: ${{ env.WORKDIR }}/dist/anh-std-${{ matrix.target }}.vsix
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-exp.vsix
+          path: ${{ env.WORKDIR }}/dist/anh-exp-${{ matrix.target }}.vsix
+
   publish:
     name: Publish to Marketplace
-    needs: build
+    needs: [build, build-linux]
     if: ${{ inputs.publish == true }}
     runs-on: ubuntu-latest
     environment: publish
