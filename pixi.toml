@@ -29,6 +29,10 @@ publish_ovsx = { cmd = ["npx", "ovsx", "publish"] }
 
 publish_all = { depends-on = ["publish", "publish_ovsx"] }
 
+local_std = { cmd = ["node", "scripts/pixi-local-build.js", "std"], env = { ELECTRON_VERSION = "30.0.9" } }
+local_exp = { cmd = ["node", "scripts/pixi-local-build.js", "exp"], env = { ELECTRON_VERSION = "30.0.9" } }
+local_both = { depends-on = ["local_std", "local_exp"] }
+
 
 [dependencies]
 python = ">=3.13.5,<3.14"
