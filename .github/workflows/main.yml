@@ -185,7 +185,13 @@ jobs:
       WORKDIR: .
       EV: ${{ inputs.electron_version }}
     steps:
-      - run: apt-get update && apt-get install -y git curl python3 make g++
+      - run: |
+          set -e
+          echo 'deb http://archive.debian.org/debian buster main' > /etc/apt/sources.list
+          echo 'deb http://archive.debian.org/debian-security buster/updates main' >> /etc/apt/sources.list
+          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99disable-check-valid-until
+          apt-get -o Acquire::AllowInsecureRepositories=true update
+          apt-get install -y --no-install-recommends git curl python3 make g++ ca-certificates
 
       - uses: actions/checkout@v4
 
