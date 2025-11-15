@@ -12,6 +12,11 @@ on:
         type: boolean
         required: true
         default: false
+      release_only:
+        description: "仅创建 GitHub Release，不推送到商店"
+        type: boolean
+        required: true
+        default: false
 
 jobs:
   webview:
@@ -279,6 +284,8 @@ jobs:
     if: ${{ inputs.publish == true }}
     runs-on: ubuntu-latest
     environment: publish
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -286,6 +293,7 @@ jobs:
           merge-multiple: true
 
       - run: npm i -g @vscode/vsce ovsx
+        if: ${{ inputs.release_only != true }}
 
       - name: Publish to VSCode Marketplace & OpenVSX
         shell: bash
@@ -314,6 +322,7 @@ jobs:
               ovsx publish "$f"
             fi
           done
+        if: ${{ inputs.release_only != true }}
 
       - uses: actions/checkout@v4
 
@@ -335,11 +344,9 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            anh-std-*.vsix
+            **/anh-std-*.vsix
           fail_on_unmatched_files: false
           generate_release_notes: true
-          make_latest: true
-          allow_updates: true
 
       - name: Create GitHub Release (exp)
         uses: softprops/action-gh-release@v1
@@ -349,7 +356,6 @@ jobs:
           draft: false
           prerelease: true
           files: |
-            anh-exp-*.vsix
+            **/anh-exp-*.vsix
           fail_on_unmatched_files: false
           generate_release_notes: true
-          allow_updates: true
