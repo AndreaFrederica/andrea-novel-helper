@@ -118,6 +118,7 @@ jobs:
             const fs=require("fs");
             const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
             pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-std-${{ matrix.target }}.vsix"
@@ -140,6 +141,7 @@ jobs:
             if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
             parts[2]+=1;
             pkg.version=parts.join(".");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
