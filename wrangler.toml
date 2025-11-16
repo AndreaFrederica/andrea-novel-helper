@@ -1,2 +1,3 @@
 # Cloudflare Pages 配置（纯静态）
+name = "novelhelper-site"
 pages_build_output_dir = "website"
