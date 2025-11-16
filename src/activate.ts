@@ -5,8 +5,7 @@ import * as vscode from 'vscode';
 
 import { Role } from './extension';
 import { getSupportedLanguages, getSupportedExtensions, loadRoles, isHugeFile } from './utils/utils';
-import { createRoleCompletionProvider } from './Provider/completionProvider';
-import { initAutomaton, registerDecorationWatchers, updateDecorations } from './events/updateDecorations';
+import { initAutomaton, updateDecorations } from './events/updateDecorations';
 import { registerWordCountPlainTextCommands, WordCountProvider } from './Provider/view/wordCountProvider';
 import { WordCountOrderManager } from './utils/Order/wordCountOrder';
 import { ensureRegisterOpenWith } from './commands/openWith';
@@ -23,9 +22,7 @@ import { openOutlinePicker } from './commands/openOutlinePicker';
 import { redirectOutlineHere } from './commands/redirectOutlineHere';
 import { refreshOpenOutlines } from './events/refreshOpenOutlines';
 import { MemoryOutlineFSProvider } from './Provider/fileSystem/MemoryOutlineFSProvider';
-import { activateHover } from './Provider/hoverProvider';
-import { activateDef } from './Provider/defProv';
-import { registerRoleReferenceProvider } from './Provider/roleReferenceProvider';
+import { registerLanguageFeatures } from './languageServices/gateway';
 import { registerPackageManagerView } from './Provider/view/packageManagerView';
 import { registerRoleTreeView } from './Provider/view/roleTreeView';
 import { registerDocRolesTreeView } from './Provider/view/docRolesTreeView';
@@ -73,7 +70,6 @@ import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5Edi
 import {activate as registerRelationshipEditor} from './Provider/editor/RelationshipJson5EditorProvider';
 import {activate as registerTimelineEditor} from './Provider/editor/TimelineJson5EditorProvider';
 import { registerRelationshipCommands } from './commands/relationshipCommands';
-import { activateDefLinks } from './Provider/defLinksProvider';
 import { registerOpenRoleSource } from './commands/openRoleSource';
 import { setWordCounterContext, setWordCounterGitGuard } from './utils/WordCount/asyncWordCounter';
 import { setAsyncRoleMatcherContext } from './utils/asyncRoleMatcher';
@@ -93,7 +89,6 @@ import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
 import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
 import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
 import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
-import { registerFixsCodeAction } from './Provider/fixsCodeActionProvider';
 import { createCirclePackingDataProvider } from './data/circlePackingDataProvider';
 import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
@@ -674,53 +669,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 
-        // 自动补全提供器：使用纯 provider 工厂 + 显式语言列表（附加 scheme 与触发字符）
-        let completionDisposable: vscode.Disposable | undefined;
-        const registerCompletion = () => {
-            try {
-                // 基于用户配置获取语言，强制确保 markdown 在列（避免用户误删导致写作主场景失效）
-                const langs = Array.from(new Set([...getSupportedLanguages(), 'markdown']));
-                // 组合成更精确的 document selector：file + untitled 都支持
-                const selector: (string | vscode.DocumentFilter)[] = [];
-                for (const l of langs) {
-                    selector.push({ language: l, scheme: 'file' });
-                    selector.push({ language: l, scheme: 'untitled' });
-                }
-                // 若已有旧的，先释放
-                if (completionDisposable) {
-                    completionDisposable.dispose();
-                }
-                const provider = createRoleCompletionProvider();
-                // 触发字符：常见分隔/结构 & 中西括号等（输入任意文字仍可由 VSCode 自动触发 word-based，再由我们过滤）
-                const triggers = ['#', '!', '[', '(', '（', '【'];
-                completionDisposable = vscode.languages.registerCompletionItemProvider(selector, provider, ...triggers);
-                context.subscriptions.push(completionDisposable);
-                log(`Completion provider registered for selector langs=[${langs.join(', ')}], triggers=${triggers.join('')}, initial roles=${roles.length}`);
-            } catch (e) {
-                log('Completion provider registration FAILED', e);
-            }
-        };
-        registerCompletion();
-        // 监听 supportedFileTypes 等配置变化，动态重新注册
-        context.subscriptions.push(
-            vscode.workspace.onDidChangeConfiguration(e => {
-                if (e.affectsConfiguration('AndreaNovelHelper.supportedFileTypes')) {
-                    registerCompletion();
-                }
-            })
-        );
-
-
-        // Hover 和 Definition 提供器
-        activateHover(context);
-        activateDef(context);
-        registerRoleReferenceProvider(context);
-        activateDefLinks(context);
-        registerDecorationWatchers(context);
-        // 敏感词修复 CodeAction
-        try {
-            registerFixsCodeAction(context);
-        } catch (e) { console.warn('[ANH] 注册 fixs CodeAction 失败', e); }
+        registerLanguageFeatures(context);
 
         // Markdown 工具条
         activateMarkdownToolbar(context);
