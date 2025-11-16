@@ -1,0 +1,10 @@
+name = "novelhelper-site"
+main = "workers/worker.js"
+compatibility_date = "2025-11-12"
+workers_dev = false
+
+assets = { directory = "website", binding = "ASSETS" }
+
+[[routes]]
+pattern = "anh.sirrus.cc"
+custom_domain = true

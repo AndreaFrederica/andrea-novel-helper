@@ -77,3 +77,6 @@ node_modules/webview
 node_modules/webview/**
 
 notes/**
+webside/**
+wrangler.toml
+workers
