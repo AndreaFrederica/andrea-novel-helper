@@ -60,13 +60,17 @@ function getConfig() {
     const ppi = cfg.get<number>('output.ppi') || 144
     const pages = cfg.get<string>('pages') || ''
     const fontPaths = cfg.get<string[]>('font.paths') || []
-    return { cliPath, templatesDir, defaultTemplate, format, ppi, pages, fontPaths }
+    const cleanupTemp = cfg.get<boolean>('cleanupTemp') ?? false
+    return { cliPath, templatesDir, defaultTemplate, format, ppi, pages, fontPaths, cleanupTemp }
 }
 
-async function pickOutputUri(doc: vscode.TextDocument, format: 'pdf'|'png'|'svg') {
+async function pickOutputUri(doc: vscode.TextDocument, format: 'pdf'|'png'|'svg'|'html') {
     const base = doc.uri.with({ path: doc.uri.path.replace(/\.[^/\\.]+$/, '') })
     if (format === 'pdf') {
         return await vscode.window.showSaveDialog({ defaultUri: base.with({ path: base.path + '.pdf' }), filters: { PDF: ['pdf'] } })
+    }
+    if (format === 'html') {
+        return await vscode.window.showSaveDialog({ defaultUri: base.with({ path: base.path + '.html' }), filters: { HTML: ['html','htm'] } })
     }
     const dir = path.dirname(doc.uri.fsPath)
     const name = path.basename(doc.uri.fsPath).replace(/\.[^\.]+$/, '')
@@ -82,7 +86,7 @@ export function registerTypstExport(context: vscode.ExtensionContext) {
         const ed = vscode.window.activeTextEditor
         if (!ed) { return }
         const doc = ed.document
-        const { cliPath, templatesDir, defaultTemplate, format, ppi, pages, fontPaths } = getConfig()
+        const { cliPath, templatesDir, defaultTemplate, format, ppi, pages, fontPaths, cleanupTemp } = getConfig()
         const md = doc.getText()
         const docParsed = parseMarkdownDoc(md)
         const ctx = { meta: docParsed.meta, blocks: docParsed.blocks as Block[] }
@@ -110,17 +114,20 @@ export function registerTypstExport(context: vscode.ExtensionContext) {
             }
         }
         ;(ctx.meta as any).filename = filename
-        const typ = await renderFromTemplate(defaultTemplate, templatesDir, ctx, channel)
-        channel.appendLine(`rendered typ to temp memory`)
+        ;(ctx.meta as any).doc_dir = path.dirname(doc.uri.fsPath)
+        ;(ctx.meta as any).auto_time = new Date().toLocaleString()
         const tmpBase = ensureBuildTempBase()
         const tmpDir = fs.mkdtempSync(path.join(tmpBase, 'tmp-'))
+        ;(ctx.meta as any).assets_dir = path.join(tmpDir, 'assets')
+        const typ = await renderFromTemplate(defaultTemplate, templatesDir, ctx, channel)
+        channel.appendLine(`rendered typ to temp memory`)
         const typPath = path.join(tmpDir, 'doc.typ')
         fs.writeFileSync(typPath, typ, 'utf8')
         channel.appendLine(`typ content length: ${typ?.length ?? 0}`)
         if (!typ || typ.trim().length === 0) channel.appendLine('warning: rendered typ is empty')
         channel.appendLine(`typ file: ${typPath}`)
         const outUri = await pickOutputUri(doc, format)
-        if (!outUri) { try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {} ; return }
+        if (!outUri) { channel.appendLine(`export canceled; temp kept: ${tmpDir}`); return }
         try {
             const res = await compileTypstWithLog(cliPath, typPath, outUri, { format, ppi, pages, fontPaths }, channel)
             if (!res.ok) {
@@ -132,7 +139,11 @@ export function registerTypstExport(context: vscode.ExtensionContext) {
             if (format === 'pdf') { await vscode.commands.executeCommand('vscode.open', outUri) }
             vscode.window.showInformationMessage('导出完成')
         } finally {
-            try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
+            if (cleanupTemp) {
+                try { fs.rmSync(tmpDir, { recursive: true, force: true }); channel.appendLine(`temp cleaned: ${tmpDir}`) } catch {}
+            } else {
+                channel.appendLine(`temp kept: ${tmpDir}`)
+            }
         }
     }))
 }

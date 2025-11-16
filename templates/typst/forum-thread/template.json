@@ -1,0 +1,9 @@
+{
+  "name": "forum-thread",
+  "engine": "liquid",
+  "entry": "entry.typ.liquid",
+  "mapping": "inline",
+  "defaults": {
+    "ppi": 144
+  }
+}

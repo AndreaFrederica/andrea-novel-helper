@@ -52,10 +52,46 @@ function renderTypstDirect(ctx) {
   return out.join('\n')
 }
 
+function registerFilters(engine) {
+  try { engine.registerFilter('md2typst', (v) => String(v ?? '')
+    .replace(/\*\*([^*]+)\*\*/g, '#strong[$1]')
+    .replace(/__([^_]+)__/g, '#strong[$1]')
+    .replace(/\*([^*]+)\*/g, '#emph[$1]')
+    .replace(/_([^_]+)_/g, '#emph[$1]')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '#link("$2", [$1])')) } catch {}
+  try { engine.registerFilter('forum', (v) => String(v ?? '').replace(/@([^\s\[\]@：:]+)/g, '#text(fill: rgb("#2563eb"))[\\@$1]')) } catch {}
+  try {
+    const path = require('path'); const fs = require('fs')
+    engine.registerFilter('imgpath', (src, baseDir, assetsDir) => {
+      const p = String(src ?? '').trim()
+      if (!p) return p
+      if (/^(https?:|data:)/i.test(p)) return p
+      const base = String(baseDir ?? '')
+      const abs = path.isAbsolute(p) ? p : path.join(base, p)
+      let use = abs
+      if (!fs.existsSync(use)) {
+        const alt = path.join(base, 'images', p)
+        if (fs.existsSync(alt)) use = alt
+      }
+      if (assetsDir) {
+        try {
+          const assets = String(assetsDir)
+          fs.mkdirSync(assets, { recursive: true })
+          const dest = path.join(assets, path.basename(use))
+          if (!fs.existsSync(dest)) fs.copyFileSync(use, dest)
+          return ('./assets/' + path.basename(use)).replace(/\\/g, '/')
+        } catch {}
+      }
+      return use.replace(/\\/g, '/')
+    })
+  } catch {}
+}
+
 async function renderTypstWithLiquid(templatesDir, templateName, ctx) {
   try {
     const { Liquid } = require('liquidjs')
     const engine = new Liquid({ root: templatesDir, extname: '.liquid' })
+    registerFilters(engine)
     const entryJson = path.join(templatesDir, templateName, 'template.json')
     const entryCfg = JSON.parse(fs.readFileSync(entryJson, 'utf8'))
     const entry = path.join(templateName, entryCfg.entry)
@@ -70,6 +106,7 @@ function compileTypst(cli, typPath, outPath, opts) {
   return new Promise((resolve) => {
     const args = []
     if (opts.format !== 'pdf') { args.push('-f', opts.format) }
+    if (opts.format === 'html') { args.push('--features', 'html') }
     if (opts.format === 'png' && opts.ppi) { args.push('--ppi', String(opts.ppi)) }
     if (opts.pages && opts.pages.trim()) { args.push('--pages', opts.pages.trim()) }
     if (opts.fontPaths && opts.fontPaths.length) { args.push('--font-path', opts.fontPaths.join(path.delimiter)) }
@@ -98,8 +135,12 @@ async function main() {
   const firstHeading = ctx.blocks.find(b => b.type === 'heading')
   ctx.meta.title = firstHeading ? firstHeading.text : filename
   ctx.meta.filename = filename
+  ctx.meta.doc_dir = path.dirname(args.input)
   const typ = await renderTypstWithLiquid(templatesDir, args.template, ctx)
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'anh-typst-'))
+  ctx.meta.assets_dir = path.join(tmpDir, 'assets')
+  // add an image block to verify imgpath
+  try { ctx.blocks.push({ type: 'image', src: path.join('samples', 'typst', 'article-card.png') }) } catch {}
   const typPath = path.join(tmpDir, 'doc.typ')
   fs.writeFileSync(typPath, typ, 'utf8')
   let outPath = args.out

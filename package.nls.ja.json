@@ -1,6 +1,5 @@
 {
     "extension.name": "Andrea 小説アシスタント",
-    "extension.description": "小説執筆支援ツール",
     "command.addRoleFromSelection.title": "選択範囲からキャラクターを作成",
     "command.refreshRoles.title": "キャラクターライブラリを更新",
     "command.addSensitiveWord.title": "選択範囲からセンシティブワードを作成",

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.19",
+  "version": "0.4.21",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -263,6 +263,14 @@
       {
         "command": "andrea.typst.exportCurrent",
         "title": "导出：使用Typst模板为PDF/图片"
+      },
+      {
+        "command": "andrea.typst.exportFromExplorer",
+        "title": "导出：使用Typst模板",
+        "icon": {
+          "light": "$(export)",
+          "dark": "$(export)"
+        }
       },
       {
         "command": "myPreview.copyPlainText",
@@ -2268,6 +2276,11 @@
           "items": { "type": "string" },
           "default": [],
           "description": "额外字体搜索路径"
+        },
+        "andrea.typst.cleanupTemp": {
+          "type": "boolean",
+          "default": false,
+          "description": "导出后是否自动清理临时编译目录 build/typst/tmp-*（默认不清理，便于诊断）"
         }
       }
     },
@@ -2277,6 +2290,21 @@
           "command": "AndreaNovelHelper.toggleRoleManagerOpenForFile",
           "when": "andrea.anh.enabled && resourceExtname == .json5",
           "group": "navigation"
+        },
+        {
+          "command": "andrea.typst.exportFromExplorer",
+          "when": "resourceExtname == .md",
+          "group": "navigation@100"
+        },
+        {
+          "command": "andrea.typst.exportFromExplorer",
+          "when": "resourceExtname == .txt",
+          "group": "navigation@100"
+        },
+        {
+          "command": "andrea.typst.exportFromExplorer",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation@100"
         }
       ],
       "view/title": [
@@ -2610,6 +2638,11 @@
           "command": "andrea.formatDocument",
           "when": "andrea.anh.enabled && (editorLangId == markdown || editorLangId == plaintext || editorLangId == json5)",
           "group": "navigation@9"
+        },
+        {
+          "command": "andrea.typst.exportCurrent",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation@100"
         },
         {
           "when": "andrea.anh.enabled && editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",

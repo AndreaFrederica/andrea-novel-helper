@@ -1,6 +1,5 @@
 {
     "extension.name": "Andrea Novel Helper",
-    "extension.description": "Helper tool for novel writing",
     "command.addRoleFromSelection.title": "ANH:Create Role from Selection",
     "command.refreshRoles.title": "ANH:Refresh Role Library",
     "command.addSensitiveWord.title": "ANH:Create Sensitive Word from Selection",

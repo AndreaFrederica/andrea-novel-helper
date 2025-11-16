@@ -59,6 +59,7 @@ import { registerEnsureEnterOverridesCommand } from './keybindings/ensureEnterOv
 import { registerTypoFeature } from './typo/typoService';
 import { registerTypoQuickSettings } from './typo/typoQuickSettings';
 import { registerTypstExport } from './commands/typstExport'
+import { registerExplorerTypstExport } from './commands/explorerTypstExport'
 import { templateRegistry } from './typst/templateRegistry'
 import * as os from 'os'
 import { registerWordCountTypstExport } from './commands/wordCountTypstExport'
@@ -435,6 +436,7 @@ export async function activate(context: vscode.ExtensionContext) {
         (globalThis as any).__anhPreviewManager = previewManager; // 调试/备用
         _previewManager = previewManager; // 模块级保存
         registerTypstExport(context)
+        registerExplorerTypstExport(context)
         try { templateRegistry.init(context) } catch {}
         context.subscriptions.push(vscode.commands.registerCommand('andrea.typst.refreshTemplates', () => { try { (templateRegistry as any).scan?.() } catch {} }))
         // 批注专用面板与装饰

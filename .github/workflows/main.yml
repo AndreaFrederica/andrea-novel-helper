@@ -343,6 +343,15 @@ jobs:
           echo "STD_VER=$STD_VER" >> "$GITHUB_ENV"
           echo "EXP_VER=$STD_VER" >> "$GITHUB_ENV"
 
+      - name: Get latest commit message
+        id: commit
+        shell: bash
+        run: |
+          MSG=$(git log -1 --pretty=%B | sed 's/\r$//')
+          echo "COMMIT_MSG<<EOF" >> $GITHUB_ENV
+          echo "$MSG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
       - name: Create GitHub Release (combined)
         if: ${{ inputs.release_notes != '' }}
         uses: softprops/action-gh-release@v1
@@ -395,12 +404,12 @@ jobs:
             release_artifacts/anh-std-*.vsix
             release_artifacts/anh-exp-*.vsix
           fail_on_unmatched_files: false
-          generate_release_notes: true
           body: |
+            ${{ env.COMMIT_MSG }}
+
             ## Variants
             - `std`: Stable build; disables `onStartupFinished` to follow VS Code activation standards; normal startup.
             - `exp`: Preview build; patch version +1; enables `onStartupFinished` to start early; marked pre-release and must be installed manually.
             - Both variants share the same features and fixes for this release; only activation timing differs.
-          append_body: true
 
       # 移除单独的 EXP Release，改为与 STD 同版本合并附件

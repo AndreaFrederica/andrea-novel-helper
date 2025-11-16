@@ -1,6 +1,5 @@
 {
     "extension.name": "Andrea 小说助手",
-    "extension.description": "小说写作辅助工具",
     "command.addRoleFromSelection.title": "从选中内容创建角色",
     "command.refreshRoles.title": "刷新角色库",
     "command.addSensitiveWord.title": "从选中内容创建敏感词",

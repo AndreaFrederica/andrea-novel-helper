@@ -7,20 +7,51 @@ import { spawn } from 'child_process'
 import { parseSingleFileTemplate } from './singleFileTemplate'
 import { templateRegistry } from './templateRegistry'
 
-export type TypstOpts = { format: 'pdf'|'png'|'svg'; ppi: number; pages?: string; fontPaths: string[] }
+export type TypstOpts = { format: 'pdf'|'png'|'svg'|'html'; ppi: number; pages?: string; fontPaths: string[] }
 
 function mdToTypstInline(s: string): string {
   if (!s) return s
   return s
-    .replace(/\*\*([^*]+)\*\*/g, '#strong[$1]')
-    .replace(/__([^_]+)__/g, '#strong[$1]')
-    .replace(/\*([^*]+)\*/g, '#emph[$1]')
-    .replace(/_([^_]+)_/g, '#emph[$1]')
+    .replace(/\*\*([^*]+)\*\*/g, '#text(lang: "zh", weight: "bold")[$1]')
+    .replace(/__([^_]+)__/g, '#text(lang: "zh", weight: "bold")[$1]')
+    .replace(/\*([^*]+)\*/g, '#text(lang: "zh", style: "italic")[$1]')
+    .replace(/_([^_]+)_/g, '#text(lang: "zh", style: "italic")[$1]')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '#link("$2", [$1])')
 }
 
 function registerFilters(engine: Liquid) {
   try { engine.registerFilter('md2typst', (v: any) => mdToTypstInline(String(v ?? ''))) } catch {}
+  try {
+    engine.registerFilter('forum', (v: any) => {
+      const s = String(v ?? '')
+      return s.replace(/@([^\s\[\]@：:]+)/g, '#text(lang: "zh", fill: rgb(37, 99, 235))[\\@$1]')
+    })
+  } catch {}
+  try {
+    engine.registerFilter('imgpath', (src: any, baseDir: any, assetsDir?: any) => {
+      const p = String(src ?? '').trim()
+      if (!p) return p
+      if (/^(https?:|data:)/i.test(p)) return p
+      const base = String(baseDir ?? '')
+      const abs = path.isAbsolute(p) ? p : path.join(base, p)
+      let use = abs
+      if (!fs.existsSync(use)) {
+        const alt = path.join(base, 'images', p)
+        if (fs.existsSync(alt)) use = alt
+      }
+      // 如果有 assets 目录，则复制到临时资源目录，并返回复制后的路径
+      if (assetsDir) {
+        try {
+          const assets = String(assetsDir)
+          fs.mkdirSync(assets, { recursive: true })
+          const dest = path.join(assets, path.basename(use))
+          if (!fs.existsSync(dest)) fs.copyFileSync(use, dest)
+          return ('./assets/' + path.basename(use)).replace(/\\/g, '/')
+        } catch { /* ignore */ }
+      }
+      return use.replace(/\\/g, '/')
+    })
+  } catch {}
 }
 
 export async function renderFromTemplate(templateName: string, fallbackTemplatesDir: string, ctx: any, channel?: vscode.OutputChannel): Promise<string> {
@@ -121,6 +152,7 @@ export async function compileTypstWithLog(cli: string, typPath: string, out: vsc
   return await new Promise(resolve => {
     const args: string[] = []
     if (opts.format !== 'pdf') { args.push('-f', opts.format) }
+    if (opts.format === 'html') { args.push('--features', 'html') }
     if (opts.format === 'png' && opts.ppi) { args.push('--ppi', String(opts.ppi)) }
     if (opts.pages && String(opts.pages).trim()) { args.push('--pages', String(opts.pages).trim()) }
     if (opts.fontPaths && opts.fontPaths.length) { args.push('--font-path', opts.fontPaths.join(path.delimiter)) }

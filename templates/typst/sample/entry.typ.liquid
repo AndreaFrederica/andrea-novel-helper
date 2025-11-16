@@ -32,7 +32,7 @@
 #box(inset: 8pt)[{{ b.text | md2typst }}]
 
 {% elsif b.type == 'image' %}
-#image("{{ b.src }}")
+#image("{{ b.src | imgpath: meta.doc_dir, meta.assets_dir }}")
 
 {% elsif b.type == 'hr' %}
 ---

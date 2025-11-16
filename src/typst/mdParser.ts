@@ -5,8 +5,10 @@ export type CodeBlock = { type: 'code'; lang?: string; code: string }
 export type QuoteBlock = { type: 'blockquote'; text: string }
 export type ImageBlock = { type: 'image'; alt: string; src: string }
 export type HRBlock = { type: 'hr' }
+export type QuoteEntry = { level: number; user?: string; time?: string; text: string }
+export type DialogBlock = { type: 'dialog'; user: string; time?: string; text: string; quotes?: QuoteEntry[] }
 
-export type Block = HeadingBlock | ParagraphBlock | ListBlock | CodeBlock | QuoteBlock | ImageBlock | HRBlock
+export type Block = HeadingBlock | ParagraphBlock | ListBlock | CodeBlock | QuoteBlock | ImageBlock | HRBlock | DialogBlock
 
 export function parseMarkdownBlocks(text: string): { blocks: Block[] } {
   const lines = text.split(/\r?\n/)
@@ -16,6 +18,32 @@ export function parseMarkdownBlocks(text: string): { blocks: Block[] } {
   const flushPara = () => { if (buf.length) { blocks.push({ type: 'paragraph', text: buf.join('\n') }); buf = [] } }
   while (i < lines.length) {
     const line = lines[i]
+    const dm = line.match(/^@([^\s\[：:]+)(?:\s*\[(.*?)\])?[：:]\s*(.*)$/)
+    if (dm) {
+      flushPara();
+      const user = dm[1];
+      const time = dm[2];
+      const first = dm[3] || '';
+      i++;
+      const body: string[] = [first];
+      const quotes: QuoteEntry[] = [];
+      while (i < lines.length && lines[i].trim() !== '') {
+        const qmatch = lines[i].match(/^(>+)[\s]*(.*)$/);
+        if (qmatch) {
+          const lvl = qmatch[1].length;
+          const rest = qmatch[2] || '';
+          const um = rest.match(/^@([^\s\[：:]+)(?:\s*\[(.*?)\])?[：:]\s*(.*)$/);
+          if (um) quotes.push({ level: lvl, user: um[1], time: um[2], text: um[3] || '' });
+          else quotes.push({ level: lvl, text: rest });
+        } else {
+          body.push(lines[i]);
+        }
+        i++;
+      }
+      if (i < lines.length && lines[i].trim() === '') i++;
+      blocks.push({ type: 'dialog', user, time, text: body.join('\n'), quotes });
+      continue
+    }
     const m = line.match(/^(#{1,6})\s+(.*)$/)
     if (m) { flushPara(); blocks.push({ type: 'heading', level: m[1].length, text: m[2].trim() }); i++; continue }
     if (/^```/.test(line)) { flushPara(); const lang = line.replace(/^```\s*/, '') || undefined; i++; const code: string[] = []; while (i < lines.length && !/^```\s*$/.test(lines[i])) { code.push(lines[i]); i++ } if (i < lines.length) i++; blocks.push({ type: 'code', lang, code: code.join('\n') }); continue }

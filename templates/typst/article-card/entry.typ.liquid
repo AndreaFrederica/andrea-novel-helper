@@ -8,12 +8,14 @@
   title-size: {{ meta.title_size | default: 36 }}pt,
   separator-size: {{ meta.separator_size | default: 36 }}pt,
   sub-size: {{ meta.sub_size | default: 16 }}pt,
-  color: rgb("#111"),
-  gray: rgb("#6b7280"),
+  color: rgb(17, 17, 17),
+  gray: rgb(107, 114, 128),
   line-height: {{ meta.line_height | default: 1.3 }},
   indent: 2em,
   para-spacing: 1.2em,
 )
+
+#let mono_font = "{{ meta.mono_font | default: 'Microsoft YaHei' }}"
 
 #let zh-paragraph() = {
   set par(justify: true, first-line-indent: theme.indent, leading: theme.line-height * 1em, spacing: theme.para-spacing)
@@ -69,28 +71,28 @@
       {% endif %}
     {% elsif b.type == 'paragraph' %}
       #zh-paragraph()
-      {{ b.text | md2typst }}
+      {{ b.text | md2typst | forum }}
     {% elsif b.type == 'code' %}
-      #set text(font: "{{ meta.mono_font | default: 'Consolas' }}", size: {{ meta.sub_size | default: 12 }}pt, fill: theme.color)
+      #set text(lang: "zh", font: mono_font, size: {{ meta.sub_size | default: 12 }}pt, fill: theme.color, weight: "regular")
       [{{ b.code }}]
     {% elsif b.type == 'list' %}
       #zh-paragraph()
       {% if b.ordered %}
-        {% for it in b.items %}{{ forloop.index }}. {{ it | md2typst }}
+        {% for it in b.items %}{{ forloop.index }}. {{ it | md2typst | forum }}
         {% endfor %}
       {% else %}
-        {% for it in b.items %}• {{ it | md2typst }}
+        {% for it in b.items %}• {{ it | md2typst | forum }}
         {% endfor %}
       {% endif %}
     {% elsif b.type == 'blockquote' %}
       #box(inset: 8pt)[
-      #set text(fill: theme.gray)
-      {{ b.text | md2typst }}
+      #set text(lang: "zh", font: theme.text-font, fill: theme.gray, weight: "regular")
+      {{ b.text | md2typst | forum }}
       ]
     {% elsif b.type == 'image' %}
-      #image("{{ b.src }}")
+      #image("{{ b.src | imgpath: meta.doc_dir, meta.assets_dir }}")
     {% elsif b.type == 'hr' %}
-      ---
+      #line(length: 100%, stroke: 0.6pt + rgb(229, 231, 235))
     {% endif %}
   {% endfor %}
   ],

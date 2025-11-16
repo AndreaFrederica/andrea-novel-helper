@@ -54,8 +54,8 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
   let outDir: string | undefined
   if (!where) return
   if (where.label === '选择导出目录') { const picked = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false }); if (!picked || picked.length === 0) return; outDir = picked[0].fsPath }
-  const formatPick = await vscode.window.showQuickPick([{ label: 'PDF', value: 'pdf' as const },{ label: 'PNG', value: 'png' as const },{ label: 'SVG', value: 'svg' as const }], { placeHolder: '选择导出格式' })
-  const format = (formatPick?.value || cfg.get<'pdf'|'png'|'svg'>('output.format','pdf')) as 'pdf'|'png'|'svg'
+  const formatPick = await vscode.window.showQuickPick([{ label: 'PDF', value: 'pdf' as const },{ label: 'PNG', value: 'png' as const },{ label: 'SVG', value: 'svg' as const },{ label: 'HTML', value: 'html' as const }], { placeHolder: '选择导出格式' })
+  const format = (formatPick?.value || cfg.get<'pdf'|'png'|'svg'>('output.format','pdf')) as 'pdf'|'png'|'svg'|'html'
   const titlePick = await vscode.window.showQuickPick([{ label: '提取主标题（第一个一级标题）', value: 'h1' },{ label: '首个标题（任意级别）', value: 'any' },{ label: '文件名（无扩展名）', value: 'file' },{ label: '不提取主标题（不渲染）', value: 'none' }], { placeHolder: '主标题来源' })
   const titleMode = (titlePick?.value as 'h1'|'any'|'file'|'none') || 'h1'
   const ppi = cfg.get<number>('output.ppi',144)
@@ -65,6 +65,7 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
   const templatesDir = cfg.get<string>('templatesDir') || (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ? path.join(vscode.workspace.workspaceFolders![0]!.uri.fsPath, 'templates','typst') : '')
   const channel = vscode.window.createOutputChannel('ANH: Typst')
   channel.show(true)
+  const cleanupTemp = cfg.get<boolean>('cleanupTemp') ?? false
   for (const f of files) {
     try {
       const text = fs.readFileSync(f, 'utf8')
@@ -81,12 +82,12 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
         else if (titleMode === 'h1' && h1) chosen = h1.text
         else if (titleMode === 'any' && anyH) chosen = anyH.text
       }
-      const ctx = { meta: { title: chosen, subtitle: docParsed.meta.subtitle, category: docParsed.meta.category, filename: baseTitle, main_title_text: h1 ? h1.text : undefined, main_title_level: h1 ? 1 : undefined }, blocks }
+      const tmpBase = ensureBuildTempBase()
+      const tmpDir = fs.mkdtempSync(path.join(tmpBase, 'tmp-'))
+      const ctx = { meta: { title: chosen, subtitle: docParsed.meta.subtitle, category: docParsed.meta.category, filename: baseTitle, doc_dir: path.dirname(f), assets_dir: path.join(tmpDir, 'assets'), auto_time: new Date().toLocaleString(), main_title_text: h1 ? h1.text : undefined, main_title_level: h1 ? 1 : undefined }, blocks }
       const typ = await renderFromTemplate(tplName, templatesDir, ctx, channel)
       channel.appendLine(`typ content length: ${typ?.length ?? 0}`)
       if (!typ || typ.trim().length === 0) channel.appendLine('warning: rendered typ is empty')
-      const tmpBase = ensureBuildTempBase()
-      const tmpDir = fs.mkdtempSync(path.join(tmpBase, 'tmp-'))
       const typPath = path.join(tmpDir, 'doc.typ')
       fs.writeFileSync(typPath, typ || '', 'utf8')
       channel.appendLine(`typ file: ${typPath}`)
@@ -94,12 +95,13 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
       const base = path.basename(f).replace(/\.[^\.]+$/, '')
       let outPath: string
       if (format === 'pdf') outPath = path.join(dir, `${base}.pdf`)
+      else if (format === 'html') outPath = path.join(dir, `${base}.html`)
       else outPath = path.join(dir, `${base}-{p}.${format}`)
       try {
         const res = await compileTypstWithLog(cliPath, typPath, vscode.Uri.file(outPath), { format, ppi, pages, fontPaths }, channel)
         if (res.stderr) channel.appendLine(res.stderr)
         if (res.stdout) channel.appendLine(res.stdout)
-        if (!res.ok && format !== 'pdf') {
+        if (!res.ok && (format !== 'pdf' && format !== 'html')) {
           const single = path.join(dir, `${base}.${format}`)
           const retry = await compileTypstWithLog(cliPath, typPath, vscode.Uri.file(single), { format, ppi, pages: '1', fontPaths }, channel)
           if (retry.stderr) channel.appendLine(retry.stderr)
@@ -107,7 +109,11 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
           if (!retry.ok) { vscode.window.showErrorMessage(`导出失败：${f}`); continue }
         }
       } finally {
-        try { fs.rmSync(tmpDir, { recursive: true, force: true }) } catch {}
+        if (cleanupTemp) {
+          try { fs.rmSync(tmpDir, { recursive: true, force: true }); channel.appendLine(`temp cleaned: ${tmpDir}`) } catch {}
+        } else {
+          channel.appendLine(`temp kept: ${tmpDir}`)
+        }
       }
     } catch { vscode.window.showErrorMessage(`导出失败：${f}`) }
   }
