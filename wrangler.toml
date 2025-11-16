@@ -1,10 +1,2 @@
-name = "novelhelper-site"
-main = "workers/worker.js"
-compatibility_date = "2025-11-12"
-workers_dev = false
-
-assets = { directory = "website", binding = "ASSETS" }
-
-[[routes]]
-pattern = "anh.sirrus.cc"
-custom_domain = true
+# Cloudflare Pages 配置（纯静态）
+pages_build_output_dir = "website"
