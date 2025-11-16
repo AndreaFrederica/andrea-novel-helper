@@ -117,6 +117,20 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.window.showInformationMessage(`自动换行已设置为：${pick.value}`);
     }
 
+    async function toggleWordCountUnit() {
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
+        const cur = cfg.get<string>('primaryUnit', 'excludePunct') ?? 'excludePunct';
+        const next = cur === 'excludePunct' ? 'includePunct' : 'excludePunct';
+        await cfg.update('primaryUnit', next, vscode.ConfigurationTarget.Workspace);
+        onRefreshStatus();
+        vscode.window.showInformationMessage(`字数单位已切换为：${next === 'excludePunct' ? '不计标点' : '含标点'}`);
+    }
+
+    async function togglePasteAll() {
+        await toggle('AndreaNovelHelper.timeStats.includePaste');
+    }
+
+
     // 编辑器字体大小（workspace 级别 + 可对常用语言作用域写入）
     async function changeEditorFontSize() {
         const editorCfg = vscode.workspace.getConfiguration('editor');
@@ -1013,6 +1027,13 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         // 智能分组锁配置
         const smartTabGroupLockEnabled = cfg.get<boolean>('AndreaNovelHelper.smartTabGroupLock.enabled', true);
 
+        const wcUnit = cfg.get<string>('AndreaNovelHelper.wordCount.primaryUnit', 'excludePunct') ?? 'excludePunct';
+        const includePaste = cfg.get<boolean>('AndreaNovelHelper.timeStats.includePaste', false) ?? false;
+        const wcCfg0 = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
+        const wcSpeedUnit = wcCfg0.get<string>('statusBar.speedUnit', 'cpm') ?? 'cpm';
+        const wcMode = wcCfg0.get<string>('statusBar.mode', 'detailed') ?? 'detailed';
+        const wcCompact = wcCfg0.get<boolean>('statusBar.compact', false) ?? false;
+
 
         const pick = await vscode.window.showQuickPick(
             [
@@ -1040,6 +1061,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: '$(search-fuzzy) 错别字识别快速设置', cmd: 'andrea.typo.quickSettings' },
                 { label: `${minimap ? '$(check)' : '$(circle-slash)'} 切换：Minimap（小地图）`, cmd: 'andrea.toggleMinimap' },
                 { label: `${wheelZoom ? '$(check)' : '$(circle-slash)'} 切换：Ctrl+滚轮快速缩放字体`, cmd: 'andrea.toggleMouseWheelZoom' },
+
+                { label: `${wcUnit === 'excludePunct' ? '$(check)' : '$(circle-slash)'} 切换：字数单位（不计标点/含标点）`, cmd: 'andrea.toggleWordCountUnit' },
+                { label: `${includePaste ? '$(check)' : '$(circle-slash)'} 切换：统计计入粘贴（速度与新增/净增）`, cmd: 'andrea.togglePasteAll' },
+                { label: `${wcSpeedUnit === 'cpm' ? '$(check)' : '$(circle-slash)'} 切换：速度单位（当前 ${wcSpeedUnit === 'cpm' ? '字/分钟' : '字/小时'}）`, cmd: 'andrea.toggleWordCountSpeedUnit' },
+                { label: `$(settings) 切换：字数状态栏显示模式（当前 ${wcMode === 'detailed' ? '详细' : wcMode === 'semi' ? '半精简' : '精简'}）`, cmd: 'andrea.cycleWordCountStatusBarMode' },
 
                 { label: `${smartTabGroupLockEnabled ? '$(check)' : '$(circle-slash)'} 切换：智能分组锁`, cmd: 'andrea.toggleSmartTabGroupLock' },
 
@@ -1185,5 +1211,20 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.commands.registerCommand('andrea.toggleAutoPairs', () => toggle('andrea.typeset.enableAutoPairs')),
         vscode.commands.registerCommand('andrea.toggleSmartEnter', () => toggle('andrea.typeset.enableSmartEnter')),
         vscode.commands.registerCommand('andrea.toggleSmartExit', () => toggle('andrea.typeset.enableSmartExit')),
+        vscode.commands.registerCommand('andrea.toggleWordCountUnit', toggleWordCountUnit),
+        vscode.commands.registerCommand('andrea.togglePasteAll', togglePasteAll),
+        vscode.commands.registerCommand('andrea.toggleWordCountSpeedUnit', async () => {
+            const cur = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount').get<string>('statusBar.speedUnit', 'cpm') ?? 'cpm';
+            const next = cur === 'cpm' ? 'cph' : 'cpm';
+            await vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount').update('statusBar.speedUnit', next, vscode.ConfigurationTarget.Workspace);
+            onRefreshStatus();
+        }),
+        vscode.commands.registerCommand('andrea.cycleWordCountStatusBarMode', async () => {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
+            const cur = cfg.get<string>('statusBar.mode', 'detailed') ?? 'detailed';
+            const next = cur === 'detailed' ? 'semi' : cur === 'semi' ? 'compact' : 'detailed';
+            await cfg.update('statusBar.mode', next, vscode.ConfigurationTarget.Workspace);
+            onRefreshStatus();
+        }),
     );
 }

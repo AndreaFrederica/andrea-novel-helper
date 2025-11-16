@@ -297,8 +297,12 @@ window.addEventListener('message', (e) => {
     // KPI
     document.getElementById('k_total').textContent = fmtMinutes(data.totalMillisAll);
     document.getElementById('k_today_time').textContent = fmtMinutes(data.today.millis);
-    document.getElementById('k_today_avg').textContent = (data.today.avgCPM ?? 0) + ' CPM';
-    document.getElementById('k_today_peak').textContent = (data.today.peakCPM ?? 0) + ' CPM';
+    const avgCPM = data.today.avgCPM ?? 0;
+    const peakCPM = data.today.peakCPM ?? 0;
+    const avgCPH = avgCPM * 60;
+    const peakCPH = peakCPM * 60;
+    document.getElementById('k_today_avg').textContent = `${avgCPM} 字/分钟 | ${avgCPH} 字/小时`;
+    document.getElementById('k_today_peak').textContent = `${peakCPM} 字/分钟 | ${peakCPH} 字/小时`;
     document.getElementById('scopeTag').textContent = data.supportsGlobal ? '跨文件汇总' : '仅当前文件';
 
     // 图表渲染 - 只在数据变化时重绘

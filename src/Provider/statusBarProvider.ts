@@ -130,21 +130,54 @@ export class StatusBarProvider {
                 timeText = '<1m';
             }
 
-            // 获取当前文档字数（使用WordCountProvider的逻辑）
-            const wordCount = await this.getFileWordCount(filePath);
+            const textStats = await this.wordCountProvider.getFileStats(filePath);
+            const wcExclude = textStats?.total ?? 0;
+            const wcInclude = textStats?.nonWSChars ?? 0;
+            const primaryUnit = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount').get<string>('primaryUnit', 'excludePunct');
+            const wordCount = primaryUnit === 'includePunct' ? wcInclude : wcExclude;
             
-            // 计算实际CPM（基于文档当前字数和写作时间）
+            // 计算“平均速度”（基于计入速度的新增字符和总时长）
             let realCPM = 0;
-            if (stats.totalMillis > 0 && wordCount > 0) {
+            if (stats.totalMillis > 0) {
                 const totalMinutesFloat = stats.totalMillis / 60000;
-                realCPM = Math.round(wordCount / totalMinutesFloat);
+                const added = typeof stats.charsAdded === 'number' ? stats.charsAdded : 0;
+                realCPM = Math.round(added / totalMinutesFloat);
             }
-
-            // 获取峰值CPM（基于buckets的最高值）
-            const peakCPM = stats.averageCPM || 0;
+            const bucketSizeMs = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats').get<number>('bucketSizeMs', 60000) ?? 60000;
+            let peakCPM = 0;
+            if (Array.isArray(stats.buckets) && stats.buckets.length) {
+                for (const b of stats.buckets) {
+                    const cpm = Math.round((b.charsAdded * 60000) / bucketSizeMs);
+                    if (cpm > peakCPM) { peakCPM = cpm; }
+                }
+            }
+            const realCPH = realCPM * 60;
+            const peakCPH = peakCPM * 60;
 
             // 构建状态栏文本
-            this.statusBarItem.text = `$(edit) ${timeText} | ${wordCount}字 | 速度:${realCPM}/${peakCPM}`;
+            const md = new vscode.MarkdownString(undefined, true);
+            md.isTrusted = true;
+            md.appendMarkdown([
+                `**当前字数（不计标点）**：${wcExclude}`,
+                `**当前字数（含标点）**：${wcInclude}`,
+                `**写作时间**：${timeText}`,
+                `**平均速度**：${realCPM} 字/分钟 | ${realCPH} 字/小时`,
+                `**峰值速度**：${peakCPM} 字/分钟 | ${peakCPH} 字/小时`
+            ].join('\n\n'));
+            this.statusBarItem.tooltip = md;
+            const wcCfg = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
+            const speedUnit = wcCfg.get<string>('statusBar.speedUnit', 'cpm');
+            const modeRaw = wcCfg.get<string>('statusBar.mode', 'detailed');
+            const compactFallback = wcCfg.get<boolean>('statusBar.compact', false) ?? false;
+            const mode = modeRaw || (compactFallback ? 'compact' : 'detailed');
+            const speedText = speedUnit === 'cph' ? `${realCPH}/h` : `${realCPM}/m`;
+            if (mode === 'compact') {
+                this.statusBarItem.text = `$(edit) ${wordCount}字`;
+            } else if (mode === 'semi') {
+                this.statusBarItem.text = `$(edit) ${wordCount}字 | 速度:${speedText}`;
+            } else {
+                this.statusBarItem.text = `$(edit) ${timeText} | ${wordCount}字 | 速度:${speedText}`;
+            }
             this.statusBarItem.show();
 
         } catch (error) {
@@ -197,12 +230,22 @@ export class StatusBarProvider {
             timeText = `${totalMinutes}分钟`;
         }
 
-        // 计算真实速度
         let realCPM = 0;
-        if (stats.totalMillis > 0 && wordCount > 0) {
+        if (stats.totalMillis > 0) {
             const totalMinutesFloat = stats.totalMillis / 60000;
-            realCPM = Math.round(wordCount / totalMinutesFloat);
+            const added = typeof stats.charsAdded === 'number' ? stats.charsAdded : 0;
+            realCPM = Math.round(added / totalMinutesFloat);
         }
+        const bucketSizeMs = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats').get<number>('bucketSizeMs', 60000) ?? 60000;
+        let peakCPM = 0;
+        if (Array.isArray(stats.buckets) && stats.buckets.length) {
+            for (const b of stats.buckets) {
+                const cpm = Math.round((b.charsAdded * 60000) / bucketSizeMs);
+                if (cpm > peakCPM) { peakCPM = cpm; }
+            }
+        }
+        const realCPH = realCPM * 60;
+        const peakCPH = peakCPM * 60;
 
     const fileName = path.basename(this.currentFilePath);
         
@@ -211,8 +254,8 @@ export class StatusBarProvider {
             ``,
             `📝 当前字数：${wordCount} 字`,
             `⏱️ 写作时间：${timeText}`,
-            `🏃 平均速度：${realCPM} 字/分钟`,
-            `🚀 峰值速度：${stats.averageCPM} 字/分钟`,
+            `🏃 平均速度：${realCPM} 字/分钟 | ${realCPH} 字/小时`,
+            `🚀 峰值速度：${peakCPM} 字/分钟 | ${peakCPH} 字/小时`,
             `📊 写作会话：${stats.sessionsCount} 次`,
             ``,
             `📈 编辑统计：`,

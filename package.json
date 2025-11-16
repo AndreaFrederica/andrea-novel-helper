@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.17",
+  "version": "0.4.19",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -1510,6 +1510,28 @@
           "maximum": 1000,
           "description": "%config.timeStats.statusBar.priority.description%"
         },
+        "AndreaNovelHelper.timeStats.includePaste": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否将复制粘贴文本统一计入统计：包括速度（字/分钟、字/小时）与新增/净增字符。默认关闭，仅统计实际书写增量。"
+        },
+        "AndreaNovelHelper.timeStats.includePasteInSpeed": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "是否将复制粘贴的文本计入速度统计（字/分钟、字/小时）。默认不计入，仅统计实际书写增量。"
+        },
+        "AndreaNovelHelper.timeStats.includePasteInAddedCounters": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否将复制粘贴的文本计入“新增/净增”字符统计。默认计入；关闭后仅统计非粘贴产生的新增字符。"
+        },
+        "AndreaNovelHelper.timeStats.pasteThresholdChars": {
+          "type": "number",
+          "default": 32,
+          "minimum": 1,
+          "maximum": 100000,
+          "markdownDescription": "粘贴判定阈值（字符数）。当一次变更新增字符数 ≥ 该值或包含换行时，视为粘贴。"
+        },
         "AndreaNovelHelper.fileTracker.respectWcignore": {
           "type": "boolean",
           "default": false,
@@ -1583,6 +1605,52 @@
           "type": "boolean",
           "default": true,
           "description": "写作资源管理器是否遵循 .wcignore（默认开启）。关闭后将不从 .wcignore 读取忽略规则。"
+        },
+        "AndreaNovelHelper.wordCount.primaryUnit": {
+          "type": "string",
+          "default": "excludePunct",
+          "enum": [
+            "excludePunct",
+            "includePunct"
+          ],
+          "enumDescriptions": [
+            "不计标点（CJK 字符 + ASCII 单词）",
+            "含标点（所有非空白字符）"
+          ],
+          "markdownDescription": "字数统计首要显示单位：\n- **excludePunct**：不计标点（`CJK 字符 + ASCII 单词`）\n- **includePunct**：含标点（`非空白字符`）\n状态栏 hover 始终显示两种单位的数据。"
+        },
+        "AndreaNovelHelper.wordCount.statusBar.speedUnit": {
+          "type": "string",
+          "default": "cpm",
+          "enum": [
+            "cpm",
+            "cph"
+          ],
+          "enumDescriptions": [
+            "字/分钟",
+            "字/小时"
+          ],
+          "markdownDescription": "字数统计状态栏速度单位：\n- **cpm**：字/分钟\n- **cph**：字/小时"
+        },
+        "AndreaNovelHelper.wordCount.statusBar.mode": {
+          "type": "string",
+          "default": "detailed",
+          "enum": [
+            "detailed",
+            "semi",
+            "compact"
+          ],
+          "enumDescriptions": [
+            "详细：显示用时、字数与速度",
+            "半精简：显示字数与当前速度",
+            "精简：仅显示总字数"
+          ],
+          "markdownDescription": "字数统计状态栏显示模式：\n- **detailed**：显示用时、字数与速度\n- **semi**：显示字数与当前速度\n- **compact**：仅显示总字数"
+        },
+        "AndreaNovelHelper.wordCount.statusBar.compact": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "字数统计状态栏精简模式：仅显示总计字数；隐藏时间与速度等附加信息。"
         },
         "AndreaNovelHelper.wordCount.maxWorkers": {
           "type": "number",

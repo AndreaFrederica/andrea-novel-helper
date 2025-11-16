@@ -125,6 +125,7 @@ interface RuntimeDocState {
     lastFullStats?: TextStats;    // 最近一次精确统计的完整 TextStats（小文件或大文件校准时更新）
     pendingFlushCore?: boolean;   // 是否已有异步 flushCore 排队
     pendingBaseline?: boolean;    // 是否需要异步建立基线（用于大文件初始化）
+    pendingPasteDelta?: number;
     // —— 里程碑跟踪字段 ——
     achievedMilestones?: Set<number>; // 已达成的里程碑目标
 }
@@ -209,6 +210,7 @@ function getOrInitDocState(doc: vscode.TextDocument): RuntimeDocState {
 // -------------------- 配置 --------------------
 function getConfig() {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+    const includePaste = cfg.get<boolean>('includePaste');
     return {
         enabledLanguages: cfg.get<string[]>('enabledLanguages', ['markdown', 'plaintext']),
         idleThresholdMs: cfg.get<number>('idleThresholdMs', 30000),
@@ -222,7 +224,10 @@ function getConfig() {
         largeThresholdBytes: cfg.get<number>('largeFile.thresholdBytes', 64 * 1024),
         largeApproximate: cfg.get<boolean>('largeFile.approximate', true),
         largeAccurateEveryChanges: cfg.get<number>('largeFile.accurateEveryChanges', 80),
-        largeAccurateEveryMs: cfg.get<number>('largeFile.accurateEveryMs', 60_000)
+        largeAccurateEveryMs: cfg.get<number>('largeFile.accurateEveryMs', 60_000),
+        includePasteSpeed: includePaste !== undefined ? includePaste : (cfg.get<boolean>('includePasteInSpeed', false) ?? false),
+        includePasteCounters: includePaste !== undefined ? includePaste : (cfg.get<boolean>('includePasteInAddedCounters', true) ?? true),
+        pasteThresholdChars: cfg.get<number>('pasteThresholdChars', 32)
     };
 }
 // 忽略解析器（按需实例化）
@@ -681,7 +686,7 @@ function checkExitIdle(trigger: 'text-change' | 'window-focus' | 'editor-change'
 // -------------------- IME 友好的去抖计数 --------------------
 // 核心冲刷（可能执行重计算），不直接调用，使用 flushDocStats 异步调度
 function flushDocStatsCore(doc: vscode.TextDocument) {
-    const { bucketSizeMs, largeApproximate, largeAccurateEveryChanges, largeAccurateEveryMs } = getConfig();
+    const { bucketSizeMs, largeApproximate, largeAccurateEveryChanges, largeAccurateEveryMs, includePasteSpeed, includePasteCounters } = getConfig();
     const filePath = doc.uri.fsPath;
     const ignored = isFileIgnoredForTimeStats(filePath);
     const st = docStates.get(filePath);
@@ -780,12 +785,18 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
             }
         } else {
             const fsEntry = getFileStats(filePath);
-            if (delta > 0) {
-                fsEntry.charsAdded += delta;
-            } else {
-                fsEntry.charsDeleted += -delta;
+            let addForCounters = delta;
+            const pasteDelta = st.pendingPasteDelta || 0;
+            if (!includePasteCounters && delta > 0 && pasteDelta > 0) {
+                addForCounters = Math.max(0, delta - pasteDelta);
             }
-            bumpBucket(fsEntry, t, Math.max(0, delta), bucketSizeMs);
+            if (addForCounters > 0) {
+                fsEntry.charsAdded += addForCounters;
+            } else if (addForCounters < 0) {
+                fsEntry.charsDeleted += -addForCounters;
+            }
+            const addForSpeed = includePasteSpeed ? Math.max(0, delta) : Math.max(0, delta - (st.pendingPasteDelta || 0));
+            bumpBucket(fsEntry, t, addForSpeed, bucketSizeMs);
             fsEntry.lastSeen = t;
             persistFileStats(filePath, fsEntry);
             tsDebug('flushCore:updateFileStats', { file: filePath, charsAdded: fsEntry.charsAdded, charsDeleted: fsEntry.charsDeleted });
@@ -796,6 +807,7 @@ function flushDocStatsCore(doc: vscode.TextDocument) {
     st.lastVersion = doc.version;
     st.lastFlushTs = t;
     if (st.isLarge) { st.pendingDelta = 0; }
+    st.pendingPasteDelta = 0;
     updateStatusBar();
 
     // 大文件近似模式：按时间或次数触发后台精确校准
@@ -897,6 +909,9 @@ function setStatusBarTextAndTooltip() {
     const cpmNow = calcCurrentCPM(fsEntry, bucketSizeMs);
     const cpmAvg = calcAverageCPM(fsEntry);
     const cpmPeak = calcPeakCPM(fsEntry, bucketSizeMs);
+    const cphNow = cpmNow * 60;
+    const cphAvg = cpmAvg * 60;
+    const cphPeak = cpmPeak * 60;
 
     // 分钟 + mm:ss
     const minutes = Math.floor(effectiveMillis / 60000);
@@ -906,17 +921,31 @@ function setStatusBarTextAndTooltip() {
     // —— 状态栏文字 —— 
     const idleIndicator = isIdle ? ' 💤' : '🖋️';
     const approxMark = approxFlag ? '≈' : '';
-    // 仍然保留原有 “X min”，但它现在会随会话进行而增长；同时在后面附上 mm:ss 让首分钟更直观
-    statusBarItem.text = `${cpmNow}/${cpmAvg}/${cpmPeak} CPM · ${minutes} min (${mmss}) · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${displayTotal} ${idleIndicator}`;
+    const wcCfg = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
+    const speedUnit = wcCfg.get<string>('statusBar.speedUnit', 'cpm') ?? 'cpm';
+    const modeRaw = wcCfg.get<string>('statusBar.mode', 'detailed');
+    const compactFallback = wcCfg.get<boolean>('statusBar.compact', false) ?? false;
+    const mode = modeRaw || (compactFallback ? 'compact' : 'detailed');
+    const now = speedUnit === 'cph' ? cphNow : cpmNow;
+    const avg = speedUnit === 'cph' ? cphAvg : cpmAvg;
+    const peak = speedUnit === 'cph' ? cphPeak : cpmPeak;
+    const unitLabel = speedUnit === 'cph' ? 'CPH' : 'CPM';
+    if (mode === 'compact') {
+        statusBarItem.text = `$(edit) 总计 ${approxMark}${displayTotal}字${idleIndicator}`;
+    } else if (mode === 'semi') {
+        statusBarItem.text = `速度 ${now} ${unitLabel} · 总计 ${approxMark}${displayTotal}字 ${idleIndicator}`;
+    } else {
+        statusBarItem.text = `${now}/${avg}/${peak} ${unitLabel} · ${minutes} min (${mmss}) · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${displayTotal} ${idleIndicator}`;
+    }
 
     // —— Tooltip —— 
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = true;
     md.appendMarkdown(
         [
-            `**当前速度**：${cpmNow} CPM`,
-            `**平均速度**：${cpmAvg} CPM`,
-            `**峰值速度**：${cpmPeak} CPM`,
+            `**当前速度**：${cpmNow} 字/分钟 | ${cphNow} 字/小时`,
+            `**平均速度**：${cpmAvg} 字/分钟 | ${cphAvg} 字/小时`,
+            `**峰值速度**：${cpmPeak} 字/分钟 | ${cphPeak} 字/小时`,
             `**累计用时**：${minutes} 分钟（${mmss}）`,
             currentSessionStart > 0 && !isIdle
                 ? `**当前会话**：已持续 ${Math.floor((Date.now() - currentSessionStart) / 1000)} 秒`
@@ -940,7 +969,7 @@ function updateStatusBar() {
 
 // -------------------- 事件 --------------------
 function handleTextChange(e: vscode.TextDocumentChangeEvent) {
-    const { enabledLanguages, idleThresholdMs } = getConfig();
+    const { enabledLanguages, idleThresholdMs, pasteThresholdChars } = getConfig();
     const doc = e.document;
     if (!enabledLanguages.includes(doc.languageId)) {
         tsDebug('textChange:skip-lang', { file: doc.uri.fsPath, lang: doc.languageId, enabledLanguages });
@@ -993,16 +1022,27 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
 
     // 关键：去抖，等待 IME 稳定后统一计算净增量（大文件采用增量估算）
     const st = getOrInitDocState(doc);
-    if (st.isLarge && e.contentChanges.length) {
+    if (e.contentChanges.length) {
         let deltaSum = 0;
+        let pasteDeltaSum = 0;
         for (const c of e.contentChanges) {
             const added = c.text.length;
             const removed = (c as any).rangeLength !== undefined ? (c as any).rangeLength : c.range.end.character - c.range.start.character;
-            deltaSum += (added - removed);
+            const changeDelta = added - removed;
+            deltaSum += changeDelta;
+            const looksLikePaste = added >= pasteThresholdChars || (c.text.indexOf('\n') >= 0);
+            if (looksLikePaste) {
+                pasteDeltaSum += Math.max(0, changeDelta);
+            }
         }
-        st.pendingDelta = (st.pendingDelta || 0) + deltaSum;
-        st.approxChanges = (st.approxChanges || 0) + 1;
-        tsDebug('textChange:largeAccum', { file: doc.uri.fsPath, deltaSum, pendingDelta: st.pendingDelta, approxChanges: st.approxChanges });
+        if (pasteDeltaSum) {
+            st.pendingPasteDelta = (st.pendingPasteDelta || 0) + pasteDeltaSum;
+        }
+        if (st.isLarge) {
+            st.pendingDelta = (st.pendingDelta || 0) + deltaSum;
+            st.approxChanges = (st.approxChanges || 0) + 1;
+            tsDebug('textChange:largeAccum', { file: doc.uri.fsPath, deltaSum, pendingDelta: st.pendingDelta, approxChanges: st.approxChanges, pasteDeltaSum });
+        }
     }
     scheduleFlush(doc);
 }
@@ -1577,7 +1617,10 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('AndreaNovelHelper.timeStats.statusBar.alignment') ||
                 e.affectsConfiguration('AndreaNovelHelper.timeStats.statusBar.priority') ||
-                e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore')) {
+                e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore') ||
+                e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.speedUnit') ||
+                e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.compact') ||
+                e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.mode')) {
                 if (e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore')) {
                     // 重置忽略解析器以便重新加载规则
                     combinedIgnoreParser = undefined;
