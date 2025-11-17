@@ -50,7 +50,7 @@ import { CommentsPanelSidebarProvider } from './Provider/view/commentsPanelSideb
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
 import { forwardEnterToMaioOrNative, refreshMaioAvailability, hasMaioAvailability } from './typeset/core/maioRoute';
-import { registerFormat } from './typeset/format';
+import { registerFormat, registerFormatWithBlanks } from './typeset/format';
 import { registerLayoutStatusBar } from './typeset/layoutStatusBar';
 import { registerQuickSettings } from './typeset/quickSettings';
 import { registerFontManager } from './typeset/fontManager';
@@ -422,6 +422,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerAutoPairs(context);
         registerSmartEnter(context);
         registerFormat(context);
+        registerFormatWithBlanks(context);
 
         const { refresh } = registerLayoutStatusBar(context);
         

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isSupportedDoc, normalizeBlankRuns } from './core/utils';
+import { isSupportedDoc, normalizeBlankRuns, ensureBlankLinesBetweenParas } from './core/utils';
 
 /**
  * 按设置应用“段首缩进”
@@ -109,5 +109,39 @@ async function formatWholeDocument() {
 export function registerFormat(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('andrea.formatDocument', formatWholeDocument)
+    );
+}
+
+async function formatWholeDocumentAddBlanks() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) { return; }
+    const doc = editor.document;
+    if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) { return; }
+    const cfg = vscode.workspace.getConfiguration();
+    const blankLines = Math.max(0, cfg.get<number>('andrea.typeset.blankLinesBetweenParas', 1) ?? 1);
+    const trimTrailing = cfg.get<boolean>('andrea.typeset.trimTrailingSpaces', true);
+    const rawSpaces = cfg.get<number | string>('andrea.typeset.firstLineIndentSpaces');
+    const nSpaces = rawSpaces === undefined ? NaN : Number(rawSpaces);
+    let indentUnit = '';
+    if (Number.isFinite(nSpaces)) {
+        indentUnit = ' '.repeat(Math.max(0, nSpaces));
+    } else {
+        const opts = editor.options;
+        const insertSpaces = opts.insertSpaces === true;
+        const tabSize = typeof opts.tabSize === 'number' ? opts.tabSize : 4;
+        indentUnit = insertSpaces ? ' '.repeat(tabSize) : '\t';
+    }
+    const fullRange = new vscode.Range(0, 0, doc.lineCount, 0);
+    const original = doc.getText(fullRange);
+    const step1 = ensureBlankLinesBetweenParas(original, blankLines, trimTrailing);
+    const step2 = applyFirstLineIndent(step1, indentUnit, trimTrailing);
+    if (step2 !== original) {
+        await editor.edit(edit => edit.replace(fullRange, step2));
+    }
+}
+
+export function registerFormatWithBlanks(context: vscode.ExtensionContext) {
+    context.subscriptions.push(
+        vscode.commands.registerCommand('andrea.formatDocument.addBlanks', formatWholeDocumentAddBlanks)
     );
 }

@@ -1,5 +1,12 @@
 # Change Log
 
+## [0.4.23] - 2025-11-18
+### ✨ 新增
+- 新增配置项 `typeset.addBlanks.sentenceEnders`，用于自定义句子结束标点
+- 新增配置项 `typeset.addBlanks.leadingOpeners`，用于自定义段落开始标点
+- 新增配置项 `typeset.addBlanks.trailingClosers`，用于自定义段落结束标点
+- 新增命令 `andrea.formatDocument.addBlanks`，用于自动补段间空行
+
 ## [0.4.21] - 2025-11-17
 ### ✨ 新增
 - 内置Typst渲染模板增加一个简单的论坛体模板

@@ -217,6 +217,10 @@
         "title": "%command.andrea.formatDocument.title%"
       },
       {
+        "command": "andrea.formatDocument.addBlanks",
+        "title": "%command.andrea.formatDocument.addBlanks.title%"
+      },
+      {
         "command": "andrea.quickSettings",
         "title": "%command.andrea.quickSettings.title%"
       },
@@ -1271,6 +1275,24 @@
           "minimum": 0,
           "maximum": 6,
           "description": "%config.typeset.blankLinesBetweenParas.description%"
+        },
+        "andrea.typeset.addBlanks.sentenceEnders": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["。","！","？","…","；","：","!","?",";",":","."],
+          "description": "%config.typeset.addBlanks.sentenceEnders.description%"
+        },
+        "andrea.typeset.addBlanks.trailingClosers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["'", "\"", "’", "”", "」", "』", "》", "）", "】", "〉", "〕", "〗", "〙", "〛", "〞", "＂", "＇", "｝", "］"],
+          "description": "%config.typeset.addBlanks.trailingClosers.description%"
+        },
+        "andrea.typeset.addBlanks.leadingOpeners": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["“", "\"", "『", "「", "（", "(", "《", "〈", "【", "["],
+          "description": "%config.typeset.addBlanks.leadingOpeners.description%"
         },
         "andrea.typeset.trimTrailingSpaces": {
           "type": "boolean",
@@ -2637,6 +2659,11 @@
         {
           "command": "andrea.formatDocument",
           "when": "andrea.anh.enabled && (editorLangId == markdown || editorLangId == plaintext || editorLangId == json5)",
+          "group": "navigation@9"
+        },
+        {
+          "command": "andrea.formatDocument.addBlanks",
+          "when": "andrea.anh.enabled && (editorLangId == markdown || editorLangId == plaintext)",
           "group": "navigation@9"
         },
         {
