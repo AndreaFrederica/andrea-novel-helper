@@ -1278,20 +1278,69 @@
         },
         "andrea.typeset.addBlanks.sentenceEnders": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["。","！","？","…","；","：","!","?",";",":","."],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "。",
+            "！",
+            "？",
+            "…",
+            "；",
+            "：",
+            "!",
+            "?",
+            ";",
+            ":",
+            "."
+          ],
           "description": "%config.typeset.addBlanks.sentenceEnders.description%"
         },
         "andrea.typeset.addBlanks.trailingClosers": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["'", "\"", "’", "”", "」", "』", "》", "）", "】", "〉", "〕", "〗", "〙", "〛", "〞", "＂", "＇", "｝", "］"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "'",
+            "\"",
+            "’",
+            "”",
+            "」",
+            "』",
+            "》",
+            "）",
+            "】",
+            "〉",
+            "〕",
+            "〗",
+            "〙",
+            "〛",
+            "〞",
+            "＂",
+            "＇",
+            "｝",
+            "］"
+          ],
           "description": "%config.typeset.addBlanks.trailingClosers.description%"
         },
         "andrea.typeset.addBlanks.leadingOpeners": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["“", "\"", "『", "「", "（", "(", "《", "〈", "【", "["],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "“",
+            "\"",
+            "『",
+            "「",
+            "（",
+            "(",
+            "《",
+            "〈",
+            "【",
+            "["
+          ],
           "description": "%config.typeset.addBlanks.leadingOpeners.description%"
         },
         "andrea.typeset.trimTrailingSpaces": {
@@ -2255,8 +2304,7 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.startupSnapshot.showNotification.description%"
-        }
-        ,
+        },
         "andrea.typst.cliPath": {
           "type": "string",
           "default": "typst",
@@ -2279,7 +2327,11 @@
         },
         "andrea.typst.output.format": {
           "type": "string",
-          "enum": ["pdf","png","svg"],
+          "enum": [
+            "pdf",
+            "png",
+            "svg"
+          ],
           "default": "pdf",
           "description": "导出格式"
         },
@@ -2295,7 +2347,9 @@
         },
         "andrea.typst.font.paths": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "额外字体搜索路径"
         },
@@ -2811,7 +2865,11 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "mcp:test": "ts-node scripts/mcp-test.ts",
+    "mcp:run": "ts-node scripts/mcp-run.ts",
+    "mcp:bing-dom": "ts-node scripts/mcp-run.ts scripts/mcp-scripts/open-bing-get-dom.js",
+    "mcp:bing-input": "ts-node scripts/mcp-run.ts scripts/mcp-scripts/open-bing-input-zh.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -2827,6 +2885,8 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@cfworker/json-schema": "^4.1.1",
+    "@modelcontextprotocol/sdk": "^1.22.0",
     "@types/uuid": "^10.0.0",
     "@vscode/sqlite3": "^5.1.8-vscode",
     "ahocorasick": "^1.0.2",
