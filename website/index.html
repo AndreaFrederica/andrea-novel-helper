@@ -198,6 +198,31 @@
       </div>
     </section>
 
+    <section>
+      <h2>发布脚本（MCP）示例</h2>
+      <p class="subtitle">脚本侧栏支持运行用户脚本，并通过 MCP 与浏览器/服务交互，实现一键发布、预览与自动化。以下为开箱示例（放置于仓库 <code>examples/</code> 目录）：</p>
+      <ul class="features">
+        <li>预览当前章节：在输出面板打印当前打开章节的处理后内容，便于检查与二次发布。</li>
+        <li>发布到 Pastebin：打开 Pastebin 并自动填充当前章节文本，支持自动提交。</li>
+        <li>打开计算器：示例操作系统脚本调用（本机工具）。</li>
+      </ul>
+      <div class="links">
+        <a class="link-card" href="https://github.com/AndreaFrederica/andrea-novel-helper/tree/feat/time-line/examples/preview-current-chapter.js" target="_blank" rel="noopener">
+          <span>preview-current-chapter.js · 预览当前章节</span>
+        </a>
+        <a class="link-card" href="https://github.com/AndreaFrederica/andrea-novel-helper/tree/feat/time-line/examples/publish-current-chapter-to-pastebin.js" target="_blank" rel="noopener">
+          <span>publish-current-chapter-to-pastebin.js · 发布到 Pastebin</span>
+        </a>
+        <a class="link-card" href="https://github.com/AndreaFrederica/andrea-novel-helper/tree/feat/time-line/examples/publish-current-chapter-to-pastebin-with-submit.js" target="_blank" rel="noopener">
+          <span>publish-current-chapter-to-pastebin-with-submit.js · 自动提交版</span>
+        </a>
+        <a class="link-card" href="https://github.com/AndreaFrederica/andrea-novel-helper/tree/feat/time-line/examples/open-calculator.js" target="_blank" rel="noopener">
+          <span>open-calculator.js · 打开计算器</span>
+        </a>
+      </div>
+      <p class="subtitle">使用方法：在脚本侧栏设置 MCP 配置（<code>novel-helper/mcp.json</code>），启用目标服务器（默认 Chrome MCP），然后在脚本列表中点击运行即可。脚本内可以直接使用 <code>console.log</code> 输出到 <strong>ANH Scripts</strong> 面板。</p>
+    </section>
+
     <section class="cta-block">
       <div class="cta">
         <a class="btn primary" href="https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper" target="_blank" rel="noopener">立即安装</a>

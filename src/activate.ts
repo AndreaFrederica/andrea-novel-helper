@@ -79,6 +79,7 @@ import { WebDAVAccountManager } from './sync/accountManager';
 import { WebDAVSyncService } from './sync/webdavSync';
 import { registerWebDAVPanel } from './Provider/view/webdavPanel';
 import { registerWebDAVTreeView } from './Provider/view/webdavTreeView';
+import { registerScriptRunnerView } from './Provider/view/scriptRunnerView';
 import { registerCommentsTreeView } from './Provider/view/commentsTreeView';
 import { WebDAVFileSystemProvider } from './Provider/fileSystem/webdavFileSystemProvider';
 import { AutoGitService } from './sync/autoGitService';
@@ -571,6 +572,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerDocRolesTreeView(context);
         registerDocRolesExplorerView(context);
         registerCommentsTreeView(context);
+        registerScriptRunnerView(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);

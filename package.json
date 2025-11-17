@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.23",
+  "version": "0.4.25",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -180,6 +180,12 @@
           "id": "AndreaWebDAVSidebar",
           "title": "%sidebar.webdav.title%",
           "icon": "$(cloud)",
+          "when": "andrea.anh.enabled"
+        },
+        {
+          "id": "AndreaScriptsSidebar",
+          "title": "%sidebar.scripts.title%",
+          "icon": "$(run)",
           "when": "andrea.anh.enabled"
         }
       ]
@@ -379,6 +385,27 @@
           "light": "$(json)",
           "dark": "$(json)"
         }
+      },
+      {
+        "command": "andrea.scripts.openMcpConfig",
+        "title": "打开 MCP 配置",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "andrea.scripts.toggleMcpServers",
+        "title": "启用/禁用 MCP 服务器",
+        "icon": "$(controls)",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.scripts.toggleSingleServer",
+        "title": "切换 MCP 服务器启用状态",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.scripts.runWithServers",
+        "title": "选择服务器运行",
+        "icon": "$(play)"
       },
       {
         "command": "WordCount.exportTxt",
@@ -811,6 +838,37 @@
         "command": "AndreaNovelHelper.circlePacking.debugPrintStats",
         "title": "输出 Circle Packing 数据统计",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.scripts.refresh",
+        "title": "刷新脚本列表",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "andrea.scripts.open",
+        "title": "打开脚本"
+      },
+      {
+        "command": "andrea.scripts.run",
+        "title": "运行脚本"
+      },
+      {
+        "command": "andrea.scripts.newScript",
+        "title": "新建脚本",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "andrea.scripts.deleteScript",
+        "title": "删除脚本"
+      },
+      {
+        "command": "andrea.scripts.renameScript",
+        "title": "重命名脚本"
+      },
+      {
+        "command": "andrea.scripts.openFolder",
+        "title": "打开脚本文件夹",
+        "icon": "$(folder-opened)"
       }
     ],
     "walkthroughs": [
@@ -2357,6 +2415,11 @@
           "type": "boolean",
           "default": false,
           "description": "导出后是否自动清理临时编译目录 build/typst/tmp-*（默认不清理，便于诊断）"
+        },
+        "AndreaNovelHelper.scripts.root": {
+          "type": "string",
+          "default": "novel-helper/scripts",
+          "markdownDescription": "脚本运行侧栏的根目录"
         }
       }
     },
@@ -2393,6 +2456,32 @@
           "command": "andrea.configureAllRoles",
           "when": "view == roleHierarchyView",
           "group": "navigation@100"
+        },
+        {
+          "command": "andrea.scripts.openFolder",
+          "when": "view == andrea.scriptsView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "andrea.scripts.openMcpConfig",
+          "when": "view == andrea.scriptsView",
+          "group": "navigation@2"
+        },
+        
+        {
+          "command": "andrea.scripts.toggleMcpServers",
+          "when": "view == andrea.scriptsView",
+          "group": "navigation@4"
+        },
+        {
+          "command": "andrea.scripts.newScript",
+          "when": "view == andrea.scriptsView",
+          "group": "navigation@5"
+        },
+        {
+          "command": "andrea.scripts.refresh",
+          "when": "view == andrea.scriptsView",
+          "group": "navigation@6"
         }
       ],
       "view/item/context": [
@@ -2400,6 +2489,31 @@
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
           "command": "AndreaNovelHelper.createCharacterGallery",
           "group": "0_create@1"
+        },
+        {
+          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
+          "command": "andrea.scripts.run",
+          "group": "inline@1"
+        },
+        {
+          "when": "view == andrea.scriptsView && viewItem == andrea.mcp.server.enabled",
+          "command": "andrea.scripts.toggleSingleServer",
+          "group": "navigation@1"
+        },
+        {
+          "when": "view == andrea.scriptsView && viewItem == andrea.mcp.server.disabled",
+          "command": "andrea.scripts.toggleSingleServer",
+          "group": "navigation@1"
+        },
+        {
+          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
+          "command": "andrea.scripts.open",
+          "group": "inline@2"
+        },
+        {
+          "when": "view == andrea.scriptsView && viewItem == andrea.script.dir",
+          "command": "andrea.scripts.newScript",
+          "group": "inline@1"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
@@ -2680,6 +2794,31 @@
           "command": "andrea.commentsExplorer.exportToJson",
           "when": "view == andrea.commentsExplorer",
           "group": "3_export@3"
+        },
+        {
+          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
+          "command": "andrea.scripts.open",
+          "group": "navigation@1"
+        },
+        {
+          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
+          "command": "andrea.scripts.run",
+          "group": "navigation@2"
+        },
+        {
+          "when": "view == andrea.scriptsView",
+          "command": "andrea.scripts.newScript",
+          "group": "0_create@1"
+        },
+        {
+          "when": "view == andrea.scriptsView",
+          "command": "andrea.scripts.renameScript",
+          "group": "2_modification@1"
+        },
+        {
+          "when": "view == andrea.scriptsView",
+          "command": "andrea.scripts.deleteScript",
+          "group": "2_deletion@9"
         }
       ],
       "editor/title": [
@@ -2837,6 +2976,13 @@
           "id": "andrea.autoGitPanel",
           "name": "AutoGit 管理",
           "icon": "git-branch"
+        }
+      ],
+      "AndreaScriptsSidebar": [
+        {
+          "id": "andrea.scriptsView",
+          "name": "%view.scripts.name%",
+          "icon": "run"
         }
       ]
     },

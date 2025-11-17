@@ -52,6 +52,8 @@
     "command.webdav.copyFile.title": "WebDAVファイルをコピー",
     "view.webdav.panel.name": "WebDAV管理",
     "view.webdav.files.name": "WebDAVファイル",
+    "sidebar.scripts.title": "Andrea 小説アシスタント: スクリプト実行",
+    "view.scripts.name": "スクリプト",
     "command.exportTimeStatsCSV.title": "タイム統計CSVをエクスポート",
     "command.myPreview.open.title": "プレビューを開く",
     "command.myPreview.copyPlainText.title": "レンダリングされたプレーンテキストをコピー",

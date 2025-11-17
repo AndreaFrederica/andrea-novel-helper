@@ -2,8 +2,8 @@
 
 > 说明：预发布版本实际上是跟随 VS Code 自动启动的版本；启用 VS Code 的预发布渠道后，本扩展会随 Code 自动加载，而不是需要触发才加载，但是如果您使用了那个版本,Code的插件禁用功能将不生效，您需要使用ANH自己的禁用功能。
 
-> **最新版本：0.4.21 (2025-11-17)**  
-> 🔗 **重大更新：支持了角色引用热力图和气泡图**  
+> **最新版本：0.4.25 (2025-11-18)**  
+> 🔗 **重大更新：支持了脚本和MCP运行时和Typst渲染系统**  
 > 📝 近期已大幅重构异步加载与性能管线，若从老版本升级，建议阅读"近期版本速览"。   
 > 独立组件 Anh Chat(小说助手 聊天组件)已经发布! [GitHub](https://github.com/AndreaFrederica/Roo-Code-Chat) [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.anh-cline?label=VS%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.anh-cline) [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/anh-cline?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/anh-cline)
 
@@ -35,6 +35,29 @@
 - [Discord](https://discord.gg/YeVAXeKX)
 
 ## 🔔 近期版本速览
+
+
+## [0.4.23] - 2025-11-18
+### ✨ 新增
+- 新增配置项 `typeset.addBlanks.sentenceEnders`，用于自定义句子结束标点
+- 新增配置项 `typeset.addBlanks.leadingOpeners`，用于自定义段落开始标点
+- 新增配置项 `typeset.addBlanks.trailingClosers`，用于自定义段落结束标点
+- 新增命令 `andrea.formatDocument.addBlanks`，用于自动补段间空行
+
+## [0.4.21] - 2025-11-17
+### ✨ 新增
+- 内置Typst渲染模板增加一个简单的论坛体模板
+- 现在Typst渲染支持图片了，编译器会自动转换图片路径
+- 现在默认build中间文件不会被自动删除，方便查看中间产物
+- 现在文章右键菜单，资源管理器右键菜单都增加了导出Typst的选项
+
+## [0.4.19] - 2025-11-16
+### ✨ 新增
+- 字数统计状态栏显示模式：详细/半精简/精简
+  - 详细：显示用时、字数与速度
+  - 半精简：显示字数与当前速度
+  - 精简：仅显示总字数
+- 字数统计状态栏速度单位：CPM/CPH
 
 ### 🌟 0.4.3（2025-09-17）- 角色关系图编辑器与文件格式扩展
 
