@@ -956,7 +956,7 @@ function setStatusBarTextAndTooltip() {
                 : `**当前会话**：未进行或已暂停`,
             `**中文字符**：${fullStats.cjkChars}${approxFlag ? ' (近似可能滞后)' : ''}`,
             `**英文单词**：${fullStats.words}${approxFlag ? ' (近似可能滞后)' : ''}`,
-            `**当前字数**：${approxMark}${wordCount}${approxFlag ? ' (估算/待校准)' : ''}${primaryUnit === 'includePunct' ? '（含标点）' : ''}`,
+            `**当前字数**：${approxMark}${wordCount}${approxFlag ? ' (估算/待校准)' : ''} ${primaryUnit === 'includePunct' ? '（含标点，按字符计）' : '（不含标点，数字按单词计）'}`,
             `**文件路径**：${currentDocPath}`,
             `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
             `**会话数**：${fsEntry.sessions.length}`,
