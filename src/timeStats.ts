@@ -418,7 +418,7 @@ export async function computeZhEnCountAsync(filePath: string): Promise<{ zhChars
             zhChars: 0,
             enWords: 0,
             total: 0,
-            full: { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 }
+            full: { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonPunctChars: 0, total: 0 }
         };
     }
 }
@@ -893,7 +893,7 @@ function setStatusBarTextAndTooltip() {
         approxFlag = true;
     }
     if (!fullStats) {
-        fullStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: displayTotal };
+        fullStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonPunctChars: 0, total: displayTotal };
     }
 
     // —— CPM & 累计用时计算 ——

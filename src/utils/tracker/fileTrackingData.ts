@@ -1360,10 +1360,10 @@ export class FileTrackingDataManager {
         const metadata = this.database.files[uuid];
         if (!metadata) { return; }
         if (!metadata.wordCountStats) {
-            metadata.wordCountStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+            metadata.wordCountStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonPunctChars: 0, total: 0 };
         }
         const prev = metadata.wordCountStats;
-        const changed = prev.cjkChars !== stats.cjkChars || prev.asciiChars !== stats.asciiChars || prev.words !== stats.words || prev.nonWSChars !== stats.nonWSChars || prev.total !== stats.total;
+        const changed = prev.cjkChars !== stats.cjkChars || prev.asciiChars !== stats.asciiChars || prev.words !== stats.words || prev.nonWSChars !== stats.nonWSChars || prev.nonPunctChars !== stats.nonPunctChars || prev.total !== stats.total;
         if (!changed) { return; }
         metadata.wordCountStats = { ...stats };
         metadata.updatedAt = Date.now();

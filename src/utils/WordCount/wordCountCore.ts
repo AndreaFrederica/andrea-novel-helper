@@ -9,6 +9,7 @@ export interface TextStats {
   asciiChars: number;
   words: number;
   nonWSChars: number;
+  nonPunctChars: number;
   total: number;
 }
 
@@ -192,6 +193,7 @@ export function analyzeText(text: string): TextStats {
   let asciiChars = 0;
   let words = 0;
   let nonWSChars = 0;
+  let nonPunctChars = 0;
 
   let inAsciiWord = false;
 
@@ -208,8 +210,11 @@ export function analyzeText(text: string): TextStats {
     (code >= 0xF900 && code <= 0xFAFF) ||   // CJK Compatibility Ideographs
     (code >= 0x20000 && code <= 0x2FFFF);   // CJK Ext B..G（代理对）
 
+  const punctRegex = /\p{P}/u;
+
   for (let i = 0; i < text.length; i++) {
     let code = text.charCodeAt(i);
+    const ch = text[i];
 
     // 代理对到码点
     if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
@@ -220,8 +225,15 @@ export function analyzeText(text: string): TextStats {
       }
     }
 
+    const charStr = String.fromCodePoint(code);
+    const isWhitespace = /\s/.test(charStr);
+    const isPunctuation = punctRegex.test(charStr);
+
     // 非空白统计
-    if (!/\s/.test(String.fromCharCode(code))) {nonWSChars++;}
+    if (!isWhitespace) {nonWSChars++;}
+
+    // 非标点且非空白统计
+    if (!isWhitespace && !isPunctuation) {nonPunctChars++;}
 
     // ASCII 统计
     if (code <= 0x7F) {asciiChars++;}
@@ -246,7 +258,7 @@ export function analyzeText(text: string): TextStats {
   }
 
   const total = cjkChars + words;
-  return { cjkChars, asciiChars, words, nonWSChars, total };
+  return { cjkChars, asciiChars, words, nonWSChars, nonPunctChars, total };
 }
 
 /** 兼容旧接口 */

@@ -502,7 +502,7 @@ class AsyncWordCounter {
     // 新：
     const abs = path.resolve(filePath);
     if (!isUnderWorkspace(abs)) {
-      return { stats: { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 } };
+      return { stats: { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonPunctChars: 0, total: 0 } };
     }
     filePath = abs;
 

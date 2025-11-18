@@ -76,6 +76,7 @@ export interface TextStats {
 	asciiChars: number;  // ASCII 字符（非 CJK 且 <128）
 	words: number;  // 英文单词数
 	nonWSChars: number;  // 非空白字符总数
+	nonPunctChars: number;  // 非标点且非空白字符总数
 	total: number;  // 总“字数”=cjk+words（或你自己定义）
 }
 
@@ -323,7 +324,18 @@ export function analyzeText(text: string): TextStats {
 	const asciiChars = ascii.filter(ch => !/[\p{Script=Han}]/u.test(ch)).length;
 	const total = cjkChars + words;  // 或用非空白：nonWSChars
 
-	return { cjkChars, asciiChars, words, nonWSChars, total };
+	// 非标点且非空白字符（排除标点和空白）
+	const punctRegex = /\p{P}/u;
+	let nonPunctChars = 0;
+	for (const ch of text) {
+		const isWhitespace = /\s/.test(ch);
+		const isPunctuation = punctRegex.test(ch);
+		if (!isWhitespace && !isPunctuation) {
+			nonPunctChars++;
+		}
+	}
+
+	return { cjkChars, asciiChars, words, nonWSChars, nonPunctChars, total };
 }
 
 export async function countAndAnalyze(fullPath: string): Promise<TextStats> {
