@@ -108,7 +108,7 @@ export class StatusBarProvider {
             const fileMetadata = getFileByPath(filePath);
             
             if (!fileMetadata?.writingStats) {
-                this.statusBarItem.text = '$(edit) 新文档';
+                this.statusBarItem.text = '$(file-text) 新文档';
                 this.statusBarItem.show();
                 return;
             }
@@ -173,17 +173,17 @@ export class StatusBarProvider {
             const mode = modeRaw || (compactFallback ? 'compact' : 'detailed');
             const speedText = speedUnit === 'cph' ? `${realCPH}/h` : `${realCPM}/m`;
             if (mode === 'compact') {
-                this.statusBarItem.text = `$(edit) ${wordCount}字`;
+                this.statusBarItem.text = `$(file-text) ${wordCount}字`;
             } else if (mode === 'semi') {
-                this.statusBarItem.text = `$(edit) ${wordCount}字 | 速度:${speedText}`;
+                this.statusBarItem.text = `$(file-text) ${wordCount}字 | 速度:${speedText}`;
             } else {
-                this.statusBarItem.text = `$(edit) ${timeText} | ${wordCount}字 | 速度:${speedText}`;
+                this.statusBarItem.text = `$(file-text) ${timeText} | ${wordCount}字 | 速度:${speedText}`;
             }
             this.statusBarItem.show();
 
         } catch (error) {
             console.error('Failed to update status bar:', error);
-            this.statusBarItem.text = '$(edit) 统计错误';
+            this.statusBarItem.text = '$(warning) 统计错误';
             this.statusBarItem.show();
         }
     }

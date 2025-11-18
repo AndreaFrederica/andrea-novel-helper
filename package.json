@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.29",
+  "version": "0.4.31",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -16,6 +16,32 @@
   "icon": "images/icon.png",
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "andrea",
+    "novel",
+    "helper",
+    "writing",
+    "assistant",
+    "小说",
+    "小説",
+    "作家",
+    "写作",
+    "助手",
+    "角色",
+    "大纲",
+    "时间线",
+    "关系图",
+    "词汇",
+    "敏感词",
+    "统计",
+    "同步",
+    "WebDAV",
+    "AutoGit",
+    "脚本",
+    "MCP",
+    "Typst",
+    "错别字检查"
   ],
   "activationEvents": [
     "onLanguage:markdown",
@@ -1805,6 +1831,11 @@
           "maximum": 128,
           "description": "%config.wordCount.maxWorkersUpperLimit.description%"
         },
+        "AndreaNovelHelper.wordCount.skipStartupStatCheck": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "⚠️ 危险选项：启用后，字数统计视图在**冷启动扫描文件时将跳过对已有缓存文件的 fs.stat 校验**，直接信任快照 / 文件追踪数据库 / 内存中的字数统计。这样可以显著减少启动时间，但**无法在启动阶段发现第三方软件或外部工具对文件内容的篡改**，也无法保证缓存与文件系统 100% 一致。仅在你确信本地文本文件几乎不会在 VS Code 之外被修改时使用。"
+        },
         "AndreaNovelHelper.debug.completionLog": {
           "type": "boolean",
           "default": false,
@@ -2469,7 +2500,6 @@
           "when": "view == andrea.scriptsView",
           "group": "navigation@2"
         },
-        
         {
           "command": "andrea.scripts.toggleMcpServers",
           "when": "view == andrea.scriptsView",
@@ -3041,6 +3071,7 @@
     "chardet": "^2.1.0",
     "chart.js": "^4.5.0",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "fast-glob": "^3.3.3",
     "font-list": "^1.5.1",
     "iconv-lite": "^0.6.3",
     "ignore": "^7.0.5",
