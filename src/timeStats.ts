@@ -930,14 +930,18 @@ function setStatusBarTextAndTooltip() {
     const avg = speedUnit === 'cph' ? cphAvg : cpmAvg;
     const peak = speedUnit === 'cph' ? cphPeak : cpmPeak;
     const unitLabel = speedUnit === 'cph' ? 'CPH' : 'CPM';
-    if (mode === 'compact') {
-        statusBarItem.text = `$(edit) 总计 ${approxMark}${displayTotal}字${idleIndicator}`;
-    } else if (mode === 'semi') {
-        statusBarItem.text = `速度 ${now} ${unitLabel} · 总计 ${approxMark}${displayTotal}字 ${idleIndicator}`;
-    } else {
-        statusBarItem.text = `${now}/${avg}/${peak} ${unitLabel} · ${minutes} min (${mmss}) · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${displayTotal} ${idleIndicator}`;
-    }
 
+    // 字数统计
+    const primaryUnit = wcCfg.get<string>('primaryUnit', 'excludePunct');
+    const wordCount = primaryUnit === 'includePunct' ? fullStats.nonWSChars : displayTotal;
+
+    if (mode === 'compact') {
+        statusBarItem.text = `$(edit) 总计 ${approxMark}${wordCount}字${idleIndicator}`;
+    } else if (mode === 'semi') {
+        statusBarItem.text = `速度 ${now} ${unitLabel} · 总计 ${approxMark}${wordCount}字 ${idleIndicator}`;
+    } else {
+        statusBarItem.text = `${now}/${avg}/${peak} ${unitLabel} · ${minutes} min (${mmss}) · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${wordCount} ${idleIndicator}`;
+    }
     // —— Tooltip —— 
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = true;
@@ -952,7 +956,7 @@ function setStatusBarTextAndTooltip() {
                 : `**当前会话**：未进行或已暂停`,
             `**中文字符**：${fullStats.cjkChars}${approxFlag ? ' (近似可能滞后)' : ''}`,
             `**英文单词**：${fullStats.words}${approxFlag ? ' (近似可能滞后)' : ''}`,
-            `**码字总量**：${approxMark}${displayTotal}${approxFlag ? ' (估算/待校准)' : ''}`,
+            `**当前字数**：${approxMark}${wordCount}${approxFlag ? ' (估算/待校准)' : ''}${primaryUnit === 'includePunct' ? '（含标点）' : ''}`,
             `**文件路径**：${currentDocPath}`,
             `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
             `**会话数**：${fsEntry.sessions.length}`,
