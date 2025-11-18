@@ -1624,7 +1624,8 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
                 e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore') ||
                 e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.speedUnit') ||
                 e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.compact') ||
-                e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.mode')) {
+                e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.mode') ||
+                e.affectsConfiguration('AndreaNovelHelper.wordCount.primaryUnit')) {
                 if (e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore')) {
                     // 重置忽略解析器以便重新加载规则
                     combinedIgnoreParser = undefined;
