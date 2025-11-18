@@ -66,6 +66,7 @@ export interface FileMetadata {
         asciiChars: number;
         words: number;
         nonWSChars: number;
+        nonWSNoPunct: number;
         total: number;
     };
     // 最后更新时间
@@ -1353,6 +1354,7 @@ export class FileTrackingDataManager {
         asciiChars: number;
         words: number;
         nonWSChars: number;
+        nonWSNoPunct: number;
         total: number;
     }): Promise<void> {
         const uuid = this.getFileUuid(filePath);
@@ -1360,10 +1362,10 @@ export class FileTrackingDataManager {
         const metadata = this.database.files[uuid];
         if (!metadata) { return; }
         if (!metadata.wordCountStats) {
-            metadata.wordCountStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+            metadata.wordCountStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
         }
         const prev = metadata.wordCountStats;
-        const changed = prev.cjkChars !== stats.cjkChars || prev.asciiChars !== stats.asciiChars || prev.words !== stats.words || prev.nonWSChars !== stats.nonWSChars || prev.total !== stats.total;
+        const changed = prev.cjkChars !== stats.cjkChars || prev.asciiChars !== stats.asciiChars || prev.words !== stats.words || prev.nonWSChars !== stats.nonWSChars || prev.nonWSNoPunct !== stats.nonWSNoPunct || prev.total !== stats.total;
         if (!changed) { return; }
         metadata.wordCountStats = { ...stats };
         metadata.updatedAt = Date.now();

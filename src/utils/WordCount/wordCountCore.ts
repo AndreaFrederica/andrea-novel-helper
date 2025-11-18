@@ -9,6 +9,7 @@ export interface TextStats {
   asciiChars: number;
   words: number;
   nonWSChars: number;
+  nonWSNoPunct: number;
   total: number;
 }
 
@@ -192,6 +193,7 @@ export function analyzeText(text: string): TextStats {
   let asciiChars = 0;
   let words = 0;
   let nonWSChars = 0;
+  let nonWSNoPunct = 0;
 
   let inAsciiWord = false;
 
@@ -221,7 +223,13 @@ export function analyzeText(text: string): TextStats {
     }
 
     // 非空白统计
-    if (!/\s/.test(String.fromCharCode(code))) {nonWSChars++;}
+    {
+      const ch = String.fromCodePoint(code);
+      if (!/\s/.test(ch)) {
+        nonWSChars++;
+        if (!punctRegex.test(ch)) { nonWSNoPunct++; }
+      }
+    }
 
     // ASCII 统计
     if (code <= 0x7F) {asciiChars++;}
@@ -246,7 +254,7 @@ export function analyzeText(text: string): TextStats {
   }
 
   const total = cjkChars + words;
-  return { cjkChars, asciiChars, words, nonWSChars, total };
+  return { cjkChars, asciiChars, words, nonWSChars, nonWSNoPunct, total };
 }
 
 /** 兼容旧接口 */
@@ -260,3 +268,4 @@ export async function countAndAnalyzeRaw(fullPath: string, debug = false): Promi
   const text = await readTextFileDetectEncodingCore(fullPath, debug);
   return analyzeText(text);
 }
+  const punctRegex = /\p{P}/u;

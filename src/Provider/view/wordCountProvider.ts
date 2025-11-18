@@ -682,7 +682,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     items.push(item);
                 } else if (cacheEntry && !cacheValid) {
                     // 强制：改回占位符显示“计算中”
-                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
                     const item = new WordCountItem(
                         uri,
                         d.name,
@@ -716,7 +716,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     items.push(staleItem);
                     needsAsync = true;
                 } else {
-                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
                     const item = new WordCountItem(
                         uri,
                         d.name,
@@ -737,7 +737,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
                 if (isRef && !exts.includes(ext) && !special) {
                     // 参考文件：仅展示，不计数，不排队后台
-                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+                    const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
                     const item = new WordCountItem(uri, d.name, zero, vscode.TreeItemCollapsibleState.None, false);
                     item.id = full;
                     // 显式标注：可在 tooltip 上注明“参考资料（不计数）”
@@ -759,7 +759,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         items.push(item);
                     } else {
                         wcDebug('placeholder:file', full);
-                        const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+                        const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
                         const item = new WordCountItem(uri, d.name, zero, vscode.TreeItemCollapsibleState.None, true);
                         item.id = full;
                         this.itemsById.set(item.id, item);
@@ -895,7 +895,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         }
 
         const work = (async () => {
-            let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+            let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
             try {
                 const dirents = await fs.promises.readdir(folder, { withFileTypes: true });
                 // 分离文件与子目录，避免深度递归串行阻塞
@@ -1078,7 +1078,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             if (!isForced && size > largeThreshold && !this.largeApproxPending.has(filePath)) {
                 // 生成估算结果（只估 total，其余置 0）
                 const estimatedTotal = Math.max(1, Math.floor(size / Math.max(0.1, avgBytesPerChar)));
-                const est: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: estimatedTotal };
+                const est: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: estimatedTotal };
                 // 1.5 大文件估算
                 this.statsCache.set(filePath, { stats: est, mtime, size });
 
@@ -1168,7 +1168,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
         } catch (error) {
             console.error(`Error calculating stats for ${filePath}:`, error);
-            return { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+            return { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
         }
     }
 
@@ -1254,7 +1254,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
     /** 非递归聚合目录：依赖子目录已更新的聚合值 + 文件最新值（支持祖先目录强制） */
     private async recomputeDirAggregate(dir: string) {
-        let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+        let agg: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
         const processedFiles = new Set<string>();
         try {
             const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -1322,7 +1322,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
             const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
             if (!root) return;
             const normalizedDir = path.resolve(dir);
-            let realSum: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 };
+            let realSum: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
             const missing: string[] = [];
             for (const [fp, entry] of this.statsCache.entries()) {
                 const abs = path.resolve(fp);

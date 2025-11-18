@@ -132,9 +132,10 @@ export class StatusBarProvider {
 
             const textStats = await this.wordCountProvider.getFileStats(filePath);
             const wcExclude = textStats?.total ?? 0;
-            const wcInclude = textStats?.nonWSChars ?? 0;
+            const wcInclude = (textStats as any)?.nonWSChars ?? 0;
+            const wcNonWSNoPunct = (textStats as any)?.nonWSNoPunct ?? wcExclude;
             const primaryUnit = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount').get<string>('primaryUnit', 'excludePunct');
-            const wordCount = primaryUnit === 'includePunct' ? wcInclude : wcExclude;
+            const wordCount = primaryUnit === 'includePunct' ? wcInclude : (primaryUnit === 'nonWSNoPunct' ? wcNonWSNoPunct : wcExclude);
             
             // 计算“平均速度”（基于计入速度的新增字符和总时长）
             let realCPM = 0;

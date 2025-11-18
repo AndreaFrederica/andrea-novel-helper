@@ -120,10 +120,10 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
     async function toggleWordCountUnit() {
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
         const cur = cfg.get<string>('primaryUnit', 'excludePunct') ?? 'excludePunct';
-        const next = cur === 'excludePunct' ? 'includePunct' : 'excludePunct';
+        const next = cur === 'excludePunct' ? 'includePunct' : (cur === 'includePunct' ? 'nonWSNoPunct' : 'excludePunct');
         await cfg.update('primaryUnit', next, vscode.ConfigurationTarget.Workspace);
         onRefreshStatus();
-        vscode.window.showInformationMessage(`字数单位已切换为：${next === 'excludePunct' ? '不计标点' : '含标点'}`);
+        vscode.window.showInformationMessage(`字数单位已切换为：${next === 'excludePunct' ? '词计（CJK字数 + 英文单词）' : next === 'includePunct' ? '含标点（非空白字符）' : '不含标点（非空白且排除标点）'}`);
     }
 
     async function togglePasteAll() {
