@@ -131,7 +131,7 @@ export class StatusBarProvider {
             }
 
             const textStats = await this.wordCountProvider.getFileStats(filePath);
-            const wcExclude = textStats?.total ?? 0;
+            const wcExclude = textStats?.nonPunctChars ?? 0;
             const wcInclude = textStats?.nonWSChars ?? 0;
             const primaryUnit = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount').get<string>('primaryUnit', 'excludePunct');
             const wordCount = primaryUnit === 'includePunct' ? wcInclude : wcExclude;
@@ -158,7 +158,7 @@ export class StatusBarProvider {
             const md = new vscode.MarkdownString(undefined, true);
             md.isTrusted = true;
             md.appendMarkdown([
-                `**当前字数（不计标点）**：${wcExclude}`,
+                `**当前字数（不含标点/空白）**：${wcExclude}`,
                 `**当前字数（含标点）**：${wcInclude}`,
                 `**写作时间**：${timeText}`,
                 `**平均速度**：${realCPM} 字/分钟 | ${realCPH} 字/小时`,
