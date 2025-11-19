@@ -496,7 +496,7 @@ class AsyncWordCounter {
   }
 
   /** 优化：先读缓存，再做 Git 判断是否可用缓存，否则才派发统计 worker */
-  async countFile(filePath: string): Promise<RichCountResult> {
+  async countFile(filePath: string, knownStats?: { mtime: number; size: number }): Promise<RichCountResult> {
     // 新增：判断文件是否在当前工作区
     // 新：
     // 新：
@@ -539,8 +539,15 @@ class AsyncWordCounter {
 
         // ── Git 说“未变更”：只有在 mtime/size 也匹配时才信缓存
         if (!needRecount && meta?.wordCountStats) {
-          const st = await fs.promises.stat(filePath).catch(() => null);
-          if (st && meta.mtime === st.mtimeMs && (meta.size === undefined || meta.size === st.size)) {
+          let currentMtime = knownStats?.mtime;
+          let currentSize = knownStats?.size;
+          
+          if (currentMtime === undefined || currentSize === undefined) {
+             const st = await fs.promises.stat(filePath).catch(() => null);
+             if (st) { currentMtime = st.mtimeMs; currentSize = st.size; }
+          }
+
+          if (currentMtime !== undefined && meta.mtime === currentMtime && (meta.size === undefined || meta.size === currentSize)) {
             return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash };
           }
           // 文件系统不同步 → 强制重算
@@ -558,10 +565,15 @@ class AsyncWordCounter {
       // 没有 GitGuard，继续用 mtime 校验
       if (meta?.mtime !== undefined && meta.wordCountStats) {
         try {
-          const st = await fs.promises.stat(filePath);
-          if (st && st.mtimeMs === meta.mtime) { return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash }; }
+          let currentMtime = knownStats?.mtime;
+          if (currentMtime === undefined) {
+             const st = await fs.promises.stat(filePath);
+             if (st) { currentMtime = st.mtimeMs; }
+          }
+          
+          if (currentMtime === meta.mtime) { return { stats: meta.wordCountStats, mtime: meta.mtime, size: meta.size, hash: meta.hash }; }
           // mtime 不一致，视为缓存失效
-          console.log('[AsyncWordCounter] pcache stale (mtime mismatch):', filePath, { diskMtime: st?.mtimeMs, cacheMtime: meta.mtime });
+          console.log('[AsyncWordCounter] pcache stale (mtime mismatch):', filePath, { diskMtime: currentMtime, cacheMtime: meta.mtime });
         } catch { /* ignore */ }
       }
 
@@ -617,8 +629,8 @@ export function getAsyncWordCounter(): AsyncWordCounter {
   return singleton;
 }
 
-export async function countAndAnalyzeOffThread(filePath: string): Promise<RichCountResult> {
-  return getAsyncWordCounter().countFile(filePath);
+export async function countAndAnalyzeOffThread(filePath: string, knownStats?: { mtime: number; size: number }): Promise<RichCountResult> {
+  return getAsyncWordCounter().countFile(filePath, knownStats);
 }
 
 

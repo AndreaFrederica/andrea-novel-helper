@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.31",
+  "version": "0.4.33",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -751,6 +751,11 @@
         "category": "Andrea Novel Helper"
       },
       {
+        "command": "andrea.typo.translateSelection",
+        "title": "翻译选中文本（LLM）",
+        "category": "Andrea Novel Helper"
+      },
+      {
         "command": "andrea.webdav.manageAccounts",
         "title": "%command.webdav.manageAccounts.title%"
       },
@@ -976,6 +981,34 @@
       "type": "object",
       "title": "%config.title%",
       "properties": {
+        "AndreaNovelHelper.translate.targets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["中文", "英文", "日语", "德语", "法语", "韩语", "繁体中文", "拉丁语", "希腊语"],
+          "markdownDescription": "右键翻译的可选目标语言列表"
+        },
+        "AndreaNovelHelper.translate.defaultTarget": {
+          "type": "string",
+          "enum": ["中文", "英文", "日语", "德语", "法语", "韩语", "繁体中文", "拉丁语", "希腊语"],
+          "default": "中文",
+          "markdownDescription": "翻译默认目标语言（与可选列表配合使用）"
+        },
+        "AndreaNovelHelper.translate.alwaysUseDefaultTarget": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "跳过语言选择，直接使用默认目标语言"
+        },
+        "AndreaNovelHelper.translate.defaultAction": {
+          "type": "string",
+          "enum": ["replaceSelection", "openInNewTab", "copyToClipboard"],
+          "default": "replaceSelection",
+          "markdownDescription": "翻译结果默认处理方式：替换选区/新标签页/复制到剪贴板"
+        },
+        "AndreaNovelHelper.translate.alwaysUseDefaultAction": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "跳过处理方式选择，直接使用默认处理方式"
+        },
         "AndreaNovelHelper.comments.authorName": {
           "type": "string",
           "default": "",
@@ -1835,6 +1868,11 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "⚠️ 危险选项：启用后，字数统计视图在**冷启动扫描文件时将跳过对已有缓存文件的 fs.stat 校验**，直接信任快照 / 文件追踪数据库 / 内存中的字数统计。这样可以显著减少启动时间，但**无法在启动阶段发现第三方软件或外部工具对文件内容的篡改**，也无法保证缓存与文件系统 100% 一致。仅在你确信本地文本文件几乎不会在 VS Code 之外被修改时使用。"
+        },
+        "AndreaNovelHelper.wordCount.parallelStatCheck": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用并行批量 fs.stat 校验。开启后，在冷启动 cache-check 阶段将对所有已缓存文件并行执行 fs.stat（而非逐个串行），显著减少校验耗时。适用于文件数量较多且磁盘/文件系统 I/O 性能较好的场景。注意：当 `skipStartupStatCheck` 开启时，此选项无效。"
         },
         "AndreaNovelHelper.debug.completionLog": {
           "type": "boolean",
@@ -2930,6 +2968,12 @@
           "when": "andrea.anh.enabled && editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
           "command": "myPreview.copyPlainText",
           "group": "navigation@8"
+        }
+        ,
+        {
+          "when": "andrea.anh.enabled && editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "andrea.typo.translateSelection",
+          "group": "navigation@98"
         }
       ],
       "commandPalette": [

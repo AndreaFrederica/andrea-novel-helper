@@ -5,7 +5,7 @@ import { getDocDB, getParagraphResult, resetParagraphs, setParagraphResult, clea
 import { ParagraphPiece, SentencePiece, TypoDiagnosticsApplyOptions, ParagraphScanResult, ParagraphTypoError } from './typoTypes';
 import { getDocumentRoleOccurrences } from '../context/documentRolesCache';
 import { Role } from '../extension';
-import { registerClientLLMDetector } from './typoClientLLM';
+import { registerClientLLMDetector, translateTextWithClientLLM } from './typoClientLLM';
 
 // Sentence boundaries for Chinese + general punctuation; newline also ends a sentence
 const SENTENCE_ENDERS = new Set(['。', '！', '？', '!', '?']);
@@ -162,17 +162,36 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
     } catch { /* ignore */ }
     const perPara = new Map<string, ParagraphScanResult>();
     const appliedSignatures = new Map<number, Set<string>>(); // sentenceIndex -> sigs
+    
+    // 存储现有结果，避免在typo过程中被清除
+    const existingResults = new Map<string, ParagraphScanResult>();
+    const docKey = doc.uri.toString();
+    for (const para of group) {
+        let existingResult;
+        try {
+            existingResult = await getParagraphResult(docKey, para.hash, doc);
+        } catch {
+            existingResult = getParagraphResultSync(docKey, para.hash);
+        }
+        if (existingResult) {
+            existingResults.set(para.hash, existingResult);
+        }
+    }
+    
     const applyCorrections = async (corrs: import('./typoTypes').TypoApiResult[]) => {
+        // 创建临时结果映射，不直接替换现有结果
+        const tempPerPara = new Map<string, ParagraphScanResult>();
+        
         for (let i = 0; i < corrs.length; i++) {
             const r = corrs[i];
             const idx = typeof r?.index === 'number' ? r.index : i;
             if (idx < 0 || idx >= allSentences.length) continue;
             const { para, s } = allSentences[idx];
             const key = para.hash;
-            let rec = perPara.get(key);
+            let rec = tempPerPara.get(key);
             if (!rec) {
                 rec = { paragraphHash: para.hash, scannedAt: Date.now(), paragraphTextSnapshot: para.text, errors: [] };
-                perPara.set(key, rec);
+                tempPerPara.set(key, rec);
             }
             const seen = appliedSignatures.get(idx) || new Set<string>();
             appliedSignatures.set(idx, seen);
@@ -191,20 +210,34 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
                 seen.add(sig);
             }
         }
-        const docKey = doc.uri.toString();
-        for (const [_, res] of perPara) { 
-        try {
-            await setParagraphResult(docKey, res, doc);
-        } catch {
-            // 如果异步失败，使用同步版本作为后备
-            setParagraphResultSync(docKey, res);
+        
+        // 合并临时结果与现有结果，优先保留现有结果
+        for (const [key, tempResult] of tempPerPara) {
+            const existingResult = existingResults.get(key);
+            if (existingResult) {
+                // 如果已有结果，不替换，保持现有结果
+                continue;
+            }
+            // 如果没有现有结果，使用临时结果
+            perPara.set(key, tempResult);
         }
-    }
-        // 流式装饰：在接收到部分结果时通过装饰器管理器应用装饰
-        enqueueApply(doc);
+        
+        // 只在有实际新结果时才应用
+        if (tempPerPara.size > 0) {
+            for (const [_, res] of tempPerPara) {
+                try {
+                    await setParagraphResult(docKey, res, doc);
+                } catch {
+                    setParagraphResultSync(docKey, res);
+                }
+            }
+            // 流式装饰：在接收到部分结果时通过装饰器管理器应用装饰
+            enqueueApply(doc);
+        }
     };
     const results = await detectTyposBatch(texts, { docFsPath: doc.uri.fsPath, docUri: doc.uri.toString(), roleNames: roleNamesCtx, onPartial: applyCorrections });
     
+    // 处理最终结果，替换现有结果
     for (let i = 0; i < allSentences.length; i++) {
         const { para, s } = allSentences[i];
         const key = para.hash;
@@ -233,6 +266,20 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
             seen.add(sig);
         }
     }
+    
+    // 应用最终结果，替换现有结果
+    if (perPara.size > 0) {
+        for (const [key, finalResult] of perPara) {
+            try {
+                await setParagraphResult(docKey, finalResult, doc);
+            } catch {
+                setParagraphResultSync(docKey, finalResult);
+            }
+        }
+        // 应用最终装饰
+        enqueueApply(doc);
+    }
+    
     return perPara;
 }
 
@@ -472,6 +519,8 @@ let statusItem: vscode.StatusBarItem | null = null;
 
 let typoDeco: vscode.TextEditorDecorationType | null = null;
 let typoDecoColor: string | null = null;
+let translationStatusItem: vscode.StatusBarItem | null = null;
+let translationBusyCount = 0;
 
 function ensureTypoDecorationType(): vscode.TextEditorDecorationType | null {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
@@ -499,6 +548,25 @@ function ensureStatusItem() {
     statusItem.name = 'Andrea Typo';
     statusItem.tooltip = '错别字识别状态';
     statusItem.command = 'andrea.typo.quickSettings';
+}
+
+function ensureTranslationStatusItem() {
+    if (translationStatusItem) return;
+    translationStatusItem = vscode.window.createStatusBarItem('andrea.translationStatus', vscode.StatusBarAlignment.Right, 100);
+    translationStatusItem.name = 'Andrea Translation';
+}
+
+function showTranslationStatus(text: string) {
+    ensureTranslationStatusItem();
+    translationBusyCount++;
+    translationStatusItem!.text = `$(sync~spin) ${text}`;
+    translationStatusItem!.tooltip = 'LLM 翻译正在进行';
+    translationStatusItem!.show();
+}
+
+function hideTranslationStatus() {
+    translationBusyCount = Math.max(0, translationBusyCount - 1);
+    if (translationBusyCount === 0) translationStatusItem?.hide();
 }
 
 function updateStatusBar() {
@@ -684,6 +752,59 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('andrea.typo.stopAllRequests', () => {
             abortAllRequests();
+        }),
+        vscode.commands.registerCommand('andrea.typo.translateSelection', async () => {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) { vscode.window.showInformationMessage('没有活动编辑器'); return; }
+            const sel = editor.selection;
+            if (sel.isEmpty) { vscode.window.showInformationMessage('请先选中文本'); return; }
+            const text = editor.document.getText(sel);
+            if (!text || !text.trim()) { vscode.window.showInformationMessage('选区为空'); return; }
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const targets = cfg.get<string[]>('translate.targets', ['中文', '英文', '日语', '德语', '法语', '韩语', '繁体中文', '拉丁语', '希腊语']);
+            const defaultTarget = cfg.get<string>('translate.defaultTarget', '中文');
+            const alwaysUseDefaultTarget = cfg.get<boolean>('translate.alwaysUseDefaultTarget', false);
+            let target: string | undefined = undefined;
+            if (alwaysUseDefaultTarget) {
+                target = defaultTarget;
+            } else {
+                const pick = await vscode.window.showQuickPick(targets.map(t => `翻译为${t}`), { placeHolder: '选择目标语言' });
+                if (!pick) return;
+                target = pick.replace('翻译为', '');
+            }
+            let translated = '';
+            showTranslationStatus(`翻译为${target}`);
+            try {
+                translated = await translateTextWithClientLLM(text, target!);
+            } catch (e) {
+                hideTranslationStatus();
+                vscode.window.showErrorMessage(`翻译失败: ${e instanceof Error ? e.message : String(e)}`);
+                return;
+            }
+            const defaultAction = cfg.get<string>('translate.defaultAction', 'replaceSelection');
+            const alwaysUseDefaultAction = cfg.get<boolean>('translate.alwaysUseDefaultAction', false);
+            let action: string | undefined = undefined;
+            if (alwaysUseDefaultAction) {
+                action = defaultAction;
+            } else {
+                const pick = await vscode.window.showQuickPick(['替换选区', '在新标签页显示', '复制到剪贴板'], { placeHolder: '处理翻译结果' });
+                if (!pick) return;
+                action = pick === '替换选区' ? 'replaceSelection' : pick === '在新标签页显示' ? 'openInNewTab' : 'copyToClipboard';
+            }
+            if (action === 'replaceSelection') {
+                await editor.edit(edit => { edit.replace(sel, translated); });
+                hideTranslationStatus();
+                return;
+            }
+            if (action === 'openInNewTab') {
+                const doc = await vscode.workspace.openTextDocument({ content: translated, language: editor.document.languageId });
+                await vscode.window.showTextDocument(doc, { preview: false });
+                hideTranslationStatus();
+                return;
+            }
+            await vscode.env.clipboard.writeText(translated);
+            vscode.window.showInformationMessage('已复制翻译结果');
+            hideTranslationStatus();
         })
     );
 

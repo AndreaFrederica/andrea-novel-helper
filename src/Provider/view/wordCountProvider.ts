@@ -1287,11 +1287,20 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     /**
      * 获取或计算文件统计（带缓存和 Git 优化）
      */
-    private async getOrCalculateFileStats(filePath: string, forceOverride = false): Promise<TextStats> {
+    private async getOrCalculateFileStats(filePath: string, forceOverride = false, knownStats?: { mtime: number; size: number }): Promise<TextStats> {
         try {
-            const stat = await fs.promises.stat(filePath);
-            const mtime = stat.mtimeMs;
-            const size = stat.size;
+            let mtime: number;
+            let size: number;
+
+            if (knownStats) {
+                mtime = knownStats.mtime;
+                size = knownStats.size;
+            } else {
+                const stat = await fs.promises.stat(filePath);
+                mtime = stat.mtimeMs;
+                size = stat.size;
+            }
+
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
             const largeThreshold = cfg.get<number>('wordCount.largeFileThreshold', 50 * 1024) ?? 50 * 1024;
             const avgBytesPerChar = cfg.get<number>('wordCount.largeFileAvgBytesPerChar', 1.6) ?? 1.6;
@@ -1341,8 +1350,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const fileMetadata = dataManager.getFileByPath(filePath);
 
                 if (fileMetadata && fileMetadata.wordCountStats) {
-                    const st = await fs.promises.stat(filePath);
-                    if (st && fileMetadata.mtime === st.mtimeMs && (fileMetadata.size === undefined || fileMetadata.size === st.size)) {
+                    // 优化：复用已有的 mtime/size，不再重复 stat
+                    if (fileMetadata.mtime === mtime && (fileMetadata.size === undefined || fileMetadata.size === size)) {
                         // 新增：命中缓存后校验 GitGuard
                         let gitOk = true;
                         if (this.gitGuard) {
@@ -1354,9 +1363,9 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                             }
                         }
                         if (gitOk) {
-                            wcDebug('cache-hit:persistent:file', filePath, 'mtime', st.mtimeMs, 'size', st.size, 'gitOk', gitOk);
+                            wcDebug('cache-hit:persistent:file', filePath, 'mtime', mtime, 'size', size, 'gitOk', gitOk);
                             const stats = fileMetadata.wordCountStats;
-                            this.statsCache.set(filePath, { stats, mtime: st.mtimeMs, size: st.size });
+                            this.statsCache.set(filePath, { stats, mtime: mtime, size: size });
                             this.markDirDirty(path.dirname(filePath));
                             this.enqueueDirRecompute(path.dirname(filePath));
                             return stats;
@@ -1364,13 +1373,16 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                             wcDebug('cache-gitguard:fail', filePath);
                         }
                     } else {
-                        wcDebug('cache-stale:persistent:file', filePath, 'cachedM', fileMetadata.mtime, 'curM', st?.mtimeMs, 'cachedS', fileMetadata.size, 'curS', st?.size);
+                        wcDebug('cache-stale:persistent:file', filePath, 'cachedM', fileMetadata.mtime, 'curM', mtime, 'cachedS', fileMetadata.size, 'curS', size);
                     }
                 }
             }
 
             // 3. 交给 asyncWordCounter
-            const result: any = await countAndAnalyzeOffThread(filePath);
+            // 激进优化：仅当外部显式传入 knownStats (如启动阶段) 时，才向 worker 传递 mtime/size 以跳过二次 stat
+            // 常规调用（如文件变更）保持双重校验，确保安全
+            const workerHint = knownStats ? { mtime, size } : undefined;
+            const result: any = await countAndAnalyzeOffThread(filePath, workerHint);
             const stats: TextStats = (result && 'stats' in result) ? result.stats : result;
             const mtimeFromWorker = (typeof result?.mtime === 'number') ? result.mtime : undefined;
             const sizeFromWorker = (typeof result?.size === 'number') ? result.size : undefined;
@@ -2062,10 +2074,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
                 // 方案3：智能跳过已缓存文件，只对“完全没有缓存”的文件进行前台计算
                 // 有缓存但 mtime/size 不一致的情况：前台直接使用旧值，并在后台排队精算
-                const skipStatCheck = vscode.workspace.getConfiguration('AndreaNovelHelper')
-                    .get<boolean>('wordCount.skipStartupStatCheck', false) ?? false;
+                const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+                const skipStatCheck = cfg.get<boolean>('wordCount.skipStartupStatCheck', false) ?? false;
+                const parallelStatCheck = cfg.get<boolean>('wordCount.parallelStatCheck', false) ?? false;
 
-                progress.report({ message: `检查缓存中… ${formatElapsed()}${skipStatCheck ? '（已跳过 stat 校验）' : ''}` });
+                progress.report({ message: `检查缓存中… ${formatElapsed()}${skipStatCheck ? '（已跳过 stat 校验）' : parallelStatCheck ? '（并行校验）' : ''}` });
                 const phaseStartCacheCheck = Date.now();
                 const filesToCalculate: string[] = [];
                 let staleCached = 0;
@@ -2084,7 +2097,45 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                             filesToCalculate.push(file);
                         }
                     }
+                } else if (parallelStatCheck) {
+                    // 并行批量 stat 模式：把所有需要 stat 的文件一次性并行处理
+                    const cachedFiles: Array<{ file: string; cached: { stats: TextStats; mtime: number; size?: number } }> = [];
+                    for (const file of allFiles) {
+                        const cached = this.statsCache.get(file);
+                        if (!cached) {
+                            pureMissCount++;
+                            filesToCalculate.push(file);
+                        } else {
+                            cachedFiles.push({ file, cached });
+                        }
+                    }
+
+                    // 并行执行所有 fs.stat
+                    const statResults = await Promise.allSettled(
+                        cachedFiles.map(({ file }) => fs.promises.stat(file))
+                    );
+
+                    for (let i = 0; i < cachedFiles.length; i++) {
+                        const { file, cached } = cachedFiles[i];
+                        const result = statResults[i];
+                        
+                        if (result.status === 'fulfilled') {
+                            statOkCount++;
+                            const stat = result.value;
+                            if (cached.mtime !== stat.mtimeMs || cached.size !== stat.size) {
+                                staleCached++;
+                                statStaleCount++;
+                                // 后台重新精算，不阻塞这次冷启动
+                                this.scheduleFileStat(file, true);
+                            }
+                        } else {
+                            // stat 失败就保持现有缓存，稍后正常重算
+                            statFailCount++;
+                            filesToCalculate.push(file);
+                        }
+                    }
                 } else {
+                    // 串行逐个 stat 模式（原有逻辑）
                     for (const file of allFiles) {
                         const cached = this.statsCache.get(file);
                         if (!cached) {
@@ -2125,7 +2176,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     statStaleCount,
                     cacheCheckElapsedMs: cacheCheckElapsed,
                     statElapsedMs: statElapsed,
-                    skipStatCheck
+                    skipStatCheck,
+                    parallelStatCheck
                 });
                 console.log('[WordCount][startup] summary:', {
                     total,
@@ -2134,7 +2186,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     needRecalculate: needCalculate,
                     staleCached,
                     cacheCheckElapsedMs: cacheCheckElapsed,
-                    skipStatCheck
+                    skipStatCheck,
+                    parallelStatCheck
                 });
                 
                 if (needCalculate === 0) {
@@ -2156,9 +2209,17 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const computeBatchSize = 20; // 控制批量大小，避免阻塞
                 for (let i = 0; i < filesToCalculate.length; i += computeBatchSize) {
                     const batch = filesToCalculate.slice(i, i + computeBatchSize);
-                    await Promise.all(batch.map(file => 
-                        this.getOrCalculateFileStats(file).catch(() => ({ total: 0, cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0 }))
-                    ));
+                    await Promise.all(batch.map(async file => {
+                        try {
+                            // 启动阶段激进优化：在此处 stat，并传入 getOrCalculateFileStats 以启用 workerHint
+                            const st = await fs.promises.stat(file);
+                            return this.getOrCalculateFileStats(file, false, { mtime: st.mtimeMs, size: st.size })
+                                .catch(() => ({ total: 0, cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0 } as TextStats));
+                        } catch {
+                            return this.getOrCalculateFileStats(file)
+                                .catch(() => ({ total: 0, cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0 } as TextStats));
+                        }
+                    }));
                     
                     done += batch.length;
                     progress.report({ 
