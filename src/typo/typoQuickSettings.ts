@@ -344,11 +344,14 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
         const cfg = vscode.workspace.getConfiguration();
         const enabled = cfg.get<boolean>('AndreaNovelHelper.typo.enabled', false);
         const autoIdentifyOnOpen = cfg.get<boolean>('AndreaNovelHelper.typo.autoIdentifyOnOpen', true);
+        const autoScanOnChange = cfg.get<boolean>('AndreaNovelHelper.typo.autoScanOnChange', true);
         const mode = cfg.get<string>('AndreaNovelHelper.typo.mode', 'macro');
         const clientLLMEnabled = cfg.get<boolean>('AndreaNovelHelper.typo.clientLLM.enabled', false);
         const persistenceEnabled = cfg.get<boolean>('AndreaNovelHelper.typo.persistence.enabled', false);
         const llmTrace = cfg.get<boolean>('AndreaNovelHelper.typo.debug.llmTrace', false);
         const serverTrace = cfg.get<boolean>('AndreaNovelHelper.typo.debug.serverTrace', false);
+        const typoDelayEnabled = cfg.get<boolean>('AndreaNovelHelper.timeStats.typoDelay.enabled', false) ?? false;
+        const typoDelayWindowMs = cfg.get<number>('AndreaNovelHelper.timeStats.typoDelay.windowMs', 1000) ?? 1000;
 
         const choices = [
             {
@@ -360,6 +363,21 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
                 label: `${autoIdentifyOnOpen ? '$(check)' : '$(circle-slash)'} 打开文档自动识别`,
                 description: autoIdentifyOnOpen ? '打开文档时自动进行错别字识别' : '需要手动点击重新识别按钮',
                 cmd: 'andrea.typo.toggleAutoIdentifyOnOpen'
+            },
+            {
+                label: `${autoScanOnChange ? '$(check)' : '$(circle-slash)'} 变更自动识别（关闭以手动模式）`,
+                description: autoScanOnChange ? '内容变更时自动触发扫描' : '内容变更不再自动扫描，仅手动触发',
+                cmd: 'andrea.typo.toggleAutoScanOnChange'
+            },
+            {
+                label: `${typoDelayEnabled ? '$(check)' : '$(circle-slash)'} 启用变更时间窗口（请求延迟）`,
+                description: typoDelayEnabled ? '当前已启用' : '当前已禁用',
+                cmd: 'andrea.typo.toggleDelay'
+            },
+            {
+                label: '$(clock) 配置请求延迟窗口时长',
+                description: `当前：${typoDelayWindowMs} ms`,
+                cmd: 'andrea.typo.changeDelayWindow'
             },
             {
                 label: `$(settings) 识别模式（当前：${mode}）`,
@@ -381,6 +399,17 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
                 description: '配置错别字识别的调试输出选项',
                 cmd: 'andrea.typo.configureDebug'
             }
+            ,
+            {
+                label: '$(search) 手动扫描当前文档',
+                description: '在手动模式下使用此项触发扫描',
+                cmd: 'andrea.typo.scanDocument'
+            },
+            {
+                label: '$(refresh) 手动重新扫描（清理缓存）',
+                description: '清理当前文档缓存后执行完整扫描',
+                cmd: 'andrea.typo.rescanDocument'
+            }
         ];
 
         const pick = await vscode.window.showQuickPick(choices, {
@@ -397,6 +426,45 @@ export function registerTypoQuickSettings(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('andrea.typo.quickSettings', typoQuickSettings),
         vscode.commands.registerCommand('andrea.typo.toggle', () => toggle('AndreaNovelHelper.typo.enabled')),
         vscode.commands.registerCommand('andrea.typo.toggleAutoIdentifyOnOpen', () => toggle('AndreaNovelHelper.typo.autoIdentifyOnOpen')),
+        vscode.commands.registerCommand('andrea.typo.toggleAutoScanOnChange', () => toggle('AndreaNovelHelper.typo.autoScanOnChange')),
+        vscode.commands.registerCommand('andrea.typo.toggleDelay', async () => {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+            const cur = cfg.get<boolean>('typoDelay.enabled', false) ?? false;
+            await cfg.update('typoDelay.enabled', !cur, vscode.ConfigurationTarget.Workspace);
+            vscode.window.showInformationMessage(`变更时间窗口已${!cur ? '启用' : '禁用'}`);
+        }),
+        vscode.commands.registerCommand('andrea.typo.changeDelayWindow', async () => {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+            const cur = cfg.get<number>('typoDelay.windowMs', 1000) ?? 1000;
+            const durationChoices = [
+                { label: '400 ms', value: 400 },
+                { label: '700 ms', value: 700 },
+                { label: '1000 ms', value: 1000 },
+                { label: '1500 ms', value: 1500 },
+                { label: '2000 ms', value: 2000 },
+                { label: '3000 ms', value: 3000 },
+                { label: '自定义毫秒值…', value: -1 }
+            ];
+            const pick = await vscode.window.showQuickPick(durationChoices, { placeHolder: '选择请求延迟窗口时长' });
+            if (!pick) { return; }
+            let newMs = pick.value;
+            if (newMs === -1) {
+                const input = await vscode.window.showInputBox({ prompt: '输入窗口时长（毫秒）', value: String(cur) });
+                if (input && input.trim().length > 0) {
+                    const n = parseInt(input.trim(), 10);
+                    if (!isNaN(n) && n >= 100 && n <= 10000) {
+                        newMs = n;
+                    } else {
+                        vscode.window.showErrorMessage('请输入 100 - 10000 之间的整数毫秒值');
+                        newMs = cur;
+                    }
+                } else {
+                    newMs = cur;
+                }
+            }
+            await cfg.update('typoDelay.windowMs', newMs, vscode.ConfigurationTarget.Workspace);
+            vscode.window.showInformationMessage(`请求延迟窗口已更新：${newMs} ms`);
+        }),
         vscode.commands.registerCommand('andrea.typo.changeMode', changeTypoMode),
         vscode.commands.registerCommand('andrea.typo.configureClientLLM', configureClientLLM),
         vscode.commands.registerCommand('andrea.typo.configurePersistence', configurePersistence),

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.33",
+  "version": "0.4.35",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -981,6 +981,17 @@
       "type": "object",
       "title": "%config.title%",
       "properties": {
+        "AndreaNovelHelper.typo.applyPartialDecorationsImmediately": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "在LLM分段结果(partial)阶段是否立刻应用错别字高亮（默认否，仅在最终结果阶段应用，避免\"瞬间出现又消失\"的闪烁）"
+        },
+        "AndreaNovelHelper.typo.suppressRolesMode": {
+          "type": "string",
+          "enum": ["none", "roleNameExact", "regexContain", "nonSensitiveIntersect"],
+          "default": "roleNameExact",
+          "markdownDescription": "错别字标记的角色抑制模式：none（不抑制）；roleNameExact（仅当错字文本与某角色名完全相等时抑制，忽略正则角色）；regexContain（仅当被正则表达式角色完全包含整段时抑制）；nonSensitiveIntersect（旧版：与任意非敏感角色相交则抑制）"
+        },
         "AndreaNovelHelper.translate.targets": {
           "type": "array",
           "items": { "type": "string" },
@@ -1668,6 +1679,18 @@
           ],
           "description": "%config.timeStats.milestone.notificationType.description%"
         },
+        "AndreaNovelHelper.timeStats.typoDelay.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用变更时间窗口机制：在连续编辑期间延迟发送错别字请求，窗口结束后统一触发。"
+        },
+        "AndreaNovelHelper.timeStats.typoDelay.windowMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100,
+          "maximum": 1000000,
+          "markdownDescription": "变更时间窗口时长（毫秒）。窗口内的连续变更将合并为一次错别字请求。"
+        },
         "AndreaNovelHelper.wordCount.largeFileThreshold": {
           "type": "number",
           "default": 51200,
@@ -1926,6 +1949,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "打开文档时是否自动进行错别字识别。关闭后需要手动点击重新识别按钮。"
+        },
+        "AndreaNovelHelper.typo.autoScanOnChange": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "在编辑内容发生变更时是否自动触发错别字扫描。关闭后仅保留手动扫描模式（通过命令或快速设置触发）。"
         },
         "AndreaNovelHelper.typo.clientLLM.enabled": {
           "type": "boolean",

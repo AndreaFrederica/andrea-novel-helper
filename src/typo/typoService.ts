@@ -1,8 +1,9 @@
+/* eslint-disable curly */
 import * as vscode from 'vscode';
 import { detectTyposBatch } from './typoDetector';
 import { onTypoConfigChanged } from './typoHttp';
 import { getDocDB, getParagraphResult, resetParagraphs, setParagraphResult, clearDocDB, pruneStoreToLimit, getDocDBSync, getParagraphResultSync, setParagraphResultSync, resetParagraphsSync, clearDocDBSync } from './typoDB';
-import { ParagraphPiece, SentencePiece, TypoDiagnosticsApplyOptions, ParagraphScanResult, ParagraphTypoError } from './typoTypes';
+import { ParagraphPiece, SentencePiece, TypoDiagnosticsApplyOptions, ParagraphScanResult, ParagraphTypoError, TypoErrorTuple } from './typoTypes';
 import { getDocumentRoleOccurrences } from '../context/documentRolesCache';
 import { Role } from '../extension';
 import { registerClientLLMDetector, translateTextWithClientLLM } from './typoClientLLM';
@@ -196,15 +197,15 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
             const seen = appliedSignatures.get(idx) || new Set<string>();
             appliedSignatures.set(idx, seen);
             for (const tuple of r.errors || []) {
-                const wrong = tuple?.[0]; const correct = tuple?.[1];
-                const hint = typeof tuple?.[2] === 'number' ? tuple[2] : undefined;
-                const score = typeof tuple?.[3] === 'number' ? tuple[3] : undefined;
+                const [wrong, correct, offset, score] = tuple as TypoErrorTuple;
                 if (!wrong || !correct) continue;
-                // 先计算位置，再基于位置构建签名，确保与最终结果聚合一致，从源头去重
-                const offInSentence = computeBestOffset(s.text, wrong, correct, (r as any).target || undefined, hint);
+                let offInSentence = computeBestOffset(s.text, wrong, correct, r.target);
+                if (offInSentence === null && typeof offset === 'number' && offset >= 0 && offset + wrong.length <= s.text.length) {
+                    offInSentence = offset;
+                }
                 if (offInSentence === null) continue;
                 const offInPara = (s.startOffset - para.startOffset) + offInSentence;
-                const sig = `${wrong}@${correct}@${hint ?? -1}@${offInPara}`;
+                const sig = `${wrong}@${correct}@-1@${offInPara}`;
                 if (seen.has(sig)) continue;
                 rec.errors.push({ wrong, correct, offset: offInPara, length: wrong.length, score });
                 seen.add(sig);
@@ -231,8 +232,10 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
                     setParagraphResultSync(docKey, res);
                 }
             }
-            // 流式装饰：在接收到部分结果时通过装饰器管理器应用装饰
-            enqueueApply(doc);
+            const applyPartial = vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('typo.applyPartialDecorationsImmediately', false);
+            if (applyPartial) {
+                enqueueApply(doc);
+            }
         }
     };
     const results = await detectTyposBatch(texts, { docFsPath: doc.uri.fsPath, docUri: doc.uri.toString(), roleNames: roleNamesCtx, onPartial: applyCorrections });
@@ -241,27 +244,26 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
     for (let i = 0; i < allSentences.length; i++) {
         const { para, s } = allSentences[i];
         const key = para.hash;
-        let rec = perPara.get(key);
-        if (!rec) {
-            rec = { paragraphHash: para.hash, scannedAt: Date.now(), paragraphTextSnapshot: para.text, errors: [] };
-            perPara.set(key, rec);
-        }
         const r = results[i];
         if (!r || !Array.isArray(r.errors) || r.errors.length === 0) continue;
-        // 与 partial 路径共用签名集合，避免“partial + final”重复
         const seen = appliedSignatures.get(i) || new Set<string>();
         appliedSignatures.set(i, seen);
+        let rec = perPara.get(key);
         for (const tuple of r.errors) {
-            const wrong = tuple?.[0];
-            const correct = tuple?.[1];
-            const hint = typeof tuple?.[2] === 'number' ? tuple[2] : undefined;
-            const score = typeof tuple?.[3] === 'number' ? tuple[3] : undefined;
+            const [wrong, correct, offset, score] = tuple as TypoErrorTuple;
             if (!wrong || !correct) continue;
-            const offInSentence = computeBestOffset(s.text, wrong, correct, (r as any).target || undefined, hint);
+            let offInSentence = computeBestOffset(s.text, wrong, correct, r.target);
+            if (offInSentence === null && typeof offset === 'number' && offset >= 0 && offset + wrong.length <= s.text.length) {
+                offInSentence = offset;
+            }
             if (offInSentence === null) continue;
             const offInPara = (s.startOffset - para.startOffset) + offInSentence;
-            const sig = `${wrong}@${correct}@${hint ?? -1}@${offInPara}`;
-            if (seen.has(sig)) continue;
+            const sig = `${wrong}@${correct}@-1@${offInPara}`;
+            // if (seen.has(sig)) continue;
+            if (!rec) {
+                rec = { paragraphHash: para.hash, scannedAt: Date.now(), paragraphTextSnapshot: para.text, errors: [] };
+                perPara.set(key, rec);
+            }
             rec.errors.push({ wrong, correct, offset: offInPara, length: wrong.length, score });
             seen.add(sig);
         }
@@ -270,6 +272,7 @@ async function scanParagraphGroup(group: ParagraphPiece[], doc: vscode.TextDocum
     // 应用最终结果，替换现有结果
     if (perPara.size > 0) {
         for (const [key, finalResult] of perPara) {
+            if (!finalResult.errors || finalResult.errors.length === 0) continue; // 避免写入空结果清除已有标记
             try {
                 await setParagraphResult(docKey, finalResult, doc);
             } catch {
@@ -319,15 +322,34 @@ async function createDiagnosticsForDoc(doc: vscode.TextDocument, options: TypoDi
             const absStart = p.startOffset + e.offset;
             const absEnd = absStart + e.length;
             const range = new vscode.Range(doc.positionAt(absStart), doc.positionAt(absEnd));
-            // Suppress when inside any non-sensitive role occurrence to avoid interference
-            if (roleMap) {
-                let coveredByNonSensitive = false;
-                for (const [role, ranges] of roleMap.entries()) {
-                    if ((role as Role).type === '敏感词') continue;
-                    for (const r of ranges) { if (r.intersection(range)) { coveredByNonSensitive = true; break; } }
-                    if (coveredByNonSensitive) break;
+            const cfgAll = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const typoMode = cfgAll.get<'macro' | 'llm'>('typo.mode', 'macro');
+            const clientLLMEnabled = cfgAll.get<boolean>('typo.clientLLM.enabled', false);
+            const disableSuppression = (typoMode === 'llm') || clientLLMEnabled;
+            const cfgSuppress = disableSuppression ? 'none' : cfgAll.get<string>('typo.suppressRolesMode', 'roleNameExact');
+            if (roleMap && cfgSuppress !== 'none') {
+                let suppress = false;
+                if (cfgSuppress === 'roleNameExact') {
+                    const wrongText = e.wrong;
+                    for (const [role, ranges] of roleMap.entries()) {
+                        if ((role as Role).type === '正则表达式') continue;
+                        if (role.name && role.name === wrongText && ranges && ranges.length) { suppress = true; break; }
+                    }
+                } else {
+                    const paraRange = new vscode.Range(doc.positionAt(p.startOffset), doc.positionAt(p.endOffset));
+                    for (const [role, ranges] of roleMap.entries()) {
+                        const t = (role as Role).type;
+                        if (cfgSuppress === 'regexContain') {
+                            if (t !== '正则表达式') continue;
+                            for (const r of ranges) { if (r.contains(paraRange)) { suppress = true; break; } }
+                        } else if (cfgSuppress === 'nonSensitiveIntersect') {
+                            if (t === '敏感词') continue;
+                            for (const r of ranges) { if (r.intersection(range)) { suppress = true; break; } }
+                        }
+                        if (suppress) break;
+                    }
                 }
-                if (coveredByNonSensitive) continue;
+                if (suppress) continue;
             }
             const msg = `错别字: ${e.wrong} → ${e.correct}`;
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
@@ -641,6 +663,9 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
     // debounce per doc
     const prev = scanTimers.get(docKey);
     if (prev) clearTimeout(prev);
+    const tsCfg = vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats');
+    const delayEnabled = tsCfg.get<boolean>('typoDelay.enabled', false) ?? false;
+    const delayMs = delayEnabled ? (tsCfg.get<number>('typoDelay.windowMs', 1000) ?? 1000) : 400;
     const handle = setTimeout(async () => {
         try {
             if (!typoFeatureEnabled()) {
@@ -657,15 +682,15 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
             const missing: ParagraphPiece[] = [];
             for (const p of paras) {
                 let exist;
-            if (!opts?.force) {
-                try {
-                    exist = await getParagraphResult(docKey, p.hash, doc);
-                } catch {
-                    // 如果异步失败，使用同步版本作为后备
-                    exist = getParagraphResultSync(docKey, p.hash);
+                if (!opts?.force) {
+                    try {
+                        exist = await getParagraphResult(docKey, p.hash, doc);
+                    } catch {
+                        exist = getParagraphResultSync(docKey, p.hash);
+                    }
                 }
-            }
-                if (!exist) missing.push(p);
+                const hasErrors = !!(exist && Array.isArray(exist.errors) && exist.errors.length > 0);
+                if (!hasErrors) missing.push(p);
             }
             const groupSize = vscode.workspace.getConfiguration('AndreaNovelHelper').get<number>('typo.docGroupSize', 3) || 3;
             for (let i = 0; i < missing.length; i += Math.max(1, groupSize)) {
@@ -697,7 +722,7 @@ async function scheduleScan(doc: vscode.TextDocument, opts?: { force?: boolean }
         } catch (e) {
             // no-op
         }
-    }, 400);
+    }, delayMs);
     scanTimers.set(docKey, handle);
 }
 
@@ -824,7 +849,54 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
                 updateStatusBar();
             }
         }),
-        vscode.workspace.onDidChangeTextDocument(e => { if (supported(e.document)) { scheduleScan(e.document); updateStatusBar(); } }),
+        vscode.workspace.onDidChangeTextDocument(e => {
+            if (!supported(e.document)) return;
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const autoOnChange = cfg.get<boolean>('typo.autoScanOnChange', true);
+            const changes = e.contentChanges;
+            const whitespaceOnly = changes.length > 0 && changes.every(c => {
+                if (!/^\s*$/.test(c.text)) return false;
+                const before = e.document.getText(c.range);
+                if (before.length > 0 && !/^\s*$/.test(before)) return false;
+                const onlyNewlines = /^[\r\n]+$/.test(c.text);
+                if (onlyNewlines) {
+                    const curLine = c.range.start.line;
+                    const prevEmpty = curLine >= 0 ? e.document.lineAt(curLine).text.trim().length === 0 : true;
+                    const nextLine = Math.min(curLine + 1, e.document.lineCount - 1);
+                    const nextEmpty = nextLine >= 0 ? e.document.lineAt(nextLine).text.trim().length === 0 : true;
+                    if (prevEmpty && nextEmpty) return true;
+                }
+                if (c.range.isEmpty) {
+                    const pos = c.range.start;
+                    const lineText = e.document.lineAt(pos.line).text;
+                    if (pos.character === lineText.length) return true;
+                    const off = e.document.offsetAt(c.range.start);
+                    const left = off > 0 ? e.document.getText(new vscode.Range(e.document.positionAt(off - 1), e.document.positionAt(off))) : '';
+                    const right = off < e.document.getText().length ? e.document.getText(new vscode.Range(e.document.positionAt(off), e.document.positionAt(off + 1))) : '';
+                    const leftWs = left && /^\s$/.test(left);
+                    const rightWs = right && /^\s$/.test(right);
+                    if (!(leftWs && rightWs)) return false;
+                }
+                const addedLines = (c.text.match(/\n/g) || []).length;
+                if (addedLines > 0) {
+                    const startLine = c.range.start.line;
+                    const endLine = Math.min(c.range.end.line + addedLines, e.document.lineCount - 1);
+                    for (let ln = startLine; ln <= endLine; ln++) {
+                        if (e.document.lineAt(ln).text.trim().length !== 0) return false;
+                    }
+                }
+                return true;
+            });
+            if (whitespaceOnly) {
+                enqueueApply(e.document);
+            } else if (autoOnChange) {
+                scheduleScan(e.document);
+            } else {
+                // 手动模式：不触发扫描，但保持状态栏与现有诊断应用
+                enqueueApply(e.document);
+            }
+            updateStatusBar();
+        }),
         vscode.workspace.onDidCloseTextDocument(async (doc) => {
             if (supported(doc)) {
                 const docKey = doc.uri.toString();
