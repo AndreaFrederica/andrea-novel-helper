@@ -14,6 +14,7 @@ export async function runMcpScript(opts: RunScriptOptions) {
   try {
     if (!scriptPath) throw new Error("scriptPath is required");
     if (!fs.existsSync(scriptPath)) throw new Error(`script not found: ${scriptPath}`);
+    // eslint-disable-next-line no-restricted-syntax
     const mod = await import(pathToFileURL(scriptPath).href);
     const run = (mod && (mod.default || mod.run)) as ((c: any, a?: any) => Promise<any> | any);
     if (typeof run !== "function") throw new Error("script must export default or run function");

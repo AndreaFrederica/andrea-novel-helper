@@ -120,10 +120,10 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
     async function toggleWordCountUnit() {
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
         const cur = cfg.get<string>('primaryUnit', 'excludePunct') ?? 'excludePunct';
-        const next = cur === 'excludePunct' ? 'includePunct' : 'excludePunct';
+        const next = cur === 'excludePunct' ? 'includePunct' : (cur === 'includePunct' ? 'nonWSNoPunct' : 'excludePunct');
         await cfg.update('primaryUnit', next, vscode.ConfigurationTarget.Workspace);
         onRefreshStatus();
-        vscode.window.showInformationMessage(`字数单位已切换为：${next === 'excludePunct' ? '不计标点' : '含标点'}`);
+        vscode.window.showInformationMessage(`字数单位已切换为：${next === 'excludePunct' ? '词计（CJK字数 + 英文单词）' : next === 'includePunct' ? '含标点（非空白字符）' : '不含标点（非空白且排除标点）'}`);
     }
 
     async function togglePasteAll() {
@@ -1062,10 +1062,10 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: `${minimap ? '$(check)' : '$(circle-slash)'} 切换：Minimap（小地图）`, cmd: 'andrea.toggleMinimap' },
                 { label: `${wheelZoom ? '$(check)' : '$(circle-slash)'} 切换：Ctrl+滚轮快速缩放字体`, cmd: 'andrea.toggleMouseWheelZoom' },
 
-                { label: `${wcUnit === 'excludePunct' ? '$(check)' : '$(circle-slash)'} 切换：字数单位（不计标点/含标点）`, cmd: 'andrea.toggleWordCountUnit' },
+                { label: `${wcUnit === 'excludePunct' ? '$(text-size)' : '$(code)'} 切换：字数单位（不计标点/含标点）`, cmd: 'andrea.toggleWordCountUnit' },
                 { label: `${includePaste ? '$(check)' : '$(circle-slash)'} 切换：统计计入粘贴（速度与新增/净增）`, cmd: 'andrea.togglePasteAll' },
                 { label: `${wcSpeedUnit === 'cpm' ? '$(check)' : '$(circle-slash)'} 切换：速度单位（当前 ${wcSpeedUnit === 'cpm' ? '字/分钟' : '字/小时'}）`, cmd: 'andrea.toggleWordCountSpeedUnit' },
-                { label: `$(settings) 切换：字数状态栏显示模式（当前 ${wcMode === 'detailed' ? '详细' : wcMode === 'semi' ? '半精简' : '精简'}）`, cmd: 'andrea.cycleWordCountStatusBarMode' },
+                { label: `$(output) 切换：字数状态栏显示模式（当前 ${wcMode === 'detailed' ? '详细' : wcMode === 'semi' ? '半精简' : '精简'}）`, cmd: 'andrea.cycleWordCountStatusBarMode' },
 
                 { label: `${smartTabGroupLockEnabled ? '$(check)' : '$(circle-slash)'} 切换：智能分组锁`, cmd: 'andrea.toggleSmartTabGroupLock' },
 

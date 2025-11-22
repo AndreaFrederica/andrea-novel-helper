@@ -895,3 +895,22 @@ export function registerClientLLMDetector(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(disp);
 }
+
+export async function translateTextWithClientLLM(text: string, targetLang: string): Promise<string> {
+    const c = getClientCfg();
+    if (!c.enabled) throw new Error('clientLLM disabled');
+    const sys = `你是一个翻译助手。将用户文本翻译为${targetLang}，保留原有段落与换行。不要输出任何解释或前后缀，只输出翻译后的纯文本。`;
+    const user = text;
+    if (c.thinkingProvider === 'gemini' && c.geminiApiFormat === 'native') {
+        return await geminiNativeStream(
+            c.apiBase, c.apiKey, c.model, sys, user,
+            c.temperature, c.enableThinking
+        );
+    } else {
+        return await chatCompletionsStream(
+            c.apiBase, c.apiKey, c.model,
+            [ { role: 'system', content: sys }, { role: 'user', content: user } ],
+            c.temperature, c.enableThinking
+        );
+    }
+}

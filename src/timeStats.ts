@@ -407,6 +407,7 @@ export async function computeZhEnCountAsync(filePath: string): Promise<{ zhChars
                         asciiChars: estimatedTotal - estimatedCjk,
                         words: estimatedWords,
                         nonWSChars: estimatedTotal,
+                        nonWSNoPunct: estimatedTotal,
                         total: estimatedTotal
                     }
                 };
@@ -418,7 +419,7 @@ export async function computeZhEnCountAsync(filePath: string): Promise<{ zhChars
             zhChars: 0,
             enWords: 0,
             total: 0,
-            full: { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: 0 }
+            full: { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 }
         };
     }
 }
@@ -893,7 +894,7 @@ function setStatusBarTextAndTooltip() {
         approxFlag = true;
     }
     if (!fullStats) {
-        fullStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, total: displayTotal };
+        fullStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: displayTotal };
     }
 
     // —— CPM & 累计用时计算 ——
@@ -933,36 +934,44 @@ function setStatusBarTextAndTooltip() {
 
     // 字数统计
     const primaryUnit = wcCfg.get<string>('primaryUnit', 'excludePunct');
-    const wordCount = primaryUnit === 'includePunct' ? fullStats.nonWSChars : displayTotal;
+    const wordCount = primaryUnit === 'includePunct'
+        ? fullStats.nonWSChars
+        : primaryUnit === 'nonWSNoPunct'
+            ? (fullStats as any).nonWSNoPunct ?? displayTotal
+            : displayTotal;
+    const unitText = primaryUnit === 'includePunct' ? '（含标点）' : primaryUnit === 'nonWSNoPunct' ? '（不含标点）' : '（词计）';
+    const countExclude = displayTotal;
+    const countInclude = fullStats.nonWSChars ?? displayTotal;
+    const countNoPunct = (fullStats as any).nonWSNoPunct ?? displayTotal;
 
     if (mode === 'compact') {
-        statusBarItem.text = `$(edit) 总计 ${approxMark}${wordCount}字${idleIndicator}`;
+        statusBarItem.text = `$(edit) 总计 ${approxMark}${wordCount}字${unitText}${idleIndicator}`;
     } else if (mode === 'semi') {
-        statusBarItem.text = `速度 ${now} ${unitLabel} · 总计 ${approxMark}${wordCount}字 ${idleIndicator}`;
+        statusBarItem.text = `速度 ${now} ${unitLabel} · 总计 ${approxMark}${wordCount}字${unitText} ${idleIndicator}`;
     } else {
-        statusBarItem.text = `${now}/${avg}/${peak} ${unitLabel} · ${minutes} min (${mmss}) · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${wordCount} ${idleIndicator}`;
+        statusBarItem.text = `${now}/${avg}/${peak} ${unitLabel} · ${minutes} min (${mmss}) · CJK ${fullStats.cjkChars} 字 ROMA ${fullStats.words} 词  总计 ${approxMark}${wordCount}字${unitText} ${idleIndicator}`;
     }
     // —— Tooltip —— 
     const md = new vscode.MarkdownString(undefined, true);
     md.isTrusted = true;
-    md.appendMarkdown(
-        [
-            `**当前速度**：${cpmNow} 字/分钟 | ${cphNow} 字/小时`,
-            `**平均速度**：${cpmAvg} 字/分钟 | ${cphAvg} 字/小时`,
-            `**峰值速度**：${cpmPeak} 字/分钟 | ${cphPeak} 字/小时`,
-            `**累计用时**：${minutes} 分钟（${mmss}）`,
-            currentSessionStart > 0 && !isIdle
-                ? `**当前会话**：已持续 ${Math.floor((Date.now() - currentSessionStart) / 1000)} 秒`
-                : `**当前会话**：未进行或已暂停`,
-            `**中文字符**：${fullStats.cjkChars}${approxFlag ? ' (近似可能滞后)' : ''}`,
-            `**英文单词**：${fullStats.words}${approxFlag ? ' (近似可能滞后)' : ''}`,
-            `**当前字数**：${approxMark}${wordCount}${approxFlag ? ' (估算/待校准)' : ''}${primaryUnit === 'includePunct' ? '（含标点）' : ''}`,
-            `**文件路径**：${currentDocPath}`,
-            `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
-            `**会话数**：${fsEntry.sessions.length}`,
-            `**状态**：${isIdle ? '离开' : '活跃'}`
-        ].join('\n\n')
-    );
+    md.appendMarkdown([
+        `**当前速度**：${cpmNow} 字/分钟 | ${cphNow} 字/小时`,
+        `**平均速度**：${cpmAvg} 字/分钟 | ${cphAvg} 字/小时`,
+        `**峰值速度**：${cpmPeak} 字/分钟 | ${cphPeak} 字/小时`,
+        `**累计用时**：${minutes} 分钟（${mmss}）`,
+        currentSessionStart > 0 && !isIdle
+            ? `**当前会话**：已持续 ${Math.floor((Date.now() - currentSessionStart) / 1000)} 秒`
+            : `**当前会话**：未进行或已暂停`,
+        `**中文字符**：${fullStats.cjkChars}${approxFlag ? ' (近似可能滞后)' : ''}`,
+        `**英文单词**：${fullStats.words}${approxFlag ? ' (近似可能滞后)' : ''}`,
+        `**字数（词计：CJK字数 + 英文单词）**：${approxMark}${countExclude}${approxFlag ? ' (估算/待校准)' : ''}`,
+        `**字数（不含标点：非空白且排除标点）**：${approxMark}${countNoPunct}${approxFlag ? ' (估算/待校准)' : ''}`,
+        `**字数（含标点：非空白字符）**：${approxMark}${countInclude}${approxFlag ? ' (估算/待校准)' : ''}`,
+        `**文件路径**：${currentDocPath}`,
+        `**最后活动时间**：${new Date(fsEntry.lastSeen).toLocaleString()}`,
+        `**会话数**：${fsEntry.sessions.length}`,
+        `**状态**：${isIdle ? '离开' : '活跃'}`
+    ].join('\n\n'));
     statusBarItem.tooltip = md;
     statusBarItem.show();
 }
@@ -1624,7 +1633,8 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
                 e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore') ||
                 e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.speedUnit') ||
                 e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.compact') ||
-                e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.mode')) {
+                e.affectsConfiguration('AndreaNovelHelper.wordCount.statusBar.mode') ||
+                e.affectsConfiguration('AndreaNovelHelper.wordCount.primaryUnit')) {
                 if (e.affectsConfiguration('AndreaNovelHelper.timeStats.respectWcignore')) {
                     // 重置忽略解析器以便重新加载规则
                     combinedIgnoreParser = undefined;

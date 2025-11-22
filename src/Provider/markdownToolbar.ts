@@ -274,7 +274,7 @@ function showStatusBarToolbar(editor: vscode.TextEditor, selection: vscode.Selec
     const truncatedText = selectedText.length > 15 ? selectedText.substring(0, 15) + '...' : selectedText;
 
     // 使用更醒目的图标和文字
-    statusBarItem.text = `$(tools) MD格式: "${truncatedText}"`;
+    statusBarItem.text = `$(tools) MD格式: "${truncatedText.slice(0, 5)}"`;
     statusBarItem.tooltip = 'Markdown 格式化工具 - 点击打开选项';
     statusBarItem.command = 'AndreaNovelHelper.showMarkdownFormatMenu';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.prominentBackground');

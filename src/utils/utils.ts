@@ -72,11 +72,12 @@ function scanExternalRoleFolders(basePath: string, externalFolders: string[], wo
 }
 
 export interface TextStats {
-	cjkChars: number;  // 中文字符
-	asciiChars: number;  // ASCII 字符（非 CJK 且 <128）
-	words: number;  // 英文单词数
-	nonWSChars: number;  // 非空白字符总数
-	total: number;  // 总“字数”=cjk+words（或你自己定义）
+    cjkChars: number;
+    asciiChars: number;
+    words: number;
+    nonWSChars: number;
+    nonWSNoPunct: number;
+    total: number;
 }
 
 /**
@@ -308,27 +309,25 @@ export function countWordsMixed(text: string): number {
 }
 
 export function analyzeText(text: string): TextStats {
-	// 中文字符
-	const cjkMatch = text.match(/[\p{Script=Han}]/gu) || [];
-	// 英文单词
-	const wordMatch = text.match(/\b[A-Za-z0-9_]+\b/g) || [];
-	// 非空白字符
-	const nonWS = text.match(/\S/gu) || [];
-	// ASCII （排除 CJK）
-	const ascii = text.match(/[\x00-\x7F]/g) || [];
+    const cjkMatch = text.match(/[\p{Script=Han}]/gu) || [];
+    const wordMatch = text.match(/\b[A-Za-z0-9_]+\b/g) || [];
+    const nonWS = text.match(/\S/gu) || [];
+    const ascii = text.match(/[\x00-\x7F]/g) || [];
+    const nonPunctNonWS = text.match(/[^\s\p{P}]/gu) || [];
 
-	const cjkChars = cjkMatch.length;
-	const words = wordMatch.length;
-	const nonWSChars = nonWS.length;
-	const asciiChars = ascii.filter(ch => !/[\p{Script=Han}]/u.test(ch)).length;
-	const total = cjkChars + words;  // 或用非空白：nonWSChars
+    const cjkChars = cjkMatch.length;
+    const words = wordMatch.length;
+    const nonWSChars = nonWS.length;
+    const nonWSNoPunct = nonPunctNonWS.length;
+    const asciiChars = ascii.filter(ch => !/[\p{Script=Han}]/u.test(ch)).length;
+    const total = cjkChars + words;
 
-	return { cjkChars, asciiChars, words, nonWSChars, total };
+    return { cjkChars, asciiChars, words, nonWSChars, nonWSNoPunct, total };
 }
 
 export async function countAndAnalyze(fullPath: string): Promise<TextStats> {
-	const text = await readTextFileDetectEncoding(fullPath);
-	return analyzeText(text);
+    const text = await readTextFileDetectEncoding(fullPath);
+    return analyzeText(text);
 }
 
 
@@ -336,13 +335,14 @@ export async function countAndAnalyze(fullPath: string): Promise<TextStats> {
  * 把两个 TextStats 累加
  */
 export function mergeStats(a: TextStats, b: TextStats): TextStats {
-	return {
-		cjkChars: a.cjkChars + b.cjkChars,
-		asciiChars: a.asciiChars + b.asciiChars,
-		words: a.words + b.words,
-		nonWSChars: a.nonWSChars + b.nonWSChars,
-		total: a.total + b.total
-	};
+    return {
+        cjkChars: a.cjkChars + b.cjkChars,
+        asciiChars: a.asciiChars + b.asciiChars,
+        words: a.words + b.words,
+        nonWSChars: a.nonWSChars + b.nonWSChars,
+        nonWSNoPunct: a.nonWSNoPunct + b.nonWSNoPunct,
+        total: a.total + b.total
+    };
 }
 
 

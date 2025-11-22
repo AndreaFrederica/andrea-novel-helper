@@ -1,12 +1,12 @@
 {
   "name": "andrea-novel-helper",
-  "displayName": "Andrea 小说助手 (Andrea Novel Helper)",
+  "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.25",
+  "version": "0.4.35",
   "engines": {
     "vscode": "^1.100.0"
   },
-  "homepage": "https://blog.sirrus.cc",
+  "homepage": "https://anh.sirrus.cc",
   "publisher": "andreafrederica",
   "license": "MPL-2.0",
   "repository": {
@@ -16,6 +16,32 @@
   "icon": "images/icon.png",
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "andrea",
+    "novel",
+    "helper",
+    "writing",
+    "assistant",
+    "小说",
+    "小説",
+    "作家",
+    "写作",
+    "助手",
+    "角色",
+    "大纲",
+    "时间线",
+    "关系图",
+    "词汇",
+    "敏感词",
+    "统计",
+    "同步",
+    "WebDAV",
+    "AutoGit",
+    "脚本",
+    "MCP",
+    "Typst",
+    "错别字检查"
   ],
   "activationEvents": [
     "onLanguage:markdown",
@@ -725,6 +751,11 @@
         "category": "Andrea Novel Helper"
       },
       {
+        "command": "andrea.typo.translateSelection",
+        "title": "翻译选中文本（LLM）",
+        "category": "Andrea Novel Helper"
+      },
+      {
         "command": "andrea.webdav.manageAccounts",
         "title": "%command.webdav.manageAccounts.title%"
       },
@@ -950,6 +981,45 @@
       "type": "object",
       "title": "%config.title%",
       "properties": {
+        "AndreaNovelHelper.typo.applyPartialDecorationsImmediately": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "在LLM分段结果(partial)阶段是否立刻应用错别字高亮（默认否，仅在最终结果阶段应用，避免\"瞬间出现又消失\"的闪烁）"
+        },
+        "AndreaNovelHelper.typo.suppressRolesMode": {
+          "type": "string",
+          "enum": ["none", "roleNameExact", "regexContain", "nonSensitiveIntersect"],
+          "default": "roleNameExact",
+          "markdownDescription": "错别字标记的角色抑制模式：none（不抑制）；roleNameExact（仅当错字文本与某角色名完全相等时抑制，忽略正则角色）；regexContain（仅当被正则表达式角色完全包含整段时抑制）；nonSensitiveIntersect（旧版：与任意非敏感角色相交则抑制）"
+        },
+        "AndreaNovelHelper.translate.targets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["中文", "英文", "日语", "德语", "法语", "韩语", "繁体中文", "拉丁语", "希腊语"],
+          "markdownDescription": "右键翻译的可选目标语言列表"
+        },
+        "AndreaNovelHelper.translate.defaultTarget": {
+          "type": "string",
+          "enum": ["中文", "英文", "日语", "德语", "法语", "韩语", "繁体中文", "拉丁语", "希腊语"],
+          "default": "中文",
+          "markdownDescription": "翻译默认目标语言（与可选列表配合使用）"
+        },
+        "AndreaNovelHelper.translate.alwaysUseDefaultTarget": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "跳过语言选择，直接使用默认目标语言"
+        },
+        "AndreaNovelHelper.translate.defaultAction": {
+          "type": "string",
+          "enum": ["replaceSelection", "openInNewTab", "copyToClipboard"],
+          "default": "replaceSelection",
+          "markdownDescription": "翻译结果默认处理方式：替换选区/新标签页/复制到剪贴板"
+        },
+        "AndreaNovelHelper.translate.alwaysUseDefaultAction": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "跳过处理方式选择，直接使用默认处理方式"
+        },
         "AndreaNovelHelper.comments.authorName": {
           "type": "string",
           "default": "",
@@ -1609,6 +1679,18 @@
           ],
           "description": "%config.timeStats.milestone.notificationType.description%"
         },
+        "AndreaNovelHelper.timeStats.typoDelay.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用变更时间窗口机制：在连续编辑期间延迟发送错别字请求，窗口结束后统一触发。"
+        },
+        "AndreaNovelHelper.timeStats.typoDelay.windowMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100,
+          "maximum": 1000000,
+          "markdownDescription": "变更时间窗口时长（毫秒）。窗口内的连续变更将合并为一次错别字请求。"
+        },
         "AndreaNovelHelper.wordCount.largeFileThreshold": {
           "type": "number",
           "default": 51200,
@@ -1748,13 +1830,15 @@
           "default": "excludePunct",
           "enum": [
             "excludePunct",
-            "includePunct"
+            "includePunct",
+            "nonWSNoPunct"
           ],
           "enumDescriptions": [
-            "不计标点（CJK 字符 + ASCII 单词）",
-            "含标点（所有非空白字符）"
+            "词计（CJK 字符 + 英文单词）",
+            "含标点（非空白字符）",
+            "不含标点（非空白且排除标点）"
           ],
-          "markdownDescription": "字数统计首要显示单位：\n- **excludePunct**：不计标点（`CJK 字符 + ASCII 单词`）\n- **includePunct**：含标点（`非空白字符`）\n状态栏 hover 始终显示两种单位的数据。"
+          "markdownDescription": "字数统计首要显示单位：\n- **excludePunct**：词计（`CJK 字符 + 英文单词`）\n- **includePunct**：含标点（`非空白字符`）\n- **nonWSNoPunct**：不含标点（`非空白且排除标点`）"
         },
         "AndreaNovelHelper.wordCount.statusBar.speedUnit": {
           "type": "string",
@@ -1802,6 +1886,16 @@
           "minimum": 1,
           "maximum": 128,
           "description": "%config.wordCount.maxWorkersUpperLimit.description%"
+        },
+        "AndreaNovelHelper.wordCount.skipStartupStatCheck": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "⚠️ 危险选项：启用后，字数统计视图在**冷启动扫描文件时将跳过对已有缓存文件的 fs.stat 校验**，直接信任快照 / 文件追踪数据库 / 内存中的字数统计。这样可以显著减少启动时间，但**无法在启动阶段发现第三方软件或外部工具对文件内容的篡改**，也无法保证缓存与文件系统 100% 一致。仅在你确信本地文本文件几乎不会在 VS Code 之外被修改时使用。"
+        },
+        "AndreaNovelHelper.wordCount.parallelStatCheck": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "启用并行批量 fs.stat 校验。开启后，在冷启动 cache-check 阶段将对所有已缓存文件并行执行 fs.stat（而非逐个串行），显著减少校验耗时。适用于文件数量较多且磁盘/文件系统 I/O 性能较好的场景。注意：当 `skipStartupStatCheck` 开启时，此选项无效。"
         },
         "AndreaNovelHelper.debug.completionLog": {
           "type": "boolean",
@@ -1855,6 +1949,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "打开文档时是否自动进行错别字识别。关闭后需要手动点击重新识别按钮。"
+        },
+        "AndreaNovelHelper.typo.autoScanOnChange": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "在编辑内容发生变更时是否自动触发错别字扫描。关闭后仅保留手动扫描模式（通过命令或快速设置触发）。"
         },
         "AndreaNovelHelper.typo.clientLLM.enabled": {
           "type": "boolean",
@@ -2467,7 +2566,6 @@
           "when": "view == andrea.scriptsView",
           "group": "navigation@2"
         },
-        
         {
           "command": "andrea.scripts.toggleMcpServers",
           "when": "view == andrea.scriptsView",
@@ -2899,6 +2997,12 @@
           "command": "myPreview.copyPlainText",
           "group": "navigation@8"
         }
+        ,
+        {
+          "when": "andrea.anh.enabled && editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",
+          "command": "andrea.typo.translateSelection",
+          "group": "navigation@98"
+        }
       ],
       "commandPalette": [
         {
@@ -3039,6 +3143,7 @@
     "chardet": "^2.1.0",
     "chart.js": "^4.5.0",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "fast-glob": "^3.3.3",
     "font-list": "^1.5.1",
     "iconv-lite": "^0.6.3",
     "ignore": "^7.0.5",

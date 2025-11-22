@@ -108,7 +108,7 @@ export class StatusBarProvider {
             const fileMetadata = getFileByPath(filePath);
             
             if (!fileMetadata?.writingStats) {
-                this.statusBarItem.text = '$(edit) 新文档';
+                this.statusBarItem.text = '$(file-text) 新文档';
                 this.statusBarItem.show();
                 return;
             }
@@ -132,9 +132,10 @@ export class StatusBarProvider {
 
             const textStats = await this.wordCountProvider.getFileStats(filePath);
             const wcExclude = textStats?.total ?? 0;
-            const wcInclude = textStats?.nonWSChars ?? 0;
+            const wcInclude = (textStats as any)?.nonWSChars ?? 0;
+            const wcNonWSNoPunct = (textStats as any)?.nonWSNoPunct ?? wcExclude;
             const primaryUnit = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount').get<string>('primaryUnit', 'excludePunct');
-            const wordCount = primaryUnit === 'includePunct' ? wcInclude : wcExclude;
+            const wordCount = primaryUnit === 'includePunct' ? wcInclude : (primaryUnit === 'nonWSNoPunct' ? wcNonWSNoPunct : wcExclude);
             
             // 计算“平均速度”（基于计入速度的新增字符和总时长）
             let realCPM = 0;
@@ -172,17 +173,17 @@ export class StatusBarProvider {
             const mode = modeRaw || (compactFallback ? 'compact' : 'detailed');
             const speedText = speedUnit === 'cph' ? `${realCPH}/h` : `${realCPM}/m`;
             if (mode === 'compact') {
-                this.statusBarItem.text = `$(edit) ${wordCount}字`;
+                this.statusBarItem.text = `$(file-text) ${wordCount}字`;
             } else if (mode === 'semi') {
-                this.statusBarItem.text = `$(edit) ${wordCount}字 | 速度:${speedText}`;
+                this.statusBarItem.text = `$(file-text) ${wordCount}字 | 速度:${speedText}`;
             } else {
-                this.statusBarItem.text = `$(edit) ${timeText} | ${wordCount}字 | 速度:${speedText}`;
+                this.statusBarItem.text = `$(file-text) ${timeText} | ${wordCount}字 | 速度:${speedText}`;
             }
             this.statusBarItem.show();
 
         } catch (error) {
             console.error('Failed to update status bar:', error);
-            this.statusBarItem.text = '$(edit) 统计错误';
+            this.statusBarItem.text = '$(warning) 统计错误';
             this.statusBarItem.show();
         }
     }

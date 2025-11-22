@@ -892,6 +892,9 @@ export async function activate(context: vscode.ExtensionContext) {
             dragAndDropController: dndController
         });
         context.subscriptions.push(treeView);
+        
+        // 设置 TreeView 引用，用于更新标题栏显示
+        wordCountProvider.setTreeView(treeView);
 
         registerWordCountPlainTextCommands(context, wordCountProvider);
         registerWordCountTypstExport(context, wordCountProvider, treeView)
