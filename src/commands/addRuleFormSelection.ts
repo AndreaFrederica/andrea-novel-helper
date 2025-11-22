@@ -6,30 +6,26 @@ import * as fs from 'fs';
 import JSON5 from 'json5';
 import { updateDecorations } from '../events/updateDecorations';
 import { generateExampleRoleList } from '../templates/templateGenerators';
+import { selectOrCreateFile } from './addRoleFileSelector';
 
 export const addRoleFromSelection = async () => {
-    // 确保角色库存在
-    const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const rolesFile = cfg1.get<string>('rolesFile')!;
-    const root1 = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!root1) return;
-    const fullPath1 = path.join(root1, rolesFile);
-    if (!fs.existsSync(fullPath1)) {
-        const action = await vscode.window.showInformationMessage(
-            `角色库 "${rolesFile}" 不存在，是否创建示例角色库？`,
-            { modal: true },
-            '创建示例',
-            '取消'
-        );
-        if (action !== '创建示例') return; // 放弃操作
-        const example = generateExampleRoleList();
-        const txtPath = fullPath1.replace(/\.[^/.]+$/, ".txt");
-        if (!fs.existsSync(txtPath)) {
-            fs.writeFileSync(txtPath, example.map(i => i.name).join('\n'), 'utf8');
-        }
-        fs.mkdirSync(path.dirname(fullPath1), { recursive: true });
-        fs.writeFileSync(fullPath1, JSON5.stringify(example, null, 2), 'utf8');
-        vscode.window.showInformationMessage(`已初始化示例角色库：${rolesFile}`);
+    // 从配置获取默认文件名并处理路径前缀
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    let defaultFileName = cfg.get<string>('rolesFile') || '角色库.json5';
+    
+    // 如果配置路径包含novel-helper/前缀，移除它
+    if (defaultFileName.startsWith('novel-helper/')) {
+        defaultFileName = defaultFileName.substring('novel-helper/'.length);
+    }
+    
+    // 选择或创建角色文件（不传入示例数据，创建空文件）
+    const fullPath1 = await selectOrCreateFile(
+        '角色',
+        defaultFileName
+    );
+    
+    if (!fullPath1) {
+        return; // 用户取消或出错
     }
 
     const editor = vscode.window.activeTextEditor;
@@ -54,15 +50,8 @@ export const addRoleFromSelection = async () => {
         validateInput: v => v && !/^#([0-9A-Fa-f]{6})$/.test(v) ? '请输入合法的 #RRGGBB 形式' : null
     });
 
-    // 读写 JSON5
-    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const file = cfg.get<string>('rolesFile')!;
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!root) return vscode.window.showErrorMessage('未找到工作区根目录');
-    const fullPath = path.join(root, file);
-    if (!fs.existsSync(fullPath)) {
-        return vscode.window.showErrorMessage(`角色库文件不存在: ${file}`);
-    }
+    // 使用已选择的文件路径
+    const fullPath = fullPath1;
 
     let arr: any[];
     try {
@@ -78,7 +67,8 @@ export const addRoleFromSelection = async () => {
 
     arr.push(newRole);
     fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已添加角色 "${name}" 到 ${file}`);
+    const fileName = path.basename(fullPath);
+    vscode.window.showInformationMessage(`已添加角色 "${name}" 到 ${fileName}`);
 
     // 刷新
     loadRoles();

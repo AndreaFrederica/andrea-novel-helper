@@ -5,41 +5,28 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSON5 from 'json5';
 import { updateDecorations } from '../events/updateDecorations';
+import { selectOrCreateFile } from './addRoleFileSelector';
 
 
 
 export const addSensitiveCmd_obj = async () => {
+    // 从配置获取默认文件名并处理路径前缀
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const sensitiveFile = cfg.get<string>('sensitiveWordsFile')!;
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!root) return;
-    const fullPath = path.join(root, sensitiveFile);
-
-    // 当敏感词库文件不存在时，初始化示例
-    if (!fs.existsSync(fullPath)) {
-        await vscode.window.showInformationMessage(
-            `敏感词库文件 "${sensitiveFile}" 不存在，先创建一个示例再继续…`,
-            { modal: true },
-            '关闭'
-        );
-        const example = [
-            {
-                name: "示例敏感词",
-                type: "敏感词",
-                description: "这是一个示例敏感词。",
-                color: "#FF0000"
-            }
-        ];
-        // txt库
-        const txtPath = fullPath.replace(/\.[^/.]+$/, ".txt");
-        if (!fs.existsSync(txtPath)) {
-            const txtContent = example.map(item => item.name).join('\n');
-            fs.writeFileSync(txtPath, txtContent, 'utf8');
-        }
-        // json5库
-        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-        fs.writeFileSync(fullPath, JSON5.stringify(example, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已初始化示例敏感词库：${sensitiveFile}`, { modal: true }, '关闭');
+    let defaultFileName = cfg.get<string>('sensitiveWordsFile') || '敏感词库.json5';
+    
+    // 如果配置路径包含novel-helper/前缀，移除它
+    if (defaultFileName.startsWith('novel-helper/')) {
+        defaultFileName = defaultFileName.substring('novel-helper/'.length);
+    }
+    
+    // 选择或创建敏感词文件（不传入示例数据，创建空文件）
+    const fullPath = await selectOrCreateFile(
+        '敏感词',
+        defaultFileName
+    );
+    
+    if (!fullPath) {
+        return; // 用户取消或出错
     }
 
     const editor = vscode.window.activeTextEditor;
@@ -78,7 +65,8 @@ export const addSensitiveCmd_obj = async () => {
 
     arr.push(newSensitive);
     fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已添加敏感词 "${name}" 到 ${sensitiveFile}`, { modal: true }, '关闭');
+    const fileName = path.basename(fullPath);
+    vscode.window.showInformationMessage(`已添加敏感词 "${name}" 到 ${fileName}`, { modal: true }, '关闭');
 
     // 刷新全局角色列表（包括特殊角色）
     loadRoles();
