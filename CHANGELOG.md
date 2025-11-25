@@ -1,5 +1,13 @@
 # Change Log
 
+## [0.4.37] - 2025-11-25
+### ✨ 新增
+- 右键添加新Role时，支持选择位置（扫描角色库文件后给出角色库内的角色文件列表供选择）
+- 新增配置项 `AndreaNovelHelper.completion.segmenterType`，允许选择自动补全的分词器类型：
+  - `auto`：智能选择（中文多时用jieba）
+  - `intl`：强制使用Intl.Segmenter
+  - `jieba`：强制使用jieba分词器（jieba对中文分词更准确，能提供更好的中文输入补全体验）
+
 ## [0.4.35] - 2025-11-21
 ### 🐛 修复
 - 修正了Typo在上个更新之后失效的问题
