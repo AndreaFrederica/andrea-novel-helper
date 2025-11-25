@@ -215,6 +215,7 @@
   "config.wordCount.maxWorkers.description": "Number of parallel workers for word counting. 0 = auto (cpu/2 capped by maxWorkersUpperLimit).",
   "config.wordCount.maxWorkersUpperLimit.description": "Upper limit for worker auto mode to avoid saturating CPU.",
   "config.debug.completionLog.description": "Completion: output debug logs for prefix/match counts (may impact performance).",
+  "config.completion.segmenterType.description": "Completion word segmenter type: auto=intelligent selection (use jieba for Chinese-heavy content), intl=force use Intl.Segmenter, jieba=force use jieba segmenter. Jieba provides more accurate Chinese segmentation for better Chinese input completion.",
   "config.decorations.cacheSize.description": "Decoration cache size: number of recently closed document decorations to keep for faster reopening. Set to 0 to disable caching.",
   "config.fileTracker.trustCallerFilters.description": "If true, FileTrackingDataManager will trust that callers already applied ignore/filter rules and skip redundant checks (e.g. .git filtering). Core protections remain enforced. Enabling may yield a small performance improvement."
 }

@@ -604,6 +604,13 @@ export async function activate(context: vscode.ExtensionContext) {
                     initAutomaton(); // 重建 AC 自动机（包含别名）
                 } catch (e) { console.warn('[ANH] initAutomaton after roles change failed', e); }
                 try { clearAllRoleMatchCache(); } catch {/* ignore */ }
+
+                // 重新加载jieba自定义词典
+                try {
+                    const { reloadCustomDict } = require('./utils/segmenter');
+                    reloadCustomDict();
+                } catch (e) { console.warn('[ANH] reload jieba dict after roles change failed', e); }
+
                 scheduleUpdate(); // 触发装饰刷新
             }, 150);
         });
@@ -613,6 +620,13 @@ export async function activate(context: vscode.ExtensionContext) {
         const onRolesFinishedDisp = onDidFinishRoles(() => {
             try { initAutomaton(); } catch (e) { console.warn('[ANH] initAutomaton after roles FINISH failed', e); }
             try { clearAllRoleMatchCache(); } catch {/* ignore */ }
+
+            // 重新加载jieba自定义词典
+            try {
+                const { reloadCustomDict } = require('./utils/segmenter');
+                reloadCustomDict();
+            } catch (e) { console.warn('[ANH] reload jieba dict after roles FINISH failed', e); }
+
             // 直接调用而非 schedule，避免再等待 200ms
             updateDecorations();
 //todo 先注释掉，等测试稳定了再放开 自动加载角色调用索引

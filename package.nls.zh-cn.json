@@ -210,5 +210,6 @@
     "config.wordCount.maxWorkers.description": "并行统计 worker 数量。0=自动 (cpu/2 上限受 maxWorkersUpperLimit 限制)。",
     "config.wordCount.maxWorkersUpperLimit.description": "worker 自动模式与手动设置的最大允许上限。防止意外拉满 CPU。",
     "config.debug.completionLog.description": "补全: 输出前缀/匹配数调试日志 (可能影响性能)。",
+    "config.completion.segmenterType.description": "自动补全分词器类型：auto=智能选择（中文多时用jieba），intl=强制使用Intl.Segmenter，jieba=强制使用jieba分词器。jieba对中文分词更准确，能提供更好的中文输入补全体验。",
     "config.decorations.cacheSize.description": "装饰缓存大小：保留最近关闭的文档装饰数量，提升重新打开时的性能。设为0禁用缓存。"
 }

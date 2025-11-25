@@ -988,19 +988,46 @@
         },
         "AndreaNovelHelper.typo.suppressRolesMode": {
           "type": "string",
-          "enum": ["none", "roleNameExact", "regexContain", "nonSensitiveIntersect"],
+          "enum": [
+            "none",
+            "roleNameExact",
+            "regexContain",
+            "nonSensitiveIntersect"
+          ],
           "default": "roleNameExact",
           "markdownDescription": "错别字标记的角色抑制模式：none（不抑制）；roleNameExact（仅当错字文本与某角色名完全相等时抑制，忽略正则角色）；regexContain（仅当被正则表达式角色完全包含整段时抑制）；nonSensitiveIntersect（旧版：与任意非敏感角色相交则抑制）"
         },
         "AndreaNovelHelper.translate.targets": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["中文", "英文", "日语", "德语", "法语", "韩语", "繁体中文", "拉丁语", "希腊语"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "中文",
+            "英文",
+            "日语",
+            "德语",
+            "法语",
+            "韩语",
+            "繁体中文",
+            "拉丁语",
+            "希腊语"
+          ],
           "markdownDescription": "右键翻译的可选目标语言列表"
         },
         "AndreaNovelHelper.translate.defaultTarget": {
           "type": "string",
-          "enum": ["中文", "英文", "日语", "德语", "法语", "韩语", "繁体中文", "拉丁语", "希腊语"],
+          "enum": [
+            "中文",
+            "英文",
+            "日语",
+            "德语",
+            "法语",
+            "韩语",
+            "繁体中文",
+            "拉丁语",
+            "希腊语"
+          ],
           "default": "中文",
           "markdownDescription": "翻译默认目标语言（与可选列表配合使用）"
         },
@@ -1011,7 +1038,11 @@
         },
         "AndreaNovelHelper.translate.defaultAction": {
           "type": "string",
-          "enum": ["replaceSelection", "openInNewTab", "copyToClipboard"],
+          "enum": [
+            "replaceSelection",
+            "openInNewTab",
+            "copyToClipboard"
+          ],
           "default": "replaceSelection",
           "markdownDescription": "翻译结果默认处理方式：替换选区/新标签页/复制到剪贴板"
         },
@@ -1901,6 +1932,16 @@
           "type": "boolean",
           "default": false,
           "description": "%config.debug.completionLog.description%"
+        },
+        "AndreaNovelHelper.completion.segmenterType": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "intl",
+            "jieba"
+          ],
+          "default": "auto",
+          "markdownDescription": "自动补全分词器类型：\n- **auto**：智能选择，中文内容较多时自动使用jieba，否则使用Intl.Segmenter\n- **intl**：强制使用浏览器内置的Intl.Segmenter\n- **jieba**：强制使用jieba中文分词器\n\njieba分词器对中文分词更准确，能提供更好的中文输入补全体验。"
         },
         "AndreaNovelHelper.decorations.cacheSize": {
           "type": "number",
@@ -2996,8 +3037,7 @@
           "when": "andrea.anh.enabled && editorTextFocus && (editorLangId == markdown || editorLangId == plaintext)",
           "command": "myPreview.copyPlainText",
           "group": "navigation@8"
-        }
-        ,
+        },
         {
           "when": "andrea.anh.enabled && editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",
           "command": "andrea.typo.translateSelection",
@@ -3137,6 +3177,7 @@
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",
     "@modelcontextprotocol/sdk": "^1.22.0",
+    "@node-rs/jieba": "^2.0.1",
     "@types/uuid": "^10.0.0",
     "@vscode/sqlite3": "^5.1.8-vscode",
     "ahocorasick": "^1.0.2",

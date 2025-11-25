@@ -8,6 +8,7 @@ import * as fastGlob from 'fast-glob';
 
 /* eslint-disable curly */
 import { Role, segmenter } from "../extension";
+import { getLastWord } from './segmenter';
 import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles, sensitiveSourceFiles } from '../activate';
 import { globalFileCache } from '../context/fileCache';
 import { parseMarkdownRoles } from './Parser/markdownParser';
@@ -82,29 +83,12 @@ export interface TextStats {
 }
 
 /**
- * 用 Intl.Segmenter 拆分成词，取最后一个词作为补全前缀
+ * 用分词器拆分成词，取最后一个词作为补全前缀
  */
 export function getPrefix(line: string): string {
-	// 说明：若 Intl.Segmenter 异常或不支持，回退到正则后缀匹配，避免返回空导致补全入口失效。
-	let last = '';
-	try {
-		for (const { segment, isWordLike } of segmenter.segment(line)) {
-			if (isWordLike) last = segment;
-		}
-	} catch (e) {
-		// Segmenter 可能在早期 Node 版本或某些区域设置失败
-		// 忽略，直接走 fallback
-	}
-	if (!last) {
-		// Fallback：匹配行尾连续的中文 / 英文数字下划线
-		const m = line.match(/([\p{Script=Han}A-Za-z0-9_]+)$/u);
-		if (m) last = m[1];
-	}
-	// 仍为空再做一个“单字符中文”兜底（用于用户刚输入第一个汉字时）
-	if (!last) {
-		const ch = line.trimEnd().slice(-1);
-		if (/^[\p{Script=Han}]$/u.test(ch)) last = ch;
-	}
+	// 使用增强的分词器获取最后一个词
+	const last = getLastWord(line);
+
 	// 可选调试输出
 	try {
 		const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
