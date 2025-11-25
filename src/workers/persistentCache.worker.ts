@@ -1,5 +1,9 @@
-// src/workers/persistentCache.worker.ts
+// 🏷️ Worker: PersistentCacheWorker - 持久化缓存与文件状态管理
 import { parentPort } from 'worker_threads';
+
+// 设置Worker名称标识，便于调试器识别
+const WORKER_NAME = 'PersistentCacheWorker';
+console.log(`🚀 [${WORKER_NAME}] 启动 - 持久化缓存管理器`);
 import * as fs from 'fs';
 
 parentPort!.on('message', async (msg: any) => {
@@ -10,6 +14,7 @@ parentPort!.on('message', async (msg: any) => {
         if (type === 'init') {
             // 仅表明 worker 就绪；不再加载 index、不做任何状态维护
             parentPort!.postMessage({ type: 'ready' });
+            console.log(`✅ [${WORKER_NAME}] 就绪 - 缓存系统已初始化`);
             return;
         }
 

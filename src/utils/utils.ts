@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as chardet from 'jschardet';
 import * as iconv from 'iconv-lite';
 import JSON5 from 'json5';
+import * as fastGlob from 'fast-glob';
 
 /* eslint-disable curly */
 import { Role, segmenter } from "../extension";
@@ -611,14 +612,63 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
 }
 
 /**
- * 递归扫描包目录，返回所有角色文件
+ * 递归扫描包目录，返回所有角色文件（使用 fast-glob 优化性能）
  * @param currentDir 当前扫描的目录绝对路径
  * @param relativePath 相对于 novel-helper 的路径
  * @returns 角色文件相对路径数组
  */
 export function getPackageDirectory(currentDir: string, relativePath: string): string[] {
+	if (!fs.existsSync(currentDir)) {
+		return [];
+	}
+
+	try {
+		// 构建glob模式：递归查找所有文件，排除特定目录
+		const globPattern = path.join(currentDir, '**/*').replace(/\\/g, '/');
+
+		// 使用fast-glob并行扫描所有文件
+		const allFiles = fastGlob.sync(globPattern, {
+			ignore: [
+				'**/outline/**',     // 跳过 outline 目录
+				'**/.anh-fsdb/**',   // 跳过内部文件追踪数据库目录
+				'**/typo/**',        // 跳过 typo 目录
+				'**/comments/**'     // 跳过 comments 目录
+			],
+			dot: false,             // 不包含隐藏文件
+			onlyFiles: true,        // 只返回文件
+			absolute: true          // 返回绝对路径
+		});
+
+		const roleFiles: string[] = [];
+
+		// 并行检查所有文件是否为角色文件
+		for (const filePath of allFiles) {
+			const fileName = path.basename(filePath);
+			// 检查是否是角色文件（带路径以便内容嗅探）
+			if (isRoleFile(fileName, filePath)) {
+				// 计算相对于传入的 relativePath 的路径
+				const relativeFilePath = path.relative(path.join(currentDir, relativePath), filePath);
+				roleFiles.push(relativeFilePath);
+			}
+		}
+
+		return roleFiles;
+	} catch (error) {
+		console.error(`getPackageDirectory: fast-glob 扫描失败 ${currentDir}:`, error);
+		// 降级到原始递归实现
+		return getPackageDirectoryRecursive(currentDir, relativePath);
+	}
+}
+
+/**
+ * 递归扫描包目录的降级实现（原始逻辑）
+ * @param currentDir 当前扫描的目录绝对路径
+ * @param relativePath 相对于 novel-helper 的路径
+ * @returns 角色文件相对路径数组
+ */
+function getPackageDirectoryRecursive(currentDir: string, relativePath: string): string[] {
 	const roleFiles: string[] = [];
-	
+
 	if (!fs.existsSync(currentDir)) {
 		return roleFiles;
 	}
@@ -639,7 +689,7 @@ export function getPackageDirectory(currentDir: string, relativePath: string): s
 				continue;
 			}
 			// 递归扫描子目录
-			const subFiles = getPackageDirectory(entryPath, entryRelativePath);
+			const subFiles = getPackageDirectoryRecursive(entryPath, entryRelativePath);
 			roleFiles.push(...subFiles);
 		} else if (entry.isFile()) {
 			// 检查是否是角色文件（带路径以便内容嗅探）
@@ -648,7 +698,7 @@ export function getPackageDirectory(currentDir: string, relativePath: string): s
 			}
 		}
 	}
-	
+
 	return roleFiles;
 }
 

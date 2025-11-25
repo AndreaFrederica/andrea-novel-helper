@@ -2,10 +2,10 @@
 import * as vscode from 'vscode';
 import { loadRoles } from '../activate';
 import * as path from 'path';
-import * as fs from 'fs';
-import JSON5 from 'json5';
 import { updateDecorations } from '../events/updateDecorations';
 import { selectOrCreateFile } from './addRoleFileSelector';
+import { addRoleToFile } from '../utils/roleFileHandler';
+import { generateRoleNameHash } from '../utils/uuidUtils';
 
 export const addVocabulary = async () => {
     // 从配置获取默认文件名并处理路径前缀
@@ -17,10 +17,22 @@ export const addVocabulary = async () => {
         defaultFileName = defaultFileName.substring('novel-helper/'.length);
     }
     
-    // 选择或创建词汇文件（创建空文件）
+    // 选择或创建词汇文件（支持多种格式，只显示词汇文件）
     const fullPath = await selectOrCreateFile(
         '词汇',
-        defaultFileName
+        defaultFileName,
+        {
+            includeMd: true,      // 支持 Markdown 格式
+            includeOjson5: true,   // 支持 OJSON5 格式
+            // 添加词汇特定过滤：排除角色和敏感词相关文件
+            customFilter: (fileName: string) => {
+                const lowerFileName = fileName.toLowerCase();
+                // 排除角色相关文件
+                const roleKeywords = ['character', 'role', 'gallery', '角色', '人物'];
+                // 敏感词文件已在基本过滤中处理
+                return !roleKeywords.some(keyword => lowerFileName.includes(keyword));
+            }
+        }
     );
     
     if (!fullPath) {
@@ -48,23 +60,25 @@ export const addVocabulary = async () => {
         }
     });
 
-    let arr: any[];
-    try {
-        const text = fs.readFileSync(fullPath, 'utf8');
-        arr = JSON5.parse(text) as any[];
-    } catch (e) {
-        vscode.window.showErrorMessage(`解析词汇库失败: ${e}`);
-        return;
-    }
-
-    const newVocab: any = { name, type: "词汇" };
+    // 创建新词汇对象
+    const newVocab: any = {
+        name,
+        type: "词汇",
+        uuid: generateRoleNameHash(name)
+    };
     if (description) newVocab.description = description;
     if (color) newVocab.color = color;
 
-    arr.push(newVocab);
-    fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    const fileName = path.basename(fullPath);
-    vscode.window.showInformationMessage(`已添加词汇 "${name}" 到 ${fileName}`, { modal: true }, '关闭');
+    // 使用统一的文件处理函数添加词汇
+    const success = addRoleToFile(fullPath, newVocab);
+
+    if (success) {
+        const fileName = path.basename(fullPath);
+        vscode.window.showInformationMessage(`已添加词汇 "${name}" 到 ${fileName}`, { modal: true }, '关闭');
+    } else {
+        vscode.window.showErrorMessage(`添加词汇失败`);
+        return;
+    }
 
     loadRoles();
     updateDecorations();

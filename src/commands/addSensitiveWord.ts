@@ -2,10 +2,10 @@
 import * as vscode from 'vscode';
 import { loadRoles } from '../activate';
 import * as path from 'path';
-import * as fs from 'fs';
-import JSON5 from 'json5';
 import { updateDecorations } from '../events/updateDecorations';
 import { selectOrCreateFile } from './addRoleFileSelector';
+import { addRoleToFile } from '../utils/roleFileHandler';
+import { generateRoleNameHash } from '../utils/uuidUtils';
 
 
 
@@ -19,10 +19,24 @@ export const addSensitiveCmd_obj = async () => {
         defaultFileName = defaultFileName.substring('novel-helper/'.length);
     }
     
-    // 选择或创建敏感词文件（不传入示例数据，创建空文件）
+    // 选择或创建敏感词文件（支持多种格式）
     const fullPath = await selectOrCreateFile(
         '敏感词',
-        defaultFileName
+        defaultFileName,
+        {
+            includeMd: true,      // 支持 Markdown 格式
+            includeOjson5: true,   // 支持 OJSON5 格式
+            // 添加敏感词特定过滤：排除角色和词汇相关文件
+            customFilter: (fileName: string) => {
+                const lowerFileName = fileName.toLowerCase();
+                // 排除角色相关文件
+                const roleKeywords = ['character', 'role', 'gallery', '角色', '人物'];
+                // 排除词汇相关文件
+                const vocabKeywords = ['vocabulary', 'vocab', 'term', '词汇', '术语'];
+                return !roleKeywords.some(keyword => lowerFileName.includes(keyword)) &&
+                       !vocabKeywords.some(keyword => lowerFileName.includes(keyword));
+            }
+        }
     );
     
     if (!fullPath) {
@@ -49,24 +63,25 @@ export const addSensitiveCmd_obj = async () => {
         }
     });
 
-    let arr: any[];
-    try {
-        const text = fs.readFileSync(fullPath, 'utf8');
-        arr = JSON5.parse(text) as any[];
-    } catch (e) {
-        vscode.window.showErrorMessage(`解析敏感词库失败: ${e}`);
+    // 创建新敏感词对象
+    const newSensitive: any = {
+        name,
+        type: "敏感词",
+        uuid: generateRoleNameHash(name),
+        color: color || "#FF0000"
+    };
+    if (description) newSensitive.description = description;
+
+    // 使用统一的文件处理函数添加敏感词
+    const success = addRoleToFile(fullPath, newSensitive);
+
+    if (success) {
+        const fileName = path.basename(fullPath);
+        vscode.window.showInformationMessage(`已添加敏感词 "${name}" 到 ${fileName}`, { modal: true }, '关闭');
+    } else {
+        vscode.window.showErrorMessage(`添加敏感词失败`);
         return;
     }
-
-    // 若用户未输入颜色，则使用红色作为默认颜色
-    const newSensitive: any = { name, type: "敏感词" };
-    if (description) newSensitive.description = description;
-    newSensitive.color = color || "#FF0000";
-
-    arr.push(newSensitive);
-    fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    const fileName = path.basename(fullPath);
-    vscode.window.showInformationMessage(`已添加敏感词 "${name}" 到 ${fileName}`, { modal: true }, '关闭');
 
     // 刷新全局角色列表（包括特殊角色）
     loadRoles();

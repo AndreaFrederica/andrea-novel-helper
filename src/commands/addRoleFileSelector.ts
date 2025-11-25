@@ -4,30 +4,70 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSON5 from 'json5';
 import { isRoleFile, getPackageDirectory } from '../utils/utils';
+import { generateMarkdownTemplate } from '../templates/templateGenerators';
 
 // 记忆功能：存储每种fileType上次选择的文件
 const lastSelectedFiles = new Map<string, string>();
 
 /**
  * 扫描工作区中的角色文件（使用isRoleFile函数判断）
+ * @param options 配置选项
  * @returns 相对路径数组
  */
-export async function scanJson5Files(): Promise<string[]> {
+export async function scanJson5Files(options?: {
+    /** 是否排除敏感词文件，默认为 true */
+    excludeSensitive?: boolean;
+    /** 是否包含 md 文件，默认为 false */
+    includeMd?: boolean;
+    /** 是否包含 ojson5 文件，默认为 true */
+    includeOjson5?: boolean;
+}, customFilter?: (fileName: string) => boolean): Promise<string[]> {
+    const {
+        excludeSensitive = true,
+        includeMd = false,
+        includeOjson5 = true
+    } = options || {};
+
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) return [];
-    
+
     // 扫描novel-helper目录
     const novelHelperPath = path.join(root, 'novel-helper');
     if (fs.existsSync(novelHelperPath)) {
         // 使用 getPackageDirectory 函数扫描角色文件
         const roleFiles = getPackageDirectory(novelHelperPath, '');
-        
-        // 筛选出所有以 .json5 为后缀的文件
-        const json5Files = roleFiles.filter(file => file.endsWith('.json5'));
-        
-        return json5Files;
+
+        // 筛选文件类型
+        const filteredFiles = roleFiles.filter(file => {
+            const lowerFile = file.toLowerCase();
+
+            // 检查文件扩展名
+            const validExtension =
+                lowerFile.endsWith('.json5') ||
+                (includeOjson5 && lowerFile.endsWith('.ojson5')) ||
+                (includeMd && lowerFile.endsWith('.md'));
+
+            if (!validExtension) return false;
+
+            // 排除敏感词文件
+            if (excludeSensitive) {
+                const fileName = path.basename(file, path.extname(file)).toLowerCase();
+                if (fileName.includes('sensitive') || fileName.includes('敏感词')) {
+                    return false;
+                }
+            }
+
+            // 应用自定义过滤器
+            if (customFilter && !customFilter(file)) {
+                return false;
+            }
+
+            return true;
+        });
+
+        return filteredFiles;
     }
-    
+
     return [];
 }
 
@@ -39,18 +79,41 @@ export async function scanJson5Files(): Promise<string[]> {
  */
 export async function selectOrCreateFile(
     fileType: string,
-    defaultFileName: string = '词汇库'
+    defaultFileName: string = '词汇库',
+    scanOptions?: {
+        /** 是否排除敏感词文件，默认为 true */
+        excludeSensitive?: boolean;
+        /** 是否包含 md 文件，默认为 false */
+        includeMd?: boolean;
+        /** 是否包含 ojson5 文件，默认为 true */
+        includeOjson5?: boolean;
+        /** 自定义文件名过滤器 */
+        customFilter?: (fileName: string) => boolean;
+    }
 ): Promise<string | undefined> {
+    const {
+        excludeSensitive = true,
+        includeMd = false,
+        includeOjson5 = true,
+        customFilter
+    } = scanOptions || {};
+
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) {
         vscode.window.showErrorMessage('没有打开的工作区');
         return undefined;
     }
-    
 
-    
+    // 根据文件类型调整选项
+    let finalScanOptions = { excludeSensitive, includeMd, includeOjson5 };
+
+    // 如果是敏感词类型，不过滤敏感词文件
+    if (fileType.includes('敏感词')) {
+        finalScanOptions.excludeSensitive = false;
+    }
+
     // 扫描现有的角色文件
-    const existingFiles = await scanJson5Files();
+    const existingFiles = await scanJson5Files(finalScanOptions, customFilter);
     
     // 获取记忆的上次选择文件
     const lastSelected = lastSelectedFiles.get(fileType);
@@ -126,8 +189,15 @@ export async function selectOrCreateFile(
                 if (!value.trim()) {
                     return '文件路径不能为空';
                 }
-                if (!value.endsWith('.json5')) {
-                    return '文件必须以 .json5 结尾';
+
+                const validExtensions = [];
+                if (includeOjson5) validExtensions.push('.ojson5');
+                validExtensions.push('.json5');
+                if (includeMd) validExtensions.push('.md');
+
+                const hasValidExtension = validExtensions.some(ext => value.endsWith(ext));
+                if (!hasValidExtension) {
+                    return `文件必须以以下扩展名之一结尾: ${validExtensions.join(', ')}`;
                 }
                 return null;
             }
@@ -149,7 +219,18 @@ export async function selectOrCreateFile(
         
         // 创建文件
         if (!fs.existsSync(fullPath)) {
-            fs.writeFileSync(fullPath, JSON5.stringify([], null, 2), 'utf8');
+            let content = '';
+
+            // 根据文件扩展名创建默认内容
+            if (filePath.endsWith('.md')) {
+                content = generateMarkdownTemplate(fileType);
+            } else if (filePath.endsWith('.ojson5') || filePath.endsWith('.json5')) {
+                content = JSON5.stringify([], null, 2);
+            } else {
+                content = '';
+            }
+
+            fs.writeFileSync(fullPath, content, 'utf8');
             vscode.window.showInformationMessage(`已创建新${fileType}文件: ${filePath}`);
         }
         

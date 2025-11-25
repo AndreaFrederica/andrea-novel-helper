@@ -1,5 +1,9 @@
-// Worker: 使用独立的 wordCountCore，避免直接依赖 vscode 模块
+// 🏷️ Worker: WordCountWorker - 文件字数统计与分析引擎
 import { parentPort } from 'worker_threads';
+
+// 设置Worker名称标识，便于调试器识别
+const WORKER_NAME = 'WordCountWorker';
+console.log(`🚀 [${WORKER_NAME}] 启动 - 字数统计引擎`);
 import * as fs from 'fs';
 import { createHash } from 'crypto';
 import { countAndAnalyzeRaw } from '../utils/WordCount/wordCountCore';
@@ -59,3 +63,4 @@ parentPort?.on('message', (msg: any) => {
 });
 
 parentPort?.postMessage({ type: 'ready' });
+console.log(`✅ [${WORKER_NAME}] 就绪 - 等待字数统计任务`);

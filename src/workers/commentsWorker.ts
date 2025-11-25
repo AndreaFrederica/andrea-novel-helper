@@ -1,4 +1,9 @@
+// 🏷️ Worker: CommentsWorker - 文档批注管理与评论系统
 import { parentPort } from 'worker_threads';
+
+// 设置Worker名称标识，便于调试器识别
+const WORKER_NAME = 'CommentsWorker';
+console.log(`🚀 [${WORKER_NAME}] 启动 - 文档批注管理系统`);
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -452,5 +457,6 @@ if (parentPort) {
 
 // 通知主线程worker已就绪（保持兼容）
 parentPort?.postMessage({ type: 'ready' });
+console.log(`✅ [${WORKER_NAME}] 就绪 - 等待批注管理任务`);
 
 export { CommentsWorker, CommentMessage, CommentResponse };

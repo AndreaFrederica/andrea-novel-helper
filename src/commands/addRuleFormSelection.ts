@@ -2,11 +2,10 @@
 import * as vscode from 'vscode';
 import { loadRoles } from '../activate';
 import * as path from 'path';
-import * as fs from 'fs';
-import JSON5 from 'json5';
 import { updateDecorations } from '../events/updateDecorations';
-import { generateExampleRoleList } from '../templates/templateGenerators';
 import { selectOrCreateFile } from './addRoleFileSelector';
+import { addRoleToFile } from '../utils/roleFileHandler';
+import { generateRoleNameHash } from '../utils/uuidUtils';
 
 export const addRoleFromSelection = async () => {
     // 从配置获取默认文件名并处理路径前缀
@@ -18,10 +17,21 @@ export const addRoleFromSelection = async () => {
         defaultFileName = defaultFileName.substring('novel-helper/'.length);
     }
     
-    // 选择或创建角色文件（不传入示例数据，创建空文件）
+    // 选择或创建角色文件（支持多种格式，只显示角色文件）
     const fullPath1 = await selectOrCreateFile(
         '角色',
-        defaultFileName
+        defaultFileName,
+        {
+            includeMd: true,      // 支持 Markdown 格式
+            includeOjson5: true,   // 支持 OJSON5 格式
+            // 添加角色特定过滤：排除词汇相关文件
+            customFilter: (fileName: string) => {
+                const lowerFileName = fileName.toLowerCase();
+                // 排除词汇相关文件 - 如果包含词汇关键词就过滤掉
+                const vocabKeywords = ['vocabulary', 'vocab', 'term', '词汇', '术语'];
+                return !vocabKeywords.some(keyword => lowerFileName.includes(keyword));
+            }
+        }
     );
     
     if (!fullPath1) {
@@ -53,22 +63,26 @@ export const addRoleFromSelection = async () => {
     // 使用已选择的文件路径
     const fullPath = fullPath1;
 
-    let arr: any[];
-    try {
-        arr = JSON5.parse(fs.readFileSync(fullPath, 'utf8'));
-    } catch (e) {
-        return vscode.window.showErrorMessage(`解析角色库失败: ${e}`);
-    }
-
-    const newRole: any = { name, type };
+    // 创建新角色对象
+    const newRole: any = {
+        name,
+        type,
+        uuid: generateRoleNameHash(name)
+    };
     if (affiliation) newRole.affiliation = affiliation;
     if (description) newRole.description = description;
     if (color) newRole.color = color;
 
-    arr.push(newRole);
-    fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    const fileName = path.basename(fullPath);
-    vscode.window.showInformationMessage(`已添加角色 "${name}" 到 ${fileName}`);
+    // 使用统一的文件处理函数添加角色
+    const success = addRoleToFile(fullPath, newRole);
+
+    if (success) {
+        const fileName = path.basename(fullPath);
+        vscode.window.showInformationMessage(`已添加角色 "${name}" 到 ${fileName}`);
+    } else {
+        vscode.window.showErrorMessage(`添加角色失败`);
+        return;
+    }
 
     // 刷新
     loadRoles();

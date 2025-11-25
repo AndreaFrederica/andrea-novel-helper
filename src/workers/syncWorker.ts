@@ -1,4 +1,9 @@
+// 🏷️ Worker: SyncWorker - WebDAV文件同步与远程存储服务
 import { parentPort, workerData } from 'worker_threads';
+
+// 设置Worker名称标识，便于调试器识别
+const WORKER_NAME = 'SyncWorker';
+console.log(`🚀 [${WORKER_NAME}] 启动 - WebDAV文件同步服务`);
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -1214,6 +1219,8 @@ if (parentPort) {
         const response = await worker.handleMessage(message);
         parentPort!.postMessage(response);
     });
+
+    console.log(`✅ [${WORKER_NAME}] 就绪 - 等待同步任务`);
 }
 
 export { SyncWorker, SyncMessage, SyncResponse };

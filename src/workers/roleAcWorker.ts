@@ -1,5 +1,9 @@
-// Worker: 构建与搜索 Aho-Corasick 自动机（与主线程隔离）
+// 🏷️ Worker: RoleACWorker - 角色匹配与Aho-Corasick搜索引擎
 import { parentPort } from "worker_threads";
+
+// 设置Worker名称标识，便于调试器识别
+const WORKER_NAME = 'RoleACWorker';
+console.log(`🚀 [${WORKER_NAME}] 启动 - 角色匹配搜索引擎`);
 // @ts-ignore
 import AhoCorasick from "ahocorasick";
 
@@ -159,3 +163,4 @@ parentPort?.on("message", (msg: any) => {
 });
 
 parentPort?.postMessage({ type: "ready" });
+console.log(`✅ [${WORKER_NAME}] 就绪 - 等待角色搜索任务`);
