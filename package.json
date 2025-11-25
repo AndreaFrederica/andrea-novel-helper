@@ -900,6 +900,27 @@
         "command": "andrea.scripts.openFolder",
         "title": "打开脚本文件夹",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "andrea-novel-helper.generateRandomNames",
+        "title": "生成随机名字",
+        "category": "Andrea Novel Helper",
+        "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "andrea-novel-helper.quickGenerateName",
+        "title": "快速生成名字",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea-novel-helper.showNameGeneratorStats",
+        "title": "显示名字生成统计",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea-novel-helper.generateRandomCharacter",
+        "title": "随机生成角色",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [
@@ -3042,6 +3063,11 @@
           "when": "andrea.anh.enabled && editorHasSelection && (editorLangId == markdown || editorLangId == plaintext)",
           "command": "andrea.typo.translateSelection",
           "group": "navigation@98"
+        },
+        {
+          "when": "andrea.anh.enabled",
+          "command": "andrea-novel-helper.generateRandomCharacter",
+          "group": "navigation@99"
         }
       ],
       "commandPalette": [
@@ -3176,6 +3202,7 @@
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",
+    "@faker-js/faker": "^10.1.0",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "@node-rs/jieba": "^2.0.1",
     "@types/uuid": "^10.0.0",

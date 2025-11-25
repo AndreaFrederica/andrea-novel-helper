@@ -578,7 +578,7 @@ function ensureTranslationStatusItem() {
     translationStatusItem.name = 'Andrea Translation';
 }
 
-function showTranslationStatus(text: string) {
+export function showTranslationStatus(text: string) {
     ensureTranslationStatusItem();
     translationBusyCount++;
     translationStatusItem!.text = `$(sync~spin) ${text}`;
@@ -586,7 +586,7 @@ function showTranslationStatus(text: string) {
     translationStatusItem!.show();
 }
 
-function hideTranslationStatus() {
+export function hideTranslationStatus() {
     translationBusyCount = Math.max(0, translationBusyCount - 1);
     if (translationBusyCount === 0) translationStatusItem?.hide();
 }
@@ -799,10 +799,16 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
             }
             let translated = '';
             showTranslationStatus(`翻译为${target}`);
+            let translationActive = true;
+            const finalizeTranslationStatus = () => {
+                if (!translationActive) return;
+                translationActive = false;
+                hideTranslationStatus();
+            };
             try {
                 translated = await translateTextWithClientLLM(text, target!);
             } catch (e) {
-                hideTranslationStatus();
+                finalizeTranslationStatus();
                 vscode.window.showErrorMessage(`翻译失败: ${e instanceof Error ? e.message : String(e)}`);
                 return;
             }
@@ -813,23 +819,26 @@ export function registerTypoFeature(context: vscode.ExtensionContext) {
                 action = defaultAction;
             } else {
                 const pick = await vscode.window.showQuickPick(['替换选区', '在新标签页显示', '复制到剪贴板'], { placeHolder: '处理翻译结果' });
-                if (!pick) return;
+                if (!pick) {
+                    finalizeTranslationStatus();
+                    return;
+                }
                 action = pick === '替换选区' ? 'replaceSelection' : pick === '在新标签页显示' ? 'openInNewTab' : 'copyToClipboard';
             }
             if (action === 'replaceSelection') {
                 await editor.edit(edit => { edit.replace(sel, translated); });
-                hideTranslationStatus();
+                finalizeTranslationStatus();
                 return;
             }
             if (action === 'openInNewTab') {
                 const doc = await vscode.workspace.openTextDocument({ content: translated, language: editor.document.languageId });
                 await vscode.window.showTextDocument(doc, { preview: false });
-                hideTranslationStatus();
+                finalizeTranslationStatus();
                 return;
             }
             await vscode.env.clipboard.writeText(translated);
             vscode.window.showInformationMessage('已复制翻译结果');
-            hideTranslationStatus();
+            finalizeTranslationStatus();
         })
     );
 

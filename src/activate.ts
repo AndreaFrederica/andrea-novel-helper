@@ -87,6 +87,7 @@ import { registerAutoGitTreeView } from './Provider/view/autoGitTreeView';
 import { initI18n } from './utils/i18n';
 import { ProjectConfigManager } from './projectConfig/projectConfigManager';
 import { ProjectConfigLinter } from './projectConfig/projectConfigLinter';
+import { registerNameGeneratorCommands } from './commands/nameGeneratorCommands';
 import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
 import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
 import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
@@ -579,6 +580,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // 注册缺省角色库缺失提示（避免与项目初始化向导重复）
         registerMissingRolesBootstrap(context);
+
+        // 注册名字生成功能
+        registerNameGeneratorCommands(context);
 
         // 角色文件监听：已在 packageManagerView 中实现更全面的 watcher（含目录/文件/保存逻辑与 UI 刷新），
         // 这里移除原简化 watcher，避免重复触发 loadRoles / _onDidChangeRoles 造成双重扫描与事件抖动。

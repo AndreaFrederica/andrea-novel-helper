@@ -303,7 +303,7 @@ async function detectThinkingSupport(apiBase: string, apiKey: string, model: str
     }
 }
 
-function getClientCfg(): ClientLLMCfg {
+export function getClientCfg(): ClientLLMCfg {
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const model = cfg.get<string>('typo.clientLLM.model', 'deepseek-v3')!;
     const enableThinkingConfig = cfg.get<boolean>('typo.clientLLM.enableThinking', false) || false;
