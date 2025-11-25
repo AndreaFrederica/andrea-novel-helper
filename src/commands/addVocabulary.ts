@@ -5,39 +5,29 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSON5 from 'json5';
 import { updateDecorations } from '../events/updateDecorations';
+import { selectOrCreateFile } from './addRoleFileSelector';
 
 export const addVocabulary = async () => {
+    // 从配置获取默认文件名并处理路径前缀
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const vocabFile = cfg.get<string>('vocabularyFile')!;
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!root) return;
-    const fullPath = path.join(root, vocabFile);
-
-    if (!fs.existsSync(fullPath)) {
-        await vscode.window.showInformationMessage(
-            `词汇库文件 "${vocabFile}" 不存在，先创建一个示例再继续…`,
-            { modal: true },
-            '关闭'
-        );
-        const example = [
-            {
-                name: "示例词汇",
-                type: "词汇",
-                description: "这是一个示例词汇。",
-                color: "#00AAFF"
-            }
-        ];
-        // txt库
-        const txtPath = fullPath.replace(/\.[^/.]+$/, ".txt");
-        if (!fs.existsSync(txtPath)) {
-            const txtContent = example.map(item => item.name).join('\n');
-            fs.writeFileSync(txtPath, txtContent, 'utf8');
-        }
-        // json5库
-        fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-        fs.writeFileSync(fullPath, JSON5.stringify(example, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已初始化示例词汇库：${vocabFile}`, { modal: true }, '关闭');
+    let defaultFileName = cfg.get<string>('vocabularyFile') || '词汇库.json5';
+    
+    // 如果配置路径包含novel-helper/前缀，移除它
+    if (defaultFileName.startsWith('novel-helper/')) {
+        defaultFileName = defaultFileName.substring('novel-helper/'.length);
     }
+    
+    // 选择或创建词汇文件（创建空文件）
+    const fullPath = await selectOrCreateFile(
+        '词汇',
+        defaultFileName
+    );
+    
+    if (!fullPath) {
+        return; // 用户取消或出错
+    }
+
+    // 文件已存在，直接使用（选择或创建函数已经处理了文件创建）
 
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
@@ -73,7 +63,8 @@ export const addVocabulary = async () => {
 
     arr.push(newVocab);
     fs.writeFileSync(fullPath, JSON5.stringify(arr, null, 2), 'utf8');
-    vscode.window.showInformationMessage(`已添加词汇 "${name}" 到 ${vocabFile}`, { modal: true }, '关闭');
+    const fileName = path.basename(fullPath);
+    vscode.window.showInformationMessage(`已添加词汇 "${name}" 到 ${fileName}`, { modal: true }, '关闭');
 
     loadRoles();
     updateDecorations();

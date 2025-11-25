@@ -611,9 +611,51 @@ function scanPackageDirectory(currentDir: string, relativePath: string) {
 }
 
 /**
+ * 递归扫描包目录，返回所有角色文件
+ * @param currentDir 当前扫描的目录绝对路径
+ * @param relativePath 相对于 novel-helper 的路径
+ * @returns 角色文件相对路径数组
+ */
+export function getPackageDirectory(currentDir: string, relativePath: string): string[] {
+	const roleFiles: string[] = [];
+	
+	if (!fs.existsSync(currentDir)) {
+		return roleFiles;
+	}
+
+	const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+	for (const entry of entries) {
+		const entryPath = path.join(currentDir, entry.name);
+		const entryRelativePath = relativePath ? path.join(relativePath, entry.name) : entry.name;
+
+		if (entry.isDirectory()) {
+			// 跳过 outline 目录
+			if (entry.name === 'outline') {
+				continue;
+			}
+			// 跳过内部文件追踪数据库目录（拆分后的多 JSON 存储）
+			if (entry.name === '.anh-fsdb') { // 名称稍后在 fileTrackingDataManager 中保持一致
+				continue;
+			}
+			// 递归扫描子目录
+			const subFiles = getPackageDirectory(entryPath, entryRelativePath);
+			roleFiles.push(...subFiles);
+		} else if (entry.isFile()) {
+			// 检查是否是角色文件（带路径以便内容嗅探）
+			if (isRoleFile(entry.name, entryPath)) {
+				roleFiles.push(entryRelativePath);
+			}
+		}
+	}
+	
+	return roleFiles;
+}
+
+/**
  * 判断文件是否是角色文件
  */
-function isRoleFile(fileName: string, fileFullPath?: string): boolean {
+export function isRoleFile(fileName: string, fileFullPath?: string): boolean {
 	const lowerName = fileName.toLowerCase();
 	const debugPrefix = `[isRoleFile] name="${fileName}" path="${fileFullPath || ''}"`;
 	
