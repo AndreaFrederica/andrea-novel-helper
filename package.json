@@ -420,12 +420,13 @@
       {
         "command": "andrea.scripts.toggleMcpServers",
         "title": "启用/禁用 MCP 服务器",
-        "icon": "$(controls)",
+        "icon": "$(plug)",
         "category": "Andrea Novel Helper"
       },
       {
         "command": "andrea.scripts.toggleSingleServer",
         "title": "切换 MCP 服务器启用状态",
+        "icon": "$(toggle-layout)",
         "category": "Andrea Novel Helper"
       },
       {
@@ -881,7 +882,8 @@
       },
       {
         "command": "andrea.scripts.run",
-        "title": "运行脚本"
+        "title": "运行脚本",
+        "icon": "$(run)"
       },
       {
         "command": "andrea.scripts.newScript",
@@ -2626,27 +2628,32 @@
         {
           "command": "andrea.scripts.openFolder",
           "when": "view == andrea.scriptsView",
-          "group": "navigation@1"
+          "group": "navigation@1",
+          "icon": "$(folder-opened)"
         },
         {
           "command": "andrea.scripts.openMcpConfig",
           "when": "view == andrea.scriptsView",
-          "group": "navigation@2"
+          "group": "navigation@2",
+          "icon": "$(gear)"
         },
         {
           "command": "andrea.scripts.toggleMcpServers",
           "when": "view == andrea.scriptsView",
-          "group": "navigation@4"
+          "group": "navigation@4",
+          "icon": "$(server-process)"
         },
         {
           "command": "andrea.scripts.newScript",
           "when": "view == andrea.scriptsView",
-          "group": "navigation@5"
+          "group": "navigation@5",
+          "icon": "$(new-file)"
         },
         {
           "command": "andrea.scripts.refresh",
           "when": "view == andrea.scriptsView",
-          "group": "navigation@6"
+          "group": "navigation@6",
+          "icon": "$(refresh)"
         }
       ],
       "view/item/context": [
@@ -2658,24 +2665,22 @@
         {
           "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
           "command": "andrea.scripts.run",
-          "group": "inline@1"
+          "group": "inline@1",
+          "icon": "$(run)"
         },
         {
           "when": "view == andrea.scriptsView && viewItem == andrea.mcp.server.enabled",
           "command": "andrea.scripts.toggleSingleServer",
-          "group": "navigation@1"
+          "group": "navigation@1",
+          "icon": "$(trash)"
         },
         {
           "when": "view == andrea.scriptsView && viewItem == andrea.mcp.server.disabled",
           "command": "andrea.scripts.toggleSingleServer",
-          "group": "navigation@1"
+          "group": "navigation@1",
+          "icon": "$(add)"
         },
-        {
-          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
-          "command": "andrea.scripts.open",
-          "group": "inline@2"
-        },
-        {
+            {
           "when": "view == andrea.scriptsView && viewItem == andrea.script.dir",
           "command": "andrea.scripts.newScript",
           "group": "inline@1"
@@ -2960,15 +2965,11 @@
           "when": "view == andrea.commentsExplorer",
           "group": "3_export@3"
         },
-        {
-          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
-          "command": "andrea.scripts.open",
-          "group": "navigation@1"
-        },
-        {
+          {
           "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
           "command": "andrea.scripts.run",
-          "group": "navigation@2"
+          "group": "navigation@1",
+          "icon": "$(run-all)"
         },
         {
           "when": "view == andrea.scriptsView",

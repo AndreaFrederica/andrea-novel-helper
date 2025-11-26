@@ -3,7 +3,7 @@ import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
 import { runScriptWithContext, getScriptOutputChannel } from '../../mcp/runtimeEnhanced'
-import { getClientOptionsFromConfig, getClientOptionsByName, openMcpConfig, listServers, listServerStatuses, setServersEnabled, getEnabledServerNames } from '../../mcp/config'
+import { getClientOptionsFromConfig, getClientOptionsByName, openMcpConfig, listServerStatuses, setServersEnabled, getEnabledServerNames, getConfigChangeEmitter, readMcpConfig, getMcpConfigPath } from '../../mcp/config'
 
 class ScriptItem extends vscode.TreeItem {
   constructor(public fullPath: string, label: string, collapsibleState: vscode.TreeItemCollapsibleState) {
@@ -12,7 +12,10 @@ class ScriptItem extends vscode.TreeItem {
     const isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()
     this.contextValue = isDir ? 'andrea.script.dir' : 'andrea.script.file'
     this.iconPath = isDir ? new vscode.ThemeIcon('folder') : new vscode.ThemeIcon('file-code')
-    if (!isDir) this.command = { command: 'andrea.scripts.open', title: 'Open', arguments: [this] }
+    // 文件可以点击打开，目录可以右键新建脚本
+    if (!isDir) {
+      this.command = { command: 'andrea.scripts.open', title: 'Open', arguments: [this] }
+    }
   }
 }
 
@@ -26,19 +29,26 @@ class NewScriptItem extends vscode.TreeItem {
 }
 
 class ServersRootItem extends vscode.TreeItem {
+  public fullPath: string  // 添加 fullPath 属性以兼容 ScriptItem 类型
   constructor(public baseDir: string) {
     super('MCP 服务器', vscode.TreeItemCollapsibleState.Collapsed)
+    this.fullPath = baseDir  // 设置 fullPath
+    // 指向 MCP 配置文件而不是脚本目录
+    const mcpConfigPath = getMcpConfigPath()
+    this.resourceUri = vscode.Uri.file(mcpConfigPath)
     this.contextValue = 'andrea.mcp.servers.root'
     this.iconPath = new vscode.ThemeIcon('plug')
   }
 }
 
 class ServerItem extends vscode.TreeItem {
-  constructor(public name: string, public enabled: boolean) {
+  constructor(public name: string, public enabled: boolean, public serverUrl?: string) {
     super(name, vscode.TreeItemCollapsibleState.None)
     this.contextValue = enabled ? 'andrea.mcp.server.enabled' : 'andrea.mcp.server.disabled'
     this.iconPath = new vscode.ThemeIcon(enabled ? 'check' : 'circle-slash')
     this.command = { command: 'andrea.scripts.toggleSingleServer', title: 'Toggle', arguments: [this] }
+    // 使用实际的MCP服务器URL，如果没有URL则使用默认格式
+    this.resourceUri = serverUrl ? vscode.Uri.parse(serverUrl) : vscode.Uri.parse(`mcp-server://${name}`)
   }
 }
 
@@ -49,19 +59,29 @@ export class ScriptTreeProvider implements vscode.TreeDataProvider<ScriptItem> {
   refresh() { this._onDidChangeTreeData.fire() }
   getTreeItem(e: ScriptItem) { return e }
   async getChildren(element?: ScriptItem): Promise<ScriptItem[]> {
+    // 处理 MCP 服务器根节点
+    if (element && (element as any).contextValue === 'andrea.mcp.servers.root') {
+      const statuses = listServerStatuses()
+      const config = readMcpConfig()
+      const servers = statuses.map(s => {
+        const serverConfig = config?.mcpServers?.[s.name]
+        const serverUrl = serverConfig?.url || serverConfig?.command
+        return new ServerItem(s.name, s.enabled, serverUrl)
+      })
+      return servers as unknown as ScriptItem[]
+    }
+
     const dir = element ? element.fullPath : this.rootDir
     if (!fs.existsSync(dir)) return []
     const entries = fs.readdirSync(dir)
     const out: ScriptItem[] = []
+
+    // 根节点：先添加 MCP 服务器部分，再添加新建脚本
     if (!element) {
-      out.push(new NewScriptItem(this.rootDir) as unknown as ScriptItem)
       out.push(new ServersRootItem(this.rootDir) as unknown as ScriptItem)
+      out.push(new NewScriptItem(this.rootDir) as unknown as ScriptItem)
     }
-    if (element && (element as any).contextValue === 'andrea.mcp.servers.root') {
-      const statuses = listServerStatuses()
-      const servers = statuses.map(s => new ServerItem(s.name, s.enabled))
-      return servers as unknown as ScriptItem[]
-    }
+
     for (const n of entries) {
       const p = path.join(dir, n)
       const stat = fs.statSync(p)
@@ -87,6 +107,15 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
   const view = vscode.window.createTreeView('andrea.scriptsView', { treeDataProvider: provider, showCollapseAll: true })
   context.subscriptions.push(view)
 
+  // 监听 MCP 配置变更并刷新树视图
+  const configChangeEmitter = getConfigChangeEmitter()
+  context.subscriptions.push(
+    configChangeEmitter.event(() => {
+      console.log('MCP config changed, refreshing tree view')
+      provider.refresh()
+    })
+  )
+
   let t: NodeJS.Timeout | undefined
   const schedule = () => { if (t) clearTimeout(t); t = setTimeout(() => provider.refresh(), 200) }
   const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(abs, '**/*'))
@@ -99,6 +128,14 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('andrea.scripts.refresh', () => provider.refresh()),
+    vscode.commands.registerCommand('andrea.scripts.debugMcpServers', async () => {
+      const statuses = listServerStatuses()
+      const msg = statuses.length === 0 
+        ? '未找到 MCP 服务器配置' 
+        : `找到 ${statuses.length} 个服务器:\n${statuses.map(s => `- ${s.name} (${s.enabled ? '已启用' : '已禁用'})`).join('\n')}`
+      vscode.window.showInformationMessage(msg, { modal: true })
+      console.log('MCP Servers Debug:', statuses)
+    }),
     vscode.commands.registerCommand('andrea.scripts.openFolder', async () => {
       try {
         await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(abs))
@@ -120,6 +157,9 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
       for (const s of statuses) enables[s.name] = !!selected.find(it => it.label === s.name)
       setServersEnabled(enables)
       vscode.window.showInformationMessage('已更新 MCP 服务器启用状态')
+
+      // 强制刷新树视图，确保显示最新的服务器状态
+      provider.refresh()
     }),
     vscode.commands.registerCommand('andrea.scripts.toggleSingleServer', async (item: any) => {
       const name = item?.name
@@ -130,7 +170,7 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
       const enables: Record<string, boolean> = {}
       for (const s of statuses) enables[s.name] = s.name === name ? !current.enabled : s.enabled
       setServersEnabled(enables)
-      vscode.window.showInformationMessage(`已${current.enabled ? '禁用' : '启用'}: ${name}`)
+      vscode.window.showInformationMessage(`已${current.enabled ? '禁用' : '启用'}: ${name}。下次脚本运行时生效。`)
       provider.refresh()
     }),
     vscode.commands.registerCommand('andrea.scripts.open', async (item: ScriptItem) => { await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(item.fullPath)) }),
@@ -154,21 +194,34 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
         }
         return
       }
-      const names = enabledNames.length ? enabledNames : listServers()
-      if (!names.length) { await openMcpConfig(); return }
-      const runs = names.map(async name => {
-        const clientOpts = getClientOptionsByName(name)
+      const names = enabledNames
+      const out = getScriptOutputChannel()
+
+      if (names.length === 0) {
+        // 没有启用的MCP服务器时，直接运行脚本（不使用MCP）
         try {
-          const result = await runScriptWithContext(item.fullPath, {}, { client: clientOpts, label: name })
-          const out = getScriptOutputChannel()
-          out.appendLine(`[${name}] Result ${item.fullPath}`)
+          const result = await runScriptWithContext(item.fullPath, {}, { client: {}, label: 'no-mcp' })
+          out.appendLine(`[无MCP] Result ${item.fullPath}`)
           out.appendLine(typeof result === 'string' ? result : JSON.stringify(result))
         } catch (e: any) {
-          getScriptOutputChannel().appendLine(`[${name}] 运行失败: ${e?.message || String(e)}`)
+          out.appendLine(`[无MCP] 运行失败: ${e?.message || String(e)}`)
         }
-      })
-      await Promise.all(runs)
-      getScriptOutputChannel().show(true)
+      } else {
+        // 有启用的MCP服务器时，同时运行（每个服务器一个实例）
+        const runs = names.map(async name => {
+          const clientOpts = getClientOptionsByName(name)
+          try {
+            const result = await runScriptWithContext(item.fullPath, {}, { client: clientOpts, label: name })
+            out.appendLine(`[${name}] Result ${item.fullPath}`)
+            out.appendLine(typeof result === 'string' ? result : JSON.stringify(result))
+          } catch (e: any) {
+            out.appendLine(`[${name}] 运行失败: ${e?.message || String(e)}`)
+          }
+        })
+        await Promise.all(runs)
+      }
+
+      out.show(true)
     }),
     // removed: runWithServers – normal run already uses all enabled servers
     vscode.commands.registerCommand('andrea.scripts.newScript', async (node?: ScriptItem) => {

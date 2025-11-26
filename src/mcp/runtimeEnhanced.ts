@@ -8,6 +8,7 @@ import { txtToPlainText } from '../utils/txt_plain'
 import { createMcpClient } from './clientFactory'
 import * as util from 'util'
 import { AsyncLocalStorage } from 'async_hooks'
+import { getConfigChangeEmitter } from './config'
 
 export interface RuntimeBuildOptions {
   client?: { httpUrl?: string; command?: string; args?: string[]; name?: string; version?: string }
@@ -16,6 +17,70 @@ export interface RuntimeBuildOptions {
 
 let outputChannel: vscode.OutputChannel | undefined
 const als = new AsyncLocalStorage<{ label?: string; ch: vscode.OutputChannel }>()
+
+// 客户端缓存
+let clientCache: Map<string, { client: any; disconnect: () => Promise<void>; lastUsed: number }> = new Map()
+
+// 配置变更监听
+let configChangeListener: vscode.Disposable | undefined
+
+function ensureConfigChangeListener() {
+  if (configChangeListener) return
+
+  configChangeListener = getConfigChangeEmitter().event(() => {
+    // 配置变更时清理客户端缓存
+    cleanupClientCache()
+  })
+}
+
+function cleanupClientCache() {
+  const now = Date.now()
+  const promises: Promise<void>[] = []
+
+  clientCache.forEach((value, key) => {
+    // 清理超过5分钟未使用的客户端
+    if (now - value.lastUsed > 5 * 60 * 1000) {
+      promises.push(value.disconnect())
+      clientCache.delete(key)
+    }
+  })
+
+  Promise.all(promises).catch(() => {}) // 忽略清理错误
+}
+
+async function getCachedClient(opts: RuntimeBuildOptions): Promise<{ client: any; disconnect: () => Promise<void> }> {
+  ensureConfigChangeListener()
+
+  const clientOptions = opts?.client
+
+  // 如果没有客户端选项，返回空客户端
+  if (!clientOptions || Object.keys(clientOptions).length === 0) {
+    return {
+      client: null,
+      disconnect: async () => {}
+    }
+  }
+
+  const cacheKey = JSON.stringify(clientOptions)
+  const cached = clientCache.get(cacheKey)
+
+  if (cached) {
+    cached.lastUsed = Date.now()
+    return cached
+  }
+
+  const clientHandle = await createMcpClient(clientOptions)
+
+  // 缓存新客户端
+  const newCacheEntry = {
+    client: clientHandle.client,
+    disconnect: clientHandle.disconnect,
+    lastUsed: Date.now()
+  }
+
+  clientCache.set(cacheKey, newCacheEntry)
+  return newCacheEntry
+}
 
 function installConsoleRedirect() {
   const flag = (globalThis as any).__ANH_console_installed
@@ -74,7 +139,9 @@ export async function buildRuntimeContext(opts?: RuntimeBuildOptions) {
       processed = raw
     }
   }
-  const { client, disconnect } = await createMcpClient(opts?.client || {})
+
+  // 使用缓存的客户端，支持配置变更时的自动重建
+  const { client, disconnect } = await getCachedClient(opts || {})
   const ch = getScriptOutputChannel()
   const ctx = {
     os,
