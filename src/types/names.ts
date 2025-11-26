@@ -47,6 +47,10 @@ export interface NameGenerationStrategy {
 	supportedCultures: string[];
 	/** 生成名字的方法 */
 	generate(options: NameGenerationOptions): Promise<GeneratedName[]>;
+	/** 生成姓氏的方法（可选） */
+	generateSurnames?(options: NameGenerationOptions): Promise<GeneratedName[]>;
+	/** 生成名字的方法（可选） */
+	generateFirstNames?(options: NameGenerationOptions): Promise<GeneratedName[]>;
 	/** 检查是否支持指定选项 */
 	supports(options: NameGenerationOptions): boolean;
 }

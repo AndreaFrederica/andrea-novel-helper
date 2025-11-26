@@ -59,6 +59,88 @@ export class NameGeneratorService {
 	}
 
 	/**
+	 * 分离生成姓氏
+	 */
+	async generateSurnames(options: NameGenerationOptions = {}): Promise<GeneratedName[]> {
+		const count = options.count || 1;
+		const results: GeneratedName[] = [];
+
+		// 选择最适合的策略
+		const strategy = this.selectStrategy(options);
+
+		try {
+			const generated = await (strategy.generateSurnames ? strategy.generateSurnames(options) : this.generateSurnamesFallback(options));
+			results.push(...generated);
+			this.updateStats(generated);
+		} catch (error) {
+			console.error('Surname generation failed:', error);
+			// 如果策略失败，使用回退方法
+			const fallback = await this.generateSurnamesFallback(options);
+			results.push(...fallback);
+			this.updateStats(fallback);
+		}
+
+		return results.slice(0, count);
+	}
+
+	/**
+	 * 分离生成名字
+	 */
+	async generateFirstNames(options: NameGenerationOptions = {}): Promise<GeneratedName[]> {
+		const count = options.count || 1;
+		const results: GeneratedName[] = [];
+
+		// 选择最适合的策略
+		const strategy = this.selectStrategy(options);
+
+		try {
+			const generated = await (strategy.generateFirstNames ? strategy.generateFirstNames(options) : this.generateFirstNamesFallback(options));
+			results.push(...generated);
+			this.updateStats(generated);
+		} catch (error) {
+			console.error('First name generation failed:', error);
+			// 如果策略失败，使用回退方法
+			const fallback = await this.generateFirstNamesFallback(options);
+			results.push(...fallback);
+			this.updateStats(fallback);
+		}
+
+		return results.slice(0, count);
+	}
+
+	/**
+	 * 姓氏生成回退方法
+	 */
+	private async generateSurnamesFallback(options: NameGenerationOptions): Promise<GeneratedName[]> {
+		const culture = options.culture || 'zh_CN';
+
+		// 使用现有策略生成完整名字，然后提取姓氏
+		const fullNames = await this.generateNames({ ...options, count: 10 });
+
+		return fullNames.map(name => ({
+			...name,
+			firstName: '', // 清空名字字段，只保留姓氏
+			fullName: name.lastName || ''
+		})).filter(name => name.fullName); // 过滤掉没有姓氏的情况
+	}
+
+	/**
+	 * 名字生成回退方法
+	 */
+	private async generateFirstNamesFallback(options: NameGenerationOptions): Promise<GeneratedName[]> {
+		const culture = options.culture || 'zh_CN';
+
+		// 使用现有策略生成完整名字，然后提取名字
+		const fullNames = await this.generateNames({ ...options, count: 10 });
+
+		return fullNames.map(name => ({
+			...name,
+			lastName: '', // 清空姓氏字段，只保留名字
+			fullName: name.firstName
+		}));
+	}
+
+	/**
 	 * 获取支持的文化列表
 	 */
 	getSupportedCultures(): CultureConfig[] {

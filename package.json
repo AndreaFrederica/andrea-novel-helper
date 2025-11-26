@@ -921,6 +921,11 @@
         "command": "andrea-novel-helper.generateRandomCharacter",
         "title": "随机生成角色",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea-novel-helper.generateStepByStepCharacter",
+        "title": "随机分步生成角色（姓氏+名字）",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [
@@ -3068,6 +3073,11 @@
           "when": "andrea.anh.enabled",
           "command": "andrea-novel-helper.generateRandomCharacter",
           "group": "navigation@99"
+        },
+        {
+          "when": "andrea.anh.enabled",
+          "command": "andrea-novel-helper.generateStepByStepCharacter",
+          "group": "navigation@100"
         }
       ],
       "commandPalette": [
