@@ -34,7 +34,7 @@ import { activateHeatmap, deactivateHeatmap } from './heatmap/heatmapProvider';
 import { initializeGlobalFileTracking, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent, getTrackedFileList, cleanAbsolutePathEntries } from './utils/tracker/globalFileTracking';
 import { setCutClipboard } from './utils/WordCount/wordCountCutHelper';
 import { getFileTracker } from './utils/tracker/fileTracker';
-import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking } from './commands/fileTrackingCommands';
+import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking, openShardForFile } from './commands/fileTrackingCommands';
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/Git/gitConfigWizard';
 import { projectInitWizardRunning, registerProjectInitWizard } from './wizard/projectInitWizard';
 import { clearAllRoleMatchCache } from './context/roleAsyncShared';
@@ -1052,7 +1052,8 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.commands.registerCommand('AndreaNovelHelper.showFileTrackingStats', showFileTrackingStats),
             vscode.commands.registerCommand('AndreaNovelHelper.cleanupMissingFiles', cleanupMissingFiles),
             vscode.commands.registerCommand('AndreaNovelHelper.exportTrackingData', exportTrackingData),
-            vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking)
+            vscode.commands.registerCommand('AndreaNovelHelper.gcFileTracking', gcFileTracking),
+            vscode.commands.registerCommand('AndreaNovelHelper.fileTracker.openShardForFile', openShardForFile)
         );
 
         // 注册数据库管理命令

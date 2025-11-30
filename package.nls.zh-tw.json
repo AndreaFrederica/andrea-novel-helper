@@ -75,6 +75,7 @@
     "command.showFileTrackingStats.title": "顯示文件追蹤統計",
     "command.cleanupMissingFiles.title": "清理不存在的文件",
     "command.exportTrackingData.title": "匯出追蹤數據",
+    "command.fileTracker.openShardForFile.title": "打開當前文件的 JSON 分片",
     "command.gcFileTracking.title": "GC 清理文件追蹤資料庫"
     ,
     "command.openFile.title": "打開",

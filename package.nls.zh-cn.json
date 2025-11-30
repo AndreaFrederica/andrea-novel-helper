@@ -90,6 +90,7 @@
     "command.showFileTrackingStats.title": "显示文件追踪统计",
     "command.cleanupMissingFiles.title": "清理不存在的文件",
     "command.exportTrackingData.title": "导出追踪数据",
+    "command.fileTracker.openShardForFile.title": "打开当前文件的 JSON 分片",
     "command.gcFileTracking.title": "GC 清理文件追踪数据库",
     "command.openFile.title": "打开",
     "command.deleteNode.title": "删除包/文件",

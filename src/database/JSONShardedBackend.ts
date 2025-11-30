@@ -12,6 +12,7 @@ export class JSONShardedBackend implements IDatabaseBackend {
     private dbDir: string;
     private indexPath: string;
     private initialized = false;
+    private indexNeedsRewrite = false;
 
     // 内存缓存（用于加速重复查询）
     private memoryCache: Map<string, any> = new Map();
@@ -22,6 +23,100 @@ export class JSONShardedBackend implements IDatabaseBackend {
         const dataPath = config.json?.dataPath || 'novel-helper/.anh-fsdb';
         this.dbDir = path.join(config.workspaceRoot, dataPath);
         this.indexPath = path.join(this.dbDir, 'index.json');
+    }
+
+    /** 统一化：工作区内返回相对键（POSIX，Win 下小写），否则返回规范化绝对路径 */
+    private toRelKey(p: string): string {
+        const rootAbs = path.resolve(this.config.workspaceRoot).replace(/\\/g, '/');
+        // 相对路径基于 workspaceRoot 归一化；避免相对路径被 path.resolve 按进程 cwd 解析到 VS Code 安装目录
+        const absBase = path.isAbsolute(p) || /^[a-z]:[\\/]/i.test(p) ? p : path.join(this.config.workspaceRoot, p);
+        const abs = path.resolve(absBase).replace(/\\/g, '/');
+        const lower = process.platform === 'win32';
+        const absCmp = lower ? abs.toLowerCase() : abs;
+        const rootCmp = lower ? rootAbs.toLowerCase() : rootAbs;
+        if (absCmp === rootCmp || absCmp.startsWith(rootCmp + '/')) {
+            const rel = absCmp.slice(rootCmp.length + (absCmp.length === rootCmp.length ? 0 : 1));
+            return rel;
+        }
+        return absCmp;
+    }
+
+    /** 相对键还原为绝对路径；若本身是绝对路径则原样返回 */
+    private toAbsPath(key: string): string {
+        if (path.isAbsolute(key) || /^[a-z]:[\\/]/i.test(key)) {
+            return path.resolve(key);
+        }
+        return path.resolve(path.join(this.config.workspaceRoot, key));
+    }
+
+    /** 查找映射表中某个 uuid 的首个键（用于反推工作区内的正确路径） */
+    private getKeyForUuid(uuid: string): string | undefined {
+        for (const [k, u] of this.pathToUuid.entries()) {
+            if (u === uuid) { return k; }
+        }
+        return undefined;
+    }
+
+    /** 判断绝对路径是否在当前工作区内 */
+    private isInsideWorkspace(absPath: string): boolean {
+        const rootAbs = path.resolve(this.config.workspaceRoot).replace(/\\/g, '/');
+        const norm = path.resolve(absPath).replace(/\\/g, '/');
+        if (process.platform === 'win32') {
+            return norm.toLowerCase().startsWith(rootAbs.toLowerCase() + '/');
+        }
+        return norm.startsWith(rootAbs + '/');
+    }
+
+    /** 后台扫描并重写历史绝对路径的分片和索引 */
+    private async normalizeShardPaths(): Promise<void> {
+        const uuids = Array.from(new Set(this.pathToUuid.values()));
+        if (uuids.length === 0) { return; }
+
+        const CONCURRENCY = 8;
+        let idxChanged = this.indexNeedsRewrite;
+        const queue = uuids.slice();
+        const workers: Promise<void>[] = [];
+
+        const runOne = async () => {
+            while (queue.length) {
+                const uuid = queue.pop();
+                if (!uuid) { continue; }
+                try {
+                    // 读取 meta（带归一化）
+                    const meta = await this.loadFileMetadata(uuid);
+                    if (!meta) { continue; }
+                    const rawPath = meta.filePath || '';
+                    const rel = this.toRelKey(rawPath);
+                    const mappedKey = this.getKeyForUuid(uuid);
+                    const preferredKey = mappedKey || rel;
+                    const abs = this.toAbsPath(preferredKey);
+                    const needShardRewrite = rawPath !== rel && rawPath !== abs;
+                    const needIndexRewrite = mappedKey && mappedKey !== rel;
+
+                    if (needShardRewrite || needIndexRewrite) {
+                        await this.saveFileMetadata(uuid, { ...meta, filePath: abs });
+                        this.pathToUuid.set(preferredKey, uuid);
+                        idxChanged = true;
+                    }
+                } catch (e) {
+                    console.warn('[JSONSharded] normalize shard failed', uuid, e);
+                }
+            }
+        };
+
+        for (let i = 0; i < CONCURRENCY; i++) {
+            workers.push(runOne());
+        }
+        await Promise.all(workers);
+
+        if (idxChanged) {
+            try {
+                await this.saveIndex({});
+                this.indexNeedsRewrite = false;
+            } catch (e) {
+                console.warn('[JSONSharded] rewrite index after normalize failed', e);
+            }
+        }
     }
 
     async initialize(): Promise<void> {
@@ -36,6 +131,10 @@ export class JSONShardedBackend implements IDatabaseBackend {
 
         // 加载索引到内存
         await this.loadIndexToMemory();
+        // 启动后异步规范化历史分片/索引中的绝对路径
+        void this.normalizeShardPaths().catch((e) => {
+            console.warn('[JSONSharded] normalizeShardPaths failed', e);
+        });
 
         this.initialized = true;
 
@@ -54,18 +153,58 @@ export class JSONShardedBackend implements IDatabaseBackend {
             const idx = JSON.parse(raw);
             const entries = idx.entries || idx.files || [];
 
-            this.pathToUuid.clear();
+            // 先按 uuid 聚合候选键，择优选择唯一键
+            type Cand = { key: string; abs: string; isWorkspace: boolean; exists: boolean };
+            const perUuid = new Map<string, Cand[]>();
+            let normalized = false;
+
             for (const ent of entries) {
                 if (typeof ent === 'string') continue;
                 const u = ent.u;
                 const p = ent.p;
-                if (u && p) {
-                    this.pathToUuid.set(p, u);
+                if (!u || !p) { continue; }
+                const rel = this.toRelKey(p);
+                const abs = this.toAbsPath(rel);
+                const exists = fs.existsSync(abs);
+                const isWorkspace = this.isInsideWorkspace(abs);
+                if (rel !== p) { normalized = true; }
+                if (!perUuid.has(u)) { perUuid.set(u, []); }
+                perUuid.get(u)!.push({ key: rel, abs, isWorkspace, exists });
+            }
+
+            const pickBest = (cands: Cand[]): Cand => {
+                // 1) 优先工作区内
+                const workspace = cands.filter(c => c.isWorkspace);
+                const pool = workspace.length ? workspace : cands;
+                // 2) 优先存在的路径
+                const existing = pool.filter(c => c.exists);
+                const pool2 = existing.length ? existing : pool;
+                // 3) 最短键优先（相对路径更短）
+                return pool2.reduce((best, cur) => cur.key.length < best.key.length ? cur : best, pool2[0]);
+            };
+
+            const newMap = new Map<string, string>();
+            for (const [uuid, cands] of perUuid.entries()) {
+                const best = pickBest(cands);
+                newMap.set(best.key, uuid);
+                if (cands.length > 1 || !best.exists || !best.isWorkspace) {
+                    normalized = true;
                 }
             }
 
+            this.pathToUuid = newMap;
+            this.indexNeedsRewrite = this.indexNeedsRewrite || normalized;
+
             if (this.config.debug) {
                 console.log(`[JSONSharded] 加载索引: ${this.pathToUuid.size} 个路径映射`);
+            }
+
+            if (this.indexNeedsRewrite) {
+                await this.saveIndex({}); // 用规范化后的映射重写 index
+                this.indexNeedsRewrite = false;
+                if (this.config.debug) {
+                    console.log('[JSONSharded] 已重写 index 为相对键');
+                }
             }
         } catch (err) {
             console.warn('[JSONSharded] 加载索引失败:', err);
@@ -96,10 +235,11 @@ export class JSONShardedBackend implements IDatabaseBackend {
             fs.mkdirSync(dir, { recursive: true });
         }
 
-        fs.writeFileSync(shardPath, JSON.stringify(metadata));
+        const payload = { ...metadata, filePath: this.toRelKey(metadata.filePath || '') };
+        fs.writeFileSync(shardPath, JSON.stringify(payload));
         
         // 更新内存缓存
-        this.memoryCache.set(uuid, metadata);
+        this.memoryCache.set(uuid, payload);
     }
 
     async saveFileMetadataBatch(entries: Array<{ uuid: string; metadata: any }>): Promise<void> {
@@ -123,8 +263,9 @@ export class JSONShardedBackend implements IDatabaseBackend {
 
             for (const { uuid, metadata } of batch) {
                 const shardPath = path.join(dir, `${uuid}.json`);
-                fs.writeFileSync(shardPath, JSON.stringify(metadata));
-                this.memoryCache.set(uuid, metadata);
+                const payload = { ...metadata, filePath: this.toRelKey(metadata.filePath || '') };
+                fs.writeFileSync(shardPath, JSON.stringify(payload));
+                this.memoryCache.set(uuid, payload);
             }
         }
     }
@@ -143,10 +284,25 @@ export class JSONShardedBackend implements IDatabaseBackend {
         try {
             const raw = fs.readFileSync(shardPath, 'utf8');
             const data = JSON.parse(raw);
+            const rawPath = data?.filePath;
+            const rel = this.toRelKey(rawPath || '');
+            const mappedKey = this.getKeyForUuid(uuid);
+            const preferredKey = mappedKey || rel;
+            const absPath = this.toAbsPath(preferredKey);
+            // 只要分片中存的不是规范化相对键，就重写
+            const needRewrite = rawPath && rawPath !== rel;
+            if (data) {
+                data.filePath = absPath;
+            }
             
             // 更新缓存
             this.memoryCache.set(uuid, data);
             
+            // 若发现工作区内条目仍存绝对键，立刻重写归一化
+            if (needRewrite) {
+                try { await this.saveFileMetadata(uuid, data); } catch {/* ignore rewrite errors */}
+            }
+
             return data;
         } catch {
             return null;
@@ -156,6 +312,7 @@ export class JSONShardedBackend implements IDatabaseBackend {
     async loadFileMetadataBatch(uuids: string[]): Promise<Map<string, any>> {
         const result = new Map<string, any>();
         const toLoad: string[] = [];
+        const pendingRewrite: Array<{ uuid: string; metadata: any }> = [];
 
         // 先从缓存获取
         for (const uuid of uuids) {
@@ -187,19 +344,33 @@ export class JSONShardedBackend implements IDatabaseBackend {
                 
                 for (const uuid of batch) {
                     const shardPath = path.join(dir, `${uuid}.json`);
-                    if (fs.existsSync(shardPath)) {
-                        try {
-                            const raw = fs.readFileSync(shardPath, 'utf8');
-                            const data = JSON.parse(raw);
-                            result.set(uuid, data);
-                            this.memoryCache.set(uuid, data);
-                        } catch {
-                            // 忽略读取失败
-                        }
+            if (fs.existsSync(shardPath)) {
+                try {
+                    const raw = fs.readFileSync(shardPath, 'utf8');
+                    const data = JSON.parse(raw);
+                    const rawPath = data?.filePath;
+                    const rel = this.toRelKey(rawPath || '');
+                    const mappedKey = this.getKeyForUuid(uuid);
+                    const preferredKey = mappedKey || rel;
+                    const absPath = this.toAbsPath(preferredKey);
+                    const needRewrite = rawPath && rawPath !== rel;
+                    if (data) { data.filePath = absPath; }
+                    result.set(uuid, data);
+                    this.memoryCache.set(uuid, data);
+                    if (needRewrite) { // 延迟重写，批量结束后统一写
+                        pendingRewrite.push({ uuid, metadata: { ...data, filePath: absPath } });
                     }
+                } catch {
+                    // 忽略读取失败
+                }
+            }
                 }
             })
         );
+
+        if (pendingRewrite.length) {
+            try { await this.saveFileMetadataBatch(pendingRewrite); } catch {/* ignore */}
+        }
 
         return result;
     }
@@ -221,22 +392,26 @@ export class JSONShardedBackend implements IDatabaseBackend {
     }
 
     async savePathMapping(path: string, uuid: string): Promise<void> {
-        this.pathToUuid.set(path, uuid);
+        const rel = this.toRelKey(path);
+        this.pathToUuid.set(rel, uuid);
         // 路径映射通过index.json持久化
     }
 
     async savePathMappingBatch(mappings: Array<{ path: string; uuid: string }>): Promise<void> {
         for (const { path, uuid } of mappings) {
-            this.pathToUuid.set(path, uuid);
+            const rel = this.toRelKey(path);
+            this.pathToUuid.set(rel, uuid);
         }
     }
 
     async getUuidByPath(path: string): Promise<string | null> {
-        return this.pathToUuid.get(path) || null;
+        const rel = this.toRelKey(path);
+        return this.pathToUuid.get(rel) || null;
     }
 
     async deletePathMapping(path: string): Promise<void> {
-        this.pathToUuid.delete(path);
+        const rel = this.toRelKey(path);
+        this.pathToUuid.delete(rel);
     }
 
     async getAllPathMappings(): Promise<Map<string, string>> {
@@ -250,7 +425,7 @@ export class JSONShardedBackend implements IDatabaseBackend {
     async saveIndex(data: any): Promise<void> {
         const entries = Array.from(this.pathToUuid.entries()).map(([p, u]) => ({
             u,
-            p,
+            p: this.toRelKey(p),
             d: 0  // 是否为目录，需要从元数据判断
         }));
 
@@ -270,7 +445,14 @@ export class JSONShardedBackend implements IDatabaseBackend {
 
         try {
             const raw = fs.readFileSync(this.indexPath, 'utf8');
-            return JSON.parse(raw);
+            const json = JSON.parse(raw);
+            if (json?.entries) {
+                json.entries = json.entries.map((ent: any) => {
+                    if (!ent || typeof ent !== 'object') { return ent; }
+                    return { ...ent, p: this.toRelKey(ent.p) };
+                });
+            }
+            return json;
         } catch {
             return null;
         }

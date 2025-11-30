@@ -3,6 +3,7 @@ import { getTrackingStats, getAllTrackedFiles, getTrackingStatus } from '../util
 import { getFileTracker } from '../utils/tracker/fileTracker';
 import * as fs from 'fs';
 import * as path from 'path';
+import { DatabaseFactory } from '../database/DatabaseFactory';
 
 /** ===== 路径工具：与数据管理器保持同样的“相对键”规范 ===== */
 function normCase(p: string) { return process.platform === 'win32' ? p.toLowerCase() : p; }
@@ -165,6 +166,58 @@ export async function exportTrackingData(): Promise<void> {
         try { await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(exportPath)); } catch { /* ignore */ }
     } catch (error) {
         vscode.window.showErrorMessage(`导出失败: ${error}`);
+    }
+}
+
+/** ===== 新增命令：打开当前文件的 JSON 分片 ===== */
+export async function openShardForFile(target?: vscode.Uri | { resourceUri?: vscode.Uri } | string): Promise<void> {
+    const configBackend = DatabaseFactory.getCurrentBackendType();
+    if (configBackend !== 'json') {
+        vscode.window.showInformationMessage('当前使用的数据库后端不是 JSON，未找到分片。');
+        return;
+    }
+
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+        vscode.window.showWarningMessage('未找到工作区，无法定位分片。');
+        return;
+    }
+
+    const candidate =
+        (target as any)?.fsPath ||
+        (target as any)?.resourceUri?.fsPath ||
+        (typeof target === 'string' ? target : undefined) ||
+        vscode.window.activeTextEditor?.document.uri.fsPath;
+
+    if (!candidate) {
+        vscode.window.showWarningMessage('请先选中文件或在编辑器中激活一个文件。');
+        return;
+    }
+
+    const filePath = path.resolve(candidate);
+    const tracker = getFileTracker();
+    if (!tracker) {
+        vscode.window.showWarningMessage('文件追踪器未初始化，无法定位分片。');
+        return;
+    }
+
+    const uuid = tracker.getFileUuid(filePath);
+    if (!uuid) {
+        vscode.window.showWarningMessage('当前文件未被追踪，找不到对应的分片。');
+        return;
+    }
+
+    const shardPath = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb', uuid.slice(0, 2), `${uuid}.json`);
+    if (!fs.existsSync(shardPath)) {
+        vscode.window.showWarningMessage('未找到对应的分片文件（可能是缓存未落盘或已被清理）。');
+        return;
+    }
+
+    try {
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(shardPath));
+        await vscode.window.showTextDocument(doc, { preview: false });
+    } catch (e: any) {
+        vscode.window.showErrorMessage(`打开分片失败: ${e?.message || e}`);
     }
 }
 

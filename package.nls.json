@@ -90,7 +90,8 @@
   "config.fileTracker.respectWcignore.description": "(File Tracking only) Whether file tracking respects .wcignore ignore rules (default: false; only .gitignore). Writing time stats do not use this flag.",
   "command.showFileTrackingStats.title": "ANH:Show File Tracking Statistics",
   "command.cleanupMissingFiles.title": "ANH:Cleanup Missing Files",
-  "command.exportTrackingData.title": "ANH:Export Tracking Data"
+  "command.exportTrackingData.title": "ANH:Export Tracking Data",
+  "command.fileTracker.openShardForFile.title": "ANH:Open JSON Shard for File"
   ,
   "config.fileTracker.writeLegacySnapshot.description": "Whether to emit legacy aggregated file-tracking.json snapshot (debug / external tools).",
   "config.fileTracker.enableVerboseLogging.description": "Enable verbose logging for file tracking operations (useful for debugging path cleanup issues).",

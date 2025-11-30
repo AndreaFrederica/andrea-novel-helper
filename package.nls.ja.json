@@ -74,6 +74,7 @@
     "command.showFileTrackingStats.title": "ファイル追跡統計を表示",
     "command.cleanupMissingFiles.title": "存在しないファイルをクリーンアップ",
     "command.exportTrackingData.title": "追跡データをエクスポート",
+    "command.fileTracker.openShardForFile.title": "現在のファイルの JSON シャードを開く",
     "command.gcFileTracking.title": "GC: ファイル追跡 DB をクリーンアップ"
     ,
     "command.openFile.title": "開く",

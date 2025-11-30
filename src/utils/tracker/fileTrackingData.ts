@@ -193,16 +193,25 @@ export class FileTrackingDataManager {
 
     /** 统一化：相对键（workspace 内用 POSIX 分隔符；Win 下小写） */
     private toRelKey(p: string): string {
-        const root = path.resolve(this.workspaceRoot);
+        const rootAbs = path.resolve(this.workspaceRoot);
         const abs = path.resolve(p);
-        let rel = path.relative(root, abs);
-        // 不在工作区内：保留绝对路径（极端情况）；否则转 POSIX
-        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
-            const canon = abs.replace(/\\/g, '/');
-            return process.platform === 'win32' ? canon.toLowerCase() : canon;
+
+        // 尝试用字符串前缀判断是否在工作区内，规避 path.relative 在大小写/盘符差异下返回绝对路径的情况
+        const normRoot = rootAbs.replace(/\\/g, '/');
+        const normAbs = abs.replace(/\\/g, '/');
+        const lower = process.platform === 'win32';
+        const inWorkspace = lower
+            ? normAbs.toLowerCase().startsWith(normRoot.toLowerCase() + '/')
+            : normAbs.startsWith(normRoot + '/');
+
+        if (inWorkspace) {
+            const rel = normAbs.slice(normRoot.length + 1);
+            return lower ? rel.toLowerCase() : rel;
         }
-        rel = rel.split(path.sep).join('/');
-        return process.platform === 'win32' ? rel.toLowerCase() : rel;
+
+        // 回退：不在工作区或路径比较失败时保留绝对路径
+        const canon = normAbs;
+        return lower ? canon.toLowerCase() : canon;
     }
 
     /** 由相对键还原为绝对路径（若键本身是绝对的则原样返回） */
@@ -264,21 +273,7 @@ export class FileTrackingDataManager {
             }
         }
 
-        // 过滤掉“不在工作区内且不可相对化”的旧绝对键（被 toRelKey 处理为绝对路径的）
-        for (const [k, u] of Object.entries(newMap)) {
-            // 仍然是绝对键说明不在工作区；如果文件也不存在，清掉
-            if (path.isAbsolute(k)) {
-                const abs = this.toAbsPath(k);
-                if (!fs.existsSync(abs)) {
-                    delete newMap[k];
-                    if (this.database.files[u]) {
-                        delete this.database.files[u];
-                        removedUuids.push(u);
-                    }
-                }
-            }
-        }
-
+        // 保留绝对键：可能是来自其他工作区的历史数据，删除会导致分片丢失。
         if (removedUuids.length) {
             removedUuids.forEach(u => this.removedShardUuids.add(u));
         }
@@ -388,6 +383,15 @@ export class FileTrackingDataManager {
         this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
         this.filterFilesAsync = this.filterFilesAsync.bind(this);
         this.getStatsAsync = this.getStatsAsync.bind(this);
+    }
+    /** 判断绝对路径是否在工作区内（大小写不敏感，仅用于 Win） */
+    private isInsideWorkspace(absPath: string): boolean {
+        const rootAbs = path.resolve(this.workspaceRoot).replace(/\\/g, '/');
+        const normAbs = path.resolve(absPath).replace(/\\/g, '/');
+        if (process.platform === 'win32') {
+            return normAbs.toLowerCase().startsWith(rootAbs.toLowerCase() + '/');
+        }
+        return normAbs.startsWith(rootAbs + '/');
     }
     /** 读取启动快照（若已启用） */
     private tryLoadStartupSnapshot(): void {
@@ -2028,20 +2032,41 @@ export class FileTrackingDataManager {
     public createTemporaryFile(filePath: string): string {
         const existing = this.getFileUuid(filePath);
         if (existing) { this.markFileTemporary(filePath); return existing; }
+
+        // 对于工作区内已存在的文件，直接写入“正式”记录，避免写绝对键的临时分片
         const now = Date.now();
+        let size = 0;
+        let mtime = 0;
+        let isDirectory = false;
+        try {
+            const st = fs.statSync(filePath);
+            size = st.size;
+            mtime = st.mtimeMs;
+            isDirectory = st.isDirectory();
+        } catch { /* 文件可能尚未落盘，继续用默认值 */ }
+
         const uuid = uuidv4();
         const fileName = path.basename(filePath);
         const fileExtension = path.extname(filePath).toLowerCase();
         const meta: FileMetadata = {
-            uuid, filePath, fileName, fileExtension,
-            size: 0, mtime: 0, hash: '', isDirectory: false,
-            isTemporary: true, createdAt: now, lastTrackedAt: now, updatedAt: now
+            uuid,
+            filePath: this.toAbsPath(this.toRelKey(filePath)),
+            fileName,
+            fileExtension,
+            size,
+            mtime,
+            hash: '',
+            isDirectory,
+            isTemporary: !fs.existsSync(filePath),
+            createdAt: now,
+            lastTrackedAt: now,
+            updatedAt: now
         };
         this.database.files[uuid] = meta;
         const key = this.toRelKey(filePath);
         this.database.pathToUuid[key] = uuid;
         this.markChanged();
-        this.markShardDirty(uuid, 'create temporary file');
+        this.markShardDirty(uuid, meta.isTemporary ? 'create temporary file' : 'create file (from temp path)');
         this.scheduleSave();
         this.stats.temporaryCreate++;
         return uuid;
