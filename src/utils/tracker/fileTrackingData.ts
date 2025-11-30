@@ -1283,6 +1283,19 @@ export class FileTrackingDataManager {
         if (uuid) {
             const metadata = this.database.files[uuid];
             if (metadata) {
+                // 启动快照/索引惰性加载下，内存 meta 可能缺失 writingStats；尝试从后端/分片补全
+                if (!metadata.writingStats) {
+                    try {
+                        const persisted = this.backend && this.backendInitialized
+                            ? await this.backend.loadFileMetadata(uuid).catch(() => undefined)
+                            : await this.readSingleShardAsync(uuid);
+                        const persistedObj = typeof persisted === 'string' ? JSON.parse(persisted) : persisted;
+                        if (persistedObj?.writingStats) {
+                            metadata.writingStats = persistedObj.writingStats;
+                        }
+                    } catch { /* ignore hydration errors */ }
+                }
+
                 if (!metadata.writingStats) {
                     metadata.writingStats = {
                         totalMillis: 0,
