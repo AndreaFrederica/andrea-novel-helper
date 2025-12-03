@@ -18,90 +18,214 @@
 #let mono_font = "{{ meta.mono_font | default: 'Microsoft YaHei' }}"
 
 #let zh-paragraph() = {
-  set par(justify: true, first-line-indent: theme.indent, leading: theme.line-height * 1em, spacing: theme.para-spacing)
-  set text(lang: "zh", font: theme.text-font, size: theme.text-size, fill: theme.color, weight: "regular")
+  set par(
+    justify: true,
+    first-line-indent: theme.indent,
+    leading: theme.line-height * 1em,
+    spacing: theme.para-spacing,
+  )
+  set text(
+    lang: "zh",
+    font: theme.text-font,
+    size: theme.text-size,
+    fill: theme.color,
+    weight: "regular",
+  )
 }
 
-#set text(lang: "zh", font: theme.text-font, size: theme.text-size, fill: theme.color, weight: "regular")
+#set text(
+  lang: "zh",
+  font: theme.text-font,
+  size: theme.text-size,
+  fill: theme.color,
+  weight: "regular",
+)
 
 #let title = "{{ meta.title | default: '' }}"
 #let subtitle = "{{ meta.subtitle | default: '' }}"
 
 #if (title != none and title != "") [
-  #text(lang: "zh", font: theme.heading-font, weight: "bold", size: theme.title-size)[#title]
+  #text(
+    lang: "zh",
+    font: theme.heading-font,
+    weight: "bold",
+    size: theme.title-size,
+  )[ #title ]
 ]
+
 #if (subtitle != none and subtitle != "") [
   #v(6pt)
-  #text(lang: "zh", font: theme.heading-font, size: theme.name-size, fill: theme.gray, weight: "regular")[#subtitle]
+  #text(
+    lang: "zh",
+    font: theme.heading-font,
+    size: theme.name-size,
+    fill: theme.gray,
+    weight: "regular",
+  )[ #subtitle ]
 ]
 
 #v(10pt)
 
 {% assign floors = 0 %}
 {% for b in blocks %}
+
 {% if b.type == 'dialog' %}
 {% assign floors = floors | plus: 1 %}
-#block(inset: 14pt, stroke: rgb(229, 231, 235), fill: rgb(255, 255, 255), radius: 10pt)[
-  #set text(lang: "zh", font: theme.text-font, size: theme.text-size, fill: theme.color, weight: "regular")
+
+#block(
+  inset: 14pt,
+  stroke: rgb(229, 231, 235),
+  fill: rgb(255, 255, 255),
+  radius: 10pt,
+  breakable: false, // ★ 核心：整层不允许跨页
+)[
+  #set text(
+    lang: "zh",
+    font: theme.text-font,
+    size: theme.text-size,
+    fill: theme.color,
+    weight: "regular",
+  )
+
   #grid(columns: (1fr, auto))[
-    #set text(lang: "zh", font: theme.heading-font, weight: "regular")
-    #text(fill: theme.link-blue, weight: "bold", size: theme.name-size)[\@{{ b.user }}]
+    #set text(
+      lang: "zh",
+      font: theme.heading-font,
+      weight: "regular",
+    )
+    #text(
+      fill: theme.link-blue,
+      weight: "bold",
+      size: theme.name-size,
+    )[ \@{{ b.user }} ]
+
     #box(inset: 0pt)[
-      #set text(lang: "zh", font: theme.text-font, size: theme.time-size, fill: theme.gray, weight: "regular")
+      #set text(
+        lang: "zh",
+        font: theme.text-font,
+        size: theme.time-size,
+        fill: theme.gray,
+        weight: "regular",
+      )
       {% assign auto_t = meta.auto_time | default: '' %}
-      {% if b.time %}{{ b.time }}{% elsif auto_t != '' %}{{ auto_t }}{% endif %}  ·  #{{ floors }}
+      {% if b.time %}
+        {{ b.time }}
+      {% elsif auto_t != '' %}
+        {{ auto_t }}
+      {% endif %}
+       ·  #{{ floors }}
     ]
   ]
+
   #v(8pt)
+
   {% if b.quotes and b.quotes.size > 0 %}
   {% for q in b.quotes %}
   #h(({{ q.level | default: 1 }}) * 6pt - 6pt)
-  #box(inset: 10pt, stroke: rgb(229, 231, 235), fill: rgb(249, 250, 251), radius: 8pt)[
-    #set text(lang: "zh", font: theme.text-font, size: theme.time-size, fill: theme.gray, weight: "regular")
-    {% if q.user %}\> #text(fill: theme.link-blue, weight: "bold")[\@{{ q.user }}]{% if q.time %} [{{ q.time }}]{% endif %}{% else %}\>{% endif %}
+  #box(
+    inset: 10pt,
+    stroke: rgb(229, 231, 235),
+    fill: rgb(249, 250, 251),
+    radius: 8pt,
+  )[
+    #set text(
+      lang: "zh",
+      font: theme.text-font,
+      size: theme.time-size,
+      fill: theme.gray,
+      weight: "regular",
+    )
+    {% if q.user %}
+      \> #text(fill: theme.link-blue, weight: "bold")[ \@{{ q.user }} ]
+      {% if q.time %} [{{ q.time }}]{% endif %}
+    {% else %}
+      \>
+    {% endif %}
+
     #v(4pt)
-    #set text(lang: "zh", font: theme.text-font, size: theme.text-size - 2pt, fill: theme.color, weight: "regular")
+    #set text(
+      lang: "zh",
+      font: theme.text-font,
+      size: theme.text-size - 2pt,
+      fill: theme.color,
+      weight: "regular",
+    )
     {{ q.text | md2typst | forum }}
   ]
   #v(6pt)
   {% endfor %}
   {% endif %}
+
   #zh-paragraph()
   {{ b.text | md2typst | forum }}
 ]
+
 #v(10pt)
+
 {% elsif b.type == 'heading' %}
+
 {% if meta.main_title_text and b.level == 1 and b.text == meta.main_title_text %}
 {% else %}
 #set text(lang: "zh", font: theme.heading-font, weight: "regular")
 #heading(level: {{ b.level | default: 2 }}, [{{ b.text }}])
-#set text(lang: "zh", font: theme.text-font, size: theme.text-size, fill: theme.color, weight: "regular")
+#set text(
+  lang: "zh",
+  font: theme.text-font,
+  size: theme.text-size,
+  fill: theme.color,
+  weight: "regular",
+)
 {% endif %}
+
 {% elsif b.type == 'paragraph' %}
 #zh-paragraph()
 {{ b.text | md2typst | forum }}
+
 {% elsif b.type == 'code' %}
-#set text(lang: "zh", font: mono_font, size: {{ meta.time_size | default: 12 }}pt, weight: "regular")
+#set text(
+  lang: "zh",
+  font: mono_font,
+  size: {{ meta.time_size | default: 12 }}pt,
+  weight: "regular",
+)
 [{{ b.code }}]
+
 {% elsif b.type == 'list' %}
 #zh-paragraph()
 {% if b.ordered %}
-{% for it in b.items %}{{ forloop.index }}. {{ it | md2typst }}
+{% for it in b.items %}
+{{ forloop.index }}. {{ it | md2typst }}
 {% endfor %}
 {% else %}
-{% for it in b.items %}• {{ it | md2typst }}
+{% for it in b.items %}
+• {{ it | md2typst }}
 {% endfor %}
 {% endif %}
+
 {% elsif b.type == 'blockquote' %}
-#box(inset: 10pt, stroke: rgb(229, 231, 235), fill: rgb(249, 250, 251), radius: 8pt)[
-#set text(lang: "zh", font: theme.text-font, size: theme.text-size - 2pt, fill: theme.gray, weight: "regular")
-\> {{ b.text | md2typst | forum }}
+#box(
+  inset: 10pt,
+  stroke: rgb(229, 231, 235),
+  fill: rgb(249, 250, 251),
+  radius: 8pt,
+)[
+  #set text(
+    lang: "zh",
+    font: theme.text-font,
+    size: theme.text-size - 2pt,
+    fill: theme.gray,
+    weight: "regular",
+  )
+  \> {{ b.text | md2typst | forum }}
 ]
+
 {% elsif b.type == 'image' %}
 #image("{{ b.src | imgpath: meta.doc_dir, meta.assets_dir }}")
+
 {% elsif b.type == 'hr' %}
 #v(8pt)
 #line(length: 100%, stroke: 0.6pt + rgb(229, 231, 235))
 #v(8pt)
+
 {% endif %}
 {% endfor %}

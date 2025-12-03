@@ -47,6 +47,7 @@ import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap'
 import { PreviewManager, registerPreviewPane, stopAllPreviewTTS } from './Provider/view/previewPane';
 import { registerCommentsFeature } from './comments/controller';
 import { CommentsPanelSidebarProvider } from './Provider/view/commentsPanelSidebar';
+import { TypstMemoryProvider } from './Provider/fileSystem/TypstMemoryProvider';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
 import { forwardEnterToMaioOrNative, refreshMaioAvailability, hasMaioAvailability } from './typeset/core/maioRoute';
@@ -60,7 +61,10 @@ import { registerTypoFeature } from './typo/typoService';
 import { registerTypoQuickSettings } from './typo/typoQuickSettings';
 import { registerTypstExport } from './commands/typstExport'
 import { registerExplorerTypstExport } from './commands/explorerTypstExport'
+import { registerTypstPreviewCommands, setTypstPreviewStatusBar } from './commands/typstPreview'
+import { TypstPreviewStatusBar } from './Provider/typstPreviewStatusBar'
 import { templateRegistry } from './typst/templateRegistry'
+import { setTypstFS } from './typst/exportService'
 import * as os from 'os'
 import { registerWordCountTypstExport } from './commands/wordCountTypstExport'
 import { registerWordCountClipboard } from './commands/wordCountClipboard'
@@ -133,6 +137,7 @@ export function cleanRoles() {
 }
 
 export let outlineFS: undefined | OutlineFSProvider | MemoryOutlineFSProvider = undefined;
+export let typstFS: undefined | TypstMemoryProvider = undefined;
 
 // 在 activate 最外层先定义一个变量，初始化成当前激活 editor 的 scheme
 export let lastEditorScheme = vscode.window.activeTextEditor?.document.uri.scheme;
@@ -389,6 +394,30 @@ export async function activate(context: vscode.ExtensionContext) {
                 outlineFS.refreshFile();
             })
         );
+
+        // 初始化 Typst 内存文件系统提供器
+        typstFS = new TypstMemoryProvider();
+        if (!typstFS) {
+            vscode.window.showErrorMessage('无法初始化Typst文件系统提供器');
+            log('typstFS 初始化失败: typstFS 为空');
+            return;
+        }
+
+        // 将typstFS引用设置到exportService中，供mapTypstToMemory使用
+        setTypstFS(typstFS);
+
+        // 注册 andrea-typst:// 文件系统提供器
+        context.subscriptions.push(
+            vscode.workspace.registerFileSystemProvider('andrea-typst', typstFS, { isReadonly: false })
+        );
+
+        // 初始化Typst预览状态栏
+        const typstPreviewStatusBar = new TypstPreviewStatusBar();
+        typstPreviewStatusBar.activate(context);
+        setTypstPreviewStatusBar(typstPreviewStatusBar);
+
+        // 注册Typst预览相关命令
+        registerTypstPreviewCommands(context, typstFS, log);
 
         // 注册注入按键配置命令
         registerEnsureEnterOverridesCommand(context);

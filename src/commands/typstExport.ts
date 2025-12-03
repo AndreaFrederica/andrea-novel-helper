@@ -4,7 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import { templateRegistry } from '../typst/templateRegistry'
-import { renderFromTemplate, compileTypstWithLog } from '../typst/exportService'
+import { renderFromTemplate, compileTypstWithLog, mapTypstToMemory } from '../typst/exportService'
 import { ensureBuildTempBase } from '../typst/tempPaths'
 import { parseMarkdownDoc, firstH1, firstHeading, Block } from '../typst/mdParser'
 
@@ -64,6 +64,27 @@ function getConfig() {
     return { cliPath, templatesDir, defaultTemplate, format, ppi, pages, fontPaths, cleanupTemp }
 }
 
+async function pickTemplate(defaultTemplate: string): Promise<string> {
+    const templates = templateRegistry.list()
+    if (templates.length === 0) {
+        return defaultTemplate
+    }
+    if (templates.length === 1) {
+        return templates[0].name
+    }
+    // 多个模板时，让用户选择（与explorerTypstExport保持一致）
+    const picks = templates.map(t => ({
+        label: t.name,
+        description: t.root,
+        value: t.name
+    }))
+    const selected = await vscode.window.showQuickPick(picks, {
+        placeHolder: '选择Typst模板',
+        canPickMany: false
+    })
+    return selected?.value || defaultTemplate
+}
+
 async function pickOutputUri(doc: vscode.TextDocument, format: 'pdf'|'png'|'svg'|'html') {
     const base = doc.uri.with({ path: doc.uri.path.replace(/\.[^/\\.]+$/, '') })
     if (format === 'pdf') {
@@ -87,6 +108,10 @@ export function registerTypstExport(context: vscode.ExtensionContext) {
         if (!ed) { return }
         const doc = ed.document
         const { cliPath, templatesDir, defaultTemplate, format, ppi, pages, fontPaths, cleanupTemp } = getConfig()
+        
+        // 让用户选择模板
+        const selectedTemplate = await pickTemplate(defaultTemplate)
+        
         const md = doc.getText()
         const docParsed = parseMarkdownDoc(md)
         const ctx = { meta: docParsed.meta, blocks: docParsed.blocks as Block[] }
@@ -119,13 +144,24 @@ export function registerTypstExport(context: vscode.ExtensionContext) {
         const tmpBase = ensureBuildTempBase()
         const tmpDir = fs.mkdtempSync(path.join(tmpBase, 'tmp-'))
         ;(ctx.meta as any).assets_dir = path.join(tmpDir, 'assets')
-        const typ = await renderFromTemplate(defaultTemplate, templatesDir, ctx, channel)
+        const typ = await renderFromTemplate(selectedTemplate, templatesDir, ctx, channel)
         channel.appendLine(`rendered typ to temp memory`)
         const typPath = path.join(tmpDir, 'doc.typ')
         fs.writeFileSync(typPath, typ, 'utf8')
         channel.appendLine(`typ content length: ${typ?.length ?? 0}`)
         if (!typ || typ.trim().length === 0) channel.appendLine('warning: rendered typ is empty')
         channel.appendLine(`typ file: ${typPath}`)
+        
+        // 将生成的Typst内容映射到内存盘，供VSCode Typst插件实时预览
+        try {
+            const memUri = mapTypstToMemory(typ, doc.uri)
+            if (memUri) {
+                channel.appendLine(`mapped to memory: ${memUri.toString()}`)
+            }
+        } catch (e) {
+            channel.appendLine(`failed to map to memory: ${e}`)
+        }
+        
         const outUri = await pickOutputUri(doc, format)
         if (!outUri) { channel.appendLine(`export canceled; temp kept: ${tmpDir}`); return }
         try {

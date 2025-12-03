@@ -1,5 +1,13 @@
 # Change Log
 
+## [0.4.45] - 2025-12-04
+### ✨ 新增
+- 新增 TypstMemoryProvider 用于内存文件系统操作,通过 andrea-typst:// 协议实现对生成的 Typst 文档的实时访问，同时支持通过设置选中一个真实临时路径 来实现Typst插件的实时预览功能
+- 引入 TypstPreviewStatusBar 管理状态栏中的预览状态,允许用户切换和管理 Typst 预览
+- 增强 typstExport 和 typstPreview 命令,支持模板选择和内存映射以实现实时预览
+- 实现文档更改时 Typst 预览的自动更新,确保流畅的编辑体验
+- 更新 Typst 模板以改进格式和结构
+
 ## [0.4.43] - 2025-12-01
 ### 🐛 修复
 - 修复了JsonDB数据库后端下，路径计算错误导致文件追踪数据被自动删除的问题

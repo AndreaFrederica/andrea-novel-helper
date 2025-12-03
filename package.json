@@ -309,6 +309,22 @@
         }
       },
       {
+        "command": "AndreaNovelHelper.openTypstPreview",
+        "title": "打开Typst实时预览",
+        "icon": {
+          "light": "$(preview)",
+          "dark": "$(preview)"
+        }
+      },
+      {
+        "command": "AndreaNovelHelper.changeTypstTemplate",
+        "title": "切换Typst模板",
+        "icon": {
+          "light": "$(settings)",
+          "dark": "$(settings)"
+        }
+      },
+      {
         "command": "myPreview.copyPlainText",
         "title": "%command.myPreview.copyPlainText.title%"
       },
@@ -2588,6 +2604,20 @@
           "default": false,
           "description": "导出后是否自动清理临时编译目录 build/typst/tmp-*（默认不清理，便于诊断）"
         },
+        "andrea.typst.preview.storage": {
+          "type": "string",
+          "enum": [
+            "memory",
+            "file"
+          ],
+          "default": "memory",
+          "markdownDescription": "Typst预览文件存储方式：\n- `memory`：存储在虚拟内存盘上（andrea-typst://），实时预览\n- `file`：存储在临时文件目录中，使用绝对路径"
+        },
+        "andrea.typst.preview.tempDir": {
+          "type": "string",
+          "default": "${workspaceFolder}/build/typst/preview",
+          "markdownDescription": "Typst预览临时文件目录（当preview.storage为'file'时使用）"
+        },
         "AndreaNovelHelper.scripts.root": {
           "type": "string",
           "default": "novel-helper/scripts",
@@ -3021,6 +3051,18 @@
           "command": "AndreaNovelHelper.redirectOutlineHere",
           "when": "resourceScheme == andrea-outline",
           "group": "navigation@103"
+        },
+        {
+          "command": "AndreaNovelHelper.openTypstPreview",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation@104",
+          "icon": "$(preview)"
+        },
+        {
+          "command": "AndreaNovelHelper.changeTypstTemplate",
+          "when": "resourceScheme == andrea-typst",
+          "group": "navigation@105",
+          "icon": "$(settings)"
         }
       ],
       "editor/context": [

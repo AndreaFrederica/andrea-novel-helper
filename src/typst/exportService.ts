@@ -1,3 +1,4 @@
+/* eslint-disable curly */
 /* eslint-disable semi */
 import * as vscode from 'vscode'
 import * as fs from 'fs'
@@ -7,7 +8,39 @@ import { spawn } from 'child_process'
 import { parseSingleFileTemplate } from './singleFileTemplate'
 import { templateRegistry } from './templateRegistry'
 
+// 全局typstFS引用（由activate.ts在初始化时设置）
+let _typstFS: any = undefined
+
+export function setTypstFS(fs: any): void {
+  _typstFS = fs
+}
+
+export function getTypstFS(): any {
+  return _typstFS
+}
+
 export type TypstOpts = { format: 'pdf'|'png'|'svg'|'html'; ppi: number; pages?: string; fontPaths: string[] }
+
+/**
+ * 将生成的Typst内容映射到内存盘，用于VSCode实时预览
+ * @param typContent Typst文档内容
+ * @param sourceUri 原始文档URI
+ * @returns 内存盘中的URI，如果typstFS未初始化则返回undefined
+ */
+export function mapTypstToMemory(typContent: string, sourceUri?: vscode.Uri): vscode.Uri | undefined {
+  try {
+    const typstFS = getTypstFS()
+    if (!typstFS) { return }
+    
+    const docUri = sourceUri || vscode.window.activeTextEditor?.document.uri
+    if (!docUri) { return }
+    
+    return typstFS.mapDocumentToMemory(docUri, typContent)
+  } catch (e) {
+    console.warn('[TypstMemoryProvider] mapTypstToMemory failed:', e)
+    return
+  }
+}
 
 function mdToTypstInline(s: string): string {
   if (!s) return s
