@@ -2,8 +2,8 @@
 
 > 说明：预发布版本实际上是跟随 VS Code 自动启动的版本；启用 VS Code 的预发布渠道后，本扩展会随 Code 自动加载，而不是需要触发才加载，但是如果您使用了那个版本,Code的插件禁用功能将不生效，您需要使用ANH自己的禁用功能。
 
-> **最新版本：0.4.39 (2025-11-26)**  
-> 🔗 **最新更新：新增了基于Faker-js的随机姓名生成器**  
+> **最新版本：0.4.45 (2025-12-04)**
+> 🔗 **最新更新：新增了实时Typst模板导出预览功能**  
 > 📝 近期已大幅重构异步加载与性能管线，若从老版本升级，建议阅读"近期版本速览"。   
 > 独立组件（生成式AI组件） Anh Chat(小说助手 聊天组件)已经发布! [GitHub] (https://github.com/AndreaFrederica/Roo-Code-Chat) [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.anh-cline?label=VS%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.anh-cline) [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/anh-cline?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/anh-cline)
 > 如果您需要生成式AI相关功能（AI生成设定集或者润色，或者与AI聊天（聊天功能尤其强化）），请安装 Anh Chat 组件。
@@ -88,6 +88,7 @@
 - **侧边栏预览**：支持 Markdown 和 TXT 格式的实时预览。
 - **个性化阅读**：支持自定义预览界面的主题与字体设置。
 - **大纲视图**：支持懒加载大纲生成，提供双重大纲辅助写作。
+- **Typst模板渲染预览**：支持Typst格式的高质量排版预览。(为您的小说创作提供专业的排版体验) **需要配合Tinymist Typst插件使用**。
 
 #### 批注系统
 - **独立侧边栏**：专用的批注管理视图，支持归总、跳转与快速处理。
@@ -171,6 +172,7 @@
   - 侧边栏一键运行管理。
 
 #### Typst 排版导出
+- **实时预览**：支持实时Typst模板导出预览，编辑时即时查看排版效果。
 - **高质量输出**：基于 Typst 引擎导出 PDF、图片（PNG/SVG）。
 - **模板系统**：内置多种模板（如论坛体），支持自定义模板开发。
 - **智能转换**：Markdown 语法自动转换为 Typst 格式，支持图片路径自动处理。

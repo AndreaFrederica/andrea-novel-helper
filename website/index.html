@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <title>小说助手 (NovelHelper) · 官方主页</title>
+  <title>小说助手 (NovelHelper) - 专业版 & 轻量版 · 官方主页</title>
   <link rel="icon" href="https://raw.githubusercontent.com/AndreaFrederica/andrea-novel-helper/feat/time-line/images/icon.png">
   <link rel="stylesheet" href="./styles.css?v=20251116">
 </head>
@@ -20,6 +20,7 @@
             <a href="https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper" target="_blank" rel="noopener" role="menuitem">VS 市场</a>
             <a href="https://open-vsx.org/extension/andreafrederica/andrea-novel-helper" target="_blank" rel="noopener" role="menuitem">Open VSX</a>
             <a href="https://github.com/AndreaFrederica/andrea-novel-helper/releases" target="_blank" rel="noopener" role="menuitem">GitHub</a>
+            <a href="https://lite-editor.sirrus.cc" target="_blank" rel="noopener" role="menuitem">LiteEditor 轻量版</a>
           </div>
         </div>
         <a href="https://github.com/AndreaFrederica/andrea-novel-helper" target="_blank" rel="noopener">仓库</a>
@@ -37,6 +38,56 @@
       <a class="btn" href="https://github.com/AndreaFrederica/andrea-novel-helper" target="_blank" rel="noopener">GitHub 仓库</a>
     </div>
   </header>
+
+  <section class="container">
+    <h2>选择适合你的小说助手</h2>
+    <p class="subtitle">小说助手现在提供两个版本，满足不同用户的需求。无论你是专业写作者还是偶尔创作，都能找到适合的版本。</p>
+
+    <div class="product-comparison">
+      <div class="product-card">
+        <div class="product-header">
+          <h3>Novel Helper Code</h3>
+          <span class="product-badge professional">专业版</span>
+        </div>
+        <div class="product-icon">💻</div>
+        <p class="product-description">基于VS Code的强大扩展，提供专业级的小说创作环境</p>
+        <ul class="product-features">
+          <li>✓ 完整的IDE级写作辅助</li>
+          <li>✓ 角色/词库管理系统</li>
+          <li>✓ 双大纲与热力图</li>
+          <li>✓ 时间统计与仪表板</li>
+          <li>✓ WebDAV/AutoGit同步</li>
+          <li>✓ 实时Typst模板导出预览</li>
+          <li>✓ 随机角色生成器</li>
+          <li>✓ 可视化编辑器</li>
+        </ul>
+        <div class="product-cta">
+          <a class="btn primary" href="https://marketplace.visualstudio.com/items?itemName=andreafrederica.andrea-novel-helper" target="_blank" rel="noopener">立即安装</a>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-header">
+          <h3>Novel Helper Lite</h3>
+          <span class="product-badge lite">轻量版</span>
+        </div>
+        <div class="product-icon">🌐</div>
+        <p class="product-description">基于LiteEditor的跨平台版本，直接在浏览器中运行</p>
+        <ul class="product-features">
+          <li>✓ 直接在浏览器运行，无需安装</li>
+          <li>✓ 跨平台支持（现代浏览器）</li>
+          <li>✓ 简洁的写作界面</li>
+          <li>✓ 基础的编辑辅助功能</li>
+          <li>🚧 云端同步功能开发中</li>
+          <li>🚧 PC/Android/iOS应用开发中</li>
+          <li>🚧 小说助手功能集成中</li>
+        </ul>
+        <div class="product-cta">
+          <a class="btn" href="https://lite-editor.sirrus.cc" target="_blank" rel="noopener">立即体验Web版</a>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <section class="container">
     <h2>关于小说助手（Andrea Novel Helper）</h2>
@@ -144,6 +195,9 @@
         <a class="link-card" href="https://github.com/AndreaFrederica/Roo-Code-Chat" target="_blank" rel="noopener">
           <span>聊天组件 (Anh Chat)</span>
         </a>
+        <a class="link-card" href="https://lite-editor.sirrus.cc" target="_blank" rel="noopener">
+          <span>LiteEditor 轻量版编辑器</span>
+        </a>
       </div>
     </section>
 
@@ -152,10 +206,11 @@
       <ul class="features">
         <li>包管理器：统一管理设定/章节/资源，右键快速创建常用文件</li>
         <li>角色/词汇/敏感词库定义与管理（JSON5/Markdown），引用追踪与热力图可视化</li>
+        <li>随机角色生成器：基于 Faker-js 的智能姓名生成，支持多种语言和文化背景</li>
         <li>异步高亮匹配与智能补全，错别字识别与快速修复</li>
         <li>双重大纲与写作资源管理器，字数统计与章节排序</li>
         <li>设定编辑器（<code>.ojson5</code> 角色对象）、关系编辑器（<code>.rjson5</code>）、时间线编辑器（<code>.tjson5</code>）</li>
-        <li>基于 Typst 的模板渲染（导出 PDF/PNG/SVG，支持内置/外置模板与单文件模板）</li>
+        <li>基于 Typst 的模板渲染（实时预览，导出 PDF/PNG/SVG，支持内置/外置模板与单文件模板）</li>
         <li>写作时间与速度统计（CPM/CPH），里程碑提醒与仪表板</li>
         <li>WebDAV 云同步与 AutoGit 自动提交/推送</li>
       </ul>
