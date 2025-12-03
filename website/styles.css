@@ -190,8 +190,40 @@ h2{font-size:20px;margin:0 0 16px}
   margin-top:24px;
 }
 
+/* Language dropdown styling */
+#lang .trigger{
+  padding:6px 8px;
+  background:transparent;
+  color:var(--text);
+  cursor:pointer;
+  border:none;
+  outline:none;
+  -webkit-appearance:none;
+  appearance:none;
+  border-radius:6px;
+  font-size:14px;
+}
+
+#lang .trigger:hover{
+  color:var(--brand);
+  background:rgba(74, 141, 255, 0.1);
+}
+
+#lang .menu a{
+  display:block;
+  padding:8px 12px;
+  color:var(--text);
+  text-decoration:none;
+}
+
+#lang .menu a:hover{
+  color:var(--brand);
+  background:rgba(74, 141, 255, 0.1);
+}
+
 @media (max-width: 640px){
-  .navbar .inner{gap:8px;padding:8px 12px}
-  .nav-links{gap:8px}
-  .theme-toggle{padding:6px 8px}
+  .navbar .inner{gap:6px;padding:6px 10px}
+  .nav-links{gap:6px;flex-wrap:wrap}
+  .theme-toggle{padding:4px 6px}
+  #lang .trigger{padding:4px 6px;font-size:12px}
 }

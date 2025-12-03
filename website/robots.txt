@@ -1,0 +1,94 @@
+# Robots.txt for Novel Helper Website
+# https://anh.sirrus.cc/
+
+User-agent: *
+Allow: /
+
+# Priority pages
+Allow: /
+Allow: /en/
+Allow: /styles.css
+Allow: /images/
+
+# Disallow certain paths if any (uncomment if needed)
+# Disallow: /private/
+# Disallow: /admin/
+
+# Sitemap
+Sitemap: https://anh.sirrus.cc/sitemap.xml
+
+# Crawl delay (optional, uncomment if needed)
+# Crawl-delay: 1
+
+# 国际搜索引擎规则
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+# 中国搜索引擎规则
+User-agent: Baiduspider
+Allow: /
+Crawl-delay: 1
+
+User-agent: Sogou web spider
+Allow: /
+Crawl-delay: 1
+
+User-agent: YisouSpider
+Allow: /
+
+User-agent: 360Spider
+Allow: /
+
+User-agent: Sosospider
+Allow: /
+
+User-agent: YoudaoBot
+Allow: /
+
+User-agent: JikeSpider
+Allow: /
+
+User-agent: EasouSpider
+Allow: /
+
+# 社交媒体爬虫
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+# 中国社交媒体爬虫
+User-agent: WeiboBot
+Allow: /
+
+User-agent: QQBot
+Allow: /
+
+User-agent: MiuiBot
+Allow: /
+
+# 屏蔽不良爬虫
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: AhrefsSiteAudit
+Disallow: /
