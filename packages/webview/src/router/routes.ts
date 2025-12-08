@@ -38,6 +38,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/CirclePackingPage.vue'),
   },
 
+  {
+    path: '/settings',
+    component: () => import('pages/settingView/SettingsPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

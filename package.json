@@ -213,6 +213,12 @@
           "title": "%sidebar.scripts.title%",
           "icon": "$(run)",
           "when": "andrea.anh.enabled"
+        },
+        {
+          "id": "AndreaSettingsSidebar",
+          "title": "设置",
+          "icon": "$(gear)",
+          "when": "andrea.anh.enabled"
         }
       ]
     },
@@ -3220,6 +3226,14 @@
           "id": "andrea.scriptsView",
           "name": "%view.scripts.name%",
           "icon": "run"
+        }
+      ],
+      "AndreaSettingsSidebar": [
+        {
+          "id": "andrea.settingsView",
+          "type": "webview",
+          "name": "设置",
+          "icon": "gear"
         }
       ]
     },
