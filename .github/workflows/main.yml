@@ -118,26 +118,6 @@ jobs:
         run: |
           # Use CI-specific build script
           npm run build:ci
-            # Fallback to cargo build if napi fails
-            cargo build --release --target-dir target
-            mkdir -p dist
-            # Copy the compiled .node file to both root and dist
-            if [ "${{ matrix.platform }}" = "win32" ]; then
-              cp target/release/*.dll . 2>/dev/null || true
-              cp target/release/*.dll ./dist/ 2>/dev/null || true
-              # Rename .dll to .node for proper loading
-              if [ -f "target/release/enigo_keyboard.dll" ]; then
-                cp target/release/enigo_keyboard.dll ./enigo_keyboard.node
-                cp target/release/enigo_keyboard.dll ./dist/enigo_keyboard.node
-              fi
-            else
-              cp target/release/*.so . 2>/dev/null || true
-              cp target/release/*.so ./dist/ 2>/dev/null || true
-              cp target/release/*.dylib . 2>/dev/null || true
-              cp target/release/*.dylib ./dist/ 2>/dev/null || true
-            fi
-            npm run build:ts
-          }
 
       # TypeScript 编译（与 vscode:prepublish 一致）
       - name: Compile extension
@@ -155,7 +135,6 @@ jobs:
             --dist-url=https://electronjs.org/headers \
             --platform='${{ matrix.platform }}' \
             --arch='${{ matrix.arch }}'
-
 
       - name: Package STD variant
         working-directory: ${{ env.WORKDIR }}
@@ -269,6 +248,7 @@ jobs:
           if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
           else
+            echo "No lockfile found, falling back to npm install"
             npm install --no-audit --no-fund
           fi
 
@@ -283,19 +263,6 @@ jobs:
         run: |
           # Use CI-specific build script
           npm run build:ci
-            # Fallback to cargo build if napi fails
-            cargo build --release --target-dir target
-            mkdir -p dist
-            # Copy the compiled library file and rename to .node
-            if [ -f "target/release/enigo_keyboard.so" ]; then
-              cp target/release/enigo_keyboard.so ./enigo_keyboard.node
-              cp target/release/enigo_keyboard.so ./dist/enigo_keyboard.node
-            elif [ -f "target/release/enigo_keyboard.dylib" ]; then
-              cp target/release/enigo_keyboard.dylib ./enigo_keyboard.node
-              cp target/release/enigo_keyboard.dylib ./dist/enigo_keyboard.node
-            fi
-            npm run build:ts
-          }
 
       - name: Compile extension
         working-directory: ${{ env.WORKDIR }}
@@ -326,7 +293,9 @@ jobs:
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-std-${{ matrix.target }}.vsix"
+          echo "Packaging STD to $OUT"
           npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          ls -al dist
 
       - name: Package EXP variant
         working-directory: ${{ env.WORKDIR }}
@@ -340,14 +309,18 @@ jobs:
             evs.add("onStartupFinished");
             pkg.activationEvents=[...evs];
             const parts=pkg.version.split(".").map(Number);
+            if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
             parts[2]+=1;
             pkg.version=parts.join(".");
             if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
+          echo "Packaging EXP (pre-release) to $OUT"
           npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+          ls -al dist
 
+      # 分别上传 STD/EXP 两个 VSIX 工件
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-std.vsix
@@ -483,5 +456,3 @@ jobs:
             - `std`: Stable build; disables `onStartupFinished` to follow VS Code activation standards; normal startup.
             - `exp`: Preview build; patch version +1; enables `onStartupFinished` to start early; marked pre-release and must be installed manually.
             - Both variants share the same features and fixes for this release; only activation timing differs.
-
-      # 移除单独的 EXP Release，改为与 STD 同版本合并附件
