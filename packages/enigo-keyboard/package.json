@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Minimal enigo-based keyboard simulator for Node/Electron using Rust + napi-rs.",
   "license": "MPL-2.0",
+
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -14,13 +15,16 @@
   },
   "files": [
     "dist",
-    "*.node"
+    "*.node",
+    "index.d.ts"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "napi build --release && npm run build:ts",
+    "build": "node scripts/build-native.js",
+    "build:ci": "node scripts/build-ci.js",
+    "build:napi": "napi build --release && npm run build:ts",
     "build:debug": "napi build && npm run build:ts",
     "build:ts": "tsc -p tsconfig.json",
     "clean": "cargo clean"

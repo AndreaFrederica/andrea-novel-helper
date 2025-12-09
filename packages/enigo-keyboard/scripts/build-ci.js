@@ -1,0 +1,51 @@
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+
+const platform = process.platform;
+const arch = process.arch;
+
+console.log(`Building native module for CI: ${platform}-${arch}`);
+
+// Build with cargo
+try {
+  console.log('Building with cargo...');
+  execSync('cargo build --release --target-dir target', { stdio: 'inherit' });
+  
+  // Determine the output file based on platform
+  let sourceFile;
+  if (platform === 'win32') {
+    sourceFile = 'target/release/enigo_keyboard.dll';
+  } else if (platform === 'darwin') {
+    sourceFile = 'target/release/enigo_keyboard.dylib';
+  } else {
+    sourceFile = 'target/release/enigo_keyboard.so';
+  }
+  
+  if (fs.existsSync(sourceFile)) {
+    // Ensure dist directory exists
+    if (!fs.existsSync('./dist')) {
+      fs.mkdirSync('./dist', { recursive: true });
+    }
+    
+    // Copy to root as .node
+    fs.copyFileSync(sourceFile, './enigo_keyboard.node');
+    
+    // Copy to dist as .node
+    fs.copyFileSync(sourceFile, './dist/enigo_keyboard.node');
+    
+    console.log('✅ Native module built successfully');
+    
+    // Build TypeScript
+    console.log('Building TypeScript...');
+    execSync('npm run build:ts', { stdio: 'inherit' });
+    
+    console.log('✅ All builds completed successfully');
+  } else {
+    console.error('❌ No native library found after build');
+    process.exit(1);
+  }
+} catch (error) {
+  console.error('❌ Build failed:', error.message);
+  process.exit(1);
+}

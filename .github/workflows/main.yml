@@ -79,7 +79,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -106,15 +116,28 @@ jobs:
         working-directory: ${{ env.WORKDIR }}/packages/enigo-keyboard
         shell: bash
         run: |
-          cargo build --release
-          mkdir -p dist
-          # Copy the compiled .node file to dist
-          if [ "${{ matrix.platform }}" = "win32" ]; then
-            cp target/release/*.node . 2>/dev/null || true
-          else
-            cp target/release/*.node . 2>/dev/null || true
-          fi
-          npm run build:ts
+          # Use CI-specific build script
+          npm run build:ci
+            # Fallback to cargo build if napi fails
+            cargo build --release --target-dir target
+            mkdir -p dist
+            # Copy the compiled .node file to both root and dist
+            if [ "${{ matrix.platform }}" = "win32" ]; then
+              cp target/release/*.dll . 2>/dev/null || true
+              cp target/release/*.dll ./dist/ 2>/dev/null || true
+              # Rename .dll to .node for proper loading
+              if [ -f "target/release/enigo_keyboard.dll" ]; then
+                cp target/release/enigo_keyboard.dll ./enigo_keyboard.node
+                cp target/release/enigo_keyboard.dll ./dist/enigo_keyboard.node
+              fi
+            else
+              cp target/release/*.so . 2>/dev/null || true
+              cp target/release/*.so ./dist/ 2>/dev/null || true
+              cp target/release/*.dylib . 2>/dev/null || true
+              cp target/release/*.dylib ./dist/ 2>/dev/null || true
+            fi
+            npm run build:ts
+          }
 
       # TypeScript 编译（与 vscode:prepublish 一致）
       - name: Compile extension
@@ -224,7 +247,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -248,10 +281,21 @@ jobs:
       - name: Build native enigo-keyboard
         working-directory: ${{ env.WORKDIR }}/packages/enigo-keyboard
         run: |
-          cargo build --release
-          mkdir -p dist
-          cp target/release/*.node . 2>/dev/null || true
-          npm run build:ts
+          # Use CI-specific build script
+          npm run build:ci
+            # Fallback to cargo build if napi fails
+            cargo build --release --target-dir target
+            mkdir -p dist
+            # Copy the compiled library file and rename to .node
+            if [ -f "target/release/enigo_keyboard.so" ]; then
+              cp target/release/enigo_keyboard.so ./enigo_keyboard.node
+              cp target/release/enigo_keyboard.so ./dist/enigo_keyboard.node
+            elif [ -f "target/release/enigo_keyboard.dylib" ]; then
+              cp target/release/enigo_keyboard.dylib ./enigo_keyboard.node
+              cp target/release/enigo_keyboard.dylib ./dist/enigo_keyboard.node
+            fi
+            npm run build:ts
+          }
 
       - name: Compile extension
         working-directory: ${{ env.WORKDIR }}
