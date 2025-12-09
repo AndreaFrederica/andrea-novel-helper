@@ -4,10 +4,10 @@
   "description": "Minimal enigo-based keyboard simulator for Node/Electron using Rust + napi-rs.",
   "license": "MPL-2.0",
   "main": "dist/index.js",
-  "types": "index.d.ts",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js"
     }
@@ -37,7 +37,7 @@
     "typescript": "^5.8.3"
   },
   "napi": {
-    "name": "enigo_keyboard"
+    "binaryName": "enigo_keyboard"
   },
   "dependencies": {
     "andrea-novel-helper": "file:../.."
