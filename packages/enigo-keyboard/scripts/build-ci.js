@@ -10,7 +10,8 @@ console.log(`Building native module for CI: ${platform}-${arch}`);
 // Build with cargo
 try {
   console.log('Building with cargo...');
-  execSync('cargo build --release --target-dir target', { stdio: 'inherit' });
+  // Force verbose output to see compilation details
+  execSync('cargo build --release --target-dir target --verbose', { stdio: 'inherit' });
   
   // Determine the output file based on platform
   let sourceFile;

@@ -2,7 +2,7 @@
 authors = ["AndreaFrederica <andreafrederica@outlook.com>"]
 channels = ["conda-forge"]
 name = "andrea-novel-helper"
-platforms = ["win-64"]
+platforms = ["win-64","linux-64", "osx-64", "osx-arm64","linux-aarch64"]
 version = "0.1.0"
 
 [tasks]
@@ -19,7 +19,7 @@ build = { cmd = ["npm", "run", "compile"] }
 
 build_web = { cmd = ["npm", "run", "build:webview"] }
 
-build_all = { depends-on = ["build_web", "build"] }
+build_all = { depends-on = ["build_enigo", "build_web", "build"] }
 
 web_dev = { cmd = ["npm", "run", "dev:webview"] }
 
@@ -34,5 +34,19 @@ local_exp = { cmd = ["node", "scripts/pixi-local-build.js", "exp"], env = { ELEC
 local_both = { depends-on = ["local_std", "local_exp"] }
 
 
+# Build enigo-keyboard native module
+build_enigo = { cmd = "npm run build:ci", cwd = "packages/enigo-keyboard" }
+build_enigo_debug = { cmd = "npm run build:debug", cwd = "packages/enigo-keyboard" }
+test_enigo = { cmd = "npm test", cwd = "packages/enigo-keyboard" }
+clean_enigo = { cmd = "cargo clean", cwd = "packages/enigo-keyboard" }
+
+# Combined build tasks
+build_with_enigo = { depends-on = ["build", "build_enigo"] }
+build_all_with_enigo = { depends-on = ["build_all", "build_enigo"] }
+
+
 [dependencies]
 python = ">=3.13.5,<3.14"
+rust = ">=1.91.1,<1.92"
+nodejs = "22.*"
+
