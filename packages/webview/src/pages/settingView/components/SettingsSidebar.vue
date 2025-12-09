@@ -2,6 +2,9 @@
   <div class="sidebar" :class="{ 'active': isOpen }">
     <div class="sidebar-header">
       <div class="logo-text">设置</div>
+      <button class="close-btn" @click="handleClose" aria-label="关闭侧边栏">
+        -
+      </button>
     </div>
     <div class="sidebar-nav">
       <div 
@@ -48,6 +51,10 @@ const handleSectionClick = (sectionId: string) => {
   }
 }
 
+const handleClose = () => {
+  emit('update:isOpen', false)
+}
+
 // 监听窗口大小变化
 watch(() => props.isOpen, (newVal) => {
   document.body.style.overflow = newVal ? 'hidden' : 'auto'
@@ -88,12 +95,34 @@ watch(() => props.isOpen, (newVal) => {
   border-bottom: 1px solid var(--vscode-sideBar-border, #333);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--spacing-small, 7px);
 }
 
 .logo-text {
   font-weight: bold;
   font-size: var(--vscode-font-size-large, 1rem);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--vscode-sideBar-foreground, #e0e0e0);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.close-btn:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, #2c2c2c);
+}
+
+.close-btn:active {
+  background-color: var(--vscode-toolbar-activeBackground, #444);
 }
 
 .sidebar-nav {
@@ -126,6 +155,12 @@ watch(() => props.isOpen, (newVal) => {
   .nav-item {
     font-size: var(--vscode-font-size, 14px);
     padding: var(--spacing-large, 13px) var(--spacing-large, 14px);
+  }
+}
+
+@media (min-width: 769px) {
+  .close-btn {
+    display: none;
   }
 }
 </style>

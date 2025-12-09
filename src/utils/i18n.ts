@@ -54,7 +54,7 @@ function loadLanguageFiles() {
 }
 
 // 获取翻译，优先使用vscode.l10n，fallback到手动加载的文件
-function getTranslation(key: string, fallback: string): string {
+export function getTranslation(key: string, fallback: string): string {
   // 首先尝试VS Code的l10n
   try {
     const vscodeTranslation = vscode.l10n.t(key);

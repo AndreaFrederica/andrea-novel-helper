@@ -1,6 +1,13 @@
 <template>
-  <div class="config-section">
-    <div class="config-title">{{ item.name }}</div>
+  <div class="config-section" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave" :class="{ 'hover-highlight': isHovered }">
+    <div class="config-title">
+      {{ item.name }}
+      <button class="reset-btn" @click="handleReset" v-show="isHovered" title="重置设置">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+      </button>
+    </div>
     
     <!-- 字符串类型（带枚举的单选） -->
     <div v-if="item.type === 'string' && item.enum" class="config-item">
@@ -9,19 +16,19 @@
           {{ item.enumDescriptions?.[index] || option }}
         </option>
       </select>
-      <div class="config-description">{{ item.markdownDescription }}</div>
+      <div class="config-description" v-html="processedDescription"></div>
     </div>
     
     <!-- 字符串类型（普通文本输入） -->
     <div v-else-if="item.type === 'string' && !item.enum" class="config-item">
       <input type="text" class="config-input" :value="item.value" @input="handleValueChange(($event.target as HTMLInputElement).value)">
-      <div class="config-description">{{ item.markdownDescription }}</div>
+      <div class="config-description" v-html="processedDescription"></div>
     </div>
     
     <!-- 布尔类型 -->
     <div v-else-if="item.type === 'boolean'" class="config-item">
       <div class="switch-container">
-        <span class="switch-label">{{ item.markdownDescription }}</span>
+        <span class="switch-label" v-html="processedDescription"></span>
         <label class="switch">
           <input type="checkbox" class="switch-input" :checked="item.value" @change="handleValueChange(($event.target as HTMLInputElement).checked)">
           <span class="slider"></span>
@@ -41,7 +48,7 @@
         }"
         @input="handleValueChange(parseFloat(($event.target as HTMLInputElement).value))"
       >
-      <div class="config-description">{{ item.markdownDescription }}</div>
+      <div class="config-description" v-html="processedDescription"></div>
     </div>
     
     <!-- 整数类型（带范围的整数输入） -->
@@ -57,23 +64,25 @@
         }"
         @input="handleValueChange(parseInt(($event.target as HTMLInputElement).value))"
       >
-      <div class="config-description">{{ item.markdownDescription }}</div>
+      <div class="config-description" v-html="processedDescription"></div>
+    </div>
+    
+    <!-- 不支持的类型 -->
+    <div v-else class="config-item">
+      <div class="switch-container">
+        <span class="switch-label" v-html="processedDescription"></span>
+        <a href="#" class="jump-link" @click.prevent="handleJumpToSettings">
+          前往配置
+        </a>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-interface ConfigItem {
-  id: string
-  type: 'string' | 'boolean' | 'number' | 'integer' | 'array'
-  name: string
-  markdownDescription: string
-  value: any
-  enum?: string[]
-  enumDescriptions?: string[]
-  minimum?: number
-  maximum?: number
-}
+import { computed, ref } from 'vue'
+
+import type { ConfigItem } from 'src/types/config'
 
 interface Props {
   item: ConfigItem
@@ -82,16 +91,50 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:value': [value: any]
+  'jumpToSettings': [key: string]
+  'reset': [key: string]
 }>()
+
+// 鼠标悬停状态
+const isHovered = ref(false)
+
+const handleMouseEnter = () => {
+  isHovered.value = true
+}
+
+const handleMouseLeave = () => {
+  isHovered.value = false
+}
+
+const handleReset = () => {
+  emit('reset', props.item.id)
+}
 
 const handleValueChange = (newValue: any) => {
   emit('update:value', newValue)
 }
+
+const handleJumpToSettings = () => {
+  emit('jumpToSettings', props.item.id)
+}
+
+// 处理描述文本，将换行符转换为<br>标签
+const processedDescription = computed(() => {
+  if (!props.item.description) return ''
+  return props.item.description.replace(/\n/g, '<br>')
+})
 </script>
 
 <style scoped>
 .config-section {
   margin-bottom: var(--spacing-xxlarge, 22px);
+  padding: var(--spacing-small, 8px);
+  border-radius: var(--border-radius, 7px);
+  transition: background-color 0.2s ease;
+}
+
+.config-section.hover-highlight {
+  background-color: var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.1));
 }
 
 .config-title {
@@ -99,6 +142,9 @@ const handleValueChange = (newValue: any) => {
   margin-bottom: var(--spacing-small, 7px);
   font-size: var(--vscode-font-size, 0.9rem);
   color: var(--vscode-foreground, #e0e0e0);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .config-item {
@@ -137,6 +183,7 @@ select.config-input {
   color: var(--vscode-descriptionForeground, #aaa);
   margin-top: var(--spacing-xsmall, 5px);
   line-height: 1.4;
+  white-space: pre-line;
 }
 
 /* 复选框样式 */
@@ -190,6 +237,7 @@ select.config-input {
   font-size: var(--vscode-font-size, 0.9rem);
   cursor: pointer;
   color: var(--vscode-foreground, #e0e0e0);
+  white-space: pre-line;
 }
 
 .switch {
@@ -238,6 +286,25 @@ select.config-input {
   transform: translateX(21px);
 }
 
+/* 跳转按钮样式 */
+.jump-link {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  min-width: calc(var(--vscode-font-size, 13px) * 4 * 1.2);
+  text-decoration: none;
+  font-size: var(--vscode-font-size, 13px);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.jump-link:hover {
+  color: var(--vscode-textLink-activeForeground, #1a85ff);
+  text-decoration: underline;
+}
+
+.jump-link:active {
+  color: var(--vscode-textLink-activeForeground, #1a85ff);
+}
+
 @media (max-width: 768px) {
   .config-input {
     font-size: var(--vscode-font-size-mobile, 14px);
@@ -250,5 +317,31 @@ select.config-input {
   .config-description {
     font-size: var(--vscode-font-size-mobile-sm, 14px);
   }
+}
+
+/* 重置按钮样式 */
+.reset-btn {
+  background: transparent;
+  border: 1px solid var(--vscode-button-border, #444);
+  color: var(--vscode-foreground, #e0e0e0);
+  padding: 4px 6px;
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+
+.reset-btn:hover {
+  background-color: var(--vscode-button-hoverBackground, #2a2d2e);
+  opacity: 1;
+  border-color: var(--vscode-button-hoverBorder, #1976d2);
+}
+
+.reset-btn:active {
+  background-color: var(--vscode-button-activeBackground, #1a1d1e);
+  transform: scale(0.95);
 }
 </style>

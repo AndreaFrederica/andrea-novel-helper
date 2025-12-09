@@ -22,6 +22,22 @@
             </svg>
           </div>
           <div class="page-title">{{ activeSectionName }}</div>
+          <div class="scope-toggle">
+            <button 
+              class="scope-btn" 
+              :class="{ active: currentScope === 'global' }"
+              @click="setScope('global')"
+            >
+              全局
+            </button>
+            <button 
+              class="scope-btn" 
+              :class="{ active: currentScope === 'workspace' }"
+              @click="setScope('workspace')"
+            >
+              工作区
+            </button>
+          </div>
         </div>
         
         <div class="main-content">
@@ -32,6 +48,8 @@
               :key="item.id" 
               :item="item"
               @update:value="updateConfigValue(item.id, $event)"
+              @jumpToSettings="handleJumpToSettings"
+              @reset="updateConfigValue(item.id, item.defaultValue)"
             />
           </div>
           
@@ -42,8 +60,8 @@
         </div>
         
         <div class="footer">
-          <button class="btn btn-reset" @click="resetConfig">重置</button>
-          <button class="btn btn-save" @click="saveConfig">保存</button>
+          <button v-if="changedCount > 0" class="btn btn-reset" @click="resetConfig">放弃更改（{{ changedCount }}个）</button>
+          <button class="btn btn-save" @click="saveConfig">保存更改</button>
         </div>
       </div>
     </div>
@@ -56,18 +74,7 @@ import SettingsSidebar from './components/SettingsSidebar.vue'
 import SettingsConfigItem from './components/SettingsConfigItem.vue'
 import { useVsCodeApiStore } from '../../stores/vscode'
 
-interface ConfigItem {
-  id: string
-  type: 'string' | 'boolean' | 'number' | 'integer' | 'array'
-  section: string
-  name: string
-  markdownDescription: string
-  value: any
-  enum?: string[]
-  enumDescriptions?: string[]
-  minimum?: number
-  maximum?: number
-}
+import type { ConfigItem } from 'src/types/config'
 
 interface Section {
   id: string
@@ -80,6 +87,7 @@ const vsCodeApiStore = useVsCodeApiStore()
 // 状态管理
 const isSidebarOpen = ref(false)
 const activeSection = ref('')
+const currentScope = ref<'global' | 'workspace'>('workspace')
 
 // 侧边栏导航项 （设置分类）- 从后端获取配置结构
 const sections = ref<Section[]>([])
@@ -90,12 +98,26 @@ const configItems = ref<ConfigItem[]>([])
 // 原始配置值，用于跟踪更改
 const originalSettings = ref<Record<string, any>>({})
 
+// 计算修改数量
+const changedCount = computed(() => {
+  let count = 0
+  configItems.value.forEach(item => {
+    if (originalSettings.value[item.id] !== item.value) {
+      count++
+    }
+  })
+  return count
+})
+
 // 计算属性
 const activeSectionName = computed(() => {
   return sections.value.find(s => s.id === activeSection.value)?.name || '设置'
 })
 
 const activeConfigItems = computed(() => {
+  if (activeSection.value === 'quickSettings') {
+    return configItems.value.filter(item => item.quickSetting === true)
+  }
   return configItems.value.filter(item => item.section === activeSection.value)
 })
 
@@ -109,14 +131,13 @@ const handleSectionChange = (sectionId: string) => {
 }
 
 const resetConfig = () => {
-  if (confirm('确定要重置所有配置吗？')) {
-    // 发送重置消息到webview
-    if (vsCodeApiStore.vscode) {
-      vsCodeApiStore.vscode.postMessage({
-        command: 'resetSettings'
-      })
-    }
-  }
+      // 将当前配置重新设为originalSettings
+    configItems.value.forEach(item => {
+      if (originalSettings.value[item.id] !== item.value) {
+        // 使用updateConfigValue来更新，这样会触发保存
+        updateConfigValue(item.id, originalSettings.value[item.id])
+      }
+    })
 }
 
 const updateConfigValue = (itemId: string, newValue: any) => {
@@ -168,6 +189,27 @@ const saveConfig = () => {
   }
 }
 
+const handleJumpToSettings = (key: string) => {
+  // 发送跳转消息到webview
+  if (vsCodeApiStore.vscode) {
+    vsCodeApiStore.vscode.postMessage({
+      command: 'jumpToSettings',
+      key: key
+    })
+  }
+}
+
+const setScope = (scope: 'global' | 'workspace') => {
+  currentScope.value = scope
+  // 发送作用域切换消息到webview
+  if (vsCodeApiStore.vscode) {
+    vsCodeApiStore.vscode.postMessage({
+      command: 'setScope',
+      scope: scope
+    })
+  }
+}
+
 // 生命周期
 onMounted(() => {
   // 请求配置数据
@@ -186,15 +228,19 @@ onMounted(() => {
         // 接收配置数据
         if (message.data) {
           // 直接使用后端返回的配置项和侧边栏数据
-          const { configItems: newConfigItems, sections: newSections } = message.data
+          const { configItems: newConfigItems, sections: newSections, currentScope: scope } = message.data
           
           // 更新数据
           configItems.value = newConfigItems
-          sections.value = newSections
           
-          // 如果有sections但没有激活的section，默认选择第一个
-          if (newSections.length > 0 && !activeSection.value) {
-            activeSection.value = newSections[0].id
+          // 添加快速设置section到sections数组开头
+          const quickSettingsSection = { id: 'quickSettings', name: '快速设置' }
+          sections.value = [quickSettingsSection, ...newSections]
+          currentScope.value = scope || 'global'
+          
+          // 如果有sections但没有激活的section，默认选择快速设置
+          if (sections.value.length > 0 && !activeSection.value) {
+            activeSection.value = 'quickSettings'
           }
           
           // 保存原始配置值，用于跟踪更改
@@ -327,7 +373,7 @@ onMounted(() => {
 
 /* 底部操作栏 */
 .footer {
-  padding: var(--spacing-medium, 16px);
+  padding: var(--spacing-medium, 6px);
   border-top: 1px solid var(--vscode-panel-border, #333);
   display: flex;
   justify-content: flex-end;
@@ -339,14 +385,14 @@ onMounted(() => {
 }
 
 .btn {
-  padding: var(--spacing-medium, 10px) var(--spacing-large, 20px);
+  padding: var(--spacing-medium, 4px) var(--spacing-large, 10px);
   border-radius: var(--border-radius, 6px);
   border: none;
   cursor: pointer;
   font-weight: 500;
   font-size: var(--vscode-font-size, 1rem);
-  min-height: var(--input-height, 44px);
-  min-width: 80px;
+  min-height: var(--input-height, 25px);
+  min-width: 50px;
   transition: all 0.2s;
 }
 
@@ -381,5 +427,38 @@ onMounted(() => {
   .content-header {
     padding: var(--spacing-small, 12px) var(--spacing-medium, 16px);
   }
+}
+
+/* 作用域切换按钮 */
+.scope-toggle {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--vscode-panel-border, #333);
+  border-radius: var(--border-radius, 2px);
+  overflow: hidden;
+}
+
+.scope-btn {
+  padding: var(--spacing-small, 2px) var(--spacing-medium, 4px);
+  border: none;
+  background-color: transparent;
+  color: var(--vscode-foreground, #e0e0e0);
+  cursor: pointer;
+  font-size: var(--vscode-font-size, 0.9rem);
+  transition: all 0.2s;
+  min-width: 40px;
+}
+
+.scope-btn:hover {
+  background-color: var(--vscode-list-hoverBackground, #2a2a2a);
+}
+
+.scope-btn.active {
+  background-color: var(--vscode-button-background, #1976d2);
+  color: var(--vscode-button-foreground, white);
+}
+
+.scope-btn.active:hover {
+  background-color: var(--vscode-button-hoverBackground, #1565c0);
 }
 </style>

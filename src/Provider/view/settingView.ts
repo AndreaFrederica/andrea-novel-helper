@@ -3,12 +3,16 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { buildHtml } from '../utils/html-builder';
 import { log } from 'console';
+import { getTranslation } from '../../utils/i18n';
 
 export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'andrea.settingsView';
     
     private _view?: vscode.WebviewView;
     private _context: vscode.ExtensionContext;
+    private _scope: 'workspace' | 'global' = 'workspace';
+    
+    private _logChannel = vscode.window.createOutputChannel('Andrea Novel Helper:buildSettings');
 
     constructor(context: vscode.ExtensionContext) {
         this._context = context;
@@ -54,11 +58,14 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 case 'updateSetting':
                     this._handleUpdateSetting(message.key, message.value);
                     break;
-                case 'resetSettings':
-                    this._handleResetSettings();
-                    break;
                 case 'saveSettings':
                     this._handleSaveSettings(message.settings);
+                    break;
+                case 'jumpToSettings':
+                    this._handleJumpToSettings(message.key);
+                    break;
+                case 'setScope':
+                    this._handleSetScope(message.scope);
                     break;
             }
         });
@@ -81,7 +88,8 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
     private async _handleUpdateSetting(key: string, value: any) {
         try {
             const config = vscode.workspace.getConfiguration();
-            await config.update(key, value, vscode.ConfigurationTarget.Global);
+            const target = this._scope === 'workspace' ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+            await config.update(key, value, target);
             
             // 使用 VS Code 原生通知显示更新成功
             // vscode.window.showInformationMessage(`设置已更新: ${key}`, '确定').then(selection => {
@@ -119,53 +127,11 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    private async _handleResetSettings() {
-        try {
-            const config = vscode.workspace.getConfiguration();
-            
-            // 获取所有配置键并动态重置为默认值
-            const allConfigs = this.getAllContributionConfigurations();
-            
-            for (const configData of allConfigs) {
-                const key = configData.key;
-                const inspection = config.inspect(key);
-                if (inspection && inspection.defaultValue !== undefined) {
-                    await config.update(key, inspection.defaultValue, vscode.ConfigurationTarget.Global);
-                }
-            }
-
-            // 使用 VS Code 原生通知显示重置成功
-            vscode.window.showInformationMessage('设置已重置为默认值', '确定').then(selection => {
-                if (selection === '确定') {
-                    console.log('用户确认重置成功');
-                }
-            });
-
-            this._handleGetSettings();
-        } catch (error) {
-            console.error('Failed to reset settings:', error);
-            
-            // 使用 VS Code 原生通知显示重置失败
-            vscode.window.showErrorMessage(`重置设置失败: ${error}`, '重试', '忽略').then(selection => {
-                if (selection === '重试') {
-                    // 用户选择重试，重新调用重置方法
-                    this._handleResetSettings();
-                }
-            });
-
-            // 仍然发送错误消息给 webview 以保持兼容性
-            if (this._view) {
-                this._view.webview.postMessage({
-                    command: 'error',
-                    message: `Failed to reset settings: ${error}`
-                });
-            }
-        }
-    }
 
     private async _handleSaveSettings(settings: any) {
         try {
             const config = vscode.workspace.getConfiguration();
+            const target = this._scope === 'workspace' ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
             
             // 验证并保存每个设置项
             for (const [key, value] of Object.entries(settings)) {
@@ -179,7 +145,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 const inspection = config.inspect(key);
                 if (inspection) {
                     // 这里可以添加类型验证逻辑
-                    await config.update(key, value, vscode.ConfigurationTarget.Global);
+                    await config.update(key, value, target);
                 } else {
                     console.warn(`配置键不存在，跳过: ${key}`);
                 }
@@ -222,66 +188,111 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    private async _handleJumpToSettings(key: string) {
+        try {
+            // 使用 VS Code 的命令来打开设置 UI 并搜索特定配置
+            await vscode.commands.executeCommand('workbench.action.openSettings', key);
+            
+            // 显示成功消息
+            vscode.window.showInformationMessage(`已跳转到设置: ${key}`, '确定').then(selection => {
+                if (selection === '确定') {
+                    console.log(`用户确认跳转成功: ${key}`);
+                }
+            });
+        } catch (error) {
+            console.error('Failed to jump to settings:', error);
+            
+            // 显示错误消息
+            vscode.window.showErrorMessage(`跳转到设置失败: ${key} - ${error}`, '重试', '忽略').then(selection => {
+                if (selection === '重试') {
+                    // 用户选择重试，重新调用跳转方法
+                    this._handleJumpToSettings(key);
+                }
+            });
+
+            // 仍然发送错误消息给 webview 以保持兼容性
+            if (this._view) {
+                this._view.webview.postMessage({
+                    command: 'error',
+                    message: `Failed to jump to settings: ${error}`
+                });
+            }
+        }
+    }
+
+    private _handleSetScope(scope: 'workspace' | 'global') {
+        this._scope = scope;
+        // 重新获取设置以应用新作用域
+        this._handleGetSettings();
+    }
+
     private buildSettings() {
         // 获取所有配置属性及其schema
-        const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper:buildSettings');
         const allConfigs = this.getAllContributionConfigurations();
         const config = vscode.workspace.getConfiguration();
-        // logChannel.appendLine('config'+JSON.stringify(config));
-
-        
-        // const config1 = vscode.workspace.getConfiguration('andrea');
-        // logChannel.appendLine('config1'+JSON.stringify(config1));
-        // const config2 = vscode.workspace.getConfiguration('');
-        // logChannel.appendLine('config2'+JSON.stringify(config2));
-        // console.log('[settingView] buildSettings: ',config);
-        // console.log('[settingView] buildSettings: ',allKeys);
-        
         // 按section分组的配置项
         const sectionMap = new Map<string, any[]>();
         const configItems: any[] = [];
+        
+        // 根据当前作用域获取配置值
+        const getConfigValue = (key: string) => {
+            const inspection = config.inspect(key);
+            if (this._scope === 'workspace') {
+                return inspection?.workspaceValue !== undefined ? inspection.workspaceValue : inspection?.defaultValue;
+            } else {
+                return inspection?.globalValue !== undefined ? inspection.globalValue : inspection?.defaultValue;
+            }
+        };
         
         // 处理每个配置项
         allConfigs.forEach(configData => {
             const { key, schema } = configData;
             
-            // 按最后一个.进行切割
-            const lastDotIndex = key.lastIndexOf('.');
+            // 计算点的数量
+            const dotCount = (key.match(/\./g) || []).length;
             let section: string;
             let name: string;
             
-            if (lastDotIndex === -1) {
-                // 没有.的情况，整个作为section，name为空
-                section = key;
-                name = '';
+            if (dotCount >= 2) {
+                // 两个或两个以上.的情况：保留xxx.xxxx为section名称
+                const firstDotIndex = key.indexOf('.');
+                const secondDotIndex = key.indexOf('.', firstDotIndex + 1);
+                section = key.substring(0, secondDotIndex);
+                name = key.substring(secondDotIndex + 1);
+            } else if (dotCount === 1) {
+                // 只有一个.的情况：分为other section
+                const dotIndex = key.indexOf('.');
+                section = 'other';
+                name = key.substring(dotIndex + 1);
             } else {
-                // 有.的情况，最后一个.之前作为section，之后作为name
-                section = key.substring(0, lastDotIndex);
-                name = key.substring(lastDotIndex + 1);
+                // 没有.的情况：分为other section
+                section = 'other';
+                name = key;
             }
             
             // 获取配置值和元数据
-            const value = config.get(key);
+            const value = getConfigValue(key);
             // const value = config.get(name);
-            const inspection = config.inspect(key);
+            // const inspection = config.inspect(key);
             
             // 从schema中获取约束信息
-            const type = schema.type || this.inferType(value);
-            const markdownDescription = schema.markdownDescription || this.getConfigDescription(key);
-            const minimum = schema.minimum || this.getNumericConstraint(inspection, 'minimum');
-            const maximum = schema.maximum || this.getNumericConstraint(inspection, 'maximum');
-            const enumValues = schema.enum || this.getEnumValues(inspection);
-            const enumDescriptions = schema.enumDescriptions || this.getEnumDescriptions(inspection);
+            const type = schema.type ;
+            const description = this.getConfigDescription(schema.markdownDescription?schema.markdownDescription: schema.description);
+            const minimum = schema.minimum ;
+            const maximum = schema.maximum ;
+            const enumValues = schema.enum ;
+            const enumDescriptions = schema.enumDescriptions ;
             
             // 构建配置项
             const configItem = {
                 id: key,
                 type: type,
                 section: section,
-                name: name || key, // 如果name为空，使用整个key作为name
-                markdownDescription: markdownDescription,
+                quickSetting: this.isQuickSetting(key),
+                name: schema.anhName || name , // 如果name为空，使用整个key作为name
+                description: description,
                 value: value,
-                defaultValue: inspection?.defaultValue,
+                defaultValue: schema.default,
                 minimum: minimum,
                 maximum: maximum,
                 enum: enumValues,
@@ -302,17 +313,87 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             id: sectionId,
             name: this.formatSectionName(sectionId)
         }));
-        
         return {
             configItems,
-            sections
+            sections,
+            currentScope: this._scope
         };
+    }
+
+    private isQuickSetting(key: string): boolean {
+        // 定义快速设置项的键列表
+        const quickSettingKeys = [
+            // 1. 排版相关配置
+            'andrea.typeset.blankLinesBetweenParas',
+            'andrea.typeset.indentFirstTwoSpaces',
+            'andrea.typeset.trimTrailingSpaces',
+            'andrea.typeset.enableAutoPairs',
+            'andrea.typeset.enableSmartEnter',
+            'andrea.typeset.enableSmartExit',
+            'andrea.typeset.statusBar.compact',
+            
+            // 2. VS Code 编辑器配置
+            'editor.wordWrap',
+            'editor.minimap.enabled',
+            'editor.mouseWheelZoom',
+            'editor.insertSpaces',
+            'editor.tabSize',
+            'editor.detectIndentation',
+            'editor.fontSize',
+            'editor.fontFamily',
+            
+            // 3. 字数统计配置
+            'AndreaNovelHelper.wordCount.primaryUnit',
+            'AndreaNovelHelper.wordCount.statusBar.speedUnit',
+            'AndreaNovelHelper.wordCount.statusBar.mode',
+            'AndreaNovelHelper.wordCount.statusBar.compact',
+            
+            // 4. 时间统计配置
+            'AndreaNovelHelper.timeStats.includePaste',
+            'AndreaNovelHelper.timeStats.milestone.enabled',
+            'AndreaNovelHelper.timeStats.milestone.targets',
+            'AndreaNovelHelper.timeStats.milestone.notificationType',
+            
+            // 5. 角色显示配置 - 当前文章角色（docRoles）
+            'AndreaNovelHelper.docRoles.groupBy',
+            'AndreaNovelHelper.docRoles.respectAffiliation',
+            'AndreaNovelHelper.docRoles.respectType',
+            'AndreaNovelHelper.docRoles.primaryGroup',
+            'AndreaNovelHelper.docRoles.useCustomGroups',
+            'AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent',
+            'AndreaNovelHelper.docRoles.display.colorizeRoleName',
+            'AndreaNovelHelper.docRoles.customGroups',
+            
+            // 5. 角色显示配置 - 全部角色（allRoles）
+            'AndreaNovelHelper.allRoles.syncWithDocRoles',
+            'AndreaNovelHelper.allRoles.groupBy',
+            'AndreaNovelHelper.allRoles.respectAffiliation',
+            'AndreaNovelHelper.allRoles.respectType',
+            'AndreaNovelHelper.allRoles.primaryGroup',
+            'AndreaNovelHelper.allRoles.useCustomGroups',
+            'AndreaNovelHelper.allRoles.display.colorizeRoleName',
+            'AndreaNovelHelper.allRoles.customGroups',
+            
+            // 5. 角色显示配置 - 角色详情显示
+            'roles.details.wrapColumn',
+            'roles.details.enableRoleExpansion',
+            
+            // 6. 其他功能配置
+            'AndreaNovelHelper.smartTabGroupLock.enabled',
+            'AndreaNovelHelper.autoGit.compactStatus',
+            
+            // 7. 按键绑定相关 - 智能回车按键绑定配置
+            'markdown.extension.onEnterKey',
+            'andrea.smartEnter'
+        ];
+        
+        return quickSettingKeys.includes(key);
     }
 
     private getAllContributionConfigurations(): Array<{key: string, schema: any}> {
         const extension = vscode.extensions.getExtension('andreafrederica.andrea-novel-helper');
         if (!extension) {
-            console.warn('无法找到扩展 andreafrederica.andrea-novel-helper');
+            this._logChannel.appendLine('无法找到扩展 andreafrederica.andrea-novel-helper');
             return [];
         }
 
@@ -322,7 +403,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
             const configurations = packageJson?.contributes?.configuration;
             if (!configurations) {
-                console.warn('在 package.json 中未找到配置定义');
+                this._logChannel.appendLine('在 package.json 中未找到配置定义');
                 return [];
             }
 
@@ -343,122 +424,39 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
             return properties;
         } catch (error) {
-            console.error('读取配置定义时出错:', error);
+            this._logChannel.appendLine('读取配置定义时出错:'+error);  
             return [];
         }
     }
     
-    private inferType(value: any): string {
-        if (value === null || value === undefined) {
-            return 'string';
-        }
-        
-        if (typeof value === 'boolean') {
-            return 'boolean';
-        }
-        
-        if (typeof value === 'number') {
-            return Number.isInteger(value) ? 'integer' : 'number';
-        }
-        
-        if (Array.isArray(value)) {
-            return 'array';
-        }
-        
-        return 'string';
-    }
-    
-    private getNumericConstraint(inspection: any, constraint: string): number | undefined {
-        if (!inspection) return undefined;
-        
-        // 尝试从配置定义中获取约束
-        const configDef = this.getConfigDefinition(inspection.key);
-        if (configDef && configDef[constraint] !== undefined) {
-            return configDef[constraint];
-        }
-        
-        return undefined;
-    }
-    
-    private getEnumValues(inspection: any): string[] | undefined {
-        if (!inspection) return undefined;
-        
-        const configDef = this.getConfigDefinition(inspection.key);
-        if (configDef && configDef.enum) {
-            return configDef.enum;
-        }
-        
-        return undefined;
-    }
-    
-    private getEnumDescriptions(inspection: any): string[] | undefined {
-        if (!inspection) return undefined;
-        
-        const configDef = this.getConfigDefinition(inspection.key);
-        if (configDef && configDef.enumDescriptions) {
-            return configDef.enumDescriptions;
-        }
-        
-        return undefined;
-    }
-    
-    private getConfigDefinition(key: string): any {
-        // 这里可以扩展为从package.json或其他配置定义文件中读取
-        // 目前返回一些常见的配置定义
-        const configDefs: { [key: string]: any } = {
-            'AndreaNovelHelper.profile': {
-                enum: ['default', 'work', 'personal'],
-                enumDescriptions: ['默认配置', '工作配置', '个人配置']
-            },
-            'AndreaNovelHelper.provider': {
-                enum: ['OpenAI', 'Anthropic', 'Google'],
-                enumDescriptions: ['OpenAI GPT系列', 'Anthropic Claude系列', 'Google Gemini系列']
-            },
-            'AndreaNovelHelper.defaultMode': {
-                enum: ['chat', 'code', 'analysis'],
-                enumDescriptions: ['聊天模式', '代码模式', '分析模式']
-            },
-            'AndreaNovelHelper.notificationSound': {
-                enum: ['default', 'chime', 'alert', 'silent'],
-                enumDescriptions: ['默认音效', '铃声', '警报声', '静音']
-            },
-            'AndreaNovelHelper.theme': {
-                enum: ['light', 'dark', 'system'],
-                enumDescriptions: ['浅色主题', '深色主题', '跟随系统']
-            },
-            'AndreaNovelHelper.fontSize': {
-                enum: ['small', 'medium', 'large'],
-                enumDescriptions: ['小字体', '中等字体', '大字体']
-            },
-            'AndreaNovelHelper.language': {
-                enum: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'],
-                enumDescriptions: ['简体中文', 'English', '日本語', '한국어']
-            }
-        };
-        
-        return configDefs[key];
-    }
     
     private getConfigDescription(key: string): string {
-        // 这里可以扩展为从配置文件或国际化文件中读取描述
-        const descriptions: { [key: string]: string } = {
-            'AndreaNovelHelper.profile': '保存多组API配置便于快速切换',
-            'AndreaNovelHelper.provider': '选择要使用的API服务提供商',
-            'AndreaNovelHelper.baseUrl': '用于连接API服务的URL',
-            'AndreaNovelHelper.enableCache': '启用API响应缓存以提高性能',
-            'AndreaNovelHelper.defaultMode': '选择应用的默认运行模式',
-            'AndreaNovelHelper.autoModeSwitch': '根据上下文自动切换工作模式',
-            'AndreaNovelHelper.desktopNotifications': '启用桌面通知提醒',
-            'AndreaNovelHelper.emailNotifications': '接收重要事件的邮件提醒',
-            'AndreaNovelHelper.notificationSound': '选择通知提醒的音效',
-            'AndreaNovelHelper.theme': '选择应用的显示主题',
-            'AndreaNovelHelper.fontSize': '调整应用内文字大小',
-            'AndreaNovelHelper.compactView': '启用紧凑布局以显示更多信息',
-            'AndreaNovelHelper.language': '选择应用的显示语言',
-            'AndreaNovelHelper.useTranslation': '自动将内容翻译为首选语言'
-        };
-        
-        return descriptions[key] || key;
+        // 使用自定义的 i18n 实现获取国际化描述
+        try {
+            // 参数验证
+            if (!key || typeof key !== 'string') {
+                return '';
+            }
+            
+            // 处理传入的 key 格式，移除百分号并直接使用
+            // 传入的格式是：%config.typeset.trimTrailingSpaces.description%
+            // l10n 文件中的 key 是：config.typeset.trimTrailingSpaces.description
+            let l10nKey = key;
+            if (key.startsWith('%') && key.endsWith('%')) {
+                l10nKey = key.slice(1, -1); // 移除首尾的百分号
+            } else {
+                // 如果首尾没有%，则原模原样返回
+                return key;
+            }
+            
+            // 使用自定义的 getTranslation 函数替代 vscode.l10n.t
+            const localizedDescription = getTranslation(l10nKey, l10nKey);
+            
+            return localizedDescription;
+        } catch (error) {
+            // 如果 i18n 系统不可用，使用配置项的最后一个部分作为描述
+            return key
+        }
     }
     
     private formatSectionName(sectionId: string): string {
@@ -467,12 +465,31 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper': '基础设置',
             'AndreaNovelHelper.docRoles': '文档角色',
             'AndreaNovelHelper.typo': '拼写检查',
+            'AndreaNovelHelper.translate': '翻译设置',
+            'AndreaNovelHelper.comments': '批注设置',
+            'AndreaNovelHelper.allRoles': '全部角色',
+            'AndreaNovelHelper.wordCount': '字数统计',
+            'AndreaNovelHelper.roles': '角色设置',
+            'andrea.typeset': '排版设置',
+            'AndreaNovelHelper.wordSegment': '分词设置',
+            'andrea.roleJson5': '角色JSON5',
+            'AndreaNovelHelper.outline': '大纲设置',
+            'AndreaNovelHelper.timeStats': '时间统计',
+            'AndreaNovelHelper.hugeFile': '大文件处理',
+            'AndreaNovelHelper.fileTracker': '文件追踪',
+            'AndreaNovelHelper.debug': '调试设置',
+            'AndreaNovelHelper.completion': '自动补全',
+            'AndreaNovelHelper.decorations': '装饰设置',
+            'AndreaNovelHelper.externalFolder': '外部文件夹',
+            'AndreaNovelHelper.sensitiveWords': '敏感词设置',
             'AndreaNovelHelper.webdav': 'WebDAV',
-            'provider': '提供商',
-            'mode': '模式',
-            'notifications': '通知',
-            'ui': '界面',
-            'language': '语言'
+            'AndreaNovelHelper.autoGit': '自动Git',
+            'AndreaNovelHelper.smartTabGroupLock': '智能标签组锁定',
+            'AndreaNovelHelper.database': '数据库设置',
+            'AndreaNovelHelper.startupSnapshot': '启动快照',
+            'andrea.typst': 'Typst设置',
+            'AndreaNovelHelper.scripts': '脚本设置',
+            'other': '其它设置'
         };
         
         return sectionNames[sectionId] || sectionId;
