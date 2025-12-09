@@ -53,6 +53,7 @@
     "view.webdav.panel.name": "WebDAV管理",
     "view.webdav.files.name": "WebDAVファイル",
     "sidebar.scripts.title": "Andrea 小説アシスタント: スクリプト実行",
+  "sidebar.settings.title": "Andrea 小説アシスタント: 設定",
     "view.scripts.name": "スクリプト",
     "command.exportTimeStatsCSV.title": "タイム統計CSVをエクスポート",
     "command.myPreview.open.title": "プレビューを開く",

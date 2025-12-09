@@ -54,6 +54,7 @@
     "view.webdav.panel.name": "WebDAV 管理",
     "view.webdav.files.name": "WebDAV 文件",
     "sidebar.scripts.title": "小說助手:腳本執行",
+  "sidebar.settings.title": "小說助手:設定",
     "view.scripts.name": "腳本",
     "command.exportTimeStatsCSV.title": "匯出寫作統計CSV",
     "command.myPreview.open.title": "打開預覽",
