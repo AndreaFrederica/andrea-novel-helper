@@ -1,5 +1,9 @@
 # Change Log
 
+## [0.4.47（PreRelease）] - 2025-12-09
+### 🐛 修复
+- 修复了中文IME下对中文引号补全的不良体验问题，新增配置项 `andrea.typeset.enableChineseIMEFix` （默认开启）和 `andrea.typeset.chineseIMEDelay` （默认50ms），通过模拟键盘输入的方式来改善中文输入法下的引号补全体验，避免输入法状态导致的下一次输入错误。
+
 ## [0.4.45] - 2025-12-04
 ### ✨ 新增
 - 新增 TypstMemoryProvider 用于内存文件系统操作,通过 andrea-typst:// 协议实现对生成的 Typst 文档的实时访问，同时支持通过设置选中一个真实临时路径 来实现Typst插件的实时预览功能
