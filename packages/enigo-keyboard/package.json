@@ -38,8 +38,5 @@
   },
   "napi": {
     "binaryName": "enigo_keyboard"
-  },
-  "dependencies": {
-    "andrea-novel-helper": "file:../.."
   }
 }
