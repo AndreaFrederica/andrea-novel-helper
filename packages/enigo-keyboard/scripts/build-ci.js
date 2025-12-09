@@ -22,6 +22,27 @@ try {
     sourceFile = 'target/release/enigo_keyboard.so';
   }
   
+  // Check if the expected file exists, if not, list all files in target/release
+  if (!fs.existsSync(sourceFile)) {
+    console.log(`Expected file ${sourceFile} not found, listing target/release directory:`);
+    const files = fs.readdirSync('target/release');
+    console.log('Files in target/release:', files);
+    
+    // Try to find any file that matches our pattern
+    const foundFile = files.find(file => 
+      file.includes('enigo_keyboard') || 
+      (file.startsWith('libenigo_keyboard') && (file.endsWith('.dylib') || file.endsWith('.so')))
+    );
+    
+    if (foundFile) {
+      sourceFile = `target/release/${foundFile}`;
+      console.log(`Using found file: ${sourceFile}`);
+    } else {
+      console.error('❌ No enigo_keyboard library found in target/release');
+      process.exit(1);
+    }
+  }
+  
   if (fs.existsSync(sourceFile)) {
     // Ensure dist directory exists
     if (!fs.existsSync('./dist')) {
