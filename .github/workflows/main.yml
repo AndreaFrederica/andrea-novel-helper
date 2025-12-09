@@ -81,6 +81,9 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       # 安装依赖
       - name: Install deps
         working-directory: ${{ env.WORKDIR }}
@@ -98,6 +101,10 @@ jobs:
         with:
           name: webview-dist
           path: packages/webview/dist
+
+      - name: Build native enigo-keyboard
+        working-directory: ${{ env.WORKDIR }}
+        run: npm --prefix packages/enigo-keyboard run build
 
       # TypeScript 编译（与 vscode:prepublish 一致）
       - name: Compile extension
@@ -209,6 +216,9 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install deps
         working-directory: ${{ env.WORKDIR }}
         shell: bash
@@ -224,6 +234,10 @@ jobs:
         with:
           name: webview-dist
           path: packages/webview/dist
+
+      - name: Build native enigo-keyboard
+        working-directory: ${{ env.WORKDIR }}
+        run: npm --prefix packages/enigo-keyboard run build
 
       - name: Compile extension
         working-directory: ${{ env.WORKDIR }}
