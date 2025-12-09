@@ -61,3 +61,5 @@ export class Keyboard {
 export function createKeyboard(): Keyboard;
 
 export default Keyboard;
+
+export {};
