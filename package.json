@@ -3281,11 +3281,11 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@anh/enigo-keyboard": "workspace:*",
     "@cfworker/json-schema": "^4.1.1",
     "@faker-js/faker": "^10.1.0",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "@node-rs/jieba": "^2.0.1",
-    "@nut-tree-fork/nut-js": "^4.2.6",
     "@types/uuid": "^10.0.0",
     "@vscode/sqlite3": "^5.1.8-vscode",
     "ahocorasick": "^1.0.2",

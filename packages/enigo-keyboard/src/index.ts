@@ -1,9 +1,10 @@
 type NativeKeyboard = {
   new (): {
-    typeText(text: string): void;
-    tapKey(key: string, modifiers?: string[]): void;
-    keyDown(key: string): void;
-    keyUp(key: string): void;
+    type_text(text: string): void;
+    tap_key(key: string, modifiers?: string[]): void;
+    key_down(key: string): void;
+    key_up(key: string): void;
+    tapVirtualKey(keycode: number, with_shift?: boolean): void;
   };
 };
 
@@ -69,19 +70,23 @@ export class Keyboard {
   }
 
   typeText(text: string): void {
-    this.inner.typeText(text);
+    this.inner.type_text(text);
   }
 
   tapKey(key: KeyName, modifiers?: Modifier[]): void {
-    this.inner.tapKey(key, modifiers);
+    this.inner.tap_key(key, modifiers);
   }
 
   keyDown(key: KeyName): void {
-    this.inner.keyDown(key);
+    this.inner.key_down(key);
   }
 
   keyUp(key: KeyName): void {
-    this.inner.keyUp(key);
+    this.inner.key_up(key);
+  }
+
+  tapVirtualKey(keycode: number, withShift = false): void {
+    this.inner.tapVirtualKey(keycode, withShift);
   }
 }
 

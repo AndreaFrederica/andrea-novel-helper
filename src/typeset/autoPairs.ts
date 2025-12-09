@@ -1,11 +1,23 @@
 // src/typeset/autoPairs.ts
 import * as vscode from 'vscode';
+import { Keyboard } from '@anh/enigo-keyboard';
 import { getPairsFromConfig, nextIsClosingPair } from './core/pairs';
-import { keyboard } from '@nut-tree-fork/nut-js';
 
 let langConfigDisposables: vscode.Disposable[] = [];
 let typingListener: vscode.Disposable | undefined;
 let isSimulatingInput = false; // 标记是否正在模拟输入，防止无限循环
+let cachedKeyboard: Keyboard | null = null;
+
+function getKeyboard(): Keyboard | null {
+    if (cachedKeyboard) { return cachedKeyboard; }
+    try {
+        cachedKeyboard = new Keyboard();
+        return cachedKeyboard;
+    } catch (err) {
+        console.error('Failed to initialize enigo keyboard', err);
+        return null;
+    }
+}
 
 function disposeAll() {
     for (const d of langConfigDisposables) { try { d.dispose(); } catch { } }
@@ -150,6 +162,11 @@ async function handleQuoteWithKeyboardSimulation(
     delay: number
 ) {
     try {
+        const keyboard = getKeyboard();
+        if (!keyboard) {
+            throw new Error('enigo keyboard not available');
+        }
+
         // 标记正在模拟输入，防止无限循环
         isSimulatingInput = true;
 
@@ -160,29 +177,16 @@ async function handleQuoteWithKeyboardSimulation(
         //     vscode.window.setStatusBarMessage('中文单引号自动补全（键盘模拟）', 2000);
         // }
 
-        // 使用 nut-js 模拟键盘输入闭合引号
-        // 中文引号需要映射到对应的英文按键
-        let keyToPress: string;
-        if (quotePair.close === '”') {
-            // 中文右双引号映射到英文双引号键
-            keyToPress = '"';
-        } else if (quotePair.close === '’') {
-            // 中文右单引号映射到英文单引号键
-            keyToPress = "'";
-        } else {
-            // 其他情况直接使用
-            keyToPress = quotePair.close;
-        }
+        // 使用 enigo 发送物理按键（IME 可接管）
+        // Windows: VK_OEM_7 = 0xDE，对应单/双引号，双引号需 Shift。
+        // 其他平台同键位映射；如失败再回退到直接插入文字。
+        const VK_OEM_7 = 0xde;
+        const useShift = quotePair.close === '”';
 
-
-
-        // 使用 VSCode API 将光标移动到引号之间
-
-
-        // 模拟按键，让IME进行转换
+        // 模拟按键，让 IME 进行转换
         // 添加一个小延迟以确保模拟的稳定性
         await new Promise(resolve => setTimeout(resolve, delay));
-        await keyboard.type(keyToPress);
+        keyboard.tapVirtualKey(VK_OEM_7, useShift);
         await new Promise(resolve => setTimeout(resolve, delay));
         const currentPosition = editor.selection.active;
         const newPosition = currentPosition.with({

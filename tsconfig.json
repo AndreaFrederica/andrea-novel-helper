@@ -18,6 +18,7 @@
 	},
 	"exclude": [
 		"packages/webview",
+		"packages/enigo-keyboard",
 		"scripts"
 	] // 避免把前端也编进来
 }

@@ -56,6 +56,27 @@ impl Keyboard {
         let key = parse_key(&key)?;
         self.inner.key(key, Release).map_err(map_input_error)
     }
+
+    #[napi(js_name = "tapVirtualKey")]
+    pub fn tap_virtual_key(&mut self, keycode: u16, with_shift: Option<bool>) -> Result<()> {
+        let mut pressed_shift = false;
+        if with_shift.unwrap_or(false) {
+            self.inner
+                .key(Key::Shift, Press)
+                .map_err(map_input_error)?;
+            pressed_shift = true;
+        }
+
+        let key = Key::Other(u32::from(keycode));
+        let res = self.inner.key(key, Click).map_err(map_input_error);
+
+        if pressed_shift {
+            // Best-effort release shift even on failure.
+            let _ = self.inner.key(Key::Shift, Release);
+        }
+
+        res
+    }
 }
 
 fn parse_key(input: &str) -> Result<Key> {
