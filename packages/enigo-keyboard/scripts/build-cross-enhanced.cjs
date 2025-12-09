@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { execSync } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import { platform, arch } from 'os';
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { platform, arch } = require('os');
 
 const targets = [
   { name: 'win32-x64', rust: 'x86_64-pc-windows-msvc', platform: 'win32', arch: 'x64' },
@@ -20,7 +20,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 Enhanced Cross-Platform Build Script for @anh/enigo-keyboard
 
 Usage:
-  node scripts/build-cross-enhanced.js [target] [options]
+  node scripts/build-cross-enhanced.cjs [target] [options]
 
 Targets:
   win32-x64       Windows x64
@@ -37,16 +37,16 @@ Options:
 
 Examples:
   # Build for current platform
-  node scripts/build-cross-enhanced.js
+  node scripts/build-cross-enhanced.cjs
 
   # Build for specific target
-  node scripts/build-cross-enhanced.js win32-x64
+  node scripts/build-cross-enhanced.cjs win32-x64
 
   # Use Docker for cross-compilation
-  node scripts/build-cross-enhanced.js linux-x64 --docker
+  node scripts/build-cross-enhanced.cjs linux-x64 --docker
 
   # List available targets
-  node scripts/build-cross-enhanced.js list
+  node scripts/build-cross-enhanced.cjs list
 `);
   process.exit(0);
 }
