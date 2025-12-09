@@ -216,7 +216,7 @@
         },
         {
           "id": "AndreaSettingsSidebar",
-          "title": "设置",
+          "title": "%sidebar.settings.title%",
           "icon": "$(gear)",
           "when": "andrea.anh.enabled"
         }
@@ -3345,7 +3345,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@anh/enigo-keyboard": "workspace:*",
+    "@anh/enigo-keyboard": "^0.1.0",
     "@cfworker/json-schema": "^4.1.1",
     "@faker-js/faker": "^10.1.0",
     "@modelcontextprotocol/sdk": "^1.22.0",

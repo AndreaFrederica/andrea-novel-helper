@@ -277,7 +277,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             
             // 从schema中获取约束信息
             const type = schema.type ;
-            const description = this.getConfigDescription(schema.markdownDescription?schema.markdownDescription: schema.description);
+            const description = this.getConfigl10n(schema.markdownDescription?schema.markdownDescription: schema.description);
             const minimum = schema.minimum ;
             const maximum = schema.maximum ;
             const enumValues = schema.enum ;
@@ -289,7 +289,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 type: type,
                 section: section,
                 quickSetting: this.isQuickSetting(key),
-                name: schema.anhName || name , // 如果name为空，使用整个key作为name
+                name: this.getConfigl10n(schema.anhName || name) , // 如果name为空，使用整个key作为name
                 description: description,
                 value: value,
                 defaultValue: schema.default,
@@ -430,7 +430,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
     }
     
     
-    private getConfigDescription(key: string): string {
+    private getConfigl10n(key: string): string {
         // 使用自定义的 i18n 实现获取国际化描述
         try {
             // 参数验证
@@ -504,9 +504,15 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
 export function registerSettingsView(context: vscode.ExtensionContext): vscode.Disposable {
     const provider = new SettingsWebviewProvider(context);
-    
+
     return vscode.window.registerWebviewViewProvider(
         SettingsWebviewProvider.viewType,
-        provider
+        provider,
+        {
+            webviewOptions: {
+                // 关键配置：隐藏时保留 Webview 的上下文（不会销毁 iframe）
+                retainContextWhenHidden: true,
+            },
+        },
     );
 }
