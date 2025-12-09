@@ -40,6 +40,85 @@ build_enigo_debug = { cmd = "npm run build:debug", cwd = "packages/enigo-keyboar
 test_enigo = { cmd = "npm test", cwd = "packages/enigo-keyboard" }
 clean_enigo = { cmd = "cargo clean", cwd = "packages/enigo-keyboard" }
 
+# Rust cross-compilation tasks using the new cross-platform script
+build_enigo_cross = { cmd = "npm run build:cross", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_verbose = { cmd = "npm run build:cross -- --verbose", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_win32 = { cmd = "npm run build:cross:target -- win32-x64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_darwin_x64 = { cmd = "npm run build:cross:target -- darwin-x64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_darwin_arm64 = { cmd = "npm run build:cross:target -- darwin-arm64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_linux_x64 = { cmd = "npm run build:cross:target -- linux-x64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_linux_arm64 = { cmd = "npm run build:cross:target -- linux-arm64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_linux_armhf = { cmd = "npm run build:cross:target -- linux-armhf", cwd = "packages/enigo-keyboard" }
+
+# Enhanced cross-compilation with Docker support
+build_enigo_cross_enhanced = { cmd = "npm run build:cross:enhanced", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_enhanced_win32 = { cmd = "npm run build:cross:enhanced:target -- win32-x64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_enhanced_darwin_x64 = { cmd = "npm run build:cross:enhanced:target -- darwin-x64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_enhanced_darwin_arm64 = { cmd = "npm run build:cross:enhanced:target -- darwin-arm64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_enhanced_linux_x64 = { cmd = "npm run build:cross:enhanced:target -- linux-x64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_enhanced_linux_arm64 = { cmd = "npm run build:cross:enhanced:target -- linux-arm64", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_enhanced_linux_armhf = { cmd = "npm run build:cross:enhanced:target -- linux-armhf", cwd = "packages/enigo-keyboard" }
+
+# Docker-based cross-compilation
+build_enigo_cross_docker = { cmd = "npm run build:cross:enhanced -- --docker", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_docker_win32 = { cmd = "npm run build:cross:enhanced:target -- win32-x64 -- --docker", cwd = "packages/enigo-keyboard" }
+build_enigo_cross_docker_linux_x64 = { cmd = "npm run build:cross:enhanced:target -- linux-x64 -- --docker", cwd = "packages/enigo-keyboard" }
+
+# List available cross-platform targets
+list_enigo_targets = { cmd = "npm run build:cross -- list", cwd = "packages/enigo-keyboard" }
+
+# Install Rust targets (run once per host)
+install_rust_targets = { cmd = "rustup target add x86_64-pc-windows-msvc x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu arm-unknown-linux-gnueabihf" }
+
+# SQLite rebuild tasks (for different platforms)
+rebuild_sqlite_win32 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=win32 --arch=x64" }
+rebuild_sqlite_darwin_x64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=darwin --arch=x64" }
+rebuild_sqlite_darwin_arm64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=darwin --arch=arm64" }
+rebuild_sqlite_linux_x64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=linux --arch=x64" }
+rebuild_sqlite_linux_arm64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=linux --arch=arm64" }
+
+# VSIX packaging tasks (STD and EXP variants) for all platforms
+package_std_win32 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=='onStartupFinished'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target win32-x64 --out dist/anh-std-win32-x64.vsix" }
+package_exp_win32 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target win32-x64 --pre-release --out dist/anh-exp-win32-x64.vsix" }
+
+package_std_darwin_x64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=='onStartupFinished'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target darwin-x64 --out dist/anh-std-darwin-x64.vsix" }
+package_exp_darwin_x64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target darwin-x64 --pre-release --out dist/anh-exp-darwin-x64.vsix" }
+
+package_std_darwin_arm64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=='onStartupFinished'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target darwin-arm64 --out dist/anh-std-darwin-arm64.vsix" }
+package_exp_darwin_arm64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target darwin-arm64 --pre-release --out dist/anh-exp-darwin-arm64.vsix" }
+
+package_std_linux_x64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=='onStartupFinished'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target linux-x64 --out dist/anh-std-linux-x64.vsix" }
+package_exp_linux_x64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target linux-x64 --pre-release --out dist/anh-exp-linux-x64.vsix" }
+
+package_std_linux_arm64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=='onStartupFinished'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target linux-arm64 --out dist/anh-std-linux-arm64.vsix" }
+package_exp_linux_arm64 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target linux-arm64 --pre-release --out dist/anh-exp-linux-arm64.vsix" }
+
+package_std_linux_armhf = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=='onStartupFinished'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target linux-armhf --out dist/anh-std-linux-armhf.vsix" }
+package_exp_linux_armhf = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target linux-armhf --pre-release --out dist/anh-exp-linux-armhf.vsix" }
+
+# Combined build tasks for local development (all platforms)
+build_std_win32 = { depends-on = ["build_enigo", "rebuild_sqlite_win32", "package_std_win32"] }
+build_exp_win32 = { depends-on = ["build_enigo", "rebuild_sqlite_win32", "package_exp_win32"] }
+build_std_darwin_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_x64", "package_std_darwin_x64"] }
+build_exp_darwin_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_x64", "package_exp_darwin_x64"] }
+build_std_darwin_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_arm64", "package_std_darwin_arm64"] }
+build_exp_darwin_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_arm64", "package_exp_darwin_arm64"] }
+build_std_linux_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_x64", "package_std_linux_x64"] }
+build_exp_linux_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_x64", "package_exp_linux_x64"] }
+build_std_linux_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_arm64", "package_std_linux_arm64"] }
+build_exp_linux_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_arm64", "package_exp_linux_arm64"] }
+build_std_linux_armhf = { depends-on = ["build_enigo", "rebuild_sqlite_linux_armhf", "package_std_linux_armhf"] }
+build_exp_linux_armhf = { depends-on = ["build_enigo", "rebuild_sqlite_linux_armhf", "package_exp_linux_armhf"] }
+
+# Package all STD variants
+package_all_std = { depends-on = ["package_std_win32", "package_std_darwin_x64", "package_std_darwin_arm64", "package_std_linux_x64", "package_std_linux_arm64", "package_std_linux_armhf"] }
+
+# Package all EXP variants  
+package_all_exp = { depends-on = ["package_exp_win32", "package_exp_darwin_x64", "package_exp_darwin_arm64", "package_exp_linux_x64", "package_exp_linux_arm64", "package_exp_linux_armhf"] }
+
+# Package all variants (STD + EXP)
+package_all = { depends-on = ["package_all_std", "package_all_exp"] }
+
 # Combined build tasks
 build_with_enigo = { depends-on = ["build", "build_enigo"] }
 build_all_with_enigo = { depends-on = ["build_all", "build_enigo"] }
