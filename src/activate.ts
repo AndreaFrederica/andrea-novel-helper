@@ -99,6 +99,7 @@ import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
 import { createCirclePackingDataProvider } from './data/circlePackingDataProvider';
 import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
+import { registerSettingsView } from './Provider/view/settingView'
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -603,6 +604,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerDocRolesExplorerView(context);
         registerCommentsTreeView(context);
         registerScriptRunnerView(context);
+        registerSettingsView(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);
