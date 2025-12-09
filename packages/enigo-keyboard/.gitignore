@@ -1,0 +1,6 @@
+target/
+node_modules/
+*.node
+*.log
+npm-debug.log*
+yarn-error.log
