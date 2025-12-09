@@ -104,7 +104,12 @@ jobs:
 
       - name: Build native enigo-keyboard
         working-directory: ${{ env.WORKDIR }}
-        run: npm --prefix packages/enigo-keyboard run build
+        shell: bash
+        run: |
+          cd packages/enigo-keyboard
+          rm -rf node_modules package-lock.json
+          npm install --no-audit --no-fund
+          npm run build
 
       # TypeScript 编译（与 vscode:prepublish 一致）
       - name: Compile extension
