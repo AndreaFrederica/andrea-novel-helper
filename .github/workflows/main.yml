@@ -36,8 +36,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules/
+            packages/*/node_modules/
+          key: ${{ runner.os }}-npm-webview-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-webview-
 
       - name: Install deps (workspace:webview)
         run: |
@@ -87,6 +96,7 @@ jobs:
           path: |
             ~/.npm
             node_modules/
+            packages/*/node_modules/
           key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
@@ -111,6 +121,14 @@ jobs:
           key: ${{ runner.os }}-tsc-${{ hashFiles('tsconfig.json', 'packages/enigo-keyboard/tsconfig.json', 'src/**/*.ts') }}
           restore-keys: |
             ${{ runner.os }}-tsc-
+
+      - name: Cache Rust toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.rustup
+          key: ${{ runner.os }}-rustup-stable
+          restore-keys: |
+            ${{ runner.os }}-rustup-
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -174,12 +192,11 @@ jobs:
             const fs=require("fs");
             const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
             pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
-            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-std-${{ matrix.target }}.vsix"
           echo "Packaging STD to $OUT"
-          npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          npx vsce package --target ${{ matrix.target }} --skipBuild --out "$OUT"
           ls -al dist
 
       - name: Package EXP variant
@@ -197,12 +214,11 @@ jobs:
             if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
             parts[2]+=1;
             pkg.version=parts.join(".");
-            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
           echo "Packaging EXP (pre-release) to $OUT"
-          npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+          npx vsce package --target ${{ matrix.target }} --pre-release --skipBuild --out "$OUT"
           ls -al dist
 
       # 分别上传 STD/EXP 两个 VSIX 工件
@@ -261,6 +277,7 @@ jobs:
           path: |
             ~/.npm
             node_modules/
+            packages/*/node_modules/
           key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
@@ -285,6 +302,14 @@ jobs:
           key: ${{ runner.os }}-tsc-${{ hashFiles('tsconfig.json', 'packages/enigo-keyboard/tsconfig.json', 'src/**/*.ts') }}
           restore-keys: |
             ${{ runner.os }}-tsc-
+
+      - name: Cache Rust toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.rustup
+          key: ${{ runner.os }}-rustup-stable
+          restore-keys: |
+            ${{ runner.os }}-rustup-
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -337,12 +362,11 @@ jobs:
             const fs=require("fs");
             const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
             pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
-            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-std-${{ matrix.target }}.vsix"
           echo "Packaging STD to $OUT"
-          npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          npx vsce package --target ${{ matrix.target }} --skipBuild --out "$OUT"
           ls -al dist
 
       - name: Package EXP variant
@@ -360,12 +384,11 @@ jobs:
             if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
             parts[2]+=1;
             pkg.version=parts.join(".");
-            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
           echo "Packaging EXP (pre-release) to $OUT"
-          npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+          npx vsce package --target ${{ matrix.target }} --pre-release --skipBuild --out "$OUT"
           ls -al dist
 
       # 分别上传 STD/EXP 两个 VSIX 工件
