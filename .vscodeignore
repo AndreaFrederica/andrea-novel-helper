@@ -60,6 +60,22 @@ packages/enigo-keyboard/
 !packages/webview/dist/
 !packages/webview/dist/**
 
+# ============= 忽略Rust编译产物 =============
+node_modules/@anh/enigo-keyboard/node_modules/**
+node_modules/@anh/enigo-keyboard/target/**
+node_modules/@anh/enigo-keyboard/examples/**
+node_modules/@anh/enigo-keyboard/scripts/**
+node_modules/@anh/enigo-keyboard/dist/win32-x64/**
+node_modules/@anh/enigo-keyboard/dist/linux-x64/**
+node_modules/@anh/enigo-keyboard/dist/darwin-x64/**
+node_modules/@anh/enigo-keyboard/dist/darwin-arm64/**
+node_modules/@anh/enigo-keyboard/dist/linux-arm64/**
+node_modules/@anh/enigo-keyboard/dist/linux-armhf/**
+node_modules/@anh/enigo-keyboard/dist/win32-arm64/**
+node_modules/@anh/enigo-keyboard/**.node
+# ============ 保留 Pixi 配置文件 ============
+
+
 
 .pixi/*
 !.pixi/config.toml

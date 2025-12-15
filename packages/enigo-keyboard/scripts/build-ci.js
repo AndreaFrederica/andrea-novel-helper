@@ -74,34 +74,38 @@ function buildWithNapi() {
     // Use napi build for Unix systems
     execSync('napi build --release', { stdio: 'inherit' });
     
+    // Find .node file in root directory (napi build puts it there)
+    const rootNodeFiles = fs.readdirSync('.').filter(f => f.endsWith('.node'));
+    if (rootNodeFiles.length === 0) {
+      console.error('❌ No .node file found in root directory after napi build');
+      console.error('   Expected file like enigo_keyboard.node');
+      process.exit(1);
+    }
+    
+    const nodeFile = rootNodeFiles[0];
+    console.log(`✅ Found native binary: ${nodeFile}`);
+    
     // Compile TypeScript to generate dist directory
     console.log('\n📦 Compiling TypeScript...');
     execSync('npm run build:ts', { stdio: 'inherit' });
     
-    // Find the generated .node file
+    // Verify dist directory exists
     const distDir = './dist';
     if (!fs.existsSync(distDir)) {
-      console.error('❌ dist directory not found after napi build and TypeScript compilation');
+      console.error('❌ dist directory not found after TypeScript compilation');
       process.exit(1);
     }
     
-    const nodeFiles = fs.readdirSync(distDir).filter(f => f.endsWith('.node'));
-    if (nodeFiles.length === 0) {
-      console.error('❌ No .node file found in dist directory after build');
-      process.exit(1);
-    }
-    
-    const nodeFile = nodeFiles[0];
-    const sourceFile = path.join(distDir, nodeFile);
-    
-    // Copy to root as well
-    fs.copyFileSync(sourceFile, './enigo_keyboard.node');
-    console.log(`✅ Copied ${nodeFile} to root and dist/`);
+    // Copy .node file to dist directory
+    const sourceFile = `./${nodeFile}`;
+    const distNodeFile = path.join(distDir, nodeFile);
+    fs.copyFileSync(sourceFile, distNodeFile);
+    console.log(`✅ Copied ${nodeFile} to dist/`);
     
     // Sign binary on macOS
     if (platform === 'darwin') {
-      signMacOSBinary('./enigo_keyboard.node');
       signMacOSBinary(sourceFile);
+      signMacOSBinary(distNodeFile);
     }
     
     console.log('✅ napi build completed');
