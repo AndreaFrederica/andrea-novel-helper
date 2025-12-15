@@ -49,6 +49,8 @@ packages/webview/**/*.config.*
 
 # ============= 忽略扩展打包中间产物 =============
 # node_modules/
+# ============= 忽略 enigo-keyboard 源目录（npm 会从 node_modules 中自动获取） =============
+packages/enigo-keyboard/
 # ============= 忽略其它管理文件夹 =============
 .vscode/
 .history/

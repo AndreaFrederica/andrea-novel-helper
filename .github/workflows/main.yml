@@ -124,6 +124,13 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
         run: npm run compile
 
+      # macOS 代码签名
+      - name: Sign macOS binary
+        if: runner.os == 'macOS'
+        working-directory: ${{ env.WORKDIR }}/packages/enigo-keyboard
+        shell: bash
+        run: npm run sign:macos
+
       # 为目标 Electron + 平台/架构重建原生模块（跨平台统一用 bash）
       - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
         working-directory: ${{ env.WORKDIR }}

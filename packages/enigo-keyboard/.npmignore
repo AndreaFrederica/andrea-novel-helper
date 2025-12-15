@@ -1,0 +1,55 @@
+# Rust build artifacts
+target/
+target-*/
+*.lock
+Cargo.lock
+
+# Build scripts and configs
+scripts/
+build.rs
+tsconfig.json
+rust-toolchain.toml
+Cargo.toml
+
+# Source files
+src/
+*.ts
+!dist/**/*.d.ts
+
+# Development files
+.cargo/
+.git/
+.github/
+.vscode/
+.idea/
+
+# Test files
+test/
+tests/
+**/*.test.*
+**/*.spec.*
+
+# Package manager lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Documentation
+*.md
+LICENSE

@@ -14,9 +14,10 @@
     }
   },
   "files": [
-    "dist",
+    "dist/",
     "*.node",
-    "index.d.ts"
+    "index.d.ts",
+    "README.md"
   ],
   "engines": {
     "node": ">=18"
@@ -31,7 +32,9 @@
     "build:napi": "napi build --release && npm run build:ts",
     "build:debug": "napi build && npm run build:ts",
     "build:ts": "tsc -p tsconfig.json",
-    "clean": "cargo clean"
+    "clean": "cargo clean",
+    "cleanup": "node scripts/cleanup-artifacts.js",
+    "sign:macos": "node scripts/sign-macos.js"
   },
   "keywords": [
     "enigo",

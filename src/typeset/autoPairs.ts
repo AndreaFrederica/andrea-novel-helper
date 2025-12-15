@@ -2,21 +2,52 @@
 import * as vscode from 'vscode';
 import { Keyboard } from '@anh/enigo-keyboard';
 import { getPairsFromConfig, nextIsClosingPair } from './core/pairs';
+import { tryLoadNativeModuleWithFallback } from '../utils/nativeModuleLoader';
 
 let langConfigDisposables: vscode.Disposable[] = [];
 let typingListener: vscode.Disposable | undefined;
 let isSimulatingInput = false; // 标记是否正在模拟输入，防止无限循环
 let cachedKeyboard: Keyboard | null = null;
+let keyboardLoadPromise: Promise<Keyboard | null> | null = null;
+let extensionContext: vscode.ExtensionContext | null = null;
 
-function getKeyboard(): Keyboard | null {
+async function getKeyboard(): Promise<Keyboard | null> {
     if (cachedKeyboard) { return cachedKeyboard; }
-    try {
-        cachedKeyboard = new Keyboard();
-        return cachedKeyboard;
-    } catch (err) {
-        console.error('Failed to initialize enigo keyboard', err);
+    
+    // 如果已经在尝试加载，等待结果
+    if (keyboardLoadPromise) {
+        return keyboardLoadPromise;
+    }
+
+    if (!extensionContext) {
+        console.error('Extension context not set for native module loading');
         return null;
     }
+
+    // 开始加载
+    keyboardLoadPromise = (async () => {
+        try {
+            const result = await tryLoadNativeModuleWithFallback(
+                () => new Keyboard(),
+                {
+                    moduleName: '@anh/enigo-keyboard',
+                    displayName: 'Enigo Keyboard',
+                    context: extensionContext!,
+                }
+            );
+            
+            if (result) {
+                cachedKeyboard = result;
+            }
+            
+            return cachedKeyboard ?? null;
+        } catch (err) {
+            console.error('Failed to initialize enigo keyboard', err);
+            return null;
+        }
+    })();
+
+    return keyboardLoadPromise;
 }
 
 function disposeAll() {
@@ -26,6 +57,8 @@ function disposeAll() {
 }
 
 export function registerAutoPairs(context: vscode.ExtensionContext) {
+    extensionContext = context; // 存储 context 以便加载原生模块时使用
+    
     const apply = () => {
         disposeAll();
 
@@ -162,7 +195,7 @@ async function handleQuoteWithKeyboardSimulation(
     delay: number
 ) {
     try {
-        const keyboard = getKeyboard();
+        const keyboard = await getKeyboard();
         if (!keyboard) {
             throw new Error('enigo keyboard not available');
         }

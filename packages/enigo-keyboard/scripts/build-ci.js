@@ -4,70 +4,160 @@ import path from 'path';
 
 const platform = process.platform;
 const arch = process.arch;
+const isWindows = platform === 'win32';
+const isUnix = platform === 'darwin' || platform === 'linux';
 
 console.log(`Building native module for CI: ${platform}-${arch}`);
+console.log(`Using build method: ${isWindows ? 'cargo (Windows)' : 'napi-rs CLI (Unix)'}`);
 
-// Build with cargo
 try {
-  console.log('Building with cargo...');
-  // Force verbose output to see compilation details
-  execSync('cargo build --release --target-dir target --verbose', { stdio: 'inherit' });
-  
-  // Determine the output file based on platform
-  let sourceFile;
-  if (platform === 'win32') {
-    sourceFile = 'target/release/enigo_keyboard.dll';
-  } else if (platform === 'darwin') {
-    sourceFile = 'target/release/enigo_keyboard.dylib';
+  if (isWindows) {
+    // Windows: Use cargo directly
+    buildWithCargo();
+  } else if (isUnix) {
+    // Unix (macOS, Linux): Use napi-rs CLI
+    buildWithNapi();
   } else {
-    sourceFile = 'target/release/enigo_keyboard.so';
-  }
-  
-  // Check if the expected file exists, if not, list all files in target/release
-  if (!fs.existsSync(sourceFile)) {
-    console.log(`Expected file ${sourceFile} not found, listing target/release directory:`);
-    const files = fs.readdirSync('target/release');
-    console.log('Files in target/release:', files);
-    
-    // Try to find any file that matches our pattern
-    const foundFile = files.find(file => 
-      file.includes('enigo_keyboard') || 
-      (file.startsWith('libenigo_keyboard') && (file.endsWith('.dylib') || file.endsWith('.so')))
-    );
-    
-    if (foundFile) {
-      sourceFile = `target/release/${foundFile}`;
-      console.log(`Using found file: ${sourceFile}`);
-    } else {
-      console.error('❌ No enigo_keyboard library found in target/release');
-      process.exit(1);
-    }
-  }
-  
-  if (fs.existsSync(sourceFile)) {
-    // Ensure dist directory exists
-    if (!fs.existsSync('./dist')) {
-      fs.mkdirSync('./dist', { recursive: true });
-    }
-    
-    // Copy to root as .node
-    fs.copyFileSync(sourceFile, './enigo_keyboard.node');
-    
-    // Copy to dist as .node
-    fs.copyFileSync(sourceFile, './dist/enigo_keyboard.node');
-    
-    console.log('✅ Native module built successfully');
-    
-    // Build TypeScript
-    console.log('Building TypeScript...');
-    execSync('npm run build:ts', { stdio: 'inherit' });
-    
-    console.log('✅ All builds completed successfully');
-  } else {
-    console.error('❌ No native library found after build');
+    console.error(`❌ Unsupported platform: ${platform}`);
     process.exit(1);
   }
 } catch (error) {
   console.error('❌ Build failed:', error.message);
+  process.exit(1);
+}
+
+function buildWithCargo() {
+  console.log('\n🔨 Building with cargo (Windows)...');
+  
+  try {
+    // Force verbose output to see compilation details
+    execSync('cargo build --release --target-dir target --verbose', { stdio: 'inherit' });
+    
+    // Determine the output file based on platform
+    let sourceFile = 'target/release/enigo_keyboard.dll';
+    
+    // Check if the expected file exists
+    if (!fs.existsSync(sourceFile)) {
+      console.log(`Expected file ${sourceFile} not found, listing target/release directory:`);
+      const files = fs.readdirSync('target/release');
+      console.log('Files in target/release:', files);
+      
+      // Try to find any file that matches our pattern
+      const foundFile = files.find(file => file.includes('enigo_keyboard'));
+      
+      if (foundFile) {
+        sourceFile = `target/release/${foundFile}`;
+        console.log(`Using found file: ${sourceFile}`);
+      } else {
+        console.error('❌ No enigo_keyboard library found in target/release');
+        process.exit(1);
+      }
+    }
+    
+    if (fs.existsSync(sourceFile)) {
+      copyToDistribution(sourceFile);
+      console.log('✅ Cargo build completed');
+    } else {
+      console.error('❌ No native library found after build');
+      process.exit(1);
+    }
+  } catch (error) {
+    console.error('❌ Cargo build failed:', error.message);
+    process.exit(1);
+  }
+}
+
+function buildWithNapi() {
+  console.log('\n🔨 Building with napi-rs CLI (Unix)...');
+  
+  try {
+    // Use napi build for Unix systems
+    execSync('napi build --release', { stdio: 'inherit' });
+    
+    // Find the generated .node file
+    const distDir = './dist';
+    if (!fs.existsSync(distDir)) {
+      console.error('❌ dist directory not found after napi build');
+      process.exit(1);
+    }
+    
+    const nodeFiles = fs.readdirSync(distDir).filter(f => f.endsWith('.node'));
+    if (nodeFiles.length === 0) {
+      console.error('❌ No .node file found in dist directory after build');
+      process.exit(1);
+    }
+    
+    const nodeFile = nodeFiles[0];
+    const sourceFile = path.join(distDir, nodeFile);
+    
+    // Copy to root as well
+    fs.copyFileSync(sourceFile, './enigo_keyboard.node');
+    console.log(`✅ Copied ${nodeFile} to root and dist/`);
+    
+    // Sign binary on macOS
+    if (platform === 'darwin') {
+      signMacOSBinary('./enigo_keyboard.node');
+      signMacOSBinary(sourceFile);
+    }
+    
+    console.log('✅ napi build completed');
+  } catch (error) {
+    console.error('❌ napi build failed:', error.message);
+    process.exit(1);
+  }
+}
+
+function signMacOSBinary(filePath) {
+  console.log(`\n📝 Signing macOS binary: ${filePath}`);
+  
+  try {
+    // Try to sign with developer certificate if available
+    // Otherwise use ad-hoc signing for development
+    const devIdentity = process.env.MACOS_SIGN_IDENTITY || '-';
+    
+    if (devIdentity === '-') {
+      console.log('   Using ad-hoc signing (development)');
+    } else {
+      console.log(`   Using identity: ${devIdentity}`);
+    }
+    
+    execSync(`codesign --force --sign ${devIdentity} "${filePath}"`, { stdio: 'inherit' });
+    console.log(`✅ Signed: ${filePath}`);
+  } catch (error) {
+    console.warn(`⚠ Warning: Failed to sign binary: ${error.message}`);
+    console.warn('   The binary may not load on macOS. Ensure codesign is available.');
+    
+    // Don't exit on signing failure, as it might be expected in some environments
+    if (process.env.CI && process.env.CI !== 'false') {
+      // In CI, signing failure should be more critical
+      console.error('❌ Signing failed in CI environment');
+      process.exit(1);
+    }
+  }
+}
+
+function copyToDistribution(sourceFile) {
+  // Ensure dist directory exists
+  if (!fs.existsSync('./dist')) {
+    fs.mkdirSync('./dist', { recursive: true });
+  }
+  
+  // Copy to root as .node
+  fs.copyFileSync(sourceFile, './enigo_keyboard.node');
+  
+  // Copy to dist as .node
+  fs.copyFileSync(sourceFile, './dist/enigo_keyboard.node');
+  
+  console.log('✅ Native module copied to dist/ and root');
+}
+
+// TypeScript build (common for all platforms)
+console.log('\n📦 Building TypeScript...');
+try {
+  execSync('npm run build:ts', { stdio: 'inherit' });
+  console.log('✅ TypeScript build completed');
+  console.log('\n✅ All builds completed successfully');
+} catch (error) {
+  console.error('❌ TypeScript build failed:', error.message);
   process.exit(1);
 }

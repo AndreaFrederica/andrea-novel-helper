@@ -69,6 +69,7 @@ import * as os from 'os'
 import { registerWordCountTypstExport } from './commands/wordCountTypstExport'
 import { registerWordCountClipboard } from './commands/wordCountClipboard'
 import { registerDefCompletions } from './language/defCompletion'
+import { registerNativeModuleCheckup } from './utils/nativeModuleLoader';
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
@@ -450,6 +451,9 @@ export async function activate(context: vscode.ExtensionContext) {
         registerRelationshipEditor(context);
         registerTimelineEditor(context);
         registerRelationshipCommands(context);
+
+        // 注册原生模块加载检查（macOS 安全策略处理）
+        registerNativeModuleCheckup(context);
 
         registerAutoPairs(context);
         registerSmartEnter(context);
