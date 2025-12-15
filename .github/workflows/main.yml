@@ -196,7 +196,7 @@ jobs:
           '
           OUT="dist/anh-std-${{ matrix.target }}.vsix"
           echo "Packaging STD to $OUT"
-          npx @vscode/vsce package --target ${{ matrix.target }} --skip-build --out "$OUT"
+          npx @vscode/vsce package --target ${{ matrix.target }} --out "$OUT"
           ls -al dist
 
       - name: Package EXP variant
@@ -218,7 +218,7 @@ jobs:
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
           echo "Packaging EXP (pre-release) to $OUT"
-          npx @vscode/vsce package --target ${{ matrix.target }} --pre-release --skip-build --out "$OUT"
+          npx @vscode/vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
           ls -al dist
 
       # 分别上传 STD/EXP 两个 VSIX 工件
@@ -366,7 +366,7 @@ jobs:
           '
           OUT="dist/anh-std-${{ matrix.target }}.vsix"
           echo "Packaging STD to $OUT"
-          npx @vscode/vsce package --target ${{ matrix.target }} --skip-build --out "$OUT"
+          npx @vscode/vsce package --target ${{ matrix.target }} --out "$OUT"
           ls -al dist
 
       - name: Package EXP variant
@@ -388,7 +388,7 @@ jobs:
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
           echo "Packaging EXP (pre-release) to $OUT"
-          npx @vscode/vsce package --target ${{ matrix.target }} --pre-release --skip-build --out "$OUT"
+          npx @vscode/vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
           ls -al dist
 
       # 分别上传 STD/EXP 两个 VSIX 工件
