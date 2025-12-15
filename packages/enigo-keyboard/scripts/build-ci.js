@@ -74,10 +74,14 @@ function buildWithNapi() {
     // Use napi build for Unix systems
     execSync('napi build --release', { stdio: 'inherit' });
     
+    // Compile TypeScript to generate dist directory
+    console.log('\n📦 Compiling TypeScript...');
+    execSync('npm run build:ts', { stdio: 'inherit' });
+    
     // Find the generated .node file
     const distDir = './dist';
     if (!fs.existsSync(distDir)) {
-      console.error('❌ dist directory not found after napi build');
+      console.error('❌ dist directory not found after napi build and TypeScript compilation');
       process.exit(1);
     }
     
@@ -108,31 +112,25 @@ function buildWithNapi() {
 }
 
 function signMacOSBinary(filePath) {
+  const devIdentity = process.env.MACOS_SIGN_IDENTITY;
+  
+  if (!devIdentity) {
+    console.warn(`\n⚠️  Skipping code signing for ${filePath}`);
+    console.warn('   No MACOS_SIGN_IDENTITY certificate provided.');
+    console.warn('   The binary may not load on macOS. Please provide a signing certificate if needed.');
+    return;
+  }
+  
   console.log(`\n📝 Signing macOS binary: ${filePath}`);
+  console.log(`   Using identity: ${devIdentity}`);
   
   try {
-    // Try to sign with developer certificate if available
-    // Otherwise use ad-hoc signing for development
-    const devIdentity = process.env.MACOS_SIGN_IDENTITY || '-';
-    
-    if (devIdentity === '-') {
-      console.log('   Using ad-hoc signing (development)');
-    } else {
-      console.log(`   Using identity: ${devIdentity}`);
-    }
-    
     execSync(`codesign --force --sign ${devIdentity} "${filePath}"`, { stdio: 'inherit' });
     console.log(`✅ Signed: ${filePath}`);
   } catch (error) {
-    console.warn(`⚠ Warning: Failed to sign binary: ${error.message}`);
-    console.warn('   The binary may not load on macOS. Ensure codesign is available.');
-    
-    // Don't exit on signing failure, as it might be expected in some environments
-    if (process.env.CI && process.env.CI !== 'false') {
-      // In CI, signing failure should be more critical
-      console.error('❌ Signing failed in CI environment');
-      process.exit(1);
-    }
+    console.error(`❌ Signing failed: ${error.message}`);
+    console.error('   The binary cannot be used on macOS without a valid signature.');
+    process.exit(1);
   }
 }
 

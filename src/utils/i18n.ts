@@ -15,34 +15,41 @@ export function initI18n(extPath: string) {
 // 加载所有语言文件
 function loadLanguageFiles() {
   if (!extensionPath) { return; }
-  
+
   const l10nDir = path.join(extensionPath, 'l10n');
   if (!fs.existsSync(l10nDir)) { return; }
-  
+
   try {
     const files = fs.readdirSync(l10nDir);
     for (const file of files) {
-      if (file.startsWith('bundle.l10n') && file.endsWith('.json')) {
+      if ((file.startsWith('bundle.l10n') || file.startsWith('anhName.l10n')) && file.endsWith('.json')) {
         const filePath = path.join(l10nDir, file);
         try {
           const content = fs.readFileSync(filePath, 'utf8');
           const translations = JSON.parse(content);
-          
+
           // 从文件名提取语言代码
           let langCode = 'en'; // 默认英文
-          if (file === 'bundle.l10n.zh-cn.json') {
+          if (file === 'bundle.l10n.zh-cn.json' || file === 'anhName.l10n.zh-cn.json') {
             langCode = 'zh-cn';
-          } else if (file === 'bundle.l10n.zh-tw.json') {
+          } else if (file === 'bundle.l10n.zh-tw.json' || file === 'anhName.l10n.zh-tw.json') {
             langCode = 'zh-tw';
+          } else if (file === 'bundle.l10n.ja.json' || file === 'anhName.l10n.ja.json') {
+            langCode = 'ja';
           } else if (file.includes('.')) {
-            // bundle.l10n.{lang}.json 格式
+            // bundle.l10n.{lang}.json 或 anhName.l10n.{lang}.json 格式
             const parts = file.split('.');
             if (parts.length >= 3) {
               langCode = parts[2];
             }
           }
-          
-          languageCache.set(langCode, translations);
+
+          // 合并翻译，anhName 的翻译会覆盖 bundle 的翻译（如果键名相同）
+          if (!languageCache.has(langCode)) {
+            languageCache.set(langCode, {});
+          }
+          const existing = languageCache.get(langCode)!;
+          languageCache.set(langCode, { ...existing, ...translations });
         } catch (err) {
           console.warn('[i18n] Failed to load', file, ':', err);
         }
