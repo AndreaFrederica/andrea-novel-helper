@@ -1,8 +1,9 @@
 <template>
   <div class="config-section" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave" :class="{ 'hover-highlight': isHovered }">
     <div class="config-title">
-      {{ item.name }}
-      <button class="reset-btn" @click="handleReset" v-show="isHovered" title="重置设置">
+      <span v-if="item.highlightedName" v-html="item.highlightedName"></span>
+      <span v-else>{{ item.name }}</span>
+      <button class="reset-btn" @click="handleReset" :class="{ 'visible': isHovered }" title="重置设置">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
           <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
         </svg>
@@ -16,19 +17,19 @@
           {{ item.enumDescriptions?.[index] || option }}
         </option>
       </select>
-      <div class="config-description" v-html="processedDescription"></div>
+      <div class="config-description" v-html="processedHighlightedDescription"></div>
     </div>
     
     <!-- 字符串类型（普通文本输入） -->
     <div v-else-if="item.type === 'string' && !item.enum" class="config-item">
       <input type="text" class="config-input" :value="item.value" @input="handleValueChange(($event.target as HTMLInputElement).value)">
-      <div class="config-description" v-html="processedDescription"></div>
+      <div class="config-description" v-html="processedHighlightedDescription"></div>
     </div>
     
     <!-- 布尔类型 -->
     <div v-else-if="item.type === 'boolean'" class="config-item">
       <div class="switch-container">
-        <span class="switch-label" v-html="processedDescription"></span>
+        <span class="switch-label" v-html="processedHighlightedDescription"></span>
         <label class="switch">
           <input type="checkbox" class="switch-input" :checked="item.value" @change="handleValueChange(($event.target as HTMLInputElement).checked)">
           <span class="slider"></span>
@@ -48,7 +49,7 @@
         }"
         @input="handleValueChange(parseFloat(($event.target as HTMLInputElement).value))"
       >
-      <div class="config-description" v-html="processedDescription"></div>
+      <div class="config-description" v-html="processedHighlightedDescription"></div>
     </div>
     
     <!-- 整数类型（带范围的整数输入） -->
@@ -64,13 +65,13 @@
         }"
         @input="handleValueChange(parseInt(($event.target as HTMLInputElement).value))"
       >
-      <div class="config-description" v-html="processedDescription"></div>
+      <div class="config-description" v-html="processedHighlightedDescription"></div>
     </div>
     
     <!-- 不支持的类型 -->
     <div v-else class="config-item">
       <div class="switch-container">
-        <span class="switch-label" v-html="processedDescription"></span>
+        <span class="switch-label" v-html="processedHighlightedDescription"></span>
         <a href="#" class="jump-link" @click.prevent="handleJumpToSettings">
           前往配置
         </a>
@@ -85,7 +86,11 @@ import { computed, ref } from 'vue'
 import type { ConfigItem } from 'src/types/config'
 
 interface Props {
-  item: ConfigItem
+  item: ConfigItem & {
+    highlightedName?: string
+    highlightedDescription?: string
+    highlightedId?: string
+  }
 }
 
 const props = defineProps<Props>()
@@ -122,6 +127,13 @@ const handleJumpToSettings = () => {
 const processedDescription = computed(() => {
   if (!props.item.description) return ''
   return props.item.description.replace(/\n/g, '<br>')
+})
+
+// 处理高亮的描述文本
+const processedHighlightedDescription = computed(() => {
+  const description = props.item.highlightedDescription || props.item.description
+  if (!description) return ''
+  return description.replace(/\n/g, '<br>')
 })
 </script>
 
@@ -331,7 +343,13 @@ select.config-input {
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.reset-btn.visible {
   opacity: 0.7;
+  transform: scale(1);
 }
 
 .reset-btn:hover {

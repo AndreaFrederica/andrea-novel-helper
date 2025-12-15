@@ -101,6 +101,7 @@ import { createCirclePackingDataProvider } from './data/circlePackingDataProvide
 import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 import { registerSettingsView } from './Provider/view/settingView'
+import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -238,6 +239,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
             })
         );
+
+        // 命令现在在 registerEditorSettingsPage 中注册
 
         return;
     }
@@ -609,6 +612,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerCommentsTreeView(context);
         registerScriptRunnerView(context);
         registerSettingsView(context);
+        registerEditorSettingsPage(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);

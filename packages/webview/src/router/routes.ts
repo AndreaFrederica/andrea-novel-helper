@@ -43,6 +43,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/settingView/SettingsPage.vue'),
   },
 
+  {
+    path: '/editor-settings-enhanced',
+    component: () => import('pages/editorSettingsEnhanced/EditorSettingsEnhancedPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

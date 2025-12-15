@@ -4,17 +4,16 @@ import * as fs from 'fs';
 import { buildHtml } from '../utils/html-builder';
 import { log } from 'console';
 import { getTranslation } from '../../utils/i18n';
-import { EditorSettingsWebviewProvider } from './editorSettingsProvider';
 
-export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'andrea.settingsView';
+export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider {
+    public static readonly viewType = 'andrea.editorSettingsView';
 
     private _view?: vscode.WebviewView;
     private _context: vscode.ExtensionContext;
     private _scope: 'workspace' | 'global' = 'workspace';
-    private _editorSettingsProvider?: EditorSettingsWebviewProvider;
-    
-    private _logChannel = vscode.window.createOutputChannel('Andrea Novel Helper:buildSettings');
+    private _externalWebview?: vscode.Webview;
+
+    private _logChannel = vscode.window.createOutputChannel('Andrea Novel Helper:EditorSettings');
 
     constructor(context: vscode.ExtensionContext) {
         this._context = context;
@@ -31,6 +30,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             enableScripts: true,
             localResourceRoots: [
                 vscode.Uri.joinPath(this._context.extensionUri, 'packages', 'webview', 'dist', 'spa'),
+                vscode.Uri.joinPath(this._context.extensionUri, 'packages', 'webview', 'dist', 'spa', 'assets'),
                 vscode.Uri.joinPath(this._context.extensionUri, 'media')
             ]
         };
@@ -42,13 +42,13 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             resourceMapperScriptUri = webviewView.webview.asWebviewUri(mapperFile).toString();
         } catch (_) { }
 
-        // 使用 buildHtml 函数构建 HTML，指定路由到设置页面
+        // 使用 buildHtml 函数构建 HTML，指定路由到编辑器设置页面
         webviewView.webview.html = buildHtml(webviewView.webview, {
             spaRoot: vscode.Uri.joinPath(this._context.extensionUri, 'packages', 'webview', 'dist', 'spa'),
             connectSrc: ['https:', 'http:', 'ws:', 'wss:'],
             resourceMapperScriptUri,
-            route: '/settings',
-            editorTitle: '设置'
+            route: '/editor-settings-enhanced',
+            editorTitle: '编辑器设置'
         });
 
         // 处理来自webview的消息
@@ -69,22 +69,18 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 case 'setScope':
                     this._handleSetScope(message.scope);
                     break;
-                case 'openEditorSettings':
-                    this._handleOpenEditorSettings();
+                case 'searchSettings':
+                    this._handleSearchSettings(message.query);
                     break;
             }
         });
     }
 
     private _handleGetSettings() {
-        if (!this._view) {
-            return;
-        }
-
         // 使用新的buildSettings方法动态生成配置
         const settingsData = this.buildSettings();
 
-        this._view.webview.postMessage({
+        this._postMessage({
             command: 'settingsData',
             data: settingsData
         });
@@ -95,25 +91,16 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             const config = vscode.workspace.getConfiguration();
             const target = this._scope === 'workspace' ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
             await config.update(key, value, target);
-            
-            // 使用 VS Code 原生通知显示更新成功
-            // vscode.window.showInformationMessage(`设置已更新: ${key}`, '确定').then(selection => {
-            //     if (selection === '确定') {
-            //         console.log(`用户确认更新成功: ${key}`);
-            //     }
-            // });
-            
-            // 仍然发送消息给 webview 以保持兼容性
-            if (this._view) {
-                this._view.webview.postMessage({
-                    command: 'settingUpdated',
-                    key: key,
-                    value: value
-                });
-            }
+
+            // 发送消息给 webview 以保持兼容性
+            this._postMessage({
+                command: 'settingUpdated',
+                key: key,
+                value: value
+            });
         } catch (error) {
             console.error('Failed to update setting:', error);
-            
+
             // 使用 VS Code 原生通知显示更新失败
             vscode.window.showErrorMessage(`更新设置失败: ${key} - ${error}`, '重试', '忽略').then(selection => {
                 if (selection === '重试') {
@@ -122,22 +109,19 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 }
             });
 
-            // 仍然发送错误消息给 webview 以保持兼容性
-            if (this._view) {
-                this._view.webview.postMessage({
-                    command: 'error',
-                    message: `Failed to update setting: ${error}`
-                });
-            }
+            // 仍然发送错误消息以保持兼容性
+            this._postMessage({
+                command: 'error',
+                message: `Failed to update setting: ${error}`
+            });
         }
     }
-
 
     private async _handleSaveSettings(settings: any) {
         try {
             const config = vscode.workspace.getConfiguration();
             const target = this._scope === 'workspace' ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
-            
+
             // 验证并保存每个设置项
             for (const [key, value] of Object.entries(settings)) {
                 // 验证键名是否有效（以AndreaNovelHelper开头） 或者以andrea开头
@@ -145,7 +129,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                     console.warn(`跳过无效的配置键: ${key}`);
                     continue;
                 }
-                
+
                 // 获取配置检查信息以验证值类型
                 const inspection = config.inspect(key);
                 if (inspection) {
@@ -164,16 +148,14 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 }
             });
 
-            // 仍然发送消息给 webview 以保持兼容性
-            if (this._view) {
-                this._view.webview.postMessage({
-                    command: 'settingsSaved',
-                    message: '设置已保存'
-                });
-            }
+            // 仍然发送消息以保持兼容性
+            this._postMessage({
+                command: 'settingsSaved',
+                message: '设置已保存'
+            });
         } catch (error) {
             console.error('Failed to save settings:', error);
-            
+
             // 使用 VS Code 原生通知显示保存失败
             vscode.window.showErrorMessage(`保存设置失败: ${error}`, '重试', '忽略').then(selection => {
                 if (selection === '重试') {
@@ -183,13 +165,11 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 // 忽略选项不做任何处理
             });
 
-            // 仍然发送错误消息给 webview 以保持兼容性
-            if (this._view) {
-                this._view.webview.postMessage({
-                    command: 'error',
-                    message: `Failed to save settings: ${error}`
-                });
-            }
+            // 仍然发送错误消息以保持兼容性
+            this._postMessage({
+                command: 'error',
+                message: `Failed to save settings: ${error}`
+            });
         }
     }
 
@@ -197,7 +177,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
         try {
             // 使用 VS Code 的命令来打开设置 UI 并搜索特定配置
             await vscode.commands.executeCommand('workbench.action.openSettings', key);
-            
+
             // 显示成功消息
             vscode.window.showInformationMessage(`已跳转到设置: ${key}`, '确定').then(selection => {
                 if (selection === '确定') {
@@ -206,7 +186,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             });
         } catch (error) {
             console.error('Failed to jump to settings:', error);
-            
+
             // 显示错误消息
             vscode.window.showErrorMessage(`跳转到设置失败: ${key} - ${error}`, '重试', '忽略').then(selection => {
                 if (selection === '重试') {
@@ -215,13 +195,11 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 }
             });
 
-            // 仍然发送错误消息给 webview 以保持兼容性
-            if (this._view) {
-                this._view.webview.postMessage({
-                    command: 'error',
-                    message: `Failed to jump to settings: ${error}`
-                });
-            }
+            // 仍然发送错误消息以保持兼容性
+            this._postMessage({
+                command: 'error',
+                message: `Failed to jump to settings: ${error}`
+            });
         }
     }
 
@@ -231,9 +209,10 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
         this._handleGetSettings();
     }
 
-    private _handleOpenEditorSettings() {
-        // 发送命令到VS Code，打开编辑器设置
-        vscode.commands.executeCommand('andrea.openEditorSettingsEnhanced');
+    private _handleSearchSettings(query: string) {
+        // 在当前实现中，搜索功能在前端处理
+        // 如果需要后端搜索支持，可以在这里实现
+        console.log('Search query:', query);
     }
 
     private buildSettings() {
@@ -243,7 +222,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
         // 按section分组的配置项
         const sectionMap = new Map<string, any[]>();
         const configItems: any[] = [];
-        
+
         // 根据当前作用域获取配置值
         const getConfigValue = (key: string) => {
             const inspection = config.inspect(key);
@@ -253,16 +232,16 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 return inspection?.globalValue !== undefined ? inspection.globalValue : inspection?.defaultValue;
             }
         };
-        
+
         // 处理每个配置项
         allConfigs.forEach(configData => {
             const { key, schema } = configData;
-            
+
             // 计算点的数量
             const dotCount = (key.match(/\./g) || []).length;
             let section: string;
             let name: string;
-            
+
             if (dotCount >= 2) {
                 // 两个或两个以上.的情况：保留xxx.xxxx为section名称
                 const firstDotIndex = key.indexOf('.');
@@ -279,12 +258,10 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 section = 'other';
                 name = key;
             }
-            
+
             // 获取配置值和元数据
             const value = getConfigValue(key);
-            // const value = config.get(name);
-            // const inspection = config.inspect(key);
-            
+
             // 从schema中获取约束信息
             const type = schema.type ;
             const description = this.getConfigl10n(schema.markdownDescription?schema.markdownDescription: schema.description);
@@ -292,7 +269,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             const maximum = schema.maximum ;
             const enumValues = schema.enum ;
             const enumDescriptions = schema.enumDescriptions ;
-            
+
             // 构建配置项
             const configItem = {
                 id: key,
@@ -308,16 +285,16 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 enum: enumValues,
                 enumDescriptions: enumDescriptions
             };
-            
+
             configItems.push(configItem);
-            
+
             // 按section分组
             if (!sectionMap.has(section)) {
                 sectionMap.set(section, []);
             }
             sectionMap.get(section)!.push(configItem);
         });
-        
+
         // 构建sections
         const sections = Array.from(sectionMap.keys()).map(sectionId => ({
             id: sectionId,
@@ -341,7 +318,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'andrea.typeset.enableSmartEnter',
             'andrea.typeset.enableSmartExit',
             'andrea.typeset.statusBar.compact',
-            
+
             // 2. VS Code 编辑器配置
             'editor.wordWrap',
             'editor.minimap.enabled',
@@ -351,19 +328,19 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'editor.detectIndentation',
             'editor.fontSize',
             'editor.fontFamily',
-            
+
             // 3. 字数统计配置
             'AndreaNovelHelper.wordCount.primaryUnit',
             'AndreaNovelHelper.wordCount.statusBar.speedUnit',
             'AndreaNovelHelper.wordCount.statusBar.mode',
             'AndreaNovelHelper.wordCount.statusBar.compact',
-            
+
             // 4. 时间统计配置
             'AndreaNovelHelper.timeStats.includePaste',
             'AndreaNovelHelper.timeStats.milestone.enabled',
             'AndreaNovelHelper.timeStats.milestone.targets',
             'AndreaNovelHelper.timeStats.milestone.notificationType',
-            
+
             // 5. 角色显示配置 - 当前文章角色（docRoles）
             'AndreaNovelHelper.docRoles.groupBy',
             'AndreaNovelHelper.docRoles.respectAffiliation',
@@ -373,7 +350,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent',
             'AndreaNovelHelper.docRoles.display.colorizeRoleName',
             'AndreaNovelHelper.docRoles.customGroups',
-            
+
             // 5. 角色显示配置 - 全部角色（allRoles）
             'AndreaNovelHelper.allRoles.syncWithDocRoles',
             'AndreaNovelHelper.allRoles.groupBy',
@@ -383,20 +360,20 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.allRoles.useCustomGroups',
             'AndreaNovelHelper.allRoles.display.colorizeRoleName',
             'AndreaNovelHelper.allRoles.customGroups',
-            
+
             // 5. 角色显示配置 - 角色详情显示
             'roles.details.wrapColumn',
             'roles.details.enableRoleExpansion',
-            
+
             // 6. 其他功能配置
             'AndreaNovelHelper.smartTabGroupLock.enabled',
             'AndreaNovelHelper.autoGit.compactStatus',
-            
+
             // 7. 按键绑定相关 - 智能回车按键绑定配置
             'markdown.extension.onEnterKey',
             'andrea.smartEnter'
         ];
-        
+
         return quickSettingKeys.includes(key);
     }
 
@@ -434,12 +411,11 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
             return properties;
         } catch (error) {
-            this._logChannel.appendLine('读取配置定义时出错:'+error);  
+            this._logChannel.appendLine('读取配置定义时出错:'+error);
             return [];
         }
     }
-    
-    
+
     private getConfigl10n(key: string): string {
         // 使用自定义的 i18n 实现获取国际化描述
         try {
@@ -447,7 +423,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             if (!key || typeof key !== 'string') {
                 return '';
             }
-            
+
             // 处理传入的 key 格式，移除百分号并直接使用
             // 传入的格式是：%config.typeset.trimTrailingSpaces.description%
             // l10n 文件中的 key 是：config.typeset.trimTrailingSpaces.description
@@ -458,17 +434,17 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 // 如果首尾没有%，则原模原样返回
                 return key;
             }
-            
+
             // 使用自定义的 getTranslation 函数替代 vscode.l10n.t
             const localizedDescription = getTranslation(l10nKey, l10nKey);
-            
+
             return localizedDescription;
         } catch (error) {
             // 如果 i18n 系统不可用，使用配置项的最后一个部分作为描述
             return key
         }
     }
-    
+
     private formatSectionName(sectionId: string): string {
         // 将sectionId转换为中文名称
         const sectionNames: { [key: string]: string } = {
@@ -501,22 +477,55 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.scripts': '脚本设置',
             'other': '其它设置'
         };
-        
+
         return sectionNames[sectionId] || sectionId;
     }
 
-    public refresh() {
-        if (this._view) {
-            this._handleGetSettings();
+    public setExternalWebview(webview: vscode.Webview) {
+        this._externalWebview = webview;
+    }
+
+    public async processMessage(message: any) {
+        switch (message.command) {
+            case 'getSettings':
+                this._handleGetSettings();
+                break;
+            case 'updateSetting':
+                await this._handleUpdateSetting(message.key, message.value);
+                break;
+            case 'saveSettings':
+                await this._handleSaveSettings(message.settings);
+                break;
+            case 'jumpToSettings':
+                await this._handleJumpToSettings(message.key);
+                break;
+            case 'setScope':
+                this._handleSetScope(message.scope);
+                break;
+            case 'searchSettings':
+                this._handleSearchSettings(message.query);
+                break;
         }
+    }
+
+    private _postMessage(message: any) {
+        if (this._view) {
+            this._view.webview.postMessage(message);
+        } else if (this._externalWebview) {
+            this._externalWebview.postMessage(message);
+        }
+    }
+
+    public refresh() {
+        this._handleGetSettings();
     }
 }
 
-export function registerSettingsView(context: vscode.ExtensionContext): vscode.Disposable {
-    const provider = new SettingsWebviewProvider(context);
+export function registerEditorSettingsView(context: vscode.ExtensionContext): vscode.Disposable {
+    const provider = new EditorSettingsWebviewProvider(context);
 
     return vscode.window.registerWebviewViewProvider(
-        SettingsWebviewProvider.viewType,
+        EditorSettingsWebviewProvider.viewType,
         provider,
         {
             webviewOptions: {
