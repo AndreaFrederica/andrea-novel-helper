@@ -1042,6 +1042,7 @@
           "markdownDescription": "在LLM分段结果(partial)阶段是否立刻应用错别字高亮（默认否，仅在最终结果阶段应用，避免\"瞬间出现又消失\"的闪烁）"
         },
         "AndreaNovelHelper.typo.suppressRolesMode": {
+          "anhName": "角色抑制模式",
           "type": "string",
           "enum": [
             "none",
@@ -1053,6 +1054,7 @@
           "markdownDescription": "错别字标记的角色抑制模式：none（不抑制）；roleNameExact（仅当错字文本与某角色名完全相等时抑制，忽略正则角色）；regexContain（仅当被正则表达式角色完全包含整段时抑制）；nonSensitiveIntersect（旧版：与任意非敏感角色相交则抑制）"
         },
         "AndreaNovelHelper.translate.targets": {
+          "anhName": "翻译目标语言列表",
           "type": "array",
           "items": {
             "type": "string"
@@ -1071,6 +1073,7 @@
           "markdownDescription": "右键翻译的可选目标语言列表"
         },
         "AndreaNovelHelper.translate.defaultTarget": {
+          "anhName": "默认翻译目标语言",
           "type": "string",
           "enum": [
             "中文",
@@ -1087,11 +1090,13 @@
           "markdownDescription": "翻译默认目标语言（与可选列表配合使用）"
         },
         "AndreaNovelHelper.translate.alwaysUseDefaultTarget": {
+          "anhName": "跳过语言选择",
           "type": "boolean",
           "default": false,
           "markdownDescription": "跳过语言选择，直接使用默认目标语言"
         },
         "AndreaNovelHelper.translate.defaultAction": {
+          "anhName": "翻译结果处理方式",
           "type": "string",
           "enum": [
             "replaceSelection",
@@ -1102,21 +1107,25 @@
           "markdownDescription": "翻译结果默认处理方式：替换选区/新标签页/复制到剪贴板"
         },
         "AndreaNovelHelper.translate.alwaysUseDefaultAction": {
+          "anhName": "跳过处理方式选择",
           "type": "boolean",
           "default": false,
           "markdownDescription": "跳过处理方式选择，直接使用默认处理方式"
         },
         "AndreaNovelHelper.comments.authorName": {
+          "anhName": "批注作者名",
           "type": "string",
           "default": "",
           "markdownDescription": "批注作者显示名（留空则使用系统用户名）"
         },
         "AndreaNovelHelper.comments.showInOverviewRuler": {
+          "anhName": "显示概览标尺",
           "type": "boolean",
           "default": true,
           "markdownDescription": "在编辑器右侧概览标尺中显示批注范围标记"
         },
         "AndreaNovelHelper.comments.style.mode": {
+          "anhName": "批注展示风格",
           "type": "string",
           "enum": [
             "underline",
@@ -1126,6 +1135,7 @@
           "markdownDescription": "批注范围展示风格：下划线或高亮背景"
         },
         "AndreaNovelHelper.comments.style.underlineStyle": {
+          "anhName": "下划线样式",
           "type": "string",
           "enum": [
             "solid",
@@ -1137,11 +1147,13 @@
           "markdownDescription": "下划线样式"
         },
         "AndreaNovelHelper.comments.style.underlineColor": {
+          "anhName": "下划线颜色",
           "type": "string",
           "default": "#0e639c",
           "markdownDescription": "下划线颜色（CSS 颜色）"
         },
         "AndreaNovelHelper.comments.style.highlightOffset": {
+          "anhName": "高亮背景强度",
           "type": "number",
           "default": 0.06,
           "minimum": 0,
@@ -1149,21 +1161,25 @@
           "markdownDescription": "高亮背景强度：在当前主题背景上叠加的透明度偏移（亮色为黑、暗色为白）"
         },
         "AndreaNovelHelper.comments.hoverEnabled": {
+          "anhName": "悬停显示批注",
           "type": "boolean",
           "default": true,
           "markdownDescription": "鼠标悬停批注范围时显示批注内容"
         },
         "AndreaNovelHelper.comments.showGutterInfo": {
+          "anhName": "显示行号图标",
           "type": "boolean",
           "default": true,
           "markdownDescription": "在有批注的行号区域显示信息图标，便于快速定位（可关闭）"
         },
         "AndreaNovelHelper.comments.relink.strict": {
+          "anhName": "严格重定位",
           "type": "boolean",
           "default": true,
           "markdownDescription": "严格重定位：仅在上下文吻合或距原位置不远时才回钩；否则视为该范围已缺失，不再兜底到段落。"
         },
         "AndreaNovelHelper.comments.cleanup.mode": {
+          "anhName": "清理模式",
           "type": "string",
           "enum": [
             "delete-thread",
@@ -1214,6 +1230,7 @@
           "markdownDescription": "第一级别分组（归属优先/类型优先）"
         },
         "AndreaNovelHelper.allRoles.customGroups": {
+          "anhName": "自定义分组规则",
           "type": "array",
           "default": [
             {
@@ -1279,6 +1296,7 @@
           "markdownDescription": "是否启用全部角色的自定义分组规则"
         },
         "AndreaNovelHelper.wordCount.referenceVisibleExtensions": {
+          "anhName": "参考文件扩展名",
           "type": "array",
           "default": [
             "png",
@@ -1340,6 +1358,7 @@
           "markdownDescription": "第一级别分组依据：**affiliation** (归属) 或 **type** (类型)"
         },
         "AndreaNovelHelper.docRoles.customGroups": {
+          "anhName": "自定义分组规则",
           "type": "array",
           "default": [
             {
@@ -1402,21 +1421,25 @@
           "markdownDescription": "自定义角色分组规则列表，用于创建第一级别的自定义分组"
         },
         "AndreaNovelHelper.docRoles.useCustomGroups": {
+          "anhName": "启用自定义分组",
           "type": "boolean",
           "default": false,
           "markdownDescription": "是否启用自定义分组规则（优先级高于 groupBy 设置）"
         },
         "AndreaNovelHelper.roles.details.showColorOnValue": {
+          "anhName": "显示颜色预览",
           "type": "boolean",
           "default": true,
           "markdownDescription": "在角色详情的值行上显示颜色预览色块（默认: true）。此设置影响全部角色与当前文章角色视图，除非对应的 allRoles/docRoles 同名设置覆盖。"
         },
         "AndreaNovelHelper.roles.display.useRoleSvgIfPresent": {
+          "anhName": "使用角色SVG图标",
           "type": "boolean",
           "default": false,
           "markdownDescription": "如果角色对象包含 svg 字段，是否优先使用该 svg 作为角色图标（默认: false）。支持 data URI 或相对/绝对路径。"
         },
         "AndreaNovelHelper.docRoles.details.showColorOnValue": {
+          "anhName": "显示颜色预览",
           "type": "boolean",
           "default": true,
           "markdownDescription": "在当前文章角色视图中，在值行上显示颜色预览色块（默认: true）。"
@@ -1453,12 +1476,14 @@
           "markdownDescription": "版式状态栏显示为**简略模式**（仅显示“版式”）。关闭则显示详细信息（缩进、段距、去尾空格、括号补齐、跳出、切段等）。"
         },
         "andrea.typeset.statusBar.alwaysShow": {
+          "anhName": "始终显示版式工具条",
           "type": "boolean",
           "default": true,
           "scope": "window",
           "markdownDescription": "始终显示版式工具条，无论当前是否为支持的文档类型。"
         },
         "andrea.typeset.pairs": {
+          "anhName": "自动补齐括号对",
           "type": [
             "array",
             "string"
@@ -1485,11 +1510,13 @@
           "description": "%config.typeset.enableAutoPairs.description%"
         },
         "andrea.typeset.enableChineseIMEFix": {
+          "anhName": "修复中文输入法",
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.typeset.enableChineseIMEFix.description%"
         },
         "andrea.typeset.chineseIMEDelay": {
+          "anhName": "中文输入法延迟",
           "type": "number",
           "default": 50,
           "minimum": 0,
@@ -1523,6 +1550,7 @@
           "description": "%config.typeset.blankLinesBetweenParas.description%"
         },
         "andrea.typeset.addBlanks.sentenceEnders": {
+          "anhName": "句末标点",
           "type": "array",
           "items": {
             "type": "string"
@@ -1543,6 +1571,7 @@
           "description": "%config.typeset.addBlanks.sentenceEnders.description%"
         },
         "andrea.typeset.addBlanks.trailingClosers": {
+          "anhName": "后置括号",
           "type": "array",
           "items": {
             "type": "string"
@@ -1550,8 +1579,8 @@
           "default": [
             "'",
             "\"",
-            "’",
-            "”",
+            "\\'",
+            "\"",
             "」",
             "』",
             "》",
@@ -1571,6 +1600,7 @@
           "description": "%config.typeset.addBlanks.trailingClosers.description%"
         },
         "andrea.typeset.addBlanks.leadingOpeners": {
+          "anhName": "前导括号列表",
           "type": "array",
           "items": {
             "type": "string"
@@ -1596,11 +1626,13 @@
           "description": "%config.typeset.trimTrailingSpaces.description%"
         },
         "AndreaNovelHelper.enableWordSegmentFilter": {
+          "anhName": "启用词汇过滤",
           "type": "boolean",
           "default": true,
           "description": "%config.roles.enableWordSegmentFilter.description%"
         },
         "AndreaNovelHelper.wordSegment.autoFilterMaxLength": {
+          "anhName": "自动过滤最大长度",
           "type": "integer",
           "default": 1,
           "minimum": 1,
@@ -1608,47 +1640,56 @@
           "description": "%config.roles.wordSegment.autoFilterMaxLength.description%"
         },
         "AndreaNovelHelper.rolesFile": {
+          "anhName": "角色文件路径",
           "type": "string",
           "default": "novel-helper/character-gallery.json5",
           "description": "%config.rolesFile.description%"
         },
         "andrea.roleJson5.openWithRoleManager": {
+          "anhName": "使用角色管理器打开",
           "type": "boolean",
           "default": true,
           "description": "是否默认使用角色卡管理器打开 JSON5 角色文件"
         },
         "AndreaNovelHelper.sensitiveWordsFile": {
+          "anhName": "敏感词文件路径",
           "type": "string",
           "default": "novel-helper/sensitive-words.json5",
           "description": "%config.sensitiveWordsFile.description%"
         },
         "AndreaNovelHelper.vocabularyFile": {
+          "anhName": "词汇文件路径",
           "type": "string",
           "default": "novel-helper/vocabulary.json5",
           "description": "%config.vocabularyFile.description%"
         },
         "AndreaNovelHelper.regexPatternsFile": {
+          "anhName": "正则模式文件路径",
           "type": "string",
           "default": "novel-helper/regex-patterns.json5",
           "description": "%config.regexPatternsFile.description%"
         },
         "AndreaNovelHelper.outlinePath": {
+          "anhName": "大纲路径",
           "type": "string",
           "default": "novel-helper/outline",
           "description": "%config.outlinePath.description%"
         },
         "AndreaNovelHelper.outline.lazyMode": {
+          "anhName": "懒加载模式",
           "type": "boolean",
           "default": true,
           "description": "%config.outline.lazyMode.description%"
         },
         "AndreaNovelHelper.minChars": {
+          "anhName": "最少字符数",
           "type": "number",
           "default": 1,
           "minimum": 1,
           "description": "%config.minChars.description%"
         },
         "AndreaNovelHelper.supportedFileTypes": {
+          "anhName": "支持的文件类型",
           "type": "array",
           "default": [
             "markdown",
@@ -1658,16 +1699,19 @@
           "description": "%config.supportedFileTypes.description%"
         },
         "AndreaNovelHelper.workspaceDisabled": {
+          "anhName": "禁用工作区",
           "type": "boolean",
           "default": false,
           "description": "%config.workspaceDisabled.description%"
         },
         "AndreaNovelHelper.markdownToolbarEnabled": {
+          "anhName": "启用Markdown工具栏",
           "type": "boolean",
           "default": true,
           "description": "%config.markdownToolbarEnabled.description%"
         },
         "AndreaNovelHelper.markdownToolbarHeight": {
+          "anhName": "工具栏高度",
           "type": "number",
           "default": 28,
           "minimum": 20,
@@ -1675,6 +1719,7 @@
           "description": "%config.markdownToolbarHeight.description%"
         },
         "AndreaNovelHelper.timeStats.enabledLanguages": {
+          "anhName": "统计启用语言",
           "type": "array",
           "default": [
             "markdown",
@@ -1683,6 +1728,7 @@
           "description": "%config.timeStats.enabledLanguages.description%"
         },
         "AndreaNovelHelper.hugeFile.thresholdBytes": {
+          "anhName": "超大文件阈值",
           "type": "number",
           "default": 51200,
           "minimum": 1024,
@@ -1690,11 +1736,13 @@
           "description": "%config.hugeFile.thresholdBytes.description%"
         },
         "AndreaNovelHelper.hugeFile.suppressWarning": {
+          "anhName": "抑制警告",
           "type": "boolean",
           "default": false,
           "description": "%config.hugeFile.suppressWarning.description%"
         },
         "AndreaNovelHelper.timeStats.idleThresholdMs": {
+          "anhName": "闲置阈值",
           "type": "number",
           "default": 30000,
           "minimum": 5000,
@@ -1702,6 +1750,7 @@
           "description": "%config.timeStats.idleThresholdMs.description%"
         },
         "AndreaNovelHelper.timeStats.bucketSizeMs": {
+          "anhName": "统计时间桶",
           "type": "number",
           "default": 60000,
           "minimum": 10000,
@@ -1709,6 +1758,7 @@
           "description": "%config.timeStats.bucketSizeMs.description%"
         },
         "AndreaNovelHelper.timeStats.imeDebounceMs": {
+          "anhName": "输入法防抖",
           "type": "number",
           "default": 350,
           "minimum": 100,
@@ -1716,11 +1766,13 @@
           "description": "%config.timeStats.imeDebounceMs.description%"
         },
         "AndreaNovelHelper.timeStats.respectWcignore": {
+          "anhName": "遵循忽略文件",
           "type": "boolean",
           "default": false,
           "description": "%config.timeStats.respectWcignore.description%"
         },
         "AndreaNovelHelper.timeStats.exitIdleOn": {
+          "anhName": "退出闲置触发",
           "type": "string",
           "default": "text-change",
           "enum": [
@@ -1736,39 +1788,46 @@
           "description": "%config.timeStats.exitIdleOn.description%"
         },
         "AndreaNovelHelper.timeStats.largeFile.thresholdBytes": {
+          "anhName": "大文件阈值",
           "type": "number",
           "default": 65536,
           "minimum": 4096,
           "description": "%config.timeStats.largeFile.thresholdBytes.description%"
         },
         "AndreaNovelHelper.timeStats.largeFile.approximate": {
+          "anhName": "大文件近似统计",
           "type": "boolean",
           "default": true,
           "description": "%config.timeStats.largeFile.approximate.description%"
         },
         "AndreaNovelHelper.timeStats.largeFile.accurateEveryChanges": {
+          "anhName": "精确统计变更次数",
           "type": "number",
           "default": 80,
           "minimum": 5,
           "description": "%config.timeStats.largeFile.accurateEveryChanges.description%"
         },
         "AndreaNovelHelper.timeStats.largeFile.accurateEveryMs": {
+          "anhName": "精确统计时间间隔",
           "type": "number",
           "default": 60000,
           "minimum": 5000,
           "description": "%config.timeStats.largeFile.accurateEveryMs.description%"
         },
         "AndreaNovelHelper.timeStats.debug": {
+          "anhName": "调试模式",
           "type": "boolean",
           "default": false,
           "description": "%config.timeStats.debug.description%"
         },
         "AndreaNovelHelper.timeStats.milestone.enabled": {
+          "anhName": "里程碑启用",
           "type": "boolean",
           "default": true,
           "description": "%config.timeStats.milestone.enabled.description%"
         },
         "AndreaNovelHelper.timeStats.milestone.targets": {
+          "anhName": "里程碑目标",
           "type": "array",
           "default": [
             1000,
@@ -1786,6 +1845,7 @@
           "description": "%config.timeStats.milestone.targets.description%"
         },
         "AndreaNovelHelper.timeStats.milestone.notificationType": {
+          "anhName": "里程碑通知类型",
           "type": "string",
           "default": "information",
           "enum": [
@@ -1799,11 +1859,13 @@
           "description": "%config.timeStats.milestone.notificationType.description%"
         },
         "AndreaNovelHelper.timeStats.typoDelay.enabled": {
+          "anhName": "错别字延迟启用",
           "type": "boolean",
           "default": false,
           "markdownDescription": "启用变更时间窗口机制：在连续编辑期间延迟发送错别字请求，窗口结束后统一触发。"
         },
         "AndreaNovelHelper.timeStats.typoDelay.windowMs": {
+          "anhName": "错别字延迟窗口",
           "type": "number",
           "default": 5000,
           "minimum": 100,
@@ -1811,12 +1873,14 @@
           "markdownDescription": "变更时间窗口时长（毫秒）。窗口内的连续变更将合并为一次错别字请求。"
         },
         "AndreaNovelHelper.wordCount.largeFileThreshold": {
+          "anhName": "大文件阈值",
           "type": "number",
           "default": 51200,
           "minimum": 1024,
           "description": "%config.wordCount.largeFileThreshold.description%"
         },
         "AndreaNovelHelper.wordCount.largeFileAvgBytesPerChar": {
+          "anhName": "大文件平均字节数",
           "type": "number",
           "default": 3,
           "minimum": 0.5,
@@ -1824,11 +1888,13 @@
           "description": "%config.wordCount.largeFileAvgBytesPerChar.description%"
         },
         "AndreaNovelHelper.timeStats.persistReadOnlySessions": {
+          "anhName": "只读会话持久化",
           "type": "boolean",
           "default": false,
           "description": "%config.timeStats.persistReadOnlySessions.description%"
         },
         "AndreaNovelHelper.timeStats.statusBar.alignment": {
+          "anhName": "状态栏对齐",
           "type": "string",
           "default": "left",
           "enum": [
@@ -1842,6 +1908,7 @@
           "description": "%config.timeStats.statusBar.alignment.description%"
         },
         "AndreaNovelHelper.timeStats.statusBar.priority": {
+          "anhName": "状态栏优先级",
           "type": "number",
           "default": 1,
           "minimum": -1000,
@@ -1875,48 +1942,57 @@
           "markdownDescription": "粘贴判定阈值（字符数）。当一次变更新增字符数 ≥ 该值或包含换行时，视为粘贴。"
         },
         "AndreaNovelHelper.fileTracker.respectWcignore": {
+          "anhName": "遵循忽略文件",
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.respectWcignore.description%"
         },
         "AndreaNovelHelper.fileTracker.trustCallerFilters": {
+          "anhName": "信任调用方过滤器",
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.trustCallerFilters.description%"
         },
         "AndreaNovelHelper.fileTracker.writeLegacySnapshot": {
+          "anhName": "写入旧版快照",
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.writeLegacySnapshot.description%"
         },
         "AndreaNovelHelper.fileTracker.enableVerboseLogging": {
+          "anhName": "启用详细日志",
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.enableVerboseLogging.description%"
         },
         "AndreaNovelHelper.wordCount.order.showIndexInLabel": {
+          "anhName": "显示索引",
           "type": "boolean",
           "default": true,
           "description": "%config.wordCount.order.showIndexInLabel.description%"
         },
         "AndreaNovelHelper.wordCount.order.step": {
+          "anhName": "索引步长",
           "type": "number",
           "default": 10,
           "minimum": 1,
           "description": "%config.wordCount.order.step.description%"
         },
         "AndreaNovelHelper.wordCount.order.padWidth": {
+          "anhName": "索引宽度",
           "type": "number",
           "default": 3,
           "minimum": 0,
           "description": "%config.wordCount.order.padWidth.description%"
         },
         "AndreaNovelHelper.wordCount.order.autoResequence": {
+          "anhName": "自动重排序",
           "type": "boolean",
           "default": true,
           "description": "%config.wordCount.order.autoResequence.description%"
         },
         "AndreaNovelHelper.wordCount.displayFormat": {
+          "anhName": "显示格式",
           "type": "string",
           "default": "wan",
           "enum": [
@@ -1934,16 +2010,19 @@
           "description": "%config.wordCount.displayFormat.description%"
         },
         "AndreaNovelHelper.wordCount.debug": {
+          "anhName": "调试模式",
           "type": "boolean",
           "default": false,
           "description": "%config.wordCount.debug.description%"
         },
         "AndreaNovelHelper.wordCount.respectGitignore": {
+          "anhName": "遵循Git忽略",
           "type": "boolean",
           "default": true,
           "description": "写作资源管理器是否遵循 .gitignore（默认开启）。关闭后仅依据 .wcignore（若下项开启）或完全不依据忽略文件。"
         },
         "AndreaNovelHelper.wordCount.respectWcignore": {
+          "anhName": "遵循字数忽略",
           "type": "boolean",
           "default": true,
           "description": "写作资源管理器是否遵循 .wcignore（默认开启）。关闭后将不从 .wcignore 读取忽略规则。"
@@ -2001,6 +2080,7 @@
           "markdownDescription": "字数统计状态栏精简模式：仅显示总计字数；隐藏时间与速度等附加信息。"
         },
         "AndreaNovelHelper.wordCount.maxWorkers": {
+          "anhName": "最大工作线程",
           "type": "number",
           "default": 0,
           "minimum": 0,
@@ -2008,6 +2088,7 @@
           "description": "%config.wordCount.maxWorkers.description%"
         },
         "AndreaNovelHelper.wordCount.maxWorkersUpperLimit": {
+          "anhName": "最大工作线程上限",
           "type": "number",
           "default": 8,
           "minimum": 1,
@@ -2015,21 +2096,25 @@
           "description": "%config.wordCount.maxWorkersUpperLimit.description%"
         },
         "AndreaNovelHelper.wordCount.skipStartupStatCheck": {
+          "anhName": "跳过启动校验",
           "type": "boolean",
           "default": false,
           "markdownDescription": "⚠️ 危险选项：启用后，字数统计视图在**冷启动扫描文件时将跳过对已有缓存文件的 fs.stat 校验**，直接信任快照 / 文件追踪数据库 / 内存中的字数统计。这样可以显著减少启动时间，但**无法在启动阶段发现第三方软件或外部工具对文件内容的篡改**，也无法保证缓存与文件系统 100% 一致。仅在你确信本地文本文件几乎不会在 VS Code 之外被修改时使用。"
         },
         "AndreaNovelHelper.wordCount.parallelStatCheck": {
+          "anhName": "并行校验",
           "type": "boolean",
           "default": true,
           "markdownDescription": "启用并行批量 fs.stat 校验。开启后，在冷启动 cache-check 阶段将对所有已缓存文件并行执行 fs.stat（而非逐个串行），显著减少校验耗时。适用于文件数量较多且磁盘/文件系统 I/O 性能较好的场景。注意：当 `skipStartupStatCheck` 开启时，此选项无效。"
         },
         "AndreaNovelHelper.debug.completionLog": {
+          "anhName": "调试日志",
           "type": "boolean",
           "default": false,
           "description": "%config.debug.completionLog.description%"
         },
         "AndreaNovelHelper.completion.segmenterType": {
+          "anhName": "分词器类型",
           "type": "string",
           "enum": [
             "auto",
@@ -2040,6 +2125,7 @@
           "markdownDescription": "自动补全分词器类型：\n- **auto**：智能选择，中文内容较多时自动使用jieba，否则使用Intl.Segmenter\n- **intl**：强制使用浏览器内置的Intl.Segmenter\n- **jieba**：强制使用jieba中文分词器\n\njieba分词器对中文分词更准确，能提供更好的中文输入补全体验。"
         },
         "AndreaNovelHelper.decorations.cacheSize": {
+          "anhName": "装饰缓存大小",
           "type": "number",
           "default": 5,
           "minimum": 0,
@@ -2067,16 +2153,19 @@
           "markdownDescription": "是否允许角色节点可展开以查看属性详情；关闭后角色节点将不再可展开。"
         },
         "AndreaNovelHelper.typo.service.baseUrl": {
+          "anhName": "错别字服务地址",
           "type": "string",
           "default": "http://127.0.0.1:8001",
           "markdownDescription": "错别字服务 API 基地址，例如 http://127.0.0.1:8001"
         },
         "AndreaNovelHelper.typo.enabled": {
+          "anhName": "启用错别字检查",
           "type": "boolean",
           "default": false,
           "markdownDescription": "启用错别字识别与诊断（关闭后不再调用服务、扫描或标注）。"
         },
         "AndreaNovelHelper.typo.mode": {
+          "anhName": "错别字检查模式",
           "type": "string",
           "enum": [
             "macro",
@@ -2086,36 +2175,43 @@
           "markdownDescription": "错别字识别模式：macro 使用 /correct（规则）；llm 使用 /correct/llm（大语言模型）。\n\n⚠️ **数据安全提醒**：使用 llm 模式时，您的文档内容将发送至第三方服务或本地大模型进行处理。请确保您信任所使用的服务提供商，并自行承担数据安全责任。"
         },
         "AndreaNovelHelper.typo.autoIdentifyOnOpen": {
+          "anhName": "打开时自动检查",
           "type": "boolean",
           "default": true,
           "markdownDescription": "打开文档时是否自动进行错别字识别。关闭后需要手动点击重新识别按钮。"
         },
         "AndreaNovelHelper.typo.autoScanOnChange": {
+          "anhName": "变更时自动扫描",
           "type": "boolean",
           "default": true,
           "markdownDescription": "在编辑内容发生变更时是否自动触发错别字扫描。关闭后仅保留手动扫描模式（通过命令或快速设置触发）。"
         },
         "AndreaNovelHelper.typo.clientLLM.enabled": {
+          "anhName": "启用客户端大模型",
           "type": "boolean",
           "default": false,
           "markdownDescription": "使用本地客户端直连大模型进行错别字识别（实验功能，优先于服务端）。\n\n⚠️ **数据安全提醒**：启用此功能后，您的文档内容将通过配置的 API 发送至第三方大模型服务。请确保您信任所使用的服务提供商，并自行承担数据安全和隐私保护责任。"
         },
         "AndreaNovelHelper.typo.clientLLM.apiBase": {
+          "anhName": "API基地址",
           "type": "string",
           "default": "https://api.deepseek.com/v1",
           "markdownDescription": "Chat Completions 兼容 API Base（如 https://api.openai.com/v1 或 DeepSeek）。\n\n⚠️ **数据安全提醒**：配置第三方 API 地址时，请确保您信任该服务提供商。您的文档内容将通过此 API 发送进行处理，请自行评估和承担数据安全风险。"
         },
         "AndreaNovelHelper.typo.clientLLM.apiKey": {
+          "anhName": "API密钥",
           "type": "string",
           "default": "",
           "markdownDescription": "客户端直连大模型 API Key（请注意安全）。\n\n⚠️ **数据安全提醒**：API Key 将用于访问第三方服务。请妥善保管您的密钥，避免在共享配置或代码中泄露，并定期更换以确保安全。"
         },
         "AndreaNovelHelper.typo.clientLLM.model": {
+          "anhName": "模型名称",
           "type": "string",
           "default": "deepseek-v3",
           "markdownDescription": "客户端直连模型名称。\n\n⚠️ **数据安全提醒**：不同模型的服务商可能有不同的数据处理政策。请在使用前查看并了解相应模型提供商的数据使用条款。"
         },
         "AndreaNovelHelper.typo.clientLLM.temperature": {
+          "anhName": "温度参数",
           "type": "number",
           "default": 0,
           "minimum": 0,
@@ -2123,11 +2219,13 @@
           "markdownDescription": "客户端直连模型的 temperature。"
         },
         "AndreaNovelHelper.typo.clientLLM.enableThinking": {
+          "anhName": "启用思考模式",
           "type": "boolean",
           "default": false,
           "markdownDescription": "启用深度思考模型的思考过程（如 GLM-4.6、GLM-4.5、GLM-4.5-air、DeepSeek-R1、Qwen-R 等支持推理的模型）。\n\n🔧 **配置方式**：需要配合 `thinkingProvider` 配置项来指定参数格式。\n\n📋 **支持的供应商预设**：\n- `auto`：自动检测（默认）\n- `glm`：智谱 GLM 系列\n- `deepseek`：DeepSeek 系列\n- `qwen`：通义千问系列\n- `custom`：自定义配置\n\n⚠️ **注意**：思考过程仅在支持相应格式的模型上有效，请根据模型类型选择合适的预设。"
         },
         "AndreaNovelHelper.typo.clientLLM.thinkingProvider": {
+          "anhName": "思考提供商",
           "type": "string",
           "default": "auto",
           "enum": [
@@ -2140,21 +2238,25 @@
           "markdownDescription": "选择思考过程的参数格式预设。\n\n📋 **预设说明**：\n- `auto`：根据模型名称自动选择合适的参数格式\n- `glm`：智谱 GLM 格式 - `\"thinking\": {\"type\": \"enabled|disabled\"}`\n- `deepseek`：DeepSeek 格式 - `\"extra_body\": {\"enable_thinking\": true}`\n- `qwen`：通义千问格式 - `\"reasoning_effort\": \"high|medium\"`\n- `custom`：使用自定义配置（需配置 `customThinking*` 选项）\n\n💡 **建议**：不确定时选择 `auto`，系统会根据模型名称自动匹配。"
         },
         "AndreaNovelHelper.typo.clientLLM.customThinkingEnabled": {
+          "anhName": "自定义思考启用",
           "type": "boolean",
           "default": false,
           "markdownDescription": "启用自定义 thinking 字段配置。仅当 `thinkingProvider` 设置为 `custom` 时生效。\n\n⚙️ **配置**：启用后，可配置自定义的字段名和启用/禁用值。"
         },
         "AndreaNovelHelper.typo.clientLLM.customThinkingEnabledValue": {
+          "anhName": "自定义思考启用值",
           "type": "boolean",
           "default": true,
           "markdownDescription": "自定义 thinking 字段的启用值。当 `enableThinking` 为 true 时使用此值。\n\n📝 **示例**：如果字段为 `thinking`，启用值为 `true`，则请求中包含 `\"thinking\": true`。"
         },
         "AndreaNovelHelper.typo.clientLLM.customThinkingDisabledValue": {
+          "anhName": "自定义思考禁用值",
           "type": "boolean",
           "default": false,
           "markdownDescription": "自定义 thinking 字段的禁用值。当 `enableThinking` 为 false 时使用此值。\n\n📝 **示例**：如果字段为 `thinking`，禁用值为 `false`，则请求中包含 `\"thinking\": false`。"
         },
         "AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod": {
+          "anhName": "通义千问思考方法",
           "type": "string",
           "enum": [
             "parameter",
@@ -2164,11 +2266,13 @@
           "markdownDescription": "通义千问模型的 thinking 控制方法选择。当 `thinkingProvider` 设置为 \"qwen\" 时生效。\n\n- **parameter**（默认）：使用 `extra_body.enable_thinking=False` 参数\n- **suffix**：使用模型名称后缀 `/no_think`\n\n📝 **示例**：\n- parameter 方法：`\"extra_body\": {\"enable_thinking\": false}`\n- suffix 方法：`\"model\": \"qwen2.5-72b-instruct/no_think\"`"
         },
         "AndreaNovelHelper.typo.clientLLM.geminiThinkingBudget": {
+          "anhName": "Gemini思考预算",
           "type": "number",
           "default": -1,
           "markdownDescription": "Google Gemini 模型的思考预算配置。当 `thinkingProvider` 设置为 \"gemini\" 时生效。\n\n- **-1**（默认）：动态思考，模型根据任务复杂度自动调整预算\n- **0**：禁用思考功能\n- **正数**：指定具体的思考 token 预算（如 1024）\n\n📝 **模型支持**：\n- **Gemini 2.5 Pro**：动态思考（128-32768），无法禁用\n- **Gemini 2.5 Flash**：动态思考（0-24576），可禁用\n- **Gemini 2.5 Flash-Lite**：无思考（512-24576），可禁用\n\n📝 **示例请求**：\n```json\n{\n  \"extra_body\": {\n    \"thinking_config\": {\n      \"thinking_budget\": 1024,\n      \"include_thoughts\": true\n    }\n  }\n}\n```"
         },
         "AndreaNovelHelper.typo.clientLLM.geminiApiFormat": {
+          "anhName": "Gemini API格式",
           "type": "string",
           "enum": [
             "openai",
@@ -2178,6 +2282,7 @@
           "markdownDescription": "Google Gemini 模型的 API 调用格式。当 `thinkingProvider` 设置为 \"gemini\" 时生效。\n\n- **openai**（默认）：使用 OpenAI 兼容的 API 格式，适用于 OpenAI 兼容的代理服务\n- **native**：使用 Gemini 原生 API 格式，直接调用 Google GenerativeAI API\n\n📝 **OpenAI 兼容格式示例**：\n```json\n{\n  \"model\": \"gemini-2.5-flash\",\n  \"messages\": [...],\n  \"reasoning_effort\": \"low\"\n}\n```\n\n📝 **原生 API 格式示例**：\n```json\n{\n  \"contents\": [\n    {\"parts\": [{\"text\": \"...\"}]}\n  ],\n  \"generationConfig\": {\n    \"thinkingConfig\": {\n      \"thinkingBudget\": 1024\n    }\n  }\n}\n```\n\n⚠️ **注意**：使用原生 API 格式时，API Base URL 需要设置为 `https://generativelanguage.googleapis.com/v1beta`"
         },
         "AndreaNovelHelper.externalFolder.ignoredDirectories": {
+          "anhName": "外部文件夹忽略目录",
           "type": "array",
           "items": {
             "type": "string"
@@ -2196,26 +2301,31 @@
           "markdownDescription": "外部角色文件夹扫描时忽略的目录列表。系统会扫描工作区下所有包含 `__init__.ojson5` 的文件夹，但会跳过这些配置的目录。\n\n📝 **默认忽略**：\n- 版本控制：`.git`\n- 编辑器配置：`.vscode`, `.idea`\n- 依赖包：`node_modules`\n- 构建输出：`dist`, `build`, `out`\n- 系统文件：`.DS_Store`, `Thumbs.db`\n\n📝 **使用示例**：\n```json\n[\n  \".git\",\n  \".vscode\",\n  \"node_modules\",\n  \"dist\",\n  \"temp\",\n  \"logs\"\n]\n```"
         },
         "AndreaNovelHelper.typo.debug.llmTrace": {
+          "anhName": "LLM调试追踪",
           "type": "boolean",
           "default": false,
           "markdownDescription": "调试：输出客户端直连大模型的请求与流式响应到 Output（包含提示词与分段输出，谨慎开启）。"
         },
         "AndreaNovelHelper.typo.debug.serverTrace": {
+          "anhName": "服务端调试追踪",
           "type": "boolean",
           "default": false,
           "markdownDescription": "调试：输出服务端 HTTP /correct 与 /correct/llm 的请求/响应概要到 Output。"
         },
         "AndreaNovelHelper.typo.persistence.enabled": {
+          "anhName": "启用持久化",
           "type": "boolean",
           "default": false,
           "markdownDescription": "启用错别字数据持久化存储。开启后，错别字扫描结果将保存到本地文件，重启后可恢复之前的扫描结果。"
         },
         "AndreaNovelHelper.typo.persistence.autoCleanup": {
+          "anhName": "自动清理",
           "type": "boolean",
           "default": true,
           "markdownDescription": "自动清理过期的错别字数据文件。"
         },
         "AndreaNovelHelper.typo.persistence.maxAgeDays": {
+          "anhName": "数据保存天数",
           "type": "number",
           "default": 30,
           "minimum": 1,
@@ -2223,11 +2333,13 @@
           "markdownDescription": "错别字数据文件的最大保存天数，超过此时间的文件将被自动清理。"
         },
         "AndreaNovelHelper.typo.debug.compactTrace": {
+          "anhName": "压缩调试输出",
           "type": "boolean",
           "default": false,
           "markdownDescription": "调试输出是否压缩为单行（合并换行与多余空白）。"
         },
         "AndreaNovelHelper.typo.debug.traceMaxLen": {
+          "anhName": "调试输出最大长度",
           "type": "number",
           "default": 1200,
           "minimum": 200,
@@ -2235,21 +2347,25 @@
           "markdownDescription": "单条调试输出最大长度（字符）。"
         },
         "AndreaNovelHelper.typo.llm.model": {
+          "anhName": "服务端LLM模型",
           "type": "string",
           "default": "deepseek-v3",
           "markdownDescription": "LLM 模型（可选）。为空表示由服务端默认。"
         },
         "AndreaNovelHelper.typo.llm.apiKey": {
+          "anhName": "服务端API密钥",
           "type": "string",
           "default": "",
           "markdownDescription": "LLM API Key（可选）。为空表示由服务端默认。"
         },
         "AndreaNovelHelper.typo.llm.apiBase": {
+          "anhName": "服务端API地址",
           "type": "string",
           "default": "",
           "markdownDescription": "LLM API Base（可选）。为空表示由服务端默认。"
         },
         "AndreaNovelHelper.typo.batchSize": {
+          "anhName": "批次大小",
           "type": "number",
           "default": 30,
           "minimum": 1,
@@ -2257,6 +2373,7 @@
           "markdownDescription": "批量调用每次携带的句子数，建议 10-50（macro）/ 5-20（llm）。"
         },
         "AndreaNovelHelper.typo.docConcurrency": {
+          "anhName": "文档并发数",
           "type": "number",
           "default": 3,
           "minimum": 1,
@@ -2264,6 +2381,7 @@
           "markdownDescription": "每个文档并发扫描段落的最大请求数（限流，以免阻塞外部服务）。"
         },
         "AndreaNovelHelper.typo.docGroupSize": {
+          "anhName": "文档分组大小",
           "type": "number",
           "default": 3,
           "minimum": 1,
@@ -2271,6 +2389,7 @@
           "markdownDescription": "同一文档连续段落的合并扫描组大小（尽可能给大模型更长的上下文）。"
         },
         "AndreaNovelHelper.typo.timeoutMs": {
+          "anhName": "超时时间",
           "type": "number",
           "default": 30000,
           "minimum": 1000,
@@ -2278,16 +2397,19 @@
           "markdownDescription": "调用错别字服务的超时时间（毫秒）。LLM 模式建议 120000。"
         },
         "AndreaNovelHelper.typo.enableHighlight": {
+          "anhName": "启用高亮",
           "type": "boolean",
           "default": false,
           "markdownDescription": "是否为错别字添加标黄背景（诊断之外的视觉装饰）。"
         },
         "AndreaNovelHelper.typo.highlightColor": {
+          "anhName": "高亮颜色",
           "type": "string",
           "default": "#fff3a3",
           "markdownDescription": "错别字标黄背景色（CSS 颜色，如 #fff3a3）。"
         },
         "AndreaNovelHelper.typo.maxDocs": {
+          "anhName": "最大文档数",
           "type": "number",
           "default": 10,
           "minimum": 1,
@@ -2295,11 +2417,13 @@
           "markdownDescription": "错别字内存数据库最大文档数（LRU 淘汰）。"
         },
         "AndreaNovelHelper.typo.keepCacheOnClose": {
+          "anhName": "关闭时保留缓存",
           "type": "boolean",
           "default": true,
           "markdownDescription": "关闭编辑器后是否保留错别字扫描缓存（由 LRU 控制释放）。关闭则在关闭文档时立即清理缓存。"
         },
         "AndreaNovelHelper.typo.warningLevel": {
+          "anhName": "警告级别",
           "type": "string",
           "enum": [
             "error",
@@ -2311,6 +2435,7 @@
           "markdownDescription": "错别字诊断的警告级别：error（错误）、warning（警告）、information（信息）、hint（提示）。"
         },
         "AndreaNovelHelper.sensitiveWords.warningLevel": {
+          "anhName": "敏感词警告级别",
           "type": "string",
           "enum": [
             "error",
@@ -2322,6 +2447,7 @@
           "markdownDescription": "敏感词诊断的警告级别：error（错误）、warning（警告）、information（信息）、hint（提示）。"
         },
         "AndreaNovelHelper.webdav.sync.strategy": {
+          "anhName": "同步策略",
           "type": "string",
           "default": "timestamp",
           "enum": [
@@ -2339,6 +2465,7 @@
           "markdownDescription": "WebDAV 同步策略：选择如何判断文件是否需要同步。timestamp 基于修改时间，size 基于文件大小，both 同时检查两者，content 基于内容哈希。"
         },
         "AndreaNovelHelper.webdav.sync.timeTolerance": {
+          "anhName": "时间容差",
           "type": "number",
           "default": 15000,
           "minimum": 0,
@@ -2346,11 +2473,13 @@
           "markdownDescription": "时间戳比较的容差（毫秒）。由于网络传输和服务器处理延迟，允许一定的时间差异。设置为 0 表示严格比较。"
         },
         "AndreaNovelHelper.webdav.sync.enableSmartComparison": {
+          "anhName": "启用智能比较",
           "type": "boolean",
           "default": true,
           "markdownDescription": "启用智能比较算法。结合文件大小和修改时间进行更准确的同步判断，减少误同步。"
         },
         "AndreaNovelHelper.webdav.sync.ignoredDirectories": {
+          "anhName": "忽略目录",
           "type": "array",
           "items": {
             "type": "string"
@@ -2385,6 +2514,7 @@
           "markdownDescription": "WebDAV 同步时忽略的目录列表。默认忽略版本控制、依赖包、编译缓存等目录。IDE 和编辑器目录（如 .vscode、.idea 等）不会被忽略，以支持跨设备的开发环境同步。"
         },
         "AndreaNovelHelper.webdav.sync.ignoredFiles": {
+          "anhName": "忽略文件",
           "type": "array",
           "items": {
             "type": "string"
@@ -2402,36 +2532,43 @@
           "markdownDescription": "WebDAV 同步时忽略的文件模式列表。支持通配符匹配，用于过滤系统文件、临时文件等。"
         },
         "AndreaNovelHelper.webdav.sync.ignoreAppDataDirectories": {
+          "anhName": "忽略应用数据目录",
           "type": "boolean",
           "default": true,
           "markdownDescription": "是否忽略应用程序内部数据目录（如 .anh-fsdb）。启用时不会同步写作统计、文件追踪等内部数据，推荐保持启用以避免数据冲突。"
         },
         "AndreaNovelHelper.webdav.sync.showDiffTable": {
+          "anhName": "显示差异表",
           "type": "boolean",
           "default": false,
           "markdownDescription": "同步完成后是否在输出日志中显示文件差异表。启用后可以查看本次同步涉及的所有文件变更详情。"
         },
         "AndreaNovelHelper.webdav.sync.enableMetadataSidecar": {
+          "anhName": "启用元数据缓存文件",
           "type": "boolean",
           "default": true,
-          "markdownDescription": "是否启用侧车文件元数据功能。启用后会为每个文件创建包含详细元数据的侧车文件，提供更丰富的同步信息。"
+          "markdownDescription": "是否启用缓存文件元数据功能。启用后会为每个文件创建包含详细元数据的缓存文件，提供更丰富的同步信息。"
         },
         "AndreaNovelHelper.webdav.sync.metadataSidecarSuffix": {
+          "anhName": "元数据文件后缀",
           "type": "string",
           "default": ".anhmeta.json",
-          "markdownDescription": "侧车文件的后缀名。默认为 .anhmeta.json，用于存储文件的元数据信息。"
+          "markdownDescription": "缓存文件的后缀名。默认为 .anhmeta.json，用于存储文件的元数据信息。"
         },
         "AndreaNovelHelper.webdav.sync.skipDatabaseAccess": {
+          "anhName": "跳过数据库访问",
           "type": "boolean",
           "default": true,
-          "markdownDescription": "跳过数据库访问以提升同步速度。启用后侧车数据将不会从文件追踪数据库获取完整信息，显著提升同步性能。"
+          "markdownDescription": "跳过数据库访问以提升同步速度。启用后缓存数据将不会从文件追踪数据库获取完整信息，显著提升同步性能。"
         },
         "AndreaNovelHelper.webdav.sync.autoSync.enabled": {
+          "anhName": "启用自动同步",
           "type": "boolean",
           "default": false,
           "markdownDescription": "是否启用定时自动同步。启用后将按设定的时间间隔自动执行双向同步。"
         },
         "AndreaNovelHelper.webdav.sync.autoSync.intervalMinutes": {
+          "anhName": "自动同步间隔",
           "type": "number",
           "default": 30,
           "minimum": 1,
@@ -2439,6 +2576,7 @@
           "markdownDescription": "定时同步的时间间隔（分钟）。范围：1-1440分钟（1分钟到24小时）。"
         },
         "AndreaNovelHelper.webdav.sync.autoSync.method": {
+          "anhName": "自动同步方式",
           "type": "string",
           "enum": [
             "bidirectional",
@@ -2574,6 +2712,7 @@
           "markdownDescription": "自定义参与智能锁定的笔记本类型列表。例如：['my-notebook', 'another-notebook']"
         },
         "AndreaNovelHelper.database.backend": {
+          "anhName": "数据库后端",
           "type": "string",
           "enum": [
             "json",
@@ -2583,11 +2722,13 @@
           "markdownDescription": "数据库后端类型：\n- **json**: JSON文件存储（默认，兼容旧版本）\n- **sqlite**: SQLite数据库（推荐，性能更好）\n\n⚠️ 切换后端时会提示运行数据同步"
         },
         "AndreaNovelHelper.database.sqlite.enableWAL": {
+          "anhName": "启用WAL模式",
           "type": "boolean",
           "default": true,
           "markdownDescription": "启用SQLite的WAL（Write-Ahead Logging）模式，提升并发性能"
         },
         "AndreaNovelHelper.database.sqlite.cacheSize": {
+          "anhName": "缓存大小",
           "type": "number",
           "default": 2560,
           "minimum": 256,
@@ -2595,51 +2736,61 @@
           "markdownDescription": "SQLite缓存大小（页数），默认2560页约10MB"
         },
         "AndreaNovelHelper.database.sqlite.enableMmap": {
+          "anhName": "启用内存映射",
           "type": "boolean",
           "default": true,
           "markdownDescription": "启用SQLite的内存映射IO，提升读取性能"
         },
         "AndreaNovelHelper.database.autoMigrate": {
+          "anhName": "自动迁移",
           "type": "boolean",
           "default": false,
           "markdownDescription": "切换数据库后端时自动运行数据迁移（否则需要手动运行迁移命令）"
         },
         "AndreaNovelHelper.startupSnapshot.enabled": {
+          "anhName": "启用启动快照",
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.startupSnapshot.enabled.description%"
         },
         "AndreaNovelHelper.startupSnapshot.deleteOnDisable": {
+          "anhName": "禁用时删除",
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.startupSnapshot.deleteOnDisable.description%"
         },
         "AndreaNovelHelper.startupSnapshot.showNotification": {
+          "anhName": "显示通知",
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.startupSnapshot.showNotification.description%"
         },
         "andrea.typst.cliPath": {
+          "anhName": "CLI路径",
           "type": "string",
           "default": "typst",
           "description": "Typst CLI 可执行路径（留空使用 PATH）"
         },
         "andrea.typst.templatesDir": {
+          "anhName": "模板目录",
           "type": "string",
           "default": "${workspaceFolder}/templates/typst",
           "description": "扩展外置模板默认目录"
         },
         "andrea.typst.externalTemplatesDir": {
+          "anhName": "外部模板目录",
           "type": "string",
           "default": "${workspaceFolder}/novel-helper/templates/typst",
           "description": "项目 novel-helper 目录下模板路径"
         },
         "andrea.typst.defaultTemplate": {
+          "anhName": "默认模板",
           "type": "string",
           "default": "sample",
           "description": "默认模板包名称"
         },
         "andrea.typst.output.format": {
+          "anhName": "导出格式",
           "type": "string",
           "enum": [
             "pdf",
@@ -2650,16 +2801,19 @@
           "description": "导出格式"
         },
         "andrea.typst.output.ppi": {
+          "anhName": "导出分辨率",
           "type": "number",
           "default": 144,
           "description": "PNG 导出分辨率（PPI）"
         },
         "andrea.typst.pages": {
+          "anhName": "导出页码范围",
           "type": "string",
           "default": "",
           "description": "导出页码范围（例如 2,3-6,8-）"
         },
         "andrea.typst.font.paths": {
+          "anhName": "字体路径",
           "type": "array",
           "items": {
             "type": "string"
@@ -2668,11 +2822,13 @@
           "description": "额外字体搜索路径"
         },
         "andrea.typst.cleanupTemp": {
+          "anhName": "清理临时文件",
           "type": "boolean",
           "default": false,
           "description": "导出后是否自动清理临时编译目录 build/typst/tmp-*（默认不清理，便于诊断）"
         },
         "andrea.typst.preview.storage": {
+          "anhName": "预览存储方式",
           "type": "string",
           "enum": [
             "memory",
@@ -2682,11 +2838,13 @@
           "markdownDescription": "Typst预览文件存储方式：\n- `memory`：存储在虚拟内存盘上（andrea-typst://），实时预览\n- `file`：存储在临时文件目录中，使用绝对路径"
         },
         "andrea.typst.preview.tempDir": {
+          "anhName": "预览临时目录",
           "type": "string",
           "default": "${workspaceFolder}/build/typst/preview",
           "markdownDescription": "Typst预览临时文件目录（当preview.storage为'file'时使用）"
         },
         "AndreaNovelHelper.scripts.root": {
+          "anhName": "脚本根目录",
           "type": "string",
           "default": "novel-helper/scripts",
           "markdownDescription": "脚本运行侧栏的根目录"
@@ -3303,7 +3461,7 @@
       {
         "key": "enter",
         "command": "andrea.smartEnter",
-        "when": "editorTextFocus && andrea.typeset.smartEnterOn && !editorReadonly && (!suggestWidgetVisible || config.editor.acceptSuggestionOnEnter == 'off') && !inlineSuggestionVisible && !editorHasMultipleSelections && vim.mode != 'Normal' && vim.mode != 'Visual' && vim.mode != 'VisualBlock' && vim.mode != 'VisualLine' && vim.mode != 'SearchInProgressMode' && vim.mode != 'CommandlineInProgress' && vim.mode != 'Replace' && vim.mode != 'EasyMotionMode' && vim.mode != 'EasyMotionInputMode'"
+        "when": "andrea.anh.enabled && editorTextFocus && andrea.typeset.smartEnterOn && !editorReadonly && (!suggestWidgetVisible || config.editor.acceptSuggestionOnEnter == 'off') && !inlineSuggestionVisible && !editorHasMultipleSelections && vim.mode != 'Normal' && vim.mode != 'Visual' && vim.mode != 'VisualBlock' && vim.mode != 'VisualLine' && vim.mode != 'SearchInProgressMode' && vim.mode != 'CommandlineInProgress' && vim.mode != 'Replace' && vim.mode != 'EasyMotionMode' && vim.mode != 'EasyMotionInputMode'"
       },
       {
         "key": "ctrl+alt+i",
