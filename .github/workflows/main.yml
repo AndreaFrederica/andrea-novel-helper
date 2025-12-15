@@ -37,6 +37,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install deps (workspace:webview)
         run: |
@@ -79,8 +80,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules/
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -90,6 +99,18 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache TypeScript compilation
+        uses: actions/cache@v4
+        with:
+          path: |
+            out/
+            packages/enigo-keyboard/dist/
+          key: ${{ runner.os }}-tsc-${{ hashFiles('tsconfig.json', 'packages/enigo-keyboard/tsconfig.json', 'src/**/*.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-tsc-
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -233,8 +254,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            node_modules/
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -244,6 +273,18 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache TypeScript compilation
+        uses: actions/cache@v4
+        with:
+          path: |
+            out/
+            packages/enigo-keyboard/dist/
+          key: ${{ runner.os }}-tsc-${{ hashFiles('tsconfig.json', 'packages/enigo-keyboard/tsconfig.json', 'src/**/*.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-tsc-
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
