@@ -226,11 +226,11 @@ jobs:
             target: linux-x64
             platform: linux
             arch: x64
-          - runner: ubuntu-24.04-arm64     # GitHub 托管 arm64 runner
+          - runner: ubuntu-22.04-arm64     # GitHub 托管 arm64 runner
             target: linux-arm64
             platform: linux
             arch: arm64
-          - runner: [self-hosted, linux, arm, armhf] # 需要自备 armhf runner
+          - runner: ubuntu-latest            # 在 x64 runner 上交叉构建 armhf
             target: linux-armhf
             platform: linux
             arch: arm
