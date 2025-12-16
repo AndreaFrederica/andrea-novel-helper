@@ -153,6 +153,17 @@ jobs:
         run: npm run sign:macos
 
       # 为目标 Electron + 平台/架构重建原生模块（跨平台统一用 bash）
+      - name: Rebuild @node-rs/jieba for Electron (${{ matrix.platform }}-${{ matrix.arch }})
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          npm rebuild @node-rs/jieba \
+            --runtime=electron \
+            --target='${{ inputs.electron_version }}' \
+            --dist-url=https://electronjs.org/headers \
+            --platform='${{ matrix.platform }}' \
+            --arch='${{ matrix.arch }}'
+
       - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
         working-directory: ${{ env.WORKDIR }}
         shell: bash
