@@ -55,11 +55,11 @@ jobs:
       matrix:
         include:
           # macOS: 用不同 Runner 架构生成对应二进制，避免 arm64/x64 混淆
-          - os: macos-14 # Apple Silicon
+          - os: macos-latest # 当前为 macOS 15 arm64
             target: darwin-arm64
             platform: darwin
             arch: arm64
-          - os: macos-13 # Intel
+          - os: macos-15-intel # macOS 15 x86_64（GitHub 提供的最后一代 Intel 镜像）
             target: darwin-x64
             platform: darwin
             arch: x64
