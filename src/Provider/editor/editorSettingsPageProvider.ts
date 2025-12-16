@@ -2,6 +2,27 @@ import * as vscode from 'vscode';
 import { buildHtml } from '../utils/html-builder';
 import { EditorSettingsWebviewProvider } from '../view/editorSettingsProvider';
 
+// Mock SecretStorage 实现
+class MockSecretStorage implements vscode.SecretStorage {
+    async get(key: string): Promise<string | undefined> {
+        return undefined;
+    }
+
+    async store(key: string, value: string): Promise<void> {
+    }
+
+    async delete(key: string): Promise<void> {
+    }
+
+    onDidChange: vscode.Event<vscode.SecretStorageChangeEvent> = () => ({
+        dispose: () => {}
+    }) as any;
+
+    async keys(): Promise<string[]> {
+        return [];
+    }
+}
+
 export class EditorSettingsPanel {
     private static _instance: EditorSettingsPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
@@ -31,12 +52,7 @@ export class EditorSettingsPanel {
                 update: () => Promise.resolve(),
                 keys: () => []
             } as any,
-            secrets: {
-                get: () => Promise.resolve(undefined),
-                store: () => Promise.resolve(),
-                delete: () => Promise.resolve(),
-                onDidChange: () => ({ dispose: () => {} })
-            },
+            secrets: new MockSecretStorage(),
             extensionPath: '',
             storageUri: vscode.Uri.file(''),
             globalStorageUri: vscode.Uri.file(''),

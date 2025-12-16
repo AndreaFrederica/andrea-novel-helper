@@ -12,3 +12,6 @@ novel-helper# pixi environments
 .pixi/*
 !.pixi/config.toml
 novel-helper
+
+anh-enigo-keyboard-0.1.0.tgz
+anh-enigo-keyboard-*.tgz
