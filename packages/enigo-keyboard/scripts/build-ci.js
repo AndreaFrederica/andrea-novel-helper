@@ -4,6 +4,7 @@ import path from 'path';
 
 const platform = process.platform;
 const arch = process.arch;
+const buildTarget = process.env.BUILD_TARGET || ''; // e.g. aarch64-unknown-linux-gnu / arm-unknown-linux-gnueabihf
 const isWindows = platform === 'win32';
 const isUnix = platform === 'darwin' || platform === 'linux';
 
@@ -15,7 +16,7 @@ try {
     // Windows: Use cargo directly
     buildWithCargo();
   } else if (isUnix) {
-    // Unix (macOS, Linux): Use napi-rs CLI
+    // Unix (macOS, Linux): Use napi-rs CLI (supports cross when BUILD_TARGET is set)
     buildWithNapi();
   } else {
     console.error(`❌ Unsupported platform: ${platform}`);
@@ -71,8 +72,9 @@ function buildWithNapi() {
   console.log('\n🔨 Building with napi-rs CLI (Unix)...');
   
   try {
-    // Use napi build for Unix systems
-    execSync('napi build --release', { stdio: 'inherit' });
+    // Use napi build for Unix systems; allow cross via BUILD_TARGET
+    const targetArg = buildTarget ? ` --target ${buildTarget}` : '';
+    execSync(`napi build --release${targetArg}`, { stdio: 'inherit' });
     
     // Find .node file in root directory (napi build puts it there)
     const rootNodeFiles = fs.readdirSync('.').filter(f => f.endsWith('.node'));
@@ -82,7 +84,8 @@ function buildWithNapi() {
       process.exit(1);
     }
     
-    const nodeFile = rootNodeFiles[0];
+    // Prefer the file that matches target, otherwise take the first
+    const nodeFile = selectNodeBinary(rootNodeFiles, buildTarget) || rootNodeFiles[0];
     console.log(`✅ Found native binary: ${nodeFile}`);
     
     // Compile TypeScript to generate dist directory
@@ -98,9 +101,10 @@ function buildWithNapi() {
     
     // Copy .node file to dist directory
     const sourceFile = `./${nodeFile}`;
-    const distNodeFile = path.join(distDir, nodeFile);
+    const distNodeFile = path.join(distDir, 'enigo_keyboard.node');
+    fs.copyFileSync(sourceFile, './enigo_keyboard.node');
     fs.copyFileSync(sourceFile, distNodeFile);
-    console.log(`✅ Copied ${nodeFile} to dist/`);
+    console.log(`✅ Copied ${nodeFile} to enigo_keyboard.node and dist/enigo_keyboard.node`);
     
     // Sign binary on macOS
     if (platform === 'darwin') {
@@ -113,6 +117,19 @@ function buildWithNapi() {
     console.error('❌ napi build failed:', error.message);
     process.exit(1);
   }
+}
+
+function selectNodeBinary(files, target) {
+  if (!target) return null;
+  const map = {
+    'aarch64-unknown-linux-gnu': ['linux-arm64', 'aarch64'],
+    'arm-unknown-linux-gnueabihf': ['linux-arm', 'arm-gnueabihf', 'armv7'],
+    'x86_64-unknown-linux-gnu': ['linux-x64', 'x86_64'],
+    'aarch64-apple-darwin': ['darwin-arm64'],
+    'x86_64-apple-darwin': ['darwin-x64'],
+  };
+  const hints = map[target] || [];
+  return files.find(f => hints.some(h => f.includes(h))) || null;
 }
 
 function signMacOSBinary(filePath) {

@@ -120,6 +120,11 @@ jobs:
       - name: Install deps
         working-directory: ${{ env.WORKDIR }}
         shell: bash
+        env:
+          # 让 npm 以目标架构安装依赖（影响 @node-rs/jieba 等预编译包）
+          npm_config_arch: ${{ matrix.arch }}
+          npm_config_target_arch: ${{ matrix.arch }}
+          npm_config_platform: ${{ matrix.platform }}
         run: |
           if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
@@ -157,6 +162,10 @@ jobs:
       - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
         working-directory: ${{ env.WORKDIR }}
         shell: bash
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+          npm_config_target_arch: ${{ matrix.arch }}
+          npm_config_platform: ${{ matrix.platform }}
         run: |
           npm rebuild @vscode/sqlite3 \
             --runtime=electron \
@@ -249,6 +258,11 @@ jobs:
           echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99disable-check-valid-until
           apt-get -o Acquire::AllowInsecureRepositories=true update
           apt-get install -y --no-install-recommends git curl python3 make g++ ca-certificates
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config-aarch64-linux-gnu;
+          elif [ "${{ matrix.arch }}" = "arm" ]; then
+            apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf pkg-config-arm-linux-gnueabihf;
+          fi
 
       - uses: actions/checkout@v4
 
@@ -289,6 +303,15 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Add Rust cross targets
+        if: matrix.platform == 'linux' && matrix.arch != 'x64'
+        run: |
+          set -e
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            rustup target add aarch64-unknown-linux-gnu;
+          elif [ "${{ matrix.arch }}" = "arm" ]; then
+            rustup target add arm-unknown-linux-gnueabihf;
+          fi
 
       - name: Install deps
         working-directory: ${{ env.WORKDIR }}
@@ -309,8 +332,12 @@ jobs:
 
       - name: Build native enigo-keyboard
         working-directory: ${{ env.WORKDIR }}/packages/enigo-keyboard
+        env:
+          BUILD_TARGET: ${{ matrix.target == 'linux-arm64' && 'aarch64-unknown-linux-gnu' || matrix.target == 'linux-armhf' && 'arm-unknown-linux-gnueabihf' || '' }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'linux-arm64' && 'aarch64-linux-gnu-gcc' || '' }}
+          CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER: ${{ matrix.target == 'linux-armhf' && 'arm-linux-gnueabihf-gcc' || '' }}
         run: |
-          # Use CI-specific build script
+          # Use CI-specific build script (supports BUILD_TARGET for cross)
           npm run build:ci
 
       - name: Compile extension
