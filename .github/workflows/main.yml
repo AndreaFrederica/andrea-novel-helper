@@ -157,6 +157,21 @@ jobs:
           tar -xzf "$TARBALL" -C node_modules/@anh
           mv node_modules/@anh/package node_modules/@anh/enigo-keyboard
           rm -f "$TARBALL"
+          # npm list --production expects a non-link entry; patch the lockfile to match the flattened copy
+          node - <<'NODE'
+          const fs = require('fs');
+          const lockPath = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          const pkgEntry = lock.packages?.['packages/enigo-keyboard'];
+          if (!pkgEntry) {
+            throw new Error('packages/enigo-keyboard entry missing in package-lock.json');
+          }
+          lock.packages['node_modules/@anh/enigo-keyboard'] = {
+            ...pkgEntry,
+            resolved: 'file:packages/enigo-keyboard',
+          };
+          fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+          NODE
 
       # TypeScript 编译（与 vscode:prepublish 一致）
       - name: Compile extension
@@ -342,6 +357,21 @@ jobs:
           tar -xzf "$TARBALL" -C node_modules/@anh
           mv node_modules/@anh/package node_modules/@anh/enigo-keyboard
           rm -f "$TARBALL"
+          # npm list --production expects a non-link entry; patch the lockfile to match the flattened copy
+          node - <<'NODE'
+          const fs = require('fs');
+          const lockPath = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          const pkgEntry = lock.packages?.['packages/enigo-keyboard'];
+          if (!pkgEntry) {
+            throw new Error('packages/enigo-keyboard entry missing in package-lock.json');
+          }
+          lock.packages['node_modules/@anh/enigo-keyboard'] = {
+            ...pkgEntry,
+            resolved: 'file:packages/enigo-keyboard',
+          };
+          fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+          NODE
 
       - name: Compile extension
         working-directory: ${{ env.WORKDIR }}
