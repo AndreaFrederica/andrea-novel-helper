@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 type NativeKeyboard = {
   new (): {
     type_text(text: string): void;
@@ -8,7 +9,25 @@ type NativeKeyboard = {
   };
 };
 
-import nativeBinding from '../enigo_keyboard.node';
+// 支持 dist/enigo_keyboard.node（打包后放在 dist 内）与根目录 enigo_keyboard.node 的双路径加载
+let nativeBinding: any;
+for (const candidate of ['./enigo_keyboard.node', '../enigo_keyboard.node']) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    nativeBinding = require(candidate);
+    break;
+  } catch (err: any) {
+    if (err?.code === 'MODULE_NOT_FOUND') {
+      continue;
+    }
+    throw err;
+  }
+}
+
+if (!nativeBinding) {
+  throw new Error('Failed to load enigo_keyboard.node from expected locations.');
+}
+
 const native = nativeBinding as { Keyboard: NativeKeyboard };
 
 export type ModifierLiteral =

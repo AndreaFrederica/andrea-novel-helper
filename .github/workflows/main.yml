@@ -54,17 +54,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: windows-latest
-            target: win32-x64
-            platform: win32
-            arch: x64
-          - os: macos-latest
+          # macOS: 用不同 Runner 架构生成对应二进制，避免 arm64/x64 混淆
+          - os: macos-14 # Apple Silicon
             target: darwin-arm64
             platform: darwin
             arch: arm64
-          - os: macos-latest
+          - os: macos-13 # Intel
             target: darwin-x64
             platform: darwin
+            arch: x64
+          - os: windows-latest
+            target: win32-x64
+            platform: win32
             arch: x64
     runs-on: ${{ matrix.os }}
     needs: webview
@@ -153,18 +154,6 @@ jobs:
         run: npm run sign:macos
 
       # 为目标 Electron + 平台/架构重建原生模块（跨平台统一用 bash）
-      - name: Rebuild @node-rs/jieba for Electron (${{ matrix.platform }}-${{ matrix.arch }})
-        if: runner.os != 'Windows' # Windows 上 @node-rs/jieba rebuild 会失败，使用预编译 NAPI 即可
-        working-directory: ${{ env.WORKDIR }}
-        shell: bash
-        run: |
-          npm rebuild @node-rs/jieba \
-            --runtime=electron \
-            --target='${{ inputs.electron_version }}' \
-            --dist-url=https://electronjs.org/headers \
-            --platform='${{ matrix.platform }}' \
-            --arch='${{ matrix.arch }}'
-
       - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
         working-directory: ${{ env.WORKDIR }}
         shell: bash
@@ -233,19 +222,19 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - runner: ubuntu-latest          # GitHub 托管 x64 runner
             target: linux-x64
             platform: linux
             arch: x64
-          - os: ubuntu-latest
+          - runner: ubuntu-24.04-arm64     # GitHub 托管 arm64 runner
             target: linux-arm64
             platform: linux
             arch: arm64
-          - os: ubuntu-latest
+          - runner: [self-hosted, linux, arm, armhf] # 需要自备 armhf runner
             target: linux-armhf
             platform: linux
             arch: arm
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     needs: webview
     container:
       image: debian:buster

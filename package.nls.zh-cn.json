@@ -185,7 +185,7 @@
     "command.wordCount.forceRecountAll.title": "强制重算全部字数缓存",
     "command.wordCount.forceRecountHere.title": "强制重算此项(文件/文件夹)",
     "config.typeset.enableAutoPairs.description": "开启智慧补齐括号/引号（自动补全与包裹选区）。",
-    "config.typeset.enableChineseIMEFix.description": "开启中文IME修复：通过模拟键盘输入优化中文引号（\"\"''）的输入体验，自动补全配对引号并将光标置于其间。启用后可能会有轻微的输入延迟。",
+    "config.typeset.enableChineseIMEFix.description": "开启中文IME修复：通过模拟键盘输入优化中文引号（\"\"''）的输入体验，自动补全配对引号并将光标置于其间。启用后可能会有轻微的输入延迟（在 macOS 上可能不正常工作）。",
     "config.typeset.chineseIMEDelay.description": "中文IME键盘模拟延迟（毫秒）。调整键盘模拟输入前的等待时间，以适应不同的系统响应速度。",
     "config.typeset.enableSmartEnter.description": "开启智慧切段（回车：下一段，插入空行+缩进）。",
     "config.typeset.enableSmartExit.description": "开启智慧跳出括号/引号：当光标紧贴闭合符号左侧时，按 Enter 会先把光标移到闭合符号之后。",

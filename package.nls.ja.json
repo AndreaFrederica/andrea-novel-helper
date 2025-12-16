@@ -61,6 +61,7 @@
     "command.wordCount.exportTxt.title": "項目テキストを .txt にエクスポート",
     "command.wordCount.copyPlainText.title": "項目のプレーンテキストをコピー",
     "config.typeset.pairs.markdownDescription": "ペア記号を統一します。配列を推奨：各要素は2文字（開→閉）。偶数長の文字列も指定できます（配列が優先されます）。",
+    "config.typeset.enableChineseIMEFix.description": "中国語 IME 修復を有効化: キーボードシミュレーションで中国語の引用符（\"\"''）入力を最適化し、対になる引用符を自動補完してカーソルを間に配置します。有効化すると入力がわずかに遅くなる場合があります（macOS では正常に動作しない可能性があります）。",
     "config.timeStats.enabledLanguages.description": "執筆統計を追跡する言語 ID のリスト（デフォルト: markdown, plaintext）。",
     "config.timeStats.idleThresholdMs.description": "アイドル閾値（ミリ秒）。この時間以上入力がなければ統計が一時停止します（デフォルト: 30000）。",
     "config.timeStats.bucketSizeMs.description": "CPM 計算のための時間バケットサイズ（ミリ秒）（デフォルト: 60000）。"

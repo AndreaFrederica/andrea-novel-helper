@@ -1,12 +1,24 @@
 import { segmenter } from "../extension";
-import { Jieba } from '@node-rs/jieba';
 import * as vscode from 'vscode';
 import { roles } from '../activate';
+import type { Jieba as JiebaCtor } from '@node-rs/jieba';
 
 // 创建jieba实例
 let jiebaInstance: any = null;
 let jiebaLoadError: Error | null = null;
 let customDictLoaded = false;
+let jiebaWarningShown = false;
+let JiebaClass: { new(): JiebaCtor } | null = null;
+let jiebaModuleError: Error | null = null;
+
+// 尝试加载 @node-rs/jieba，避免顶层 import 失败导致扩展崩溃
+try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    JiebaClass = (require('@node-rs/jieba') as { Jieba: JiebaCtor }).Jieba as unknown as { new(): JiebaCtor };
+} catch (err) {
+    jiebaModuleError = err as Error;
+    console.warn('[ANH][Segmenter] 无法加载 @node-rs/jieba，已回退到 Intl 分词。', err);
+}
 
 /**
  * 从角色数据构建自定义词典
@@ -68,8 +80,11 @@ function initializeJieba() {
     }
 
     try {
+        if (!JiebaClass) {
+            throw jiebaModuleError || new Error('未找到 @node-rs/jieba 模块');
+        }
         // 使用默认字典初始化
-        jiebaInstance = new Jieba();
+        jiebaInstance = new JiebaClass();
 
         // 加载自定义词典
         const customWords = buildCustomDict();
@@ -91,6 +106,13 @@ function initializeJieba() {
     } catch (error) {
         jiebaLoadError = error as Error;
         console.warn('[ANH][Segmenter] Jieba分词器加载失败:', error);
+        if (!jiebaWarningShown) {
+            jiebaWarningShown = true;
+            void vscode.window.showWarningMessage(
+                'Jieba 分词器加载失败，将回退到 Intl 分词器（性能可能降低）。',
+                { modal: false }
+            );
+        }
     }
 }
 

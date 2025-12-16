@@ -263,6 +263,6 @@
   "config.decorations.cacheSize.description": "Decoration cache size: number of recently closed document decorations to keep for faster reopening. Set to 0 to disable caching.",
   "config.fileTracker.trustCallerFilters.description": "If true, FileTrackingDataManager will trust that callers already applied ignore/filter rules and skip redundant checks (e.g. .git filtering). Core protections remain enforced. Enabling may yield a small performance improvement.",
   "sidebar.settings.title": "Andrea Novel Helper: Settings",
-  "config.typeset.enableChineseIMEFix.description": "Enable Chinese IME fix: optimize Chinese quote input experience through keyboard simulation, auto-completing paired quotes (\"\" and '') and positioning cursor between them. May cause slight input delay when enabled.",
+  "config.typeset.enableChineseIMEFix.description": "Enable Chinese IME fix: optimize Chinese quote input experience through keyboard simulation, auto-completing paired quotes (\"\" and '') and positioning cursor between them. May cause slight input delay when enabled (may not work properly on macOS).",
   "config.typeset.chineseIMEDelay.description": "Chinese IME keyboard simulation delay in milliseconds. Adjust the waiting time before keyboard simulation to accommodate different system response speeds."
 }

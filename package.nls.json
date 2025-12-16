@@ -190,7 +190,7 @@
   "command.wordCount.forceRecountHere.title": "ANH:Force Recount (This File/Folder)"
   ,
   "config.typeset.enableAutoPairs.description": "Enable smart auto-pairs (auto-closing and wrapping selection).",
-  "config.typeset.enableChineseIMEFix.description": "Enable Chinese IME fix: optimize Chinese quote input experience through keyboard simulation, auto-completing paired quotes (\"\" and '') and positioning cursor between them. May cause slight input delay when enabled.",
+  "config.typeset.enableChineseIMEFix.description": "Enable Chinese IME fix: optimize Chinese quote input experience through keyboard simulation, auto-completing paired quotes (\"\" and '') and positioning cursor between them. May cause slight input delay when enabled (may not work properly on macOS).",
   "config.typeset.chineseIMEDelay.description": "Chinese IME keyboard simulation delay in milliseconds. Adjust the waiting time before keyboard simulation to accommodate different system response speeds.",
   "config.typeset.enableSmartEnter.description": "Enable smart paragraph split on Enter (insert blank line + indent).",
   "config.typeset.enableSmartExit.description": "Enable smart exit from pairs: when cursor is before a closing char, Enter moves after it.",

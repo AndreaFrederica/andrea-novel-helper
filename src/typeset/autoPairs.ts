@@ -1,6 +1,7 @@
 // src/typeset/autoPairs.ts
 import * as vscode from 'vscode';
-import { Keyboard } from '@anh/enigo-keyboard';
+import type { Keyboard as KeyboardCtor } from '@anh/enigo-keyboard';
+type Keyboard = KeyboardCtor;
 import { getPairsFromConfig, nextIsClosingPair } from './core/pairs';
 import { tryLoadNativeModuleWithFallback } from '../utils/nativeModuleLoader';
 
@@ -10,6 +11,18 @@ let isSimulatingInput = false; // 标记是否正在模拟输入，防止无限�
 let cachedKeyboard: Keyboard | null = null;
 let keyboardLoadPromise: Promise<Keyboard | null> | null = null;
 let extensionContext: vscode.ExtensionContext | null = null;
+let enigoWarningShown = false;
+let enigoCtor: { new(): Keyboard } | null = null;
+let enigoLoadError: Error | null = null;
+
+// 尝试加载原生键盘模块，避免顶层 import 失败导致扩展崩溃
+try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    enigoCtor = (require('@anh/enigo-keyboard') as { Keyboard: KeyboardCtor }).Keyboard as unknown as { new(): Keyboard };
+} catch (err) {
+    enigoLoadError = err as Error;
+    console.warn('[ANH][AutoPairs] 加载 enigo 键盘模块失败，将在运行时禁用中文 IME 修复。', err);
+}
 
 async function getKeyboard(): Promise<Keyboard | null> {
     if (cachedKeyboard) { return cachedKeyboard; }
@@ -24,11 +37,16 @@ async function getKeyboard(): Promise<Keyboard | null> {
         return null;
     }
 
+    if (!enigoCtor) {
+        // 模块缺失或加载失败，提前返回
+        return null;
+    }
+
     // 开始加载
     keyboardLoadPromise = (async () => {
         try {
             const result = await tryLoadNativeModuleWithFallback(
-                () => new Keyboard(),
+                () => new enigoCtor!(),
                 {
                     moduleName: '@anh/enigo-keyboard',
                     displayName: 'Enigo Keyboard',
@@ -59,7 +77,7 @@ function disposeAll() {
 export function registerAutoPairs(context: vscode.ExtensionContext) {
     extensionContext = context; // 存储 context 以便加载原生模块时使用
     
-    const apply = () => {
+    const apply = async () => {
         disposeAll();
 
         const cfg = vscode.workspace.getConfiguration();
@@ -113,7 +131,22 @@ export function registerAutoPairs(context: vscode.ExtensionContext) {
         }
 
         // 5) 为引号添加自定义的输入处理逻辑
+        let chineseIMEFixActive = chineseIMEFixEnabled;
         if (chineseQuotePairs.length > 0 && chineseIMEFixEnabled) {
+            // 预加载键盘模块，失败则禁用该功能并提示
+            const keyboard = await getKeyboard();
+            if (!keyboard) {
+                chineseIMEFixActive = false;
+                if (!enigoWarningShown) {
+                    enigoWarningShown = true;
+                    const msgBase = '中文 IME 修复需要原生键盘模块 (enigo_keyboard.node)，当前加载失败，已禁用该功能并使用默认自动补全。';
+                    const detail = enigoLoadError ? ` 失败原因: ${enigoLoadError.message}` : '';
+                    void vscode.window.showWarningMessage(`${msgBase}${detail}`);
+                }
+            }
+        }
+
+        if (chineseQuotePairs.length > 0 && chineseIMEFixActive) {
             typingListener = vscode.workspace.onDidChangeTextDocument(e => {
                 // 如果正在模拟输入，忽略事件防止无限循环
                 if (isSimulatingInput) { return; }
@@ -151,7 +184,7 @@ export function registerAutoPairs(context: vscode.ExtensionContext) {
         }
     };
 
-    apply();
+    void apply();
 
     context.subscriptions.push(
         { dispose: disposeAll },
@@ -161,7 +194,7 @@ export function registerAutoPairs(context: vscode.ExtensionContext) {
                 e.affectsConfiguration('andrea.typeset.enableAutoPairs') ||
                 e.affectsConfiguration('andrea.typeset.enableChineseIMEFix') ||
                 e.affectsConfiguration('andrea.typeset.chineseIMEDelay')
-            ) { apply(); }
+            ) { void apply(); }
         })
     );
 }
