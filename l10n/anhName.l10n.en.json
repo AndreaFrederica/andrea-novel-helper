@@ -114,6 +114,8 @@
   "config.AndreaNovelHelper.wordCount.parallelStatCheck.anhName": "Parallel check",
   "config.AndreaNovelHelper.debug.completionLog.anhName": "Debug log",
   "config.AndreaNovelHelper.completion.segmenterType.anhName": "Segmenter type",
+  "config.AndreaNovelHelper.completion.triggerMode.anhName": "Completion trigger mode",
+  "config.AndreaNovelHelper.completion.symbolPrefixes.anhName": "Completion symbols",
   "config.AndreaNovelHelper.decorations.cacheSize.anhName": "Decoration cache size",
   "config.AndreaNovelHelper.roles.details.alwaysExpandable.anhName": "Always expandable",
   "config.AndreaNovelHelper.roles.details.wrapColumn.anhName": "Wrap column",

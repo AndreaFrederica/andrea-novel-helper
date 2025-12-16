@@ -114,6 +114,8 @@
   "config.AndreaNovelHelper.wordCount.parallelStatCheck.anhName": "并行校验",
   "config.AndreaNovelHelper.debug.completionLog.anhName": "调试日志",
   "config.AndreaNovelHelper.completion.segmenterType.anhName": "分词器类型",
+  "config.AndreaNovelHelper.completion.triggerMode.anhName": "补全触发模式",
+  "config.AndreaNovelHelper.completion.symbolPrefixes.anhName": "补全符号前缀",
   "config.AndreaNovelHelper.decorations.cacheSize.anhName": "装饰缓存大小",
   "config.AndreaNovelHelper.roles.details.alwaysExpandable.anhName": "总是可展开",
   "config.AndreaNovelHelper.roles.details.wrapColumn.anhName": "折行宽度",

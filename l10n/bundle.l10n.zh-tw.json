@@ -19,6 +19,8 @@
   "config.regexPatternsFile.description": "正則表達式配置 JSON 文件路徑（相對於工作區根目錄）",
   "config.outlinePath.description": "大綱目錄路徑（相對於工作區根目錄）",
   "config.minChars.description": "觸發補全所需的最少前綴字符數",
+  "config.completion.triggerMode.description": "補全觸發模式：loose=名稱包含前綴即可觸發，startsWith=僅當前綴在名稱/別名前綴時觸發，symbolLoose=僅當前綴前有指定符號且名稱包含前綴時觸發，symbolStartsWith=僅當前綴前有指定符號且名稱/別名以該前綴開頭時觸發（相容舊值 symbolPrefix，效果同 symbolLoose）。",
+  "config.completion.symbolPrefixes.description": "symbolPrefix 模式下用於觸發補全的符號列表。",
   "config.supportedFileTypes.description": "支援的文件擴展名（不帶點）",
   "command.openTimeStats.title": "打開寫作統計",
   "sidebar.webdav.title": "小說助手:雲端同步",

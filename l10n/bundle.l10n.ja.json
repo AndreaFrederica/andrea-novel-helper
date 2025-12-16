@@ -18,6 +18,8 @@
   "config.regexPatternsFile.description": "正規表現パターン JSON ファイルパス（ワークスペースルート相対）",
   "config.outlinePath.description": "アウトラインディレクトリパス（ワークスペースルート相対）",
   "config.minChars.description": "補完をトリガーするための最小プレフィックス文字数",
+  "config.completion.triggerMode.description": "補完トリガーモード: loose=プレフィックスを含む名前、startsWith=プレフィックスで始まる名前/別名のみ、symbolLoose=設定記号の直後かつ名前にプレフィックスを含む場合、symbolStartsWith=設定記号の直後かつプレフィックスで始まる名前/別名のみ（旧値 symbolPrefix は symbolLoose と同義）。",
+  "config.completion.symbolPrefixes.description": "symbolPrefix モードで補完をトリガーする記号リスト。",
   "config.supportedFileTypes.description": "サポートされるファイル拡張子（ドットなし）",
   "command.openTimeStats.title": "タイム統計を開く",
   "sidebar.webdav.title": "Andrea 小説アシスタント: クラウド同期",

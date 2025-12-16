@@ -114,6 +114,8 @@
   "config.AndreaNovelHelper.wordCount.parallelStatCheck.anhName": "並列チェック",
   "config.AndreaNovelHelper.debug.completionLog.anhName": "デバッグログ",
   "config.AndreaNovelHelper.completion.segmenterType.anhName": "単語分割器タイプ",
+  "config.AndreaNovelHelper.completion.triggerMode.anhName": "補完トリガーモード",
+  "config.AndreaNovelHelper.completion.symbolPrefixes.anhName": "補完シンボル",
   "config.AndreaNovelHelper.decorations.cacheSize.anhName": "装飾キャッシュサイズ",
   "config.AndreaNovelHelper.roles.details.alwaysExpandable.anhName": "常時展開可能",
   "config.AndreaNovelHelper.roles.details.wrapColumn.anhName": "折り返し桁",

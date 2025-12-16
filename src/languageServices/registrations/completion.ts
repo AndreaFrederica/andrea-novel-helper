@@ -5,7 +5,11 @@ import { createRoleCompletionProvider } from '../../Provider/completionProvider'
 
 export function registerCompletion(context: vscode.ExtensionContext): vscode.Disposable[] {
   let completionDisposable: vscode.Disposable | undefined
+  const defaultSymbolPrefixes = ['@']
   const register = () => {
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper')
+    const symbolPrefixes = cfg.get<string[]>('completion.symbolPrefixes', defaultSymbolPrefixes) || defaultSymbolPrefixes
+    const wordTriggers = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'.split('')
     const langs = Array.from(new Set([...getSupportedLanguages(), 'markdown']))
     const selector: (string | vscode.DocumentFilter)[] = []
     for (const l of langs) {
@@ -16,12 +20,17 @@ export function registerCompletion(context: vscode.ExtensionContext): vscode.Dis
       completionDisposable.dispose()
     }
     const provider = createRoleCompletionProvider()
-    const triggers = ['#', '!', '[', '(', '（', '【']
+    const triggerChars = (symbolPrefixes || []).filter((c): c is string => typeof c === 'string' && c.length === 1)
+    const triggers = Array.from(new Set([...(triggerChars.length ? triggerChars : defaultSymbolPrefixes), ...wordTriggers]))
     completionDisposable = vscode.languages.registerCompletionItemProvider(selector, provider, ...triggers)
   }
   register()
   const watcher = vscode.workspace.onDidChangeConfiguration(e => {
-    if (e.affectsConfiguration('AndreaNovelHelper.supportedFileTypes')) {
+    if (
+      e.affectsConfiguration('AndreaNovelHelper.supportedFileTypes') ||
+      e.affectsConfiguration('AndreaNovelHelper.completion.triggerMode') ||
+      e.affectsConfiguration('AndreaNovelHelper.completion.symbolPrefixes')
+    ) {
       register()
     }
   })

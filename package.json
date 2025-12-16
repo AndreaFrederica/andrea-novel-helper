@@ -2113,6 +2113,35 @@
           "default": false,
           "description": "%config.debug.completionLog.description%"
         },
+        "AndreaNovelHelper.completion.triggerMode": {
+          "anhName": "补全触发模式",
+          "type": "string",
+          "enum": [
+            "loose",
+            "startsWith",
+            "symbolLoose",
+            "symbolStartsWith"
+          ],
+          "default": "loose",
+          "enumDescriptions": [
+            "完全触发（名称包含当前前缀即可触发）",
+            "仅首字（仅当名称/别名以当前前缀开头时触发）",
+            "符号+完全触发（仅当前缀前有指定符号且名称包含前缀时触发）",
+            "符号+仅首字（仅当前缀前有指定符号且名称/别名以当前前缀开头时触发）"
+          ],
+          "markdownDescription": "%config.completion.triggerMode.description%"
+        },
+        "AndreaNovelHelper.completion.symbolPrefixes": {
+          "anhName": "补全符号前缀",
+          "type": "array",
+          "default": [
+            "@"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.completion.symbolPrefixes.description%"
+        },
         "AndreaNovelHelper.completion.segmenterType": {
           "anhName": "分词器类型",
           "type": "string",

@@ -33,6 +33,8 @@
     "config.regexPatternsFile.description": "正则表达式配置 JSON 文件路径（相对于工作区根目录）",
     "config.outlinePath.description": "大纲目录路径（相对于工作区根目录）",
     "config.minChars.description": "触发补全所需的最少前缀字符数",
+    "config.completion.triggerMode.description": "补全触发模式：loose=名称包含前缀即可触发，startsWith=仅当前缀在名称/别名开头时触发，symbolLoose=仅当前缀前有指定符号且名称包含前缀时触发，symbolStartsWith=仅当前缀前有指定符号且名称/别名以该前缀开头时触发（兼容旧值 symbolPrefix，效果同 symbolLoose）。",
+    "config.completion.symbolPrefixes.description": "symbolPrefix 模式下用于触发补全的符号列表。",
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）",
     "config.markdownToolbarEnabled.description": "启用 Markdown 选区工具条",
     "config.markdownToolbarHeight.description": "Markdown 工具条高度（像素）",

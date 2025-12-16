@@ -81,6 +81,8 @@
   "config.regexPatternsFile.description": "Path to the regex patterns JSON file (relative to workspace root)",
   "config.outlinePath.description": "Path to the outline directory (relative to workspace root)",
   "config.minChars.description": "Minimum number of prefix characters to trigger completion",
+  "config.completion.triggerMode.description": "Completion trigger mode: loose=names that contain the prefix, startsWith=only names/aliases starting with the prefix, symbolLoose=like loose but only after a configured symbol, symbolStartsWith=startsWith but requires the symbol.",
+  "config.completion.symbolPrefixes.description": "Symbols that trigger completion when triggerMode is symbolPrefix.",
   "config.supportedFileTypes.description": "Supported file extensions (without dot)",
   "config.markdownToolbarEnabled.description": "Enable Markdown selection toolbar",
   "config.markdownToolbarHeight.description": "Height of the Markdown toolbar (in pixels)",
