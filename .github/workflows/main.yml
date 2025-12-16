@@ -154,6 +154,7 @@ jobs:
 
       # 为目标 Electron + 平台/架构重建原生模块（跨平台统一用 bash）
       - name: Rebuild @node-rs/jieba for Electron (${{ matrix.platform }}-${{ matrix.arch }})
+        if: runner.os != 'Windows' # Windows 上 @node-rs/jieba rebuild 会失败，使用预编译 NAPI 即可
         working-directory: ${{ env.WORKDIR }}
         shell: bash
         run: |
