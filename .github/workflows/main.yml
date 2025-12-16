@@ -257,11 +257,11 @@ jobs:
           echo 'deb http://archive.debian.org/debian-security buster/updates main' >> /etc/apt/sources.list
           echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99disable-check-valid-until
           apt-get -o Acquire::AllowInsecureRepositories=true update
-          apt-get install -y --no-install-recommends git curl python3 make g++ ca-certificates
+          apt-get install -y --no-install-recommends git curl python3 make g++ ca-certificates pkg-config
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config-aarch64-linux-gnu;
+            apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu;
           elif [ "${{ matrix.arch }}" = "arm" ]; then
-            apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf pkg-config-arm-linux-gnueabihf;
+            apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf;
           fi
 
       - uses: actions/checkout@v4
