@@ -144,6 +144,20 @@ jobs:
           # Use CI-specific build script
           npm run build:ci
 
+      # 将 workspace symlink 的 enigo-keyboard 替换为打包后的实际文件，避免 vsce 打包时报错
+      - name: Flatten enigo-keyboard dependency (pack -> extract)
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL=$(npm pack ./packages/enigo-keyboard | tail -n 1)
+          echo "Packed enigo-keyboard -> $TARBALL"
+          rm -rf node_modules/@anh/enigo-keyboard
+          mkdir -p node_modules/@anh
+          tar -xzf "$TARBALL" -C node_modules/@anh
+          mv node_modules/@anh/package node_modules/@anh/enigo-keyboard
+          rm -f "$TARBALL"
+
       # TypeScript 编译（与 vscode:prepublish 一致）
       - name: Compile extension
         working-directory: ${{ env.WORKDIR }}
@@ -314,6 +328,20 @@ jobs:
         run: |
           # Use CI-specific build script
           npm run build:ci
+
+      # 将 workspace symlink 的 enigo-keyboard 替换为打包后的实际文件，避免 vsce 打包时报错
+      - name: Flatten enigo-keyboard dependency (pack -> extract)
+        working-directory: ${{ env.WORKDIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARBALL=$(npm pack ./packages/enigo-keyboard | tail -n 1)
+          echo "Packed enigo-keyboard -> $TARBALL"
+          rm -rf node_modules/@anh/enigo-keyboard
+          mkdir -p node_modules/@anh
+          tar -xzf "$TARBALL" -C node_modules/@anh
+          mv node_modules/@anh/package node_modules/@anh/enigo-keyboard
+          rm -f "$TARBALL"
 
       - name: Compile extension
         working-directory: ${{ env.WORKDIR }}

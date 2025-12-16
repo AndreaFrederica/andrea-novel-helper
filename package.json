@@ -3478,7 +3478,7 @@
     "bundle:ext": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --main-fields=module,main --outfile=out/extension.js --sourcemap",
     "build:webview": "npm --workspace=packages/webview run build",
     "dev:webview": "npm --workspace=packages/webview run dev",
-    "vscode:prepublish": "npm run build:webview && npm run compile",
+    "vscode:prepublish": "node -e \"if (process.env.CI !== 'true') { require('child_process').execSync('npm run build:webview && npm run compile', { stdio: 'inherit' }); }\"",
     "compile": "node scripts/translate-nls2l10n.js && tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
