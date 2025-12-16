@@ -235,7 +235,7 @@ jobs:
             target: linux-x64
             platform: linux
             arch: x64
-          - runner: ubuntu-22.04-arm64     # GitHub 托管 arm64 runner
+          - runner: ubuntu-latest            # 在 x64 runner 上交叉构建 arm64
             target: linux-arm64
             platform: linux
             arch: arm64
