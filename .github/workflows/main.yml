@@ -36,20 +36,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Cache npm dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            node_modules/
-            packages/*/node_modules/
-          key: ${{ runner.os }}-npm-webview-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-webview-
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            packages/webview/package-lock.json
 
       - name: Install deps (workspace:webview)
         run: |
+          rm -rf node_modules packages/*/node_modules || true
           npm ci
           npm --workspace=packages/webview run build
 
@@ -89,17 +83,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Cache npm dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            node_modules/
-            packages/*/node_modules/
-          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -138,6 +123,7 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
         shell: bash
         run: |
+          rm -rf node_modules packages/*/node_modules || true
           if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
           else
@@ -270,17 +256,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Cache npm dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            node_modules/
-            packages/*/node_modules/
-          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -318,6 +295,7 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
         shell: bash
         run: |
+          rm -rf node_modules packages/*/node_modules || true
           if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
             npm ci
           else
@@ -416,15 +394,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Cache npm dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-          key: ${{ runner.os }}-npm-tools-${{ hashFiles('package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-tools-
+          cache: npm
+          cache-dependency-path: package.json
 
       - run: npm i -g @vscode/vsce ovsx
         if: ${{ inputs.release_only != true }}
