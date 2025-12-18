@@ -37,6 +37,14 @@
 - [QQ群【小说助手用户反馈和交流】](https://qm.qq.com/q/SG5A3XLoSQ)
 - [Discord](https://discord.gg/YeVAXeKX)
 
+### 📥 Issue标签说明
+
+- **future request** 新功能请求
+- **bug** 这是一个已经确认的bug
+- **need test** bug或许修复 待测试
+- **wait release** 功能完成 等待发布
+- **qq/bilibili/rednote** 反馈收集的社交媒体来源
+
 
 ## 🚀 核心功能概览
 
