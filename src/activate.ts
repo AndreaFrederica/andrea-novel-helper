@@ -70,11 +70,13 @@ import { registerWordCountTypstExport } from './commands/wordCountTypstExport'
 import { registerWordCountClipboard } from './commands/wordCountClipboard'
 import { registerDefCompletions } from './language/defCompletion'
 import { registerNativeModuleCheckup } from './utils/nativeModuleLoader';
+import * as segmenterModule from './utils/segmenter';
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
 import {activate as registerRoleCardEditor} from './Provider/editor/RoleJson5EditorProvider';
 import {activate as registerRelationshipEditor} from './Provider/editor/RelationshipJson5EditorProvider';
 import {activate as registerTimelineEditor} from './Provider/editor/TimelineJson5EditorProvider';
+import {activate as registerProxyLanguageEditor} from './Provider/editor/ProxyLanguageEditorProvider';
 import { registerRelationshipCommands } from './commands/relationshipCommands';
 import { registerOpenRoleSource } from './commands/openRoleSource';
 import { setWordCounterContext, setWordCounterGitGuard } from './utils/WordCount/asyncWordCounter';
@@ -102,6 +104,10 @@ import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 import { registerSettingsView } from './Provider/view/settingView'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
+import { registerProxyLanguageEditorCommands } from './commands/proxyLanguageEditorCommands'
+import { registerSimpleLanguageServiceCommands } from './commands/simpleLanguageServiceCommands'
+import { registerDocumentHoverCommands } from './commands/documentHoverCommands'
+import { registerComprehensiveLanguageServiceCommands } from './commands/comprehensiveLanguageServiceCommands'
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -453,6 +459,11 @@ export async function activate(context: vscode.ExtensionContext) {
         registerRoleCardEditor(context);
         registerRelationshipEditor(context);
         registerTimelineEditor(context);
+        registerProxyLanguageEditor(context);
+        registerProxyLanguageEditorCommands(context);
+        registerSimpleLanguageServiceCommands(context);
+        registerDocumentHoverCommands(context);
+        registerComprehensiveLanguageServiceCommands(context);
         registerRelationshipCommands(context);
 
         // 注册原生模块加载检查（macOS 安全策略处理）
@@ -650,7 +661,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
                 // 重新加载jieba自定义词典
                 try {
-                    const { reloadCustomDict } = require('./utils/segmenter');
+                    const { reloadCustomDict } = segmenterModule;
                     reloadCustomDict();
                 } catch (e) { console.warn('[ANH] reload jieba dict after roles change failed', e); }
 
@@ -666,7 +677,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             // 重新加载jieba自定义词典
             try {
-                const { reloadCustomDict } = require('./utils/segmenter');
+                const { reloadCustomDict } = segmenterModule;
                 reloadCustomDict();
             } catch (e) { console.warn('[ANH] reload jieba dict after roles FINISH failed', e); }
 

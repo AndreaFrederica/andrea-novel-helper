@@ -114,6 +114,22 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "andrea.proxyLanguageEditor",
+        "displayName": "Proxy Language Editor (Experimental)",
+        "selector": [
+          {
+            "filenamePattern": "**/*.anhproxy"
+          },
+          {
+            "filenamePattern": "**/*.md"
+          },
+          {
+            "filenamePattern": "**/*.txt"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "configurationDefaults": {
@@ -953,6 +969,96 @@
       {
         "command": "andrea-novel-helper.generateStepByStepCharacter",
         "title": "随机分步生成角色（姓氏+名字）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.proxyLanguageEditor.toggleUseRealFileUri",
+        "title": "切换代理语言编辑器 URI 模式",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getHover",
+        "title": "获取当前编辑器的 Hover 信息",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getCompletion",
+        "title": "获取当前编辑器的自动完成",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getDefinition",
+        "title": "获取当前编辑器的定义",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getSymbols",
+        "title": "获取当前编辑器的符号",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getDocumentHovers",
+        "title": "获取整个文档的所有 Hover 信息",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getAllWordHovers",
+        "title": "获取文档中所有单词的 Hover 信息",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getAllDocumentHovers",
+        "title": "获取文档中所有位置的 Hover 信息（完整扫描）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getOptimizedDocumentHovers",
+        "title": "获取文档中所有位置的 Hover 信息（优化扫描）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getAllDocumentDefinitions",
+        "title": "获取文档中所有定义信息",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.comprehensive.getAllHovers",
+        "title": "获取文档中所有 Hover 信息（VSCode API）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.comprehensive.getAllDefinitions",
+        "title": "获取文档中所有定义信息（VSCode API）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.comprehensive.getAllSymbols",
+        "title": "获取文档中所有符号信息（VSCode API）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.comprehensive.getAllCompletions",
+        "title": "获取文档中所有自动完成信息（VSCode API）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.comprehensive.getAllDiagnostics",
+        "title": "获取文档中所有诊断信息（VSCode API）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.comprehensive.getAllSemanticTokens",
+        "title": "获取文档中所有语义标记信息（VSCode API）",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getDiagnostics",
+        "title": "获取当前编辑器的诊断信息",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.getSemanticTokens",
+        "title": "获取当前编辑器的语义标记",
         "category": "Andrea Novel Helper"
       }
     ],
@@ -2877,6 +2983,11 @@
           "type": "string",
           "default": "novel-helper/scripts",
           "markdownDescription": "脚本运行侧栏的根目录"
+        },
+        "andrea.proxyLanguageEditor.useRealFileUri": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "代理语言编辑器是否使用真实文件 URI 进行语言服务查询。启用后，hover、completion、definition 等功能将在真实文件上运行，确保与原生编辑器体验一致。禁用后将在虚拟文档上运行，可能无法获得某些语言服务支持。"
         }
       }
     },
@@ -3317,6 +3428,12 @@
           "command": "AndreaNovelHelper.changeTypstTemplate",
           "when": "resourceScheme == andrea-typst",
           "group": "navigation@105",
+          "icon": "$(settings)"
+        },
+        {
+          "command": "andrea.proxyLanguageEditor.toggleUseRealFileUri",
+          "when": "resourceScheme == andrea-proxy",
+          "group": "navigation@1",
           "icon": "$(settings)"
         }
       ],
