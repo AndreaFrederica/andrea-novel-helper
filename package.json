@@ -954,6 +954,21 @@
         "command": "andrea-novel-helper.generateStepByStepCharacter",
         "title": "随机分步生成角色（姓氏+名字）",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.autoScroll.toggle",
+        "title": "切换自动滚动",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.autoScroll.setRatio",
+        "title": "设置自动滚动比例",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.autoScroll.scrollToEnd",
+        "title": "滚动到文档末尾",
+        "category": "Andrea Novel Helper"
       }
     ],
     "walkthroughs": [
@@ -2877,6 +2892,28 @@
           "type": "string",
           "default": "novel-helper/scripts",
           "markdownDescription": "脚本运行侧栏的根目录"
+        },
+        "AndreaNovelHelper.autoScroll.enabled": {
+          "anhName": "启用自动滚动",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "启用编辑器自动滚动到文档末尾功能。当文档内容变化时，自动滚动到指定的比例位置。"
+        },
+        "AndreaNovelHelper.autoScroll.ratio": {
+          "anhName": "滚动比例",
+          "type": "number",
+          "default": 1.0,
+          "minimum": 0.1,
+          "maximum": 0.7,
+          "markdownDescription": "自动滚动的目标比例（0.1-0.7）。1.0 表示完全滚动到底部，0.5 表示滚动到中间位置。"
+        },
+        "AndreaNovelHelper.autoScroll.debounceDelay": {
+          "anhName": "防抖延迟",
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 2000,
+          "markdownDescription": "自动滚动的防抖延迟时间（毫秒）。避免频繁滚动导致的抖动。 如果0 则立即触发"
         }
       }
     },
