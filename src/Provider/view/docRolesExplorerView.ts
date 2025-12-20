@@ -26,7 +26,7 @@ interface AffiliationNode extends Base {
 }
 interface TypeNode extends Base { kind: 'type'; affiliation: string; children: RoleNode[]; }
 interface RoleNode extends Base { kind: 'role'; role: Role; affiliation: string; roleType: string; }
-interface DetailNode extends Base { kind: 'detail'; value: string; roleName: string; full?: string; }
+interface DetailNode extends Base { kind: 'detail'; value: string; roleName: string; full?: string; objectValue?: any; }
 interface DetailLineNode extends Base { kind: 'detailLine'; value: string; roleName: string; }
 interface SpecialRootNode extends Base { kind: 'specialRoot'; children: SpecialTypeNode[]; count: number; }
 interface SpecialTypeNode extends Base { kind: 'specialType'; roleType: string; children: SpecialAffiliationNode[]; }
@@ -131,11 +131,17 @@ class DocRoleExplorerItem extends vscode.TreeItem {
             return enableRoleExpansion ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
         if (n.kind === 'detail') {
+            const dn = n as DetailNode;
+
+            // 如果有对象值，总是可以展开
+            if (dn.objectValue !== undefined) {
+                return vscode.TreeItemCollapsibleState.Collapsed;
+            }
+
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
             const always = cfg.get<boolean>('roles.details.alwaysExpandable', true);
             if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
             const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
-            const dn = n as DetailNode;
             const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
             return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
@@ -169,7 +175,13 @@ class DocRolesExplorerProvider implements vscode.TreeDataProvider<AnyNode> {
         if (!e) { return this.build(); }
         if (e.kind === 'affiliation' || e.kind === 'type' || e.kind === 'specialType' || e.kind === 'specialAffiliation' || e.kind === 'specialRoot') { return (e as any).children || []; }
         if (e.kind === 'role') { return this.buildRoleDetails(e as RoleNode); }
-        if (e.kind === 'detail') { return this.buildDetailLines(e as DetailNode); }
+        if (e.kind === 'detail') {
+            const dn = e as DetailNode;
+            if (dn.objectValue !== undefined) {
+                return this.buildObjectChildren(dn, dn.objectValue);
+            }
+            return this.buildDetailLines(dn);
+        }
         return [];
     }
     private buildRoleDetails(rn: RoleNode): DetailNode[] {
@@ -180,17 +192,142 @@ class DocRolesExplorerProvider implements vscode.TreeDataProvider<AnyNode> {
             if (b[0] === 'name') { return 1; }
             return a[0].localeCompare(b[0], 'zh-Hans', {numeric:true,sensitivity:'base'});
         });
-        const toStr = (v: any): { short: string; full: string } => {
+        const formatFieldValue = (v: any): { short: string; full: string; isObject?: boolean } => {
             let full: string;
-            if (v === null || v === undefined) { full = String(v); }
-            else if (typeof v === 'string') { full = v; }
-            else if (Array.isArray(v)) { full = v.join(', '); }
-            else if (typeof v === 'object') { try { full = JSON.stringify(v); } catch { full = String(v); } }
-            else { full = String(v); }
-            const limit = 120; const short = full.length > limit ? full.slice(0, limit) + '…' : full; return { short, full };
+            let isObject = false;
+
+            if (v === null || v === undefined) {
+                full = '未设置';
+            } else if (typeof v === 'string') {
+                full = v;
+            } else if (Array.isArray(v)) {
+                if (v.length === 0) {
+                    full = '空数组';
+                } else {
+                    full = `数组[${v.length}]`;
+                    isObject = true;
+                }
+            } else if (typeof v === 'object') {
+                try {
+                    const keys = Object.keys(v);
+                    if (keys.length === 0) {
+                        full = '空对象';
+                    } else {
+                        full = `对象{${keys.length}个属性}`;
+                        isObject = true;
+                    }
+                } catch {
+                    full = String(v);
+                }
+            } else {
+                full = String(v);
+            }
+
+            const limit = 120;
+            const short = full.length > limit ? full.slice(0, limit) + '…' : full;
+            return { short, full, isObject };
         };
-        return entries.map(([k, v]) => { const { short, full } = toStr(v); return { kind:'detail', key:k, value:short, full, roleName: rn.role.name } as DetailNode; });
+
+        return entries.map(([k, v]) => {
+            const { short, full, isObject } = formatFieldValue(v);
+            const detailNode: DetailNode = {
+                kind:'detail',
+                key:k,
+                value:short,
+                full,
+                roleName: rn.role.name
+            };
+
+            // 如果是对象或数组，存储原始值以便展开
+            if (isObject) {
+                detailNode.objectValue = v;
+            }
+
+            return detailNode;
+        });
     }
+
+    private buildObjectChildren(parent: DetailNode, objectValue: any): DetailNode[] {
+        const children: DetailNode[] = [];
+        const formatFieldValue = (v: any): { short: string; full: string; isObject?: boolean } => {
+            let full: string;
+            let isObject = false;
+
+            if (v === null || v === undefined) {
+                full = '未设置';
+            } else if (typeof v === 'string') {
+                full = v;
+            } else if (Array.isArray(v)) {
+                if (v.length === 0) {
+                    full = '空数组';
+                } else {
+                    full = `数组[${v.length}]`;
+                    isObject = true;
+                }
+            } else if (typeof v === 'object') {
+                try {
+                    const keys = Object.keys(v);
+                    if (keys.length === 0) {
+                        full = '空对象';
+                    } else {
+                        full = `对象{${keys.length}个属性}`;
+                        isObject = true;
+                    }
+                } catch {
+                    full = String(v);
+                }
+            } else {
+                full = String(v);
+            }
+
+            const limit = 120;
+            const short = full.length > limit ? full.slice(0, limit) + '…' : full;
+            return { short, full, isObject };
+        };
+
+        if (Array.isArray(objectValue)) {
+            // 处理数组
+            objectValue.forEach((item, index) => {
+                const value = formatFieldValue(item);
+                const childNode: DetailNode = {
+                    kind: 'detail',
+                    key: `[${index}]`,
+                    value: value.short,
+                    full: value.full,
+                    roleName: parent.roleName
+                };
+
+                // 如果子项也是对象或数组，存储以便进一步展开
+                if (value.isObject) {
+                    childNode.objectValue = item;
+                }
+
+                children.push(childNode);
+            });
+        } else if (typeof objectValue === 'object' && objectValue !== null) {
+            // 处理对象
+            Object.entries(objectValue).forEach(([key, value]) => {
+                const formattedValue = formatFieldValue(value);
+                const childNode: DetailNode = {
+                    kind: 'detail',
+                    key: key,
+                    value: formattedValue.short,
+                    full: formattedValue.full,
+                    roleName: parent.roleName
+                };
+
+                // 如果子项也是对象或数组，存储以便进一步展开
+                if (formattedValue.isObject) {
+                    childNode.objectValue = value;
+                }
+
+                children.push(childNode);
+            });
+        }
+
+        return children;
+    }
+
     private buildDetailLines(dn: DetailNode): DetailLineNode[] {
         const full = dn.full ?? dn.value;
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');

@@ -14,6 +14,7 @@ interface RoleHierarchyAffiliationGroup { affiliation: string; types: RoleHierar
 // level 0: affiliation
 // level 1: type
 // level 2: role
+// level 3: detail (包括优先级信息)
 
 type NodeKind = 'affiliation' | 'type' | 'role' | 'detail' | 'detailLine' | 'specialRoot' | 'specialType' | 'specialAffiliation';
 
@@ -21,7 +22,7 @@ interface BaseNode { kind: NodeKind; key: string; parent?: BaseNode; uid?: strin
 interface AffiliationNode extends BaseNode { kind: 'affiliation'; children?: (TypeNode | RoleNode)[]; }
 interface TypeNode extends BaseNode { kind: 'type'; affiliation: string; children?: RoleNode[]; }
 interface RoleNode extends BaseNode { kind: 'role'; role: Role; affiliation: string; roleType: string; }
-interface DetailNode extends BaseNode { kind: 'detail'; value: string; roleName: string; full?: string; }
+interface DetailNode extends BaseNode { kind: 'detail'; value: string; roleName: string; full?: string; detailType?: 'property' | 'priority' | 'prioritySource' | 'priorityBreakdown'; }
 interface DetailLineNode extends BaseNode { kind: 'detailLine'; value: string; roleName: string; }
 interface SpecialRootNode extends BaseNode { kind: 'specialRoot'; children: SpecialTypeNode[]; count: number; }
 interface SpecialTypeNode extends BaseNode { kind: 'specialType'; roleType: string; children: SpecialAffiliationNode[]; }
@@ -50,23 +51,26 @@ export class RoleTreeItem extends vscode.TreeItem {
             this.description = `${node.children?.length || 0}`;
             this.contextValue = 'roleSpecialAffiliation';
         } else if (node.kind === 'role') {
+            const roleNode = node as RoleNode;
+
             // 若来自扁平分组，roleType 可能被填为真实类型
-            this.description = node.roleType;
-            this.tooltip = buildRoleMarkdown(node.role);
+            this.description = roleNode.roleType;
+            this.tooltip = buildRoleMarkdown(roleNode.role);
             this.command = {
                 command: 'AndreaNovelHelper.openRoleSource',
                 title: '打开角色定义',
-                arguments: [node.role]
+                arguments: [roleNode.role]
             };
             this.contextValue = 'roleNode';
+
             // 如果配置允许并且角色提供了 svg 字段，则优先使用该 svg 作为图标
             try {
                 const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
                 const useSvg = cfg.get<boolean>('roles.display.useRoleSvgIfPresent', false);
-                const svgField = (node.role as any).svg;
+                const svgField = roleNode.role.svg;
                 if (useSvg && svgField && typeof svgField === 'string') {
                     try {
-                        const uri = svgField.startsWith('data:image') ? vscode.Uri.parse(svgField) : vscode.Uri.file(path.isAbsolute(svgField) ? svgField : path.join(node.role.packagePath || '', svgField));
+                        const uri = svgField.startsWith('data:image') ? vscode.Uri.parse(svgField) : vscode.Uri.file(path.isAbsolute(svgField) ? svgField : path.join(roleNode.role.packagePath || '', svgField));
                         this.iconPath = { light: uri, dark: uri };
                     } catch {}
                 }
@@ -78,7 +82,7 @@ export class RoleTreeItem extends vscode.TreeItem {
                 const sync = root.get<boolean>('allRoles.syncWithDocRoles', true);
                 const colorize = cfg.get<boolean>(`${sync ? 'docRoles' : 'allRoles'}.display.colorizeRoleName`, false);
                 if (colorize && !this.iconPath) {
-                    const r: any = node.role as any;
+                    const r = roleNode.role as any;
                     const colorValue = (r.color || r.colour || r['颜色'] || '').toString().trim();
                     if (colorValue) {
                         const safe = colorValue.replace(/"/g, '%22');
@@ -88,12 +92,12 @@ export class RoleTreeItem extends vscode.TreeItem {
                     }
                 }
             } catch {}
-            if (node.role.sourcePath) {
-                this.resourceUri = vscode.Uri.file(node.role.sourcePath);
-                // VS Code 对“可展开”的 TreeItem 会倾向使用“文件夹”图标，即使有 resourceUri。
+            if (roleNode.role.sourcePath) {
+                this.resourceUri = vscode.Uri.file(roleNode.role.sourcePath);
+                // VS Code 对"可展开"的 TreeItem 会倾向使用"文件夹"图标，即使有 resourceUri。
                 // 为了在允许展开时也保留接近原始文件类型的图标，这里按扩展名设置一个内置的文件类图标。
                 if (!this.iconPath && this.collapsibleState !== vscode.TreeItemCollapsibleState.None) {
-                    const p = node.role.sourcePath.toLowerCase();
+                    const p = roleNode.role.sourcePath.toLowerCase();
                     if (p.endsWith('.json') || p.endsWith('.json5')) {
                         this.iconPath = new vscode.ThemeIcon('file-code');
                     } else if (p.endsWith('.md') || p.endsWith('.markdown') || p.endsWith('.txt')) {
@@ -104,12 +108,25 @@ export class RoleTreeItem extends vscode.TreeItem {
                 }
             }
         } else if (node.kind === 'detail') {
-            // 只显示 key；value/详细行上会显示实际的值
+            // 根据详情类型设置不同的图标和样式
             const dn = node as DetailNode;
+            if (dn.detailType === 'priority') {
+                this.iconPath = new vscode.ThemeIcon('symbol-number');
+                this.contextValue = 'roleDetailPriority';
+            } else if (dn.detailType === 'prioritySource') {
+                this.iconPath = new vscode.ThemeIcon('file-code');
+                this.contextValue = 'roleDetailPrioritySource';
+            } else if (dn.detailType === 'priorityBreakdown') {
+                this.iconPath = new vscode.ThemeIcon('graph');
+                this.contextValue = 'roleDetailPriorityBreakdown';
+            } else {
+                this.iconPath = iconForRoleKey(`role.key.${dn.key}`);
+                this.contextValue = 'roleDetail';
+            }
+
+            // 只显示 key；value/详细行上会显示实际的值
             this.tooltip = dn.full && dn.full.length > (dn.value?.length || 0) ? dn.full : dn.full;
             this.description = undefined;
-            this.iconPath = iconForRoleKey(`role.key.${dn.key}`);
-            this.contextValue = 'roleDetail';
         } else if (node.kind === 'detailLine') {
             this.label = node.value;
             this.contextValue = 'roleDetailLine';
@@ -194,12 +211,18 @@ export class RoleTreeItem extends vscode.TreeItem {
             const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
             return enableRoleExpansion ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
-        if (node.kind === 'detail') { 
+        if (node.kind === 'detail') {
+            const dn = node as DetailNode;
+
+            // 如果有对象值，总是可以展开
+            if ((dn as any).objectValue) {
+                return vscode.TreeItemCollapsibleState.Collapsed;
+            }
+
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
             const always = cfg.get<boolean>('roles.details.alwaysExpandable', true);
             if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
             const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
-            const dn = node as DetailNode;
             const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
             return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
@@ -231,36 +254,233 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
         }
         if (element.kind === 'specialType') { return element.children; }
         if (element.kind === 'specialAffiliation') { return element.children; }
-    if (element.kind === 'role') { return this.buildRoleDetails(element as RoleNode); }
-    if (element.kind === 'detail') { return this.buildDetailLines(element as DetailNode); }
+        if (element.kind === 'role') { return this.buildRoleDetails(element as RoleNode); }
+        if (element.kind === 'detail') {
+            const dn = element as DetailNode;
+            const objectValue = (dn as any).objectValue;
+            if (objectValue !== undefined) {
+                return this.buildObjectChildren(dn, objectValue);
+            }
+            return this.buildDetailLines(dn);
+        }
         return [];
     }
 
     private buildRoleDetails(rn: RoleNode): DetailNode[] {
         const r: any = rn.role as any;
+        const details: DetailNode[] = [];
+
+        // 1. 添加优先级信息（如果存在）
+        const priority = r._computedPriority;
+        const filePriority = r._priority;
+        const priorityBreakdown = r._priorityBreakdown;
+
+        if (priority !== undefined || filePriority !== undefined || priorityBreakdown) {
+            // 总优先级
+            details.push({
+                kind: 'detail',
+                key: '⚡ 总优先级',
+                value: priority !== undefined ? String(priority) : '未计算',
+                full: `总优先级: ${priority || '未计算'}`,
+                roleName: rn.role.name,
+                detailType: 'priority'
+            });
+
+            // 文件定义的优先级
+            if (filePriority !== undefined) {
+                details.push({
+                    kind: 'detail',
+                    key: '📄 文件优先级',
+                    value: String(filePriority),
+                    full: `文件中定义的优先级: ${filePriority}`,
+                    roleName: rn.role.name,
+                    detailType: 'prioritySource'
+                });
+            }
+
+            // 优先级构成详情
+            if (priorityBreakdown) {
+                details.push({
+                    kind: 'detail',
+                    key: '📊 优先级构成',
+                    value: `来源: ${Object.keys(priorityBreakdown.source || {}).join(', ')}`,
+                    full: `优先级构成详情:\n${this.formatPriorityBreakdown(priorityBreakdown)}`,
+                    roleName: rn.role.name,
+                    detailType: 'priorityBreakdown'
+                });
+            }
+        }
+
+        // 2. 添加基础属性（name, uuid, type）
+        const basicFields = ['name', 'uuid', 'type'];
+        for (const field of basicFields) {
+            if (r[field] !== undefined) {
+                const value = this.formatFieldValue(r[field], field);
+                details.push({
+                    kind: 'detail',
+                    key: this.getFieldLabel(field),
+                    value: value.short,
+                    full: value.full,
+                    roleName: rn.role.name,
+                    detailType: 'property'
+                });
+            }
+        }
+
+        // 3. 添加其他属性
         const entries: [string, any][] = Object.entries(r || {});
-        // 将 name 置顶，其余按键名排序
-        entries.sort((a,b)=>{
-            if (a[0] === 'name') { return -1; }
-            if (b[0] === 'name') { return 1; }
-            return a[0].localeCompare(b[0], 'zh-Hans', {numeric:true,sensitivity:'base'});
-        });
-        const toStr = (v: any): { short: string; full: string } => {
-            let full: string;
-            if (v === null || v === undefined) { full = String(v); }
-            else if (typeof v === 'string') { full = v; }
-            else if (Array.isArray(v)) { full = v.join(', '); }
-            else if (typeof v === 'object') { try { full = JSON.stringify(v); } catch { full = String(v); } }
-            else { full = String(v); }
-            const limit = 120;
-            const short = full.length > limit ? full.slice(0, limit) + '…' : full;
-            return { short, full };
-        };
-        const details: DetailNode[] = entries.map(([k, v]) => {
-            const { short, full } = toStr(v);
-            return { kind:'detail', key: k, value: short, full, roleName: rn.role.name } as DetailNode;
-        });
+        const processedKeys = new Set(['name', 'uuid', 'type', '_priority', '_computedPriority', '_priorityBreakdown']);
+
+        entries
+            .filter(([k]) => !processedKeys.has(k) && !k.startsWith('_'))
+            .sort((a,b)=>a[0].localeCompare(b[0], 'zh-Hans', {numeric:true,sensitivity:'base'}))
+            .forEach(([k, v]) => {
+                const value = this.formatFieldValue(v, k);
+                const detailNode: DetailNode = {
+                    kind: 'detail',
+                    key: this.getFieldLabel(k),
+                    value: value.short,
+                    full: value.full,
+                    roleName: rn.role.name,
+                    detailType: 'property'
+                };
+
+                // 如果是对象或数组，存储原始值以便后续展开
+                if (value.isObject) {
+                    (detailNode as any).objectValue = v;
+                }
+
+                details.push(detailNode);
+            });
+
         return details;
+    }
+
+    private formatFieldValue(value: any, fieldName: string): { short: string; full: string; isObject?: boolean } {
+        let full: string;
+        let isObject = false;
+
+        if (value === null || value === undefined) {
+            full = '未设置';
+        } else if (typeof value === 'string') {
+            full = value;
+        } else if (Array.isArray(value)) {
+            if (value.length === 0) {
+                full = '空数组';
+            } else {
+                full = `数组[${value.length}]`;
+                isObject = true; // 数组可以展开
+            }
+        } else if (typeof value === 'object') {
+            try {
+                const keys = Object.keys(value);
+                if (keys.length === 0) {
+                    full = '空对象';
+                } else {
+                    full = `对象{${keys.length}个属性}`;
+                    isObject = true;
+                }
+            } catch {
+                full = String(value);
+            }
+        } else {
+            full = String(value);
+        }
+
+        const limit = 120;
+        const short = full.length > limit ? full.slice(0, limit) + '…' : full;
+        return { short, full, isObject };
+    }
+
+    private getFieldLabel(field: string): string {
+        const labelMap: { [key: string]: string } = {
+            'name': '📝 名称',
+            'uuid': '🆔 UUID',
+            'type': '🏷️ 类型',
+            'description': '📝 描述',
+            'color': '🎨 颜色',
+            'affiliation': '🏠 从属',
+            'aliases': '📛️ 别名',
+            'fixes': '🔧 修复',
+            'priority': '⚡ 优先级',
+            'wordSegmentFilter': '📝 分词过滤',
+            'regex': '🔍 正则',
+            'regexFlags': '🔍 正则标志',
+            'packagePath': '📁 包路径',
+            'sourcePath': '📄 源文件',
+            'svg': '🖼️ 图标'
+        };
+        return labelMap[field] || field;
+    }
+
+    private formatPriorityBreakdown(breakdown: any): string {
+        const lines: string[] = [];
+        for (const [source, value] of Object.entries(breakdown.source || {})) {
+            if (value !== undefined && value !== 0) {
+                const sourceLabel = this.getPrioritySourceLabel(source);
+                lines.push(`  • ${sourceLabel}: +${value}`);
+            }
+        }
+        return lines.join('\n');
+    }
+
+    private getPrioritySourceLabel(source: string): string {
+        const labelMap: { [key: string]: string } = {
+            'fileDefined': '文件定义',
+            'location': '位置优先级',
+            'fileName': '文件名优先级',
+            'fileType': '文件类型优先级',
+            'default': '默认优先级'
+        };
+        return labelMap[source] || source;
+    }
+
+    private buildObjectChildren(parent: DetailNode, objectValue: any): DetailNode[] {
+        const children: DetailNode[] = [];
+
+        if (Array.isArray(objectValue)) {
+            // 处理数组
+            objectValue.forEach((item, index) => {
+                const value = this.formatFieldValue(item, `[${index}]`);
+                const childNode: DetailNode = {
+                    kind: 'detail',
+                    key: `[${index}]`,
+                    value: value.short,
+                    full: value.full,
+                    roleName: parent.roleName,
+                    detailType: 'property'
+                };
+
+                // 如果子项也是对象或数组，存储以便进一步展开
+                if (value.isObject) {
+                    (childNode as any).objectValue = item;
+                }
+
+                children.push(childNode);
+            });
+        } else if (typeof objectValue === 'object' && objectValue !== null) {
+            // 处理对象
+            Object.entries(objectValue).forEach(([key, value]) => {
+                const formattedValue = this.formatFieldValue(value, key);
+                const childNode: DetailNode = {
+                    kind: 'detail',
+                    key: key,
+                    value: formattedValue.short,
+                    full: formattedValue.full,
+                    roleName: parent.roleName,
+                    detailType: 'property'
+                };
+
+                // 如果子项也是对象或数组，存储以便进一步展开
+                if (formattedValue.isObject) {
+                    (childNode as any).objectValue = value;
+                }
+
+                children.push(childNode);
+            });
+        }
+
+        return children;
     }
 
     private buildDetailLines(dn: DetailNode): DetailLineNode[] {
