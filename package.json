@@ -1690,6 +1690,101 @@
           "default": "novel-helper/outline",
           "description": "%config.outlinePath.description%"
         },
+        "AndreaNovelHelper.rolePriority": {
+          "anhName": "角色合并优先级策略",
+          "type": "object",
+          "default": {
+            "strategy": "loadOrder",
+            "enableFileNamePriority": false,
+            "enableFileTypePriority": false,
+            "enableLocationPriority": false,
+            "fileNamePriority": {
+              "prefixes": {
+                "__": 1000,
+                "!!": 2000,
+                "!!!": 3000,
+                "override_": 1500,
+                "config_": 500
+              },
+              "naturalSort": true
+            },
+            "fileTypePriority": {
+              ".md": 1,
+              ".json5": 2,
+              ".ojson5": 3,
+              ".txt": 0
+            },
+            "locationPriority": {
+              "external": 100,
+              "internal": 0
+            },
+            "defaultPriority": 0
+          },
+          "properties": {
+            "strategy": {
+              "type": "string",
+              "enum": ["loadOrder", "custom"],
+              "default": "loadOrder",
+              "description": "%config.rolePriority.strategy.description%"
+            },
+            "enableFileNamePriority": {
+              "type": "boolean",
+              "default": false,
+              "description": "%config.rolePriority.enableFileNamePriority.description%"
+            },
+            "enableFileTypePriority": {
+              "type": "boolean",
+              "default": false,
+              "description": "%config.rolePriority.enableFileTypePriority.description%"
+            },
+            "enableLocationPriority": {
+              "type": "boolean",
+              "default": false,
+              "description": "%config.rolePriority.enableLocationPriority.description%"
+            },
+            "fileNamePriority": {
+              "type": "object",
+              "description": "%config.rolePriority.fileNamePriority.description%",
+              "properties": {
+                "prefixes": {
+                  "type": "object",
+                  "description": "%config.rolePriority.fileNamePriority.prefixes.description%"
+                },
+                "naturalSort": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "%config.rolePriority.fileNamePriority.naturalSort.description%"
+                }
+              }
+            },
+            "fileTypePriority": {
+              "type": "object",
+              "description": "%config.rolePriority.fileTypePriority.description%"
+            },
+            "locationPriority": {
+              "type": "object",
+              "properties": {
+                "external": {
+                  "type": "number",
+                  "default": 100,
+                  "description": "%config.rolePriority.locationPriority.external.description%"
+                },
+                "internal": {
+                  "type": "number",
+                  "default": 0,
+                  "description": "%config.rolePriority.locationPriority.internal.description%"
+                }
+              },
+              "description": "%config.rolePriority.locationPriority.description%"
+            },
+            "defaultPriority": {
+              "type": "number",
+              "default": 0,
+              "description": "%config.rolePriority.defaultPriority.description%"
+            }
+          },
+          "description": "%config.rolePriority.description%"
+        },
         "AndreaNovelHelper.outline.lazyMode": {
           "anhName": "懒加载模式",
           "type": "boolean",

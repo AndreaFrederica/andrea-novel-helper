@@ -17,6 +17,23 @@ import { generateUUIDv7, generateRoleNameHash } from './uuidUtils';
 import { ensureRoleUUIDs, fixInvalidRoleUUIDs } from './roleUuidManager';
 import { loadRelationships, updateRelationships } from './relationshipLoader';
 import { enhanceAllRolesWithRelationships, clearRelationshipProperties } from './roleRelationshipEnhancer';
+import { SmartRoleAdder } from './roleMerger';
+
+// 创建全局的角色管理器
+export let roleManager: SmartRoleAdder | null = null;
+
+/**
+ * 智能添加角色到 roles 数组
+ * 如果 roleManager 存在，使用它来处理合并
+ */
+function addRole(role: Role) {
+	if (roleManager) {
+		roleManager.addRole(role);
+	} else {
+		// 如果 roleManager 未初始化（例如传统加载），直接添加
+		roles.push(role);
+	}
+}
 
 /**
  * 扫描外部文件夹，查找包含 __init__.ojson5 的文件夹
@@ -366,6 +383,11 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		globalFileCache.clear();
 		cleanRoles();
 		sensitiveSourceFiles.clear();
+		// 重新初始化角色管理器
+		roleManager = new SmartRoleAdder(roles);
+	} else if (!roleManager) {
+		// 首次加载时初始化角色管理器
+		roleManager = new SmartRoleAdder(roles);
 	}
 
 	// 检查 novel-helper 目录是否存在
@@ -538,7 +560,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 			ensureRoleUUIDs(roles, true).catch(error => {
 				console.error('[loadRoles] 为角色添加 UUID 失败:', error);
 			});
-			
+
 			// 加载关系表（在角色加载完成后）
 		loadRelationships(novelHelperRoot).then(() => {
 			// 关系表加载完成后，为所有角色添加关系属性
@@ -876,7 +898,7 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 			if (role.type === '敏感词') {
 				try { sensitiveSourceFiles.add(path.resolve(filePath).toLowerCase()); } catch { /* ignore */ }
 			}
-			roles.push(role);
+			addRole(role);
 		}
 		
 		console.log(`loadJSON5RoleFile: 从 ${filePath} 加载了 ${rolesArray.length} 个角色`);
@@ -910,7 +932,7 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 	try {
 		const markdownRoles = parseMarkdownRoles(content, filePath, packagePath, defaultType);
 		for (const role of markdownRoles) {
-			roles.push(role);
+			addRole(role);
 			if (role.type === '敏感词' && role.sourcePath) {
 				try { sensitiveSourceFiles.add(path.resolve(role.sourcePath).toLowerCase()); } catch { /* ignore */ }
 			}
@@ -963,7 +985,7 @@ function loadTXTRoleFile(content: string, filePath: string, packagePath: string,
 			role.type = 'txt角色';
 			role.color = cfg.get<string>('defaultColor')!;
 		}
-		roles.push(role);
+		addRole(role);
 		added++;
 	}
 	if (added === 0) {
@@ -985,6 +1007,11 @@ function loadTraditionalRoles(forceRefresh: boolean = false, changedFiles?: stri
 		return;
 	}
 	const root = folders[0].uri.fsPath;
+
+	// 初始化角色管理器（如果还没有）
+	if (!roleManager) {
+		roleManager = new SmartRoleAdder(roles);
+	}
 	
 	// 通用加载函数：fileKey 为配置项键，defaultType 为当 txt 版本加载时使用的类型
 	function loadLibrary(fileKey: string, defaultType: string) {
@@ -1027,8 +1054,8 @@ function loadTraditionalRoles(forceRefresh: boolean = false, changedFiles?: stri
 					for (const role of arr) {
 						role.packagePath = '';  // 根目录
 						role.sourcePath = libPath;
+						addRole(role);
 					}
-					roles.push(...arr);
 					console.log(`loadTraditionalRoles: 成功加载 JSON5库 ${fileName}`);
 				}
 			} catch (e) {
@@ -1066,7 +1093,7 @@ function loadTraditionalRoles(forceRefresh: boolean = false, changedFiles?: stri
 							console.warn(`loadTraditionalRoles: 正则表达式类型不支持TXT格式，跳过 ${txtPath}`);
 							return;
 						}
-						roles.push(role);
+						addRole(role);
 					}
 					console.log(`loadTraditionalRoles: 成功加载 TXT库 ${fileName}`);
 				}
