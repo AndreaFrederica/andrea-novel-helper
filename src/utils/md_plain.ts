@@ -4,12 +4,20 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
     const lines = src.split(/\r?\n/);
     const blocks: { srcLine: number; text: string }[] = [];
     let i = 0;
+    const refDefs = collectRefDefinitions(lines);
 
     const pushBlock = (start: number, text: string) =>
         blocks.push({ srcLine: start, text: text.replace(/\s+$/, '') });
 
     while (i < lines.length) {
         const line = lines[i];
+
+        // Reference-style link definition: keep line mapping but drop content
+        if (isReferenceDefinitionLine(line)) {
+            pushBlock(i, '');
+            i++;
+            continue;
+        }
 
         // 1) Fenced code block ```lang / ~~~
         const fence = line.match(/^(```+|~~~+)\s*(\w+)?\s*$/);
@@ -30,14 +38,14 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
         // 2) ATX Heading
         const atx = line.match(/^(#{1,6})\s*(.+?)\s*#*\s*$/);
         if (atx) {
-            pushBlock(i, stripInline(atx[2]));
+            pushBlock(i, stripInline(atx[2], refDefs));
             i++;
             continue;
         }
 
         // 3) Setext Heading
         if (i + 1 < lines.length && /^\s*[-=]{3,}\s*$/.test(lines[i + 1])) {
-            pushBlock(i, stripInline(line));
+            pushBlock(i, stripInline(line, refDefs));
             i += 2;
             continue;
         }
@@ -50,7 +58,7 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
                 buf.push(lines[i].replace(/^\s*>+\s?/, ''));
                 i++;
             }
-            pushBlock(start, stripInline(buf.join('\n')));
+            pushBlock(start, stripInline(buf.join('\n'), refDefs));
             continue;
         }
 
@@ -65,7 +73,7 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
                 buf.push(li);
                 i++;
             }
-            pushBlock(start, stripInline(buf.join('\n')));
+            pushBlock(start, stripInline(buf.join('\n'), refDefs));
             continue;
         }
 
@@ -73,10 +81,10 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
         if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?\s*[-:| ]+\|[-:| ]+\s*\|?\s*$/.test(lines[i + 1])) {
             const start = i;
             const buf: string[] = [];
-            buf.push(stripTableRow(line));
+            buf.push(stripTableRow(line, refDefs));
             i += 2; // skip separator
             while (i < lines.length && /\|/.test(lines[i])) {
-                buf.push(stripTableRow(lines[i]));
+                buf.push(stripTableRow(lines[i], refDefs));
                 i++;
             }
             pushBlock(start, buf.join('\n'));
@@ -100,7 +108,7 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
         }
         if (buf.length) {
             // 推入段落块
-            pushBlock(start, stripInline(buf.join('\n')));
+            pushBlock(start, stripInline(buf.join('\n'), refDefs));
             // 保留段落后面的空行，每个空行都作为单独空块
             while (i < lines.length && lines[i].trim() === '') {
                 pushBlock(i, '');
@@ -122,8 +130,13 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
 }
 
 /* —— 行内清理：去掉强调/链接/图片/行内代码/标签/实体 —— */
-export function stripInline(s: string): string {
+export function stripInline(s: string, refDefs?: Set<string>): string {
     let t = s;
+
+    const formatImageText = (alt?: string) => {
+        const text = (alt || '').trim();
+        return text ? `[image: ${text}]` : '[image]';
+    };
 
     // 行内代码
     t = t.replace(/`([^`]+)`/g, '$1');
@@ -131,7 +144,20 @@ export function stripInline(s: string): string {
     // 链接 [text](url) → text；保留裸链接（http...）不处理
     t = t.replace(/\[([^\]]*?)\]\(([^)]+)\)/g, (_m, a1) => a1 || '');
     // 图片 ![alt](src) → alt
-    t = t.replace(/!\[([^\]]*?)\]\([^)]+\)/g, (_m, a1) => a1 || '');
+    t = t.replace(/!\[([^\]]*?)\]\([^)]+\)/g, (_m, a1) => formatImageText(a1));
+    // Reference-style image ![alt][id] → alt
+    t = t.replace(/!\[([^\]]*?)\]\s*\[[^\]]*?\]/g, (_m, a1) => formatImageText(a1));
+    // Reference-style link [text][id] / [text][] → text
+    t = t.replace(/\[([^\]]+?)\]\s*\[[^\]]*?\]/g, (_m, a1) => a1 || '');
+    // Shortcut reference link [text] (only if defined)
+    if (refDefs && refDefs.size) {
+        t = t.replace(/\[([^\]]+?)\](?!\()/g, (m, a1) => {
+            const key = normalizeRefLabel(a1);
+            return refDefs.has(key) ? a1 : m;
+        });
+    }
+    // Autolink <https://...> or <mailto:...>
+    t = t.replace(/<((?:https?:\/\/|mailto:)[^>]+)>/gi, '$1');
 
     // 强调/斜体
     t = t.replace(/(\*\*|__)(.*?)\1/g, '$2');
@@ -152,10 +178,29 @@ export function stripInline(s: string): string {
     return t.replace(/[ \t]+$/gm, '');
 }
 
-export function stripTableRow(line: string): string {
+export function stripTableRow(line: string, refDefs?: Set<string>): string {
     const cells = line.trim()
         .replace(/^\||\|$/g, '')
         .split('|')
-        .map(c => stripInline(c.trim()));
+        .map(c => stripInline(c.trim(), refDefs));
     return cells.join('\t'); // 用制表符拼列
+}
+
+function normalizeRefLabel(label: string): string {
+    return label.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function collectRefDefinitions(lines: string[]): Set<string> {
+    const defs = new Set<string>();
+    for (const line of lines) {
+        const m = line.match(/^\s*\[([^\]]+)\]\s*:\s*\S+/);
+        if (m) {
+            defs.add(normalizeRefLabel(m[1]));
+        }
+    }
+    return defs;
+}
+
+function isReferenceDefinitionLine(line: string): boolean {
+    return /^\s*\[[^\]]+\]\s*:\s*\S+/.test(line);
 }
