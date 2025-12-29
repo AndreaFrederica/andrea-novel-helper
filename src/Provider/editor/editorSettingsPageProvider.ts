@@ -96,6 +96,19 @@ export class EditorSettingsPanel {
         );
     }
 
+    private static getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewPanelOptions & vscode.WebviewOptions {
+        return {
+            enableScripts: true,
+            retainContextWhenHidden: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(extensionUri, 'packages', 'webview', 'dist', 'spa'),
+                vscode.Uri.joinPath(extensionUri, 'packages', 'webview', 'dist', 'spa', 'assets'),
+                vscode.Uri.joinPath(extensionUri, 'media')
+            ],
+            enableFindWidget: true
+        };
+    }
+
     public static createOrShow(extensionUri: vscode.Uri): EditorSettingsPanel {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
@@ -119,19 +132,16 @@ export class EditorSettingsPanel {
             'editorSettingsEnhanced',
             '编辑器设置',
             column || vscode.ViewColumn.One,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-                localResourceRoots: [
-                    vscode.Uri.joinPath(extensionUri, 'packages', 'webview', 'dist', 'spa'),
-                    vscode.Uri.joinPath(extensionUri, 'packages', 'webview', 'dist', 'spa', 'assets'),
-                    vscode.Uri.joinPath(extensionUri, 'media')
-                ],
-                // 启用状态持久化
-                enableFindWidget: true
-            }
+            EditorSettingsPanel.getWebviewOptions(extensionUri)
         );
 
+        EditorSettingsPanel._instance = new EditorSettingsPanel(panel, extensionUri);
+        return EditorSettingsPanel._instance;
+    }
+
+    public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): EditorSettingsPanel {
+        panel.webview.options = EditorSettingsPanel.getWebviewOptions(extensionUri);
+        panel.title = '编辑器设置';
         EditorSettingsPanel._instance = new EditorSettingsPanel(panel, extensionUri);
         return EditorSettingsPanel._instance;
     }
@@ -179,29 +189,17 @@ export function registerEditorSettingsPage(context: vscode.ExtensionContext): vs
     // 注册打开编辑器设置的命令
     const command = vscode.commands.registerCommand('andrea.openEditorSettingsEnhanced', async () => {
         EditorSettingsPanel.createOrShow(context.extensionUri);
-
-        // 保存状态表示编辑器设置页面被打开
-        await context.globalState.update('editorSettingsPanelOpen', true);
     });
 
     context.subscriptions.push(command);
 
-    // 在扩展激活时检查是否需要重新打开编辑器设置页面
-    const wasOpen = context.globalState.get('editorSettingsPanelOpen', false);
-    if (wasOpen) {
-        // 延迟一点时间再打开，确保其他组件已加载
-        setTimeout(() => {
-            EditorSettingsPanel.createOrShow(context.extensionUri);
-        }, 1000);
-    }
-
-    // 注册关闭时的清理
-    context.subscriptions.push({
-        dispose: () => {
-            // 扩展停用时清除状态
-            context.globalState.update('editorSettingsPanelOpen', false);
+    // 使用 VS Code 原生恢复机制（WebviewPanelSerializer）
+    const serializer = vscode.window.registerWebviewPanelSerializer('editorSettingsEnhanced', {
+        async deserializeWebviewPanel(panel: vscode.WebviewPanel, _state: unknown) {
+            EditorSettingsPanel.revive(panel, context.extensionUri);
         }
     });
+    context.subscriptions.push(serializer);
 
     return command;
 }
