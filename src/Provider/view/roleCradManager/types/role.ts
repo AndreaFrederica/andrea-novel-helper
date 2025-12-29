@@ -3,11 +3,30 @@ export type BuiltinType = '主角' | '配角' | '联动角色' | '敏感词' | '
 export type RoleType = BuiltinType | string;
 export type JsonValue = string | number | boolean | null | string[];
 
+/** 文本样式配置 */
+export interface TextStyleOptions {
+  /** 前景色 */
+  color?: string;
+  /** 背景色 */
+  backgroundColor?: string;
+  /** 是否粗体 */
+  bold?: boolean;
+  /** 是否斜体 */
+  italic?: boolean;
+  /** 是否删除线 */
+  strikethrough?: boolean;
+  /** 是否下划线 */
+  underline?: boolean;
+}
+
 export interface BaseFieldsCommon {
   name: string;
   type: RoleType;
   uuid?: string; // 角色唯一标识符 (UUID v7)
+  /** 前景色（旧字段，保持兼容） */
   color?: string;
+  /** 文本样式（新字段，支持多种样式） */
+  style?: TextStyleOptions;
   priority?: number;
   description?: string;
   affiliation?: string;

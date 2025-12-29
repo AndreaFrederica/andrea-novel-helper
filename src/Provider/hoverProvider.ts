@@ -270,6 +270,34 @@ export function buildRoleMarkdown(r: Role): vscode.MarkdownString {
     const extensionFields = getExtensionFields(r);
     for (const [fieldName, value] of extensionFields) {
         const displayName = FIELD_ALIASES[fieldName] || fieldName;
+
+        // 特殊处理样式字段
+        if (fieldName === 'style' && typeof value === 'object' && value !== null) {
+            // style 对象：格式化显示各个属性
+            const styleParts: string[] = [];
+            if (value.color) styleParts.push(`前景色: \`${value.color}\``);
+            if (value.backgroundColor) styleParts.push(`背景色: \`${value.backgroundColor}\``);
+            if (value.bold) styleParts.push('粗体');
+            if (value.italic) styleParts.push('斜体');
+            if (value.strikethrough) styleParts.push('删除线');
+            if (value.underline) styleParts.push('下划线');
+            if (styleParts.length > 0) {
+                md.appendMarkdown(`**样式**: ${styleParts.join('，')}\n\n`);
+            }
+            continue;
+        }
+
+        // 兼容旧格式的单独样式字段
+        if (['backgroundColor', 'bold', 'italic', 'strikethrough', 'underline'].includes(fieldName)) {
+            if (fieldName === 'backgroundColor') {
+                md.appendMarkdown(`**背景色**: \`${String(value)}\`\n\n`);
+            } else if (typeof value === 'boolean' && value) {
+                const displayName = FIELD_ALIASES[fieldName] || fieldName;
+                md.appendMarkdown(`**${displayName}**: 是\n\n`);
+            }
+            continue;
+        }
+
         const formattedValue = formatContentForDisplay(String(value));
         if (containsMarkdownFormatting(String(value))) {
             md.appendMarkdown(`**${displayName}**:\n\n${formattedValue}\n\n`);
@@ -367,6 +395,34 @@ export function activateHover(context: vscode.ExtensionContext) {
                 const extensionFields = getExtensionFields(r);
                 for (const [fieldName, value] of extensionFields) {
                     const displayName = FIELD_ALIASES[fieldName] || fieldName;
+
+                    // 特殊处理样式字段
+                    if (fieldName === 'style' && typeof value === 'object' && value !== null) {
+                        // style 对象：格式化显示各个属性
+                        const styleParts: string[] = [];
+                        if (value.color) styleParts.push(`前景色: \`${value.color}\``);
+                        if (value.backgroundColor) styleParts.push(`背景色: \`${value.backgroundColor}\``);
+                        if (value.bold) styleParts.push('粗体');
+                        if (value.italic) styleParts.push('斜体');
+                        if (value.strikethrough) styleParts.push('删除线');
+                        if (value.underline) styleParts.push('下划线');
+                        if (styleParts.length > 0) {
+                            md.appendMarkdown(`**样式**: ${styleParts.join('，')}\n\n`);
+                        }
+                        continue;
+                    }
+
+                    // 兼容旧格式的单独样式字段
+                    if (['backgroundColor', 'bold', 'italic', 'strikethrough', 'underline'].includes(fieldName)) {
+                        if (fieldName === 'backgroundColor') {
+                            md.appendMarkdown(`**背景色**: \`${String(value)}\`\n\n`);
+                        } else if (typeof value === 'boolean' && value) {
+                            const displayName = FIELD_ALIASES[fieldName] || fieldName;
+                            md.appendMarkdown(`**${displayName}**: 是\n\n`);
+                        }
+                        continue;
+                    }
+
                     const formattedValue = formatContentForDisplay(String(value));
                     // 检查是否包含 Markdown 格式，如果是则换行显示
                     if (containsMarkdownFormatting(String(value))) {

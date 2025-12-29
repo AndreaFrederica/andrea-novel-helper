@@ -1,3 +1,4 @@
+/* eslint-disable curly */
 /**
  * Role <-> RoleCardModel 转换器
  * 规则摘要：
@@ -12,14 +13,33 @@
 
 export type BuiltinType = '主角' | '配角' | '联动角色' | '敏感词' | '词汇' | '正则表达式';
 export type RoleType = BuiltinType | string;
-export type JsonValue = string | number | boolean | null | string[];
+export type JsonValue = string | number | boolean | null | string[] | TextStyleOptions | Record<string, any>;
+
+/** 文本样式配置 */
+export interface TextStyleOptions {
+    /** 前景色 */
+    color?: string;
+    /** 背景色 */
+    backgroundColor?: string;
+    /** 是否粗体 */
+    bold?: boolean;
+    /** 是否斜体 */
+    italic?: boolean;
+    /** 是否删除线 */
+    strikethrough?: boolean;
+    /** 是否下划线 */
+    underline?: boolean;
+}
 
 /** ==== 前端模型 ==== */
 export interface BaseFieldsCommon {
     name: string;
     type: RoleType;
     uuid?: string; // 角色唯一标识符 (UUID v7)
+    /** 前景色（旧字段，保持兼容） */
     color?: string;
+    /** 文本样式（新字段，支持多种样式） */
+    style?: TextStyleOptions;
     priority?: number;
     description?: string;
     affiliation?: string;
@@ -49,6 +69,18 @@ export interface Role {
     aliases?: string[];
     description?: string;
     color?: string;
+    /** 文本样式（新字段） */
+    style?: TextStyleOptions;
+    /** 背景色（兼容旧格式） */
+    backgroundColor?: string;
+    /** 是否粗体（兼容旧格式） */
+    bold?: boolean;
+    /** 是否斜体（兼容旧格式） */
+    italic?: boolean;
+    /** 是否删除线（兼容旧格式） */
+    strikethrough?: boolean;
+    /** 是否下划线（兼容旧格式） */
+    underline?: boolean;
     wordSegmentFilter?: boolean; // 后端专用（不外发）
     packagePath?: string;        // 后端专用（不外发）
     sourcePath?: string;         // 后端专用（不外发）
@@ -69,11 +101,12 @@ const BACKEND_ONLY_KEYS = new Set(['wordSegmentFilter', 'packagePath', 'sourcePa
 const BASE_KEYS = new Set([
     'id', 'name', 'type', 'uuid', 'description', 'color', 'affiliation', 'aliases',
     'regex', 'regexFlags', 'priority', 'fixes', 'fixs',
+    'style', 'backgroundColor', 'bold', 'italic', 'strikethrough', 'underline', // 样式字段
     ...BACKEND_ONLY_KEYS,
 ]);
 
-// 基础字段同义词（用于“从动态键回填 base”与“发前端时避免重复”）
-const BASE_SYNONYMS: Record<string, keyof BaseFieldsCommon | 'priority' | 'fixes'> = {
+// 基础字段同义词（用于"从动态键回填 base"与"发前端时避免重复"）
+const BASE_SYNONYMS: Record<string, keyof BaseFieldsCommon | 'priority' | 'fixes' | 'style'> = {
     // name
     'name': 'name', '名称': 'name', '名字': 'name',
     // type
@@ -90,6 +123,8 @@ const BASE_SYNONYMS: Record<string, keyof BaseFieldsCommon | 'priority' | 'fixes
     'priority': 'priority', '优先级': 'priority',
     // fixes（敏感词专用）
     'fixes': 'fixes', 'fixs': 'fixes',
+    // style（文本样式）
+    'style': 'style', '样式': 'style',
 };
 
 // 扩展字段白名单（中英/单复数/中文同义词）
@@ -184,6 +219,23 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         regexFlags: role.regexFlags,
     };
 
+    // 处理 style 字段（优先使用 style 对象，否则从单独字段构建）
+    const styleObj: TextStyleOptions = {};
+    if (role.style && typeof role.style === 'object') {
+        Object.assign(styleObj, role.style);
+    } else {
+        // 兼容旧格式：从单独字段构建 style
+        if (role.color) styleObj.color = role.color;
+        if (role.backgroundColor) styleObj.backgroundColor = role.backgroundColor;
+        if (role.bold) styleObj.bold = true;
+        if (role.italic) styleObj.italic = true;
+        if (role.strikethrough) styleObj.strikethrough = true;
+        if (role.underline) styleObj.underline = true;
+    }
+    if (Object.keys(styleObj).length > 0) {
+        base.style = styleObj;
+    }
+
     const extended: ExtendedFields = {};
     const custom: CustomFields = {};
 
@@ -193,7 +245,7 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         const v = toJsonValue(rawV);
         if (isEmptyish(v)) {continue;}
 
-        // 如果是“基础字段同义词”，且 base 未设置 -> 回填 base；否则忽略（避免重复）
+        // 如果是"基础字段同义词"，且 base 未设置 -> 回填 base；否则忽略（避免重复）
         const baseKey = BASE_SYNONYMS[nk as keyof typeof BASE_SYNONYMS];
         if (baseKey) {
             if (baseKey === 'aliases') {
@@ -202,6 +254,13 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
                 if (typeof base.priority !== 'number') {
                     const n = Array.isArray(v) ? Number(v[0]) : Number(v as any);
                     if (!Number.isNaN(n)) {base.priority = n;}
+                }
+            } else if (baseKey === 'style') {
+                // style 是特殊字段，需要解析 JSON
+                if (!base.style) {
+                    try {
+                        base.style = typeof v === 'string' ? JSON.parse(v) : v;
+                    } catch { /* ignore */ }
                 }
             } else if (!base[baseKey as keyof BaseFieldsCommon]) {
                 base[baseKey] = Array.isArray(v) ? (v[0] as any) : (v as any);
@@ -242,11 +301,26 @@ export function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: R
     setIf('affiliation', base.affiliation);
     setIf('aliases', toStringArray(base.aliases));
     setIf('description', base.description);
-    setIf('color', base.color);
+
+    // color 字段处理：如果 style.color 存在，则不单独保存 color（避免重复）
+    const hasStyleColor = base.style && typeof base.style === 'object' && (base.style as TextStyleOptions).color;
+    if (!hasStyleColor) {
+        setIf('color', base.color);
+    }
+
     setIf('regex', base.regex);
     setIf('regexFlags', base.regexFlags);
     if (typeof base.priority === 'number' && !Number.isNaN(base.priority)) {out.priority = base.priority;}
     setIf('fixes', toStringArray(base.fixes));
+
+    // 处理 style 字段：仅保存 style 对象，不展开到单独字段
+    if (base.style && typeof base.style === 'object') {
+        const style = base.style as TextStyleOptions;
+        // 只有当 style 对象包含实际内容时才保存
+        if (style.color || style.backgroundColor || style.bold || style.italic || style.strikethrough || style.underline) {
+            setIf('style', style);
+        }
+    }
 
     // 后端专用只保留 existing（无视前端）
     if (existing) {

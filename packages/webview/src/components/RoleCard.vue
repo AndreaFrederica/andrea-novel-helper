@@ -107,7 +107,7 @@
             <div class="col">
               <q-input
                 v-model="draft.base.color"
-                label="颜色 (color)"
+                label="前景色 (color)"
                 dense
                 filled
                 :debounce="150"
@@ -124,7 +124,7 @@
           </div>
           <q-dialog v-model="openColor">
             <q-card>
-              <q-card-section class="text-subtitle1">选择颜色</q-card-section>
+              <q-card-section class="text-subtitle1">选择前景色</q-card-section>
               <q-card-section>
                 <q-color
                   v-model="colorPicker"
@@ -139,6 +139,89 @@
               </q-card-actions>
             </q-card>
           </q-dialog>
+        </div>
+
+        <!-- 背景色 -->
+        <div class="col-12 col-md-6">
+          <div class="row items-center q-col-gutter-sm">
+            <div class="col">
+              <q-input
+                v-model="backgroundColor"
+                label="背景色 (backgroundColor)"
+                dense
+                filled
+                :debounce="150"
+                @update:model-value="commit(['base.style'])"
+              >
+                <template #append>
+                  <q-btn dense flat icon="palette" @click="openBackgroundColor = true" />
+                </template>
+              </q-input>
+            </div>
+            <div class="col-auto">
+              <div class="color-dot" :style="{ backgroundColor: backgroundColor || '#ccc' }" />
+            </div>
+          </div>
+          <q-dialog v-model="openBackgroundColor">
+            <q-card>
+              <q-card-section class="text-subtitle1">选择背景色</q-card-section>
+              <q-card-section>
+                <q-color
+                  v-model="backgroundColorPicker"
+                  format-model="hex"
+                  no-header
+                  default-view="palette"
+                />
+              </q-card-section>
+              <q-card-actions align="right">
+                <q-btn flat label="取消" v-close-popup />
+                <q-btn color="primary" label="应用" @click="applyBackgroundColor()" v-close-popup />
+              </q-card-actions>
+            </q-card>
+          </q-dialog>
+        </div>
+
+        <!-- 文本样式选项 -->
+        <div class="col-12">
+          <div class="text-subtitle2 q-mb-sm">文本样式</div>
+          <div class="row q-col-gutter-md">
+            <div class="col-auto">
+              <q-toggle
+                v-model="bold"
+                label="粗体"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
+            </div>
+            <div class="col-auto">
+              <q-toggle
+                v-model="italic"
+                label="斜体"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
+            </div>
+            <div class="col-auto">
+              <q-toggle
+                v-model="strikethrough"
+                label="删除线"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
+            </div>
+            <div class="col-auto">
+              <q-toggle
+                v-model="underline"
+                label="下划线"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
+            </div>
+          </div>
+          <!-- 样式预览 -->
+          <div class="q-mt-sm q-pa-sm rounded-borders" :style="previewStyle">
+            <span>{{ draft.base.name || '预览文本' }}</span>
+          </div>
         </div>
 
         <!-- 别名：逐行编辑，每行一个，最后保留空行用于添加 -->
@@ -554,6 +637,150 @@ function applyColor() {
   draft.base.color = colorPicker.value;
   commit(['base.color']);
 }
+
+/** ====== 文本样式 ====== */
+// 确保 draft.base.style 存在
+watch(
+  () => draft.base.style,
+  (v) => {
+    if (!v) {
+      draft.base.style = {};
+    }
+  },
+  { immediate: true },
+);
+
+// 背景色
+const backgroundColor = ref<string>(draft.base.style?.backgroundColor || '');
+const backgroundColorPicker = ref<string>(backgroundColor.value || '#ffffff');
+const openBackgroundColor = ref(false);
+
+watch(
+  () => backgroundColor.value,
+  (v) => {
+    if (!draft.base.style) draft.base.style = {};
+    if (v) {
+      draft.base.style.backgroundColor = v;
+    } else {
+      delete draft.base.style.backgroundColor;
+    }
+    backgroundColorPicker.value = v || '#ffffff';
+  },
+);
+
+watch(
+  () => draft.base.style?.backgroundColor,
+  (v) => {
+    backgroundColor.value = v || '';
+  },
+);
+
+function applyBackgroundColor() {
+  backgroundColor.value = backgroundColorPicker.value;
+  if (!draft.base.style) draft.base.style = {};
+  if (backgroundColorPicker.value) {
+    draft.base.style.backgroundColor = backgroundColorPicker.value;
+  } else {
+    delete draft.base.style.backgroundColor;
+  }
+  commit(['base.style']);
+}
+
+// 粗体
+const bold = ref<boolean>(draft.base.style?.bold || false);
+watch(
+  () => bold.value,
+  (v) => {
+    if (!draft.base.style) draft.base.style = {};
+    if (v) {
+      draft.base.style.bold = true;
+    } else {
+      delete draft.base.style.bold;
+    }
+    commit(['base.style']);
+  },
+);
+watch(
+  () => draft.base.style?.bold,
+  (v) => {
+    bold.value = !!v;
+  },
+);
+
+// 斜体
+const italic = ref<boolean>(draft.base.style?.italic || false);
+watch(
+  () => italic.value,
+  (v) => {
+    if (!draft.base.style) draft.base.style = {};
+    if (v) {
+      draft.base.style.italic = true;
+    } else {
+      delete draft.base.style.italic;
+    }
+    commit(['base.style']);
+  },
+);
+watch(
+  () => draft.base.style?.italic,
+  (v) => {
+    italic.value = !!v;
+  },
+);
+
+// 删除线
+const strikethrough = ref<boolean>(draft.base.style?.strikethrough || false);
+watch(
+  () => strikethrough.value,
+  (v) => {
+    if (!draft.base.style) draft.base.style = {};
+    if (v) {
+      draft.base.style.strikethrough = true;
+    } else {
+      delete draft.base.style.strikethrough;
+    }
+    commit(['base.style']);
+  },
+);
+watch(
+  () => draft.base.style?.strikethrough,
+  (v) => {
+    strikethrough.value = !!v;
+  },
+);
+
+// 下划线
+const underline = ref<boolean>(draft.base.style?.underline || false);
+watch(
+  () => underline.value,
+  (v) => {
+    if (!draft.base.style) draft.base.style = {};
+    if (v) {
+      draft.base.style.underline = true;
+    } else {
+      delete draft.base.style.underline;
+    }
+    commit(['base.style']);
+  },
+);
+watch(
+  () => draft.base.style?.underline,
+  (v) => {
+    underline.value = !!v;
+  },
+);
+
+// 样式预览
+const previewStyle = computed(() => {
+  const style: Record<string, string> = {};
+  if (draft.base.color) style.color = draft.base.color;
+  if (backgroundColor.value) style.backgroundColor = backgroundColor.value;
+  if (bold.value) style.fontWeight = 'bold';
+  if (italic.value) style.fontStyle = 'italic';
+  if (strikethrough.value) style.textDecoration = 'line-through';
+  if (underline.value) style.textDecoration = style.textDecoration ? `${style.textDecoration} underline` : 'underline';
+  return style;
+});
 
 /** ====== 别名 / 修复词（基础字段字符串数组） ====== */
 const aliasesModel = ref<string[]>(

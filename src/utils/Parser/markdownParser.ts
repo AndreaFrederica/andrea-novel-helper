@@ -20,6 +20,13 @@ export const FIELD_ALIASES: { [key: string]: string } = {
     'affiliation': '从属',
     'alias': '别名',
     'aliases': '别名',
+    // 文本样式字段
+    'style': '样式',
+    'backgroundColor': '背景色',
+    'bold': '粗体',
+    'italic': '斜体',
+    'strikethrough': '删除线',
+    'underline': '下划线',
     
     // 扩展字段
     'age': '年龄',
@@ -293,11 +300,47 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
             }
             break;
         }
-    case 'fixes':
-    case 'fixs': // 兼容旧字段
-    case 'fix':
-    case 'replacements':
-    case 'replacement': {
+        case 'backgroundColor': {
+            // 提取和验证背景色格式
+            const colorText = stripMarkdown(processedContent);
+            const extractedColor = extractColor(colorText);
+            if (extractedColor) {
+                (role as any).backgroundColor = extractedColor;
+            }
+            break;
+        }
+        case 'bold':
+        case 'italic':
+        case 'strikethrough':
+        case 'underline': {
+            // 布尔样式字段：检查内容是否表示"true"
+            const text = stripMarkdown(processedContent).toLowerCase().trim();
+            const isTrue = text === 'true' || text === 'yes' || text === '是' || text === '真' || text === '1' || text === '✓' || text === '✅';
+            if (isTrue) {
+                (role as any)[fieldName] = true;
+            }
+            break;
+        }
+        case 'style': {
+            // style 字段：尝试解析 JSON 对象
+            const styleText = stripMarkdown(processedContent).trim();
+            try {
+                // 尝试解析为 JSON
+                const parsed = JSON.parse(styleText);
+                if (typeof parsed === 'object' && parsed !== null) {
+                    (role as any).style = parsed;
+                }
+            } catch {
+                // 如果不是 JSON，则忽略（style 必须是有效的 JSON 对象）
+                console.warn(`Invalid style format in markdown: ${styleText}`);
+            }
+            break;
+        }
+        case 'fixes':
+        case 'fixs': // 兼容旧字段
+        case 'fix':
+        case 'replacements':
+        case 'replacement': {
             // 解析修复候选：支持
             // 1) 逗号/中文逗号/顿号/分号/空格 分隔
             // 2) 换行分隔

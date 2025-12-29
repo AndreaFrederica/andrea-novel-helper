@@ -368,6 +368,27 @@ export class SmartRoleAdder {
     getAllUuidMappings(): Map<string, Role> {
         return new Map(this.uuidMap);
     }
+
+    /**
+     * 移除指定文件的所有角色并重建映射表
+     * @param filePath 文件路径
+     */
+    removeRolesByFile(filePath: string): void {
+        const removed = new Set<Role>();
+        // 从数组中删除
+        for (let i = this.roles.length - 1; i >= 0; i--) {
+            if (this.roles[i].sourcePath === filePath) {
+                const role = this.roles[i];
+                removed.add(role);
+                this.roles.splice(i, 1);
+            }
+        }
+        // 重建映射表（移除已删除的角色）
+        if (removed.size > 0) {
+            this.rebuildMaps();
+            console.log(`[SmartRoleAdder] 移除了 ${removed.size} 个来自 ${filePath} 的角色`);
+        }
+    }
 }
 
 /**
@@ -446,6 +467,32 @@ export function mergeRoles(baseRole: Role, mergeRole: Role): Role {
         merged.wordSegmentFilter = mergeRole.wordSegmentFilter;
     }
 
+    // 合并 style 字段（深度合并）
+    try {
+        const baseStyle = (baseRole.style && typeof baseRole.style === 'object') ? baseRole.style : {};
+        const mergeStyle = (mergeRole.style && typeof mergeRole.style === 'object') ? mergeRole.style : {};
+        const mergedStyle: any = { ...baseStyle };
+
+        // 合并 style 对象的各个属性（基础角色优先）
+        for (const key of Object.keys(mergeStyle)) {
+            if (mergedStyle[key] === undefined) {
+                mergedStyle[key] = mergeStyle[key];
+            }
+        }
+        // 只有当有实际内容时才设置 style
+        if (Object.keys(mergedStyle).length > 0) {
+            merged.style = mergedStyle;
+        }
+    } catch (error) {
+        console.error('[mergeRoles] style 字段合并失败:', error, 'baseRole:', baseRole.name, 'mergeRole:', mergeRole.name);
+        // 发生错误时，保留基础角色的 style（如果有）
+        if (baseRole.style) {
+            merged.style = baseRole.style;
+        } else if (mergeRole.style) {
+            merged.style = mergeRole.style;
+        }
+    }
+
     // 合并正则表达式（仅适用于正则表达式角色）
     if (mergeRole.regex && !baseRole.regex) {
         merged.regex = mergeRole.regex;
@@ -505,7 +552,8 @@ export function mergeRoles(baseRole: Role, mergeRole: Role): Role {
         if (key === 'name' || key === 'uuid' || key === 'type' ||
             key === 'description' || key === 'color' || key === 'affiliation' ||
             key === 'aliases' || key === 'fixes' || key === 'priority' ||
-            key === 'wordSegmentFilter' || key === 'regex' || key === 'regexFlags') {
+            key === 'wordSegmentFilter' || key === 'regex' || key === 'regexFlags' ||
+            key === 'style') {
             continue; // 已处理的属性
         }
 

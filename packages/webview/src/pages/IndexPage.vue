@@ -526,10 +526,24 @@ function bucketEntries(r: RoleWithId, bucket: 'base' | 'extended' | 'custom') {
   const rec = obj as Record<string, unknown>;
   return Object.keys(rec).map((k) => {
     const v = rec[k];
-    return { key: k, preview: toPreview(v) };
+    return { key: k, preview: toPreview(v, k) };
   });
 }
-function toPreview(v: unknown): string {
+function toPreview(v: unknown, key?: string): string {
+  if (key === 'style' && v && typeof v === 'object' && !Array.isArray(v)) {
+    const rec = v as Record<string, unknown>;
+    const parts: string[] = [];
+    if (typeof rec.color === 'string' && rec.color) parts.push(`color ${rec.color}`);
+    if (typeof rec.backgroundColor === 'string' && rec.backgroundColor) {
+      parts.push(`bg ${rec.backgroundColor}`);
+    }
+    if (rec.bold) parts.push('bold');
+    if (rec.italic) parts.push('italic');
+    if (rec.strikethrough) parts.push('strike');
+    if (rec.underline) parts.push('underline');
+    if (parts.length) return parts.join(', ');
+    return '{}';
+  }
   if (Array.isArray(v)) return `[${v.map((x) => stringifyShort(x)).join(', ')}]`;
   if (typeof v === 'object' && v !== null) return '{…}';
   return stringifyShort(v);

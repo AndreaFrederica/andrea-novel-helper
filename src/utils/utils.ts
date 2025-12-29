@@ -1116,20 +1116,28 @@ function loadTraditionalRoles(forceRefresh: boolean = false, changedFiles?: stri
  */
 function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: string) {
 	console.log(`performIncrementalUpdate: 处理 ${changedFiles.length} 个变化文件`);
-	
+
 	// 移除变化文件对应的角色
-	for (const filePath of changedFiles) {
-		// 移除该文件的所有角色
-		for (let i = roles.length - 1; i >= 0; i--) {
-			if (roles[i].sourcePath === filePath) {
-				roles.splice(i, 1);
-			}
+	if (roleManager) {
+		for (const filePath of changedFiles) {
+			roleManager.removeRolesByFile(filePath);
+			// 刷新文件缓存
+			globalFileCache.refreshFile(filePath);
 		}
-		
-		// 刷新文件缓存
-		globalFileCache.refreshFile(filePath);
+	} else {
+		// 如果 roleManager 未初始化，使用旧的删除方式
+		for (const filePath of changedFiles) {
+			// 移除该文件的所有角色
+			for (let i = roles.length - 1; i >= 0; i--) {
+				if (roles[i].sourcePath === filePath) {
+					roles.splice(i, 1);
+				}
+			}
+			// 刷新文件缓存
+			globalFileCache.refreshFile(filePath);
+		}
 	}
-	
+
 	// 重新加载变化的文件
 	for (const filePath of changedFiles) {
 		if (!fs.existsSync(filePath)) {

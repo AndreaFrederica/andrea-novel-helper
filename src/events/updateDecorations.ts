@@ -54,7 +54,6 @@ function getPerDocHashes(docUri: string): Map<string, string> {
             cached.lastSeen = Date.now();
             documentOpenCounts.set(docUri, cached.openCount);
             decorationCache.delete(docUri); // 从缓存移回活跃状态
-            console.log('[Decorations] 从缓存恢复哈希状态:', docUri, '打开次数:', cached.openCount);
         } else {
             m = new Map(); 
             appliedHashes.set(docUri, m);
@@ -115,7 +114,6 @@ function tryRestoreFromCache(editor: vscode.TextEditor, docUri: string): boolean
     decorationCache.delete(docUri);
     restoreCooldown.set(docUri, Date.now() + 200); // 200ms 内不再尝试缓存恢复
 
-    console.log('[Decorations] 命中缓存，已提前应用装饰（延迟AC验证）:', docUri);
     return true;
 }
 
@@ -133,12 +131,62 @@ export interface DecorationsUpdatedEvent { uri: vscode.Uri; rolesHighlighted: nu
 export const _onDidUpdateDecorations = new vscode.EventEmitter<DecorationsUpdatedEvent>();
 export const onDidUpdateDecorations = _onDidUpdateDecorations.event;
 
-// —— 装饰器元数据：角色名 → { deco, propsHash } —— 
+// —— 装饰器元数据：角色名 → { deco, propsHash } ——
 interface DecoMeta {
     deco: vscode.TextEditorDecorationType;
     propsHash: string;
 }
 const decorationMeta = new Map<string, DecoMeta>();
+
+/** 文本样式配置接口 */
+interface TextStyleOptions {
+    color?: string;
+    backgroundColor?: string;
+    bold?: boolean;
+    italic?: boolean;
+    strikethrough?: boolean;
+    underline?: boolean;
+}
+
+/** 从角色获取文本样式配置（兼容旧格式） */
+function getTextStyleFromRole(role: any): TextStyleOptions {
+    // 如果有新的 style 字段，直接使用
+    if (role.style && typeof role.style === 'object') {
+        return role.style as TextStyleOptions;
+    }
+
+    // 兼容旧格式：从顶层字段读取
+    const style: TextStyleOptions = {};
+    if (role.color) style.color = role.color;
+    if (role.backgroundColor) style.backgroundColor = role.backgroundColor;
+    if (role.bold) style.bold = true;
+    if (role.italic) style.italic = true;
+    if (role.strikethrough) style.strikethrough = true;
+    if (role.underline) style.underline = true;
+
+    return style;
+}
+
+/** 构建 textDecoration 字符串 */
+function buildTextDecoration(style: TextStyleOptions): string | undefined {
+    const parts: string[] = [];
+    if (style.underline) parts.push('underline');
+    if (style.strikethrough) parts.push('line-through');
+    // 斜体/粗体不走 textDecoration
+    return parts.length > 0 ? parts.join(' ') : undefined;
+}
+
+/** 构建 fontStyle 字符串（仅处理斜体） */
+function buildFontStyle(style: TextStyleOptions): string | undefined {
+    if (style.italic) return 'italic';
+    return undefined;
+}
+
+/** 构建 fontWeight 字符串（仅处理粗体） */
+function buildFontWeight(style: TextStyleOptions): string | undefined {
+    if (style.bold) return 'bold';
+    return undefined;
+}
 
 /** 初始化（或重建）自动机 & patternMap */
 export function initAutomaton() {
@@ -159,13 +207,30 @@ function ensureDecorationTypes(): Set<string> {
 
     const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const defaultColor = cfg.get<string>('defaultColor')!;
+    const rangeBehavior = vscode.DecorationRangeBehavior.ClosedClosed; // 两端关闭
+
     // 1) 计算每个角色当前应有的 propsHash
     const newHashMap = new Map<string, string>();
-    const rangeBehavior = vscode.DecorationRangeBehavior.ClosedClosed; // 两端关闭
     for (const r of roles) {
-        const color = r.color ?? typeColorMap[r.type] ?? defaultColor;
-        const props = JSON.stringify({ color, type: r.type, rb: 'ClosedClosed' });
-        newHashMap.set(r.name, props);
+        const textStyle = getTextStyleFromRole(r);
+        // 兼容旧格式：如果没有 style.color，使用顶层 color
+        const color = textStyle.color ?? r.color ?? typeColorMap[r.type] ?? defaultColor;
+
+        // 构建样式哈希，包含所有样式属性
+        const props: any = {
+            color,
+            type: r.type,
+            rb: 'ClosedClosed',
+            backgroundColor: textStyle.backgroundColor || null,  // 使用 null 而不是 undefined
+            bold: textStyle.bold || false,
+            italic: textStyle.italic || false,
+            strikethrough: textStyle.strikethrough || false,
+            underline: textStyle.underline || false
+        };
+        const propsHash = JSON.stringify(props);
+        newHashMap.set(r.name, propsHash);
+
+        // 调试：输出每个角色的样式信息
     }
 
     // 2) 更新已有的 & 新增缺失的
@@ -173,11 +238,44 @@ function ensureDecorationTypes(): Set<string> {
         const prev = decorationMeta.get(roleName);
         if (!prev || prev.propsHash !== propsHash) {
             prev?.deco.dispose();
-            const color = JSON.parse(propsHash).color as string;
-            const deco = vscode.window.createTextEditorDecorationType({
-                color,
+
+            // 直接从 roles 数组获取角色对象
+            const role = roles.find(r => r.name === roleName);
+            const textStyle = getTextStyleFromRole(role);
+            const props = JSON.parse(propsHash);
+
+            // 构建装饰选项
+            const decoOptions: vscode.DecorationRenderOptions = {
                 rangeBehavior
-            });
+            };
+
+            // 设置颜色
+            decoOptions.color = props.color;
+
+            // 设置背景色
+            if (props.backgroundColor) {
+                decoOptions.backgroundColor = props.backgroundColor;
+            }
+
+            // 设置字体样式（斜体）
+            const fontStyle = buildFontStyle(textStyle);
+            if (fontStyle) {
+                decoOptions.fontStyle = fontStyle;
+            }
+
+            // 设置字体粗细（粗体）
+            const fontWeight = buildFontWeight(textStyle);
+            if (fontWeight) {
+                decoOptions.fontWeight = fontWeight;
+            }
+
+            // 设置文本装饰（下划线/删除线）
+            const textDecoration = buildTextDecoration(textStyle);
+            if (textDecoration) {
+                decoOptions.textDecoration = textDecoration;
+            }
+
+            const deco = vscode.window.createTextEditorDecorationType(decoOptions);
             decorationMeta.set(roleName, { deco, propsHash });
             changedRoles.add(roleName); // [ANCHOR A-1] 记录变化
         }
@@ -273,7 +371,6 @@ export async function updateDecorations() {
             }
             if (hits.length === 0 && roles.length > 0) {
                 // 可能是构建 race / 词数过少；同步 fallback
-                console.log('[Decorations] 异步空结果 fallback 同步');
                 fullText = doc.getText();
                 const rawHits = ahoCorasickManager.search(fullText);
                 hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]]);
@@ -285,8 +382,7 @@ export async function updateDecorations() {
             hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]]);
         }
         const acCost = Date.now() - startMs;
-    console.log('[Decorations] AC阶段耗时', acCost, 'ms hits', hits.length);
-    console.log('[Decorations] 找到的匹配:', hits.slice(0, 5)); // 只显示前5个匹配，避免日志过长
+    
 
         // 预构建 pattern -> role 映射（包含别名和fixes），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
         const { roleToRanges, hoverEntries, snapshot, fullText: resolvedText, hits: resolvedHits } = await collectRoleUsageRanges(doc, { hits, fullText });
@@ -475,7 +571,6 @@ export async function updateDecorations() {
                         hashes: new Map(hashes),
                         rangesByRoleName
                     });
-                    console.log('[Decorations] 缓存文档装饰哈希+范围:', key, '角色数:', hashes.size, '打开次数:', openCount);
                 }
                 appliedHashes.delete(key);
                 currentRangesByDoc.delete(key);
@@ -496,7 +591,6 @@ export async function updateDecorations() {
             const toDelete = entries.slice(0, decorationCache.size - maxCache);
             for (const [key] of toDelete) {
                 decorationCache.delete(key);
-                console.log('[Decorations] 清理过期缓存:', key);
             }
         }
 
