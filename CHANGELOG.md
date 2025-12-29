@@ -1,5 +1,16 @@
 # Change Log
 
+## [0.4.53] - 2025-12-29
+### 🐛 修复
+- 默认关闭了中文IME修复，其可能在某些操作系统和输入法下无法正常工作，导致输入异常。如果需要使用该功能，请手动开启 `andrea.typeset.enableChineseIMEFix` 配置项。
+### ✨ 新增
+- 增加自动滚动功能，支持编辑时自动滚动到某个比例位置，新增配置项 `andrea.autoScroll.toggle` 用于开启或关闭自动滚动功能，`andrea.autoScroll.setRatio` 用于设置自动滚动的比例位置（0-1之间的小数），`andrea.autoScroll.scrollToEnd` 用于快速滚动到文档末尾。
+- 支持了同uuid角色的定义分散在多个文件里的情况，现在会合并这些定义，并且可用设定优先级。
+- 增强了角色Treeview视图对于嵌套属性的显示支持，现在可以展开查看角色的嵌套属性。
+- 新增了角色的Style属性，允许用户设置角色的背景色，粗体，斜体等样式，增强角色的可视化效果。
+- 增强了md2Plaintext的转换功能，现在支持更多的Markdown语法元素，如超链接，图片等。
+
+
 ## [0.4.47（PreRelease）] - 2025-12-09
 ### 🐛 修复
 - 修复了中文IME下对中文引号补全的不良体验问题，新增配置项 `andrea.typeset.enableChineseIMEFix` （默认开启）和 `andrea.typeset.chineseIMEDelay` （默认50ms），通过模拟键盘输入的方式来改善中文输入法下的引号补全体验，避免输入法状态导致的下一次输入错误。
