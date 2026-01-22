@@ -163,28 +163,8 @@ export async function activate(context: vscode.ExtensionContext) {
     initI18n(context.extensionPath);
 
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const wsDisabledInspect = cfg1.inspect<boolean>('workspaceDisabled');
-    let wsDisabled = wsDisabledInspect?.workspaceFolderValue;
-    if (wsDisabled === undefined) {
-        wsDisabled = wsDisabledInspect?.workspaceValue;
-    }
-    if (wsDisabled === undefined) {
-        wsDisabled = wsDisabledInspect?.globalValue;
-    }
+    const useVsCodeManagedDisabling = cfg1.get<boolean>('useVsCodeManagedDisabling', false);
 
-    // 确保启用/禁用命令始终可用（即使后续提前返回）
-    context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.disableWorkspace', async () => {
-            await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', true, vscode.ConfigurationTarget.Workspace);
-            await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', false);
-            vscode.window.showInformationMessage('已禁用小说助手（本工作区），重新加载窗口后生效。');
-        }),
-        vscode.commands.registerCommand('AndreaNovelHelper.enableWorkspace', async () => {
-            await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
-            await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
-            vscode.window.showInformationMessage('已启用小说助手（本工作区），重新加载窗口后生效。');
-        })
-    );
     registerContextKeys(context);
 
     let maioAvailable = hasMaioAvailability();
@@ -206,7 +186,32 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(maioExtWatcher);
 
-    if (wsDisabled === undefined) {
+    // 当使用 VSCode 托管的禁用系统时，跳过内部禁用检查
+    if (!useVsCodeManagedDisabling) {
+        const wsDisabledInspect = cfg1.inspect<boolean>('workspaceDisabled');
+        let wsDisabled = wsDisabledInspect?.workspaceFolderValue;
+        if (wsDisabled === undefined) {
+            wsDisabled = wsDisabledInspect?.workspaceValue;
+        }
+        if (wsDisabled === undefined) {
+            wsDisabled = wsDisabledInspect?.globalValue;
+        }
+
+        // 确保启用/禁用命令始终可用（即使后续提前返回）
+        context.subscriptions.push(
+            vscode.commands.registerCommand('AndreaNovelHelper.disableWorkspace', async () => {
+                await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', true, vscode.ConfigurationTarget.Workspace);
+                await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', false);
+                vscode.window.showInformationMessage('已禁用小说助手（本工作区），重新加载窗口后生效。');
+            }),
+            vscode.commands.registerCommand('AndreaNovelHelper.enableWorkspace', async () => {
+                await vscode.workspace.getConfiguration('AndreaNovelHelper').update('workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
+                await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
+                vscode.window.showInformationMessage('已启用小说助手（本工作区），重新加载窗口后生效。');
+            })
+        );
+
+        if (wsDisabled === undefined) {
         // 仅在工作区未设置时弹窗
         const pick = await vscode.window.showInformationMessage(
             '是否在当前工作区启用 Andrea Novel Helper？（可随时在设置或命令面板切换）',
@@ -249,7 +254,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
         return;
     }
-    
+    }
+
     await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
     // 输出通道用于调试激活阶段错误/栈
     const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
