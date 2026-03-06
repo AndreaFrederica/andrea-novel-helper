@@ -25,6 +25,9 @@ on:
         description: "可选：说明文件路径（如 CHANGELOG.md；留空则自动生成）"
         required: false
         default: ""
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
   webview:
@@ -73,7 +76,7 @@ jobs:
     env:
       # 扩展根目录；若在子目录请改成实际路径，例如 packages/extension
       WORKDIR: .
-      EV: ${{ inputs.electron_version }}
+      EV: ${{ inputs.electron_version || '30.0.9' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -249,7 +252,7 @@ jobs:
       image: debian:buster
     env:
       WORKDIR: .
-      EV: ${{ inputs.electron_version }}
+      EV: ${{ inputs.electron_version || '30.0.9' }}
     steps:
       - run: |
           set -e
@@ -410,7 +413,7 @@ jobs:
   publish:
     name: Publish to Marketplace
     needs: [build, build-linux]
-    if: ${{ inputs.publish == true }}
+    if: ${{ inputs.publish == true || github.event_name == 'push' && github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     environment: publish
     permissions:
@@ -474,7 +477,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       - name: Create GitHub Release (combined)
-        if: ${{ inputs.release_notes != '' }}
+        if: ${{ inputs.release_notes != '' && github.event_name != 'push' }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.STD_VER }}
@@ -494,7 +497,7 @@ jobs:
             - Both variants share the same features and fixes for this release; only activation timing differs.
 
       - name: Create GitHub Release (combined via body_path)
-        if: ${{ inputs.release_notes == '' && inputs.release_notes_path != '' }}
+        if: ${{ inputs.release_notes == '' && inputs.release_notes_path != '' && github.event_name != 'push' }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.STD_VER }}
@@ -514,7 +517,7 @@ jobs:
             - Both variants share the same features and fixes for this release; only activation timing differs.
 
       - name: Create GitHub Release (combined auto)
-        if: ${{ inputs.release_notes == '' && inputs.release_notes_path == '' }}
+        if: ${{ inputs.release_notes == '' && inputs.release_notes_path == '' || github.event_name == 'push' && github.ref_type == 'tag' }}
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.STD_VER }}
