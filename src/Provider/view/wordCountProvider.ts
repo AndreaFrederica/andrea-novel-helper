@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import fg from 'fast-glob';
-import { getSupportedExtensions, mergeStats, TextStats } from '../../utils/utils';
+import { getSupportedExtensions, mergeStats, TextStats, isExternalResourceMarkerFile } from '../../utils/utils';
 import { countAndAnalyzeOffThread } from '../../utils/WordCount/asyncWordCounter';
 import { CombinedIgnoreParser } from '../../utils/Parser/gitignoreParser';
 import { isFileIgnored, IgnoreConfig } from '../../utils/ignoreUtils';
@@ -113,6 +113,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     private dirtyRoots = new Set<string>();
     private pendingRefreshScheduled = false;
     private ignoreParser: CombinedIgnoreParser | null = null;
+    private resourceFolderMarkCache = new Map<string, { marked: boolean; ts: number }>();
 
     // 大文件异步精确统计支持
     private largeApproxPending = new Set<string>(); // 仍为估算结果等待精确统计
@@ -238,6 +239,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         const fileName = path.basename(filePath);
 
         wcDebug(`WordCount: File change detected - ${event.type}: ${filePath}`);
+        this.resourceFolderMarkCache.clear();
 
         // 检查是否为支持的文件类型或参考文件类型
         const ext = path.extname(fileName).slice(1).toLowerCase();
@@ -428,7 +430,55 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     public refreshIgnoreParser() {
         this.initIgnoreParser();
         this.clearCache();
+        this.resourceFolderMarkCache.clear();
         this.refresh();
+    }
+
+    private scanResourceMarkerFiles(dirPath: string): string[] {
+        try {
+            const candidates = fg.sync('**/*.{ojson5,rjson5,ojson,rjson,tjson5,json5,md,txt}', {
+                cwd: dirPath,
+                onlyFiles: true,
+                dot: false,
+                absolute: true,
+                ignore: [
+                    '**/.git/**',
+                    '**/.vscode/**',
+                    '**/.idea/**',
+                    '**/node_modules/**',
+                    '**/.anh-fsdb/**',
+                    '**/dist/**',
+                    '**/build/**',
+                    '**/out/**'
+                ]
+            });
+            return candidates.filter(filePath => isExternalResourceMarkerFile(path.basename(filePath)));
+        } catch (error) {
+            wcDebug('scanResourceMarkerFiles:error', dirPath, error);
+            return [];
+        }
+    }
+
+    private isResourceFolder(dirPath: string): boolean {
+        const cache = this.resourceFolderMarkCache.get(dirPath);
+        const now = Date.now();
+        if (cache && (now - cache.ts) < 5000) {
+            return cache.marked;
+        }
+        const markerFiles = this.scanResourceMarkerFiles(dirPath);
+        const marked = markerFiles.length > 0;
+        this.resourceFolderMarkCache.set(dirPath, { marked, ts: now });
+        return marked;
+    }
+
+    public rescanResourceFilesInFolder(dirPath: string): { scannedFiles: number; markerFiles: string[] } {
+        this.resourceFolderMarkCache.delete(dirPath);
+        const markerFiles = this.scanResourceMarkerFiles(dirPath);
+        this.resourceFolderMarkCache.set(dirPath, { marked: markerFiles.length > 0, ts: Date.now() });
+        return {
+            scannedFiles: markerFiles.length,
+            markerFiles
+        };
     }
 
     private refreshDebounced() {
@@ -796,6 +846,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
 
             if (d.isDirectory()) {
                 const isExpanded = this.expandedNodes.has(full);
+                const resourceFolderMarked = this.isResourceFolder(full);
                 const forced = this.forcedPaths.has(path.resolve(full));
                 const cacheEntry = this.dirAggCache.get(full);
                 const cacheValid = cacheEntry && !forced; // 去除 TTL 约束，仅强制/失效时重算
@@ -805,7 +856,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         d.name,
                         cacheEntry!.stats,
                         isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
-                        false
+                        false,
+                        resourceFolderMarked
                     );
                     item.id = full;
                     this.itemsById.set(item.id, item);
@@ -824,7 +876,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         d.name,
                         zero,
                         isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
-                        true
+                        true,
+                        resourceFolderMarked
                     );
                     item.id = full;
                     this.itemsById.set(item.id, item);
@@ -838,7 +891,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         d.name,
                         prev.stats,
                         isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
-                        false
+                        false,
+                        resourceFolderMarked
                     );
                     staleItem.id = full;
                     staleItem.iconPath = new vscode.ThemeIcon('loading~spin');
@@ -858,7 +912,8 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                         d.name,
                         zero,
                         isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed,
-                        true
+                        true,
+                        resourceFolderMarked
                     );
                     item.id = full;
                     this.itemsById.set(item.id, item);
@@ -874,7 +929,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 if (isRef && !exts.includes(ext) && !special) {
                     // 参考文件：仅展示，不计数，不排队后台
                     const zero: TextStats = { cjkChars: 0, asciiChars: 0, words: 0, nonWSChars: 0, nonWSNoPunct: 0, total: 0 };
-                    const item = new WordCountItem(uri, d.name, zero, vscode.TreeItemCollapsibleState.None, false);
+                    const item = new WordCountItem(uri, d.name, zero, vscode.TreeItemCollapsibleState.None, false, false, true);
                     item.id = full;
                     // 显式标注：可在 tooltip 上注明“参考资料（不计数）”
                     try {
@@ -2362,7 +2417,9 @@ export class WordCountItem extends vscode.TreeItem {
         public readonly label: string,
         private readonly stats: TextStats,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        private readonly isPlaceholder: boolean = false
+        private readonly isPlaceholder: boolean = false,
+        private readonly isResourceFolder: boolean = false,
+        private readonly isReferenceFile: boolean = false
     ) {
         super(label, collapsibleState);
 
@@ -2383,6 +2440,9 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`\n\n正在计算字数统计...`);
             tip.isTrusted = true;
             this.tooltip = tip;
+        } else if (isReferenceFile) {
+            // 参考文件：不显示字数统计
+            this.description = '';
         } else {
             // 根据配置格式化字数
             const cfg = vscode.workspace.getConfiguration();
@@ -2410,6 +2470,9 @@ export class WordCountItem extends vscode.TreeItem {
                     formatted = String(total);
             }
             this.description = `(${formatted})`;
+            if (isDirectory && this.isResourceFolder) {
+                this.description = `🔑 ${this.description}`;
+            }
         }
 
         this.id = this.resourceUri.fsPath;
@@ -2423,6 +2486,9 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`\n\nASCII 字符数: **${stats.asciiChars}**`);
             tip.appendMarkdown(`\n\n非空白字符数: **${stats.nonWSChars}**`);
             tip.appendMarkdown(`\n\n**总字数**: **${stats.total}**`);
+            if (isDirectory && this.isResourceFolder) {
+                tip.appendMarkdown(`\n\n🔑 **已识别为资源文件夹**`);
+            }
             // 附加 UUID（文件或目录）
             try {
                 const fUuid = getFileUuid(resourceUri.fsPath);
@@ -2463,6 +2529,28 @@ export class WordCountItem extends vscode.TreeItem {
                 title: 'Open File with Default',
                 arguments: [this.resourceUri]
             };
+
+            // 根据配置为文件设置图标
+            const iconStyle = vscode.workspace.getConfiguration('AndreaNovelHelper.package').get<string>('iconStyle', 'auto');
+            const fileName = path.basename(resourceUri.fsPath);
+            const ext = path.extname(fileName).toLowerCase();
+            const isRoleFile = ext === '.ojson5' || ext === '.ojson';
+            const isRelationshipFile = ext === '.rjson5' || ext === '.rjson';
+            const isTimelineFile = ext === '.tjson5';
+
+            // auto 或 custom 模式下，为特殊文件设置语义化图标
+            if (iconStyle === 'custom' || (iconStyle === 'auto' && (isRoleFile || isRelationshipFile || isTimelineFile))) {
+                if (isRoleFile) {
+                    this.iconPath = new vscode.ThemeIcon('person');
+                } else if (isRelationshipFile) {
+                    this.iconPath = new vscode.ThemeIcon('type-hierarchy');
+                } else if (isTimelineFile) {
+                    this.iconPath = new vscode.ThemeIcon('git-branch');
+                }
+            }
+            // theme 模式或 auto 模式下非特殊文件：不设置 iconPath，使用主题默认图标
+        } else if (!isPlaceholder && this.isResourceFolder) {
+            this.iconPath = new vscode.ThemeIcon('symbol-key');
         }
     }
 }

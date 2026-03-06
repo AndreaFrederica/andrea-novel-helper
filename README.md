@@ -666,7 +666,8 @@ rgb(255, 30, 64) - 温暖的红色，也可以用 #ff1e40 或 hsl(348, 100%, 56%
 | `AndreaNovelHelper.wordCount.displayFormat` | 字数格式转换 |
 | `AndreaNovelHelper.wordCount.debug` | 启用字数统计调试日志 |
 | `AndreaNovelHelper.docRoles.inheritExpandedFromPrevious` | 控制是否启用跨文档展开状态继承 |
-| `AndreaNovelHelper.externalFolder.ignoredDirectories` | 外部角色文件夹扫描时忽略的目录列表，默认排除 `.git`、`.vscode`、`node_modules` 等 |
+| `AndreaNovelHelper.externalFolder.ignoredDirectories` | 外部资源目录扫描时忽略的目录列表，默认排除 `.git`、`.vscode`、`node_modules` 等（兼容 `__init__.ojson5` 识别） |
+| `AndreaNovelHelper.externalFolder.markerKeywords` | 外部资源目录识别关键字，可扩展文件名匹配规则（配合 `.ojson5/.rjson5/.ojson/.rjson/.tjson5` 等标识扩展名） |
 
 ## 🛠️ 快速开始
 

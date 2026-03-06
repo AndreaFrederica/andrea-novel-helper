@@ -265,5 +265,8 @@
   "config.decorations.cacheSize.description": "装饰缓存大小：保留最近关闭的文档装饰数量，提升重新打开时的性能。设为0禁用缓存。",
   "config.typeset.enableChineseIMEFix.description": "开启中文IME修复：通过模拟键盘输入优化中文引号（\"\"''）的输入体验，自动补全配对引号并将光标置于其间。启用后可能会有轻微的输入延迟（在 macOS 上可能不正常工作）。",
   "config.typeset.chineseIMEDelay.description": "中文IME键盘模拟延迟（毫秒）。调整键盘模拟输入前的等待时间，以适应不同的系统响应速度。",
-  "sidebar.settings.title": "小说助手:设置"
+  "sidebar.settings.title": "小说助手:设置",
+  "command.package.rescanExternalFolders.title": "重新扫描外部资源目录(包管理器)",
+  "command.package.showExternalScanReport.title": "查看外部扫描报告(包管理器)",
+  "command.wordCount.rescanResourceFilesInFolder.title": "重扫资源文件"
 }

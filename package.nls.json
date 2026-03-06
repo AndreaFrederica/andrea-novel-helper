@@ -149,6 +149,8 @@
   "command.package.copy.title": "ANH:Copy (Package Manager)",
   "command.package.cut.title": "ANH:Cut (Package Manager)",
   "command.package.paste.title": "ANH:Paste (Package Manager)",
+  "command.package.rescanExternalFolders.title": "ANH:Rescan External Resource Folders",
+  "command.package.showExternalScanReport.title": "ANH:Show External Scan Report",
   "command.setupGitIdentity.title": "ANH:Setup Git User Info",
   "command.openSetupWizard.title": "ANH:Open Setup Wizard",
   "command.wizard.checkGit.title": "ANH:Wizard: Check Git Installation",
@@ -189,7 +191,8 @@
   "config.wordCount.debug.description": "WordCount: Enable verbose debug logging (console). Use only for diagnosing issues; may impact performance."
   ,
   "command.wordCount.forceRecountAll.title": "ANH:Force Recount All",
-  "command.wordCount.forceRecountHere.title": "ANH:Force Recount (This File/Folder)"
+  "command.wordCount.forceRecountHere.title": "ANH:Force Recount (This File/Folder)",
+  "command.wordCount.rescanResourceFilesInFolder.title": "ANH:Rescan Resource Files in Folder"
   ,
   "config.typeset.enableAutoPairs.description": "Enable smart auto-pairs (auto-closing and wrapping selection).",
   "config.typeset.enableChineseIMEFix.description": "Enable Chinese IME fix: optimize Chinese quote input experience through keyboard simulation, auto-completing paired quotes (\"\" and '') and positioning cursor between them. May cause slight input delay when enabled (may not work properly on macOS).",

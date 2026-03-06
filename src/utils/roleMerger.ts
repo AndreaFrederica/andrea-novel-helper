@@ -45,7 +45,7 @@ export interface RolePriorityConfig {
 
     // 位置优先级配置
     locationPriority?: {
-        external?: number;  // 外部文件（有__init__.ojson5的目录）的优先级
+        external?: number;  // 外部文件（外部资源目录）的优先级
         internal?: number;  // 内部文件的优先级
     };
 
@@ -83,6 +83,7 @@ export class SmartRoleAdder {
     private uuidMap = new Map<string, Role>();
     private nameMap = new Map<string, Role>();
     private priorityConfig: RolePriorityConfig;
+    private externalFoldersNormalized = new Set<string>();
 
     constructor(rolesArray: Role[], priorityConfig?: Partial<RolePriorityConfig>) {
         this.roles = rolesArray;
@@ -114,15 +115,53 @@ export class SmartRoleAdder {
     }
 
     /**
-     * 检查是否为外部文件（有__init__.ojson5的目录）
+     * 更新外部资源目录列表（由 loadRoles 扫描结果提供）
+     */
+    public setExternalFolders(folders: string[]): void {
+        this.externalFoldersNormalized.clear();
+        for (const folder of folders) {
+            this.externalFoldersNormalized.add(this.normalizePathForCompare(folder));
+        }
+    }
+
+    private normalizePathForCompare(p: string): string {
+        const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
+        return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    }
+
+    /**
+     * 检查是否为外部文件（外部资源目录，兼容 legacy __init__.ojson5）
      */
     private isExternalFile(filePath: string): boolean {
-        // 检查文件是否在外部角色目录中
-        // 通过查找最近的__init__.ojson5文件来判断
-        const dir = path.dirname(filePath);
-        const initFile = path.join(dir, '__init__.ojson5');
+        const normalizedFilePath = this.normalizePathForCompare(filePath);
+
+        // 优先使用 loadRoles 的外部目录扫描结果
+        if (this.externalFoldersNormalized.size > 0) {
+            for (const folder of this.externalFoldersNormalized) {
+                if (normalizedFilePath === folder || normalizedFilePath.startsWith(folder + path.sep)) {
+                    return true;
+                }
+            }
+        }
+
+        // 兼容旧机制：沿父目录向上查找 __init__.ojson5
+        let dir = path.dirname(filePath);
+        while (true) {
+            try {
+                if (fs.existsSync(path.join(dir, '__init__.ojson5'))) {
+                    return true;
+                }
+            } catch {
+                // ignore
+            }
+            const parent = path.dirname(dir);
+            if (parent === dir) break;
+            dir = parent;
+        }
+
+        // 兜底：保持旧行为（同目录 __init__.ojson5）
         try {
-            if (fs.existsSync(initFile)) {
+            if (fs.existsSync(path.join(path.dirname(filePath), '__init__.ojson5'))) {
                 return true;
             }
         } catch {

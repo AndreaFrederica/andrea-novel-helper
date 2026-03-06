@@ -130,6 +130,8 @@
     "command.package.copy.title": "コピー(パッケージ管理)",
     "command.package.cut.title": "切り取り(パッケージ管理)",
     "command.package.paste.title": "貼り付け(パッケージ管理)",
+    "command.package.rescanExternalFolders.title": "外部リソースを再スキャン(パッケージ管理)",
+    "command.package.showExternalScanReport.title": "外部スキャンレポートを表示(パッケージ管理)",
     "command.setupGitIdentity.title": "Git ユーザー情報設定",
     "command.openSetupWizard.title": "セットアップウィザードを開く",
     "command.wizard.checkGit.title": "ウィザード: Git インストール確認",

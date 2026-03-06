@@ -35,59 +35,212 @@ function addRole(role: Role) {
 	}
 }
 
+const DEFAULT_EXTERNAL_FOLDER_IGNORED_DIRECTORIES = [
+	'.git', '.vscode', '.idea', 'node_modules', 'dist', 'build', 'out', '.DS_Store', 'Thumbs.db'
+];
+
+const DEFAULT_EXTERNAL_FOLDER_MARKER_KEYWORDS = [
+	'character-gallery', 'character', 'role', 'roles',
+	'sensitive-words', 'sensitive', 'vocabulary', 'vocab',
+	'regex-patterns', 'regex',
+	'relationship', 'relation', 'connections', 'links',
+	'timeline',
+	'角色', '人物', '敏感词', '词汇', '词庫', '词库',
+	'正则', '正則', '正则表达式', '正則表達式',
+	'关系', '关联', '连接', '联系',
+	'时间线', '時間線'
+];
+
+const EXTERNAL_RESOURCE_AUTO_MARKER_EXTENSIONS = new Set([
+	'.ojson5', '.rjson5', '.ojson', '.rjson', '.tjson5'
+]);
+
+const EXTERNAL_RESOURCE_KEYWORD_EXTENSIONS = new Set([
+	'.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'
+]);
+
+export interface ExternalRoleFolderScanReport {
+	generatedAt: string;
+	workspaceRoots: string[];
+	ignoredDirectories: string[];
+	markerKeywords: string[];
+	legacyInitEnabled: boolean;
+	totalCandidateFiles: number;
+	matchedLegacyInitFiles: number;
+	matchedMarkerFiles: number;
+	externalFolderCount: number;
+	externalFolders: string[];
+	sampleMatchedFiles: string[];
+	durationMs: number;
+}
+
+let lastExternalRoleFolders: string[] = [];
+let lastExternalRoleFolderScanReport: ExternalRoleFolderScanReport | undefined;
+
+function normalizePathForCompare(p: string): string {
+	const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
+	return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function dedupeKeywords(values: string[]): string[] {
+	const seen = new Set<string>();
+	const result: string[] = [];
+	for (const raw of values) {
+		const v = String(raw ?? '').trim();
+		if (!v) continue;
+		const key = v.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		result.push(v);
+	}
+	return result;
+}
+
+function getExternalIgnoredDirectories(): string[] {
+	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+	const values = cfg.get<string[]>('externalFolder.ignoredDirectories', DEFAULT_EXTERNAL_FOLDER_IGNORED_DIRECTORIES) || [];
+	const normalized = values.map(v => String(v ?? '').trim()).filter(Boolean);
+	return normalized.length ? normalized : [...DEFAULT_EXTERNAL_FOLDER_IGNORED_DIRECTORIES];
+}
+
+export function getExternalFolderMarkerKeywords(): string[] {
+	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+	const values = cfg.get<string[]>('externalFolder.markerKeywords', DEFAULT_EXTERNAL_FOLDER_MARKER_KEYWORDS) || [];
+	const deduped = dedupeKeywords(values);
+	return deduped.length ? deduped : [...DEFAULT_EXTERNAL_FOLDER_MARKER_KEYWORDS];
+}
+
+function hasMarkerKeyword(fileName: string, markerKeywordsLower: readonly string[]): boolean {
+	const lowerName = fileName.toLowerCase();
+	return markerKeywordsLower.some(k => lowerName.includes(k));
+}
+
+export function isExternalResourceMarkerFile(fileName: string, markerKeywords?: readonly string[]): boolean {
+	const lowerName = fileName.toLowerCase();
+	const ext = path.extname(lowerName);
+	if (EXTERNAL_RESOURCE_AUTO_MARKER_EXTENSIONS.has(ext)) {
+		return true;
+	}
+	if (!EXTERNAL_RESOURCE_KEYWORD_EXTENSIONS.has(ext)) {
+		return false;
+	}
+	const keywords = (markerKeywords && markerKeywords.length ? markerKeywords : getExternalFolderMarkerKeywords())
+		.map(k => k.toLowerCase());
+	return hasMarkerKeyword(fileName, keywords);
+}
+
+export function isPathUnderAnyRoot(filePath: string, roots: readonly string[]): boolean {
+	const target = normalizePathForCompare(filePath);
+	for (const root of roots) {
+		const normalizedRoot = normalizePathForCompare(root);
+		if (target === normalizedRoot || target.startsWith(normalizedRoot + path.sep)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+export function getLastExternalRoleFolders(): string[] {
+	return [...lastExternalRoleFolders];
+}
+
+export function getLastExternalRoleFolderScanReport(): ExternalRoleFolderScanReport | undefined {
+	return lastExternalRoleFolderScanReport ? { ...lastExternalRoleFolderScanReport, externalFolders: [...lastExternalRoleFolderScanReport.externalFolders], sampleMatchedFiles: [...lastExternalRoleFolderScanReport.sampleMatchedFiles] } : undefined;
+}
+
 /**
- * 扫描外部文件夹，查找包含 __init__.ojson5 的文件夹
- * @param basePath 要扫描的基础路径
- * @param externalFolders 存储找到的外部文件夹数组
- * @param workspaceRoot 工作区根路径，用于排除novel-helper目录
+ * 扫描外部资源目录（保留 __init__.ojson5 兼容，同时支持可配置关键字 + rjson/ojson/tjson 等标识）
  */
-function scanExternalRoleFolders(basePath: string, externalFolders: string[], workspaceRoot: string): void {
-    try {
-        if (!fs.existsSync(basePath)) return;
+export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vscode.WorkspaceFolder[]): { externalFolders: string[]; report: ExternalRoleFolderScanReport; } {
+	const startedAt = Date.now();
+	const folders = workspaceFolders || vscode.workspace.workspaceFolders || [];
+	const ignoredDirectories = getExternalIgnoredDirectories();
+	const markerKeywords = getExternalFolderMarkerKeywords();
+	const markerKeywordsLower = markerKeywords.map(k => k.toLowerCase());
+	const externalFolderSet = new Set<string>();
+	const ignoredFolderSet = new Set<string>(); // 被 .anh-ignore 标记排除的目录
+	const sampleMatchedFiles: string[] = [];
+	let totalCandidateFiles = 0;
+	let matchedLegacyInitFiles = 0;
+	let matchedMarkerFiles = 0;
 
-        // 排除novel-helper目录（因为它会被单独处理）
-        if (path.relative(workspaceRoot, basePath).startsWith('novel-helper')) {
-            return;
-        }
+	// 先扫描 .anh-ignore 文件，收集被排除的目录
+	for (const folder of folders) {
+		const workspaceRoot = folder.uri.fsPath;
+		const ignoreFiles = fastGlob.sync('**/.anh-ignore', {
+			cwd: workspaceRoot,
+			absolute: true,
+			onlyFiles: true,
+			dot: true,
+			ignore: [
+				'novel-helper/**',
+				...ignoredDirectories.map(dir => `**/${dir}/**`)
+			]
+		});
+		for (const ignoreFile of ignoreFiles) {
+			ignoredFolderSet.add(path.dirname(ignoreFile));
+		}
+	}
 
-        // 获取忽略目录配置
-        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-        const ignoredDirectories = cfg.get<string[]>('externalFolder.ignoredDirectories', [
-            '.git', '.vscode', '.idea', 'node_modules', 'dist', 'build', 'out', '.DS_Store', 'Thumbs.db'
-        ]);
+	for (const folder of folders) {
+		const workspaceRoot = folder.uri.fsPath;
+		const candidates = fastGlob.sync('**/*.{ojson5,rjson5,ojson,rjson,tjson5,json5,md,txt}', {
+			cwd: workspaceRoot,
+			absolute: true,
+			onlyFiles: true,
+			dot: false,
+			ignore: [
+				'novel-helper/**',
+				...ignoredDirectories.map(dir => `**/${dir}/**`)
+			]
+		});
 
-        // 检查当前目录是否在忽略列表中
-        const dirName = path.basename(basePath);
-        if (ignoredDirectories.includes(dirName)) {
-            console.log(`[loadRoles][scan] 跳过忽略的目录: ${basePath}`);
-            return;
-        }
+		totalCandidateFiles += candidates.length;
 
-        // 检查当前目录是否包含 __init__.ojson5
-        const initFilePath = path.join(basePath, '__init__.ojson5');
-        if (fs.existsSync(initFilePath)) {
-            externalFolders.push(basePath);
-            return; // 如果找到init文件，不再扫描子目录
-        }
+		for (const filePath of candidates) {
+			const dirPath = path.dirname(filePath);
 
-        // 递归扫描子目录
-        const entries = fs.readdirSync(basePath, { withFileTypes: true });
-        for (const entry of entries) {
-            if (entry.isDirectory()) {
-                const fullPath = path.join(basePath, entry.name);
+			// 如果目录被 .anh-ignore 排除，跳过
+			if (ignoredFolderSet.has(dirPath)) {
+				continue;
+			}
 
-                // 跳过忽略的目录
-                if (ignoredDirectories.includes(entry.name)) {
-                    console.log(`[loadRoles][scan] 跳过忽略的子目录: ${fullPath}`);
-                    continue;
-                }
+			const baseName = path.basename(filePath);
+			const lowerName = baseName.toLowerCase();
+			if (lowerName === '__init__.ojson5') {
+				matchedLegacyInitFiles++;
+				externalFolderSet.add(dirPath);
+				if (sampleMatchedFiles.length < 120) sampleMatchedFiles.push(filePath);
+				continue;
+			}
+			if (!isExternalResourceMarkerFile(baseName, markerKeywordsLower)) {
+				continue;
+			}
+			matchedMarkerFiles++;
+			externalFolderSet.add(dirPath);
+			if (sampleMatchedFiles.length < 120) sampleMatchedFiles.push(filePath);
+		}
+	}
 
-                scanExternalRoleFolders(fullPath, externalFolders, workspaceRoot);
-            }
-        }
-    } catch (error) {
-        console.warn(`扫描外部文件夹时出错: ${basePath}`, error);
-    }
+	const externalFolders = Array.from(externalFolderSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+	const report: ExternalRoleFolderScanReport = {
+		generatedAt: new Date().toISOString(),
+		workspaceRoots: folders.map(f => f.uri.fsPath),
+		ignoredDirectories: [...ignoredDirectories],
+		markerKeywords: [...markerKeywords],
+		legacyInitEnabled: true,
+		totalCandidateFiles,
+		matchedLegacyInitFiles,
+		matchedMarkerFiles,
+		externalFolderCount: externalFolders.length,
+		externalFolders,
+		sampleMatchedFiles,
+		durationMs: Date.now() - startedAt
+	};
+
+	lastExternalRoleFolders = externalFolders;
+	lastExternalRoleFolderScanReport = report;
+	return { externalFolders, report };
 }
 
 export interface TextStats {
@@ -130,8 +283,8 @@ export const typeColorMap: Record<string, string> = {
  */
 export const getSupportedLanguages = (): string[] => {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-	// 默认包含 markdown / plaintext / json5 / ojson / rjson
-	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5', 'ojson', 'rjson', 'tjson5'])!;
+	// 默认包含 markdown / plaintext / json5 / ojson / ojson5 / rjson / rjson5 / tjson5
+	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5'])!;
 	return fileTypes.map((t: string): string =>
 		t === 'txt' ? 'plaintext' : t
 	);
@@ -146,7 +299,10 @@ const langToExt: Record<string, string> = {
 	javascript: 'js',
 	typescript: 'ts',
 	ojson: 'ojson',
+	ojson5: 'ojson5',
 	rjson: 'rjson',
+	rjson5: 'rjson5',
+	tjson5: 'tjson5',
 	// ……后缀名和语言id不一样的放在这里
 };
 
@@ -370,12 +526,9 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	console.log(`loadRoles: workspace root = ${root}`);
 	console.log(`loadRoles: novel-helper root = ${novelHelperRoot}`);
 
-	// 查找外部包含 __init__.ojson5 的文件夹
-	const externalRoleFolders: string[] = [];
-	for (const folder of folders) {
-		const folderPath = folder.uri.fsPath;
-		scanExternalRoleFolders(folderPath, externalRoleFolders, folderPath);
-	}
+	// 使用 fast-glob 扫描外部资源文件夹（兼容 __init__.ojson5 + 关键字标识）
+	const scanResult = scanExternalRoleFoldersWithReport(folders);
+	const externalRoleFolders = scanResult.externalFolders;
 	console.log(`loadRoles: 找到 ${externalRoleFolders.length} 个外部角色文件夹:`, externalRoleFolders);
 
 	// 如果强制刷新，清空缓存
@@ -389,6 +542,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		// 首次加载时初始化角色管理器
 		roleManager = new SmartRoleAdder(roles);
 	}
+	roleManager?.setExternalFolders(externalRoleFolders);
 
 	// 检查 novel-helper 目录是否存在
 	if (!fs.existsSync(novelHelperRoot)) {

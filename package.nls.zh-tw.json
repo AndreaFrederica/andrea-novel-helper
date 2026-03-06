@@ -130,6 +130,8 @@
     "command.package.copy.title": "複製(包管理器)",
     "command.package.cut.title": "剪下(包管理器)",
     "command.package.paste.title": "貼上(包管理器)",
+    "command.package.rescanExternalFolders.title": "重新掃描外部資源目錄(包管理器)",
+    "command.package.showExternalScanReport.title": "檢視外部掃描報告(包管理器)",
     "command.setupGitIdentity.title": "配置 Git 使用者資訊",
     "command.openSetupWizard.title": "打開小說助手配置精靈",
     "command.wizard.checkGit.title": "精靈: 檢查 Git 安裝",

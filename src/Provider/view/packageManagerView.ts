@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
-import { loadRoles } from '../../utils/utils';
+import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot } from '../../utils/utils';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
@@ -32,10 +32,14 @@ function resolveFileConflict(dir: string, baseName: string, ext: string): { path
 
 // 引用维护节点
 class ReferenceMaintenanceNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
     constructor(public readonly workspaceRoot: string) {
-        super('引用维护和热力图', vscode.TreeItemCollapsibleState.None);
+        super('+ 引用维护和热力图', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
         this.contextValue = 'referenceMaintenance';
         this.iconPath = new vscode.ThemeIcon('tools');
+        this.description = '管理角色引用、查看热力图';
         this.command = {
             command: 'AndreaNovelHelper.showReferenceMaintenance',
             title: '打开引用维护和热力图面板',
@@ -44,26 +48,37 @@ class ReferenceMaintenanceNode extends vscode.TreeItem {
     }
 }
 
-class NewFileNode extends vscode.TreeItem {
+// 外部资源目录管理节点
+class ExternalResourceManageNode extends vscode.TreeItem {
     public readonly resourceUri: vscode.Uri;
-    
-    /**
-     * @param baseDir 完整的 novel-helper 根目录路径
-     */
-    constructor(public readonly baseDir: string) {
-        // 让 TreeItem 也有 resourceUri，指向根目录
-        super(vscode.Uri.file(baseDir), vscode.TreeItemCollapsibleState.None);
 
-        this.resourceUri = vscode.Uri.file(baseDir);
-        this.contextValue = 'newFile';
-        // 把 resourceUri 传给命令，就能在命令里直接用 node.resourceUri.fsPath
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 外部资源目录管理', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'externalResourceManage';
+        this.iconPath = new vscode.ThemeIcon('folder-library');
+        this.description = '扫描、添加、移除外部资源目录';
         this.command = {
-            command: 'AndreaNovelHelper.createNewFile',
-            title: '创建新文件',
-            arguments: [this],
+            command: 'AndreaNovelHelper.showExternalResourceManage',
+            title: '打开外部资源目录管理面板',
+            arguments: []
         };
-        // 覆盖一下 label
-        this.label = '书籍根目录';
+    }
+}
+
+// 书籍根目录节点（真正的目录，可展开）
+class BookRootNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly baseDir: string, isExpanded: boolean = false) {
+        super(vscode.Uri.file(baseDir), isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+        this.resourceUri = vscode.Uri.file(baseDir);
+        this.id = baseDir;
+        this.label = path.basename(baseDir); // 显示真实文件夹名
+        this.contextValue = 'package'; // 使用 package contextValue 以支持右键菜单
+        this.iconPath = new vscode.ThemeIcon('book');
+        this.tooltip = `novel-helper 资源目录: ${baseDir}`;
+        this.description = '书籍根目录';
     }
 }
 /**
@@ -106,68 +121,37 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
     // 剪贴板（复制/剪切临时存放路径）
     private copyClipboard: string[] | null = null; // 复制
     private cutClipboard: string[] | null = null;  // 剪切
+    private externalRoleFolders: string[] = [];
+    private externalScanReport: ExternalRoleFolderScanReport | undefined;
 
     constructor(private workspaceRoot: string, memento: vscode.Memento) { 
         this.memento = memento;
         // 从工作区状态恢复展开状态
         const savedState = this.memento.get<string[]>('packageManagerExpandedNodes', []);
         this.expandedNodes = new Set(savedState);
+        this.rescanExternalRoleFolders(false);
     }
 
     refresh(): void {
         this._onDidChange.fire();
     }
 
-    /**
-     * 扫描外部文件夹，查找包含 __init__.ojson5 的文件夹
-     */
-    private scanExternalRoleFolders(basePath: string, externalFolders: string[], workspaceRoot: string): void {
-        try {
-            if (!fs.existsSync(basePath)) return;
-
-            // 排除novel-helper目录（因为它会被单独处理）
-            if (path.relative(workspaceRoot, basePath).startsWith('novel-helper')) {
-                return;
-            }
-
-            // 获取忽略目录配置
-            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-            const ignoredDirectories = cfg.get<string[]>('externalFolder.ignoredDirectories', [
-                '.git', '.vscode', '.idea', 'node_modules', 'dist', 'build', 'out', '.DS_Store', 'Thumbs.db'
-            ]);
-
-            // 检查当前目录是否在忽略列表中
-            const dirName = path.basename(basePath);
-            if (ignoredDirectories.includes(dirName)) {
-                console.log(`[PackageManager][scan] 跳过忽略的目录: ${basePath}`);
-                return;
-            }
-
-            // 检查当前目录是否包含 __init__.ojson5
-            const initFilePath = path.join(basePath, '__init__.ojson5');
-            if (fs.existsSync(initFilePath)) {
-                externalFolders.push(basePath);
-                return; // 如果找到init文件，不再扫描子目录
-            }
-
-            // 递归扫描子目录
-            const entries = fs.readdirSync(basePath, { withFileTypes: true });
-            for (const entry of entries) {
-                if (entry.isDirectory()) {
-                    const fullPath = path.join(basePath, entry.name);
-
-                    // 跳过忽略的目录
-                    if (ignoredDirectories.includes(entry.name)) {
-                        console.log(`[PackageManager][scan] 跳过忽略的子目录: ${fullPath}`);
-                        continue;
-                    }
-
-                    this.scanExternalRoleFolders(fullPath, externalFolders, workspaceRoot);
-                }
-            }
-        } catch (error) {
-            console.warn(`[PackageManager] 扫描外部文件夹时出错: ${basePath}`, error);
+    public rescanExternalRoleFolders(showMessage: boolean = false): ExternalRoleFolderScanReport {
+        const result = scanExternalRoleFoldersWithReport(vscode.workspace.workspaceFolders);
+        this.externalRoleFolders = result.externalFolders;
+        this.externalScanReport = result.report;
+        if (showMessage) {
+            vscode.window.setStatusBarMessage(`$(search) 外部资源重扫完成：${result.report.externalFolderCount} 个目录`, 3000);
         }
+        return result.report;
+    }
+
+    public getExternalRoleFolders(): string[] {
+        return [...this.externalRoleFolders];
+    }
+
+    public getExternalScanReport(): ExternalRoleFolderScanReport | undefined {
+        return this.externalScanReport ? { ...this.externalScanReport, externalFolders: [...this.externalScanReport.externalFolders], sampleMatchedFiles: [...this.externalScanReport.sampleMatchedFiles] } : undefined;
     }
 
     // —— 剪贴板操作 ——
@@ -197,8 +181,8 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 // 复制
                 await this.copyRecursive(e.source, dest);
             } else {
-                // 剪切或剪切优先
-                fs.renameSync(e.source, dest);
+                // 剪切或剪切优先 - 使用移动逻辑（支持跨分区）
+                await this.moveRecursive(e.source, dest);
             }
         }
         // 剪切后清空
@@ -214,6 +198,31 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             }
         } else {
             fs.copyFileSync(src, dest);
+        }
+    }
+    // 移动操作（支持跨分区）
+    private async moveRecursive(src: string, dest: string): Promise<void> {
+        const st = fs.statSync(src);
+        try {
+            // 先尝试 rename（同分区快速移动）
+            fs.renameSync(src, dest);
+        } catch (err: any) {
+            // 跨分区移动失败时，改用复制+删除
+            if (err.code === 'EXDEV' || err.code === 'EPERM') {
+                if (st.isDirectory()) {
+                    fs.mkdirSync(dest, { recursive: true });
+                    for (const name of fs.readdirSync(src)) {
+                        await this.moveRecursive(path.join(src, name), path.join(dest, name));
+                    }
+                    // 递归删除源目录
+                    fs.rmSync(src, { recursive: true, force: true });
+                } else {
+                    fs.copyFileSync(src, dest);
+                    fs.unlinkSync(src);
+                }
+            } else {
+                throw err;
+            }
         }
     }
 
@@ -239,30 +248,28 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
     }
 
     async getChildren(node?: PackageNode): Promise<PackageNode[]> {
-        // 根节点：先展示引用维护，然后外部文件夹，最后novel-helper
+        // 根节点：展示功能按钮 + 书籍根目录
         if (!node) {
             // 1）算出 novel-helper 根目录
             const base = path.join(this.workspaceRoot, 'novel-helper');
-            // 2）创建引用维护节点
+
+            // 2）创建功能按钮节点
             const refMaintenanceNode = new ReferenceMaintenanceNode(this.workspaceRoot);
-            // 3）创建占位节点
-            const newNode = new NewFileNode(base);
+            const externalManageNode = new ExternalResourceManageNode(this.workspaceRoot);
 
-            // 4) 查找外部包含 __init__.ojson5 的文件夹
-            const externalRoleFolders: string[] = [];
-            const folders = vscode.workspace.workspaceFolders;
-            if (folders && folders.length) {
-                for (const folder of folders) {
-                    const folderPath = folder.uri.fsPath;
-                    this.scanExternalRoleFolders(folderPath, externalRoleFolders, folderPath);
-                }
+            const result: PackageNode[] = [refMaintenanceNode as any, externalManageNode as any];
+
+            // 3) 外部资源目录（由 fast-glob 扫描器提供）
+            if (this.externalRoleFolders.length === 0 || this.externalRoleFolders.some(folder => !fs.existsSync(folder))) {
+                this.rescanExternalRoleFolders(false);
             }
-            console.log(`[PackageManager] 找到 ${externalRoleFolders.length} 个外部角色文件夹:`, externalRoleFolders);
-
-            const result: PackageNode[] = [refMaintenanceNode as any];
+            console.log(`[PackageManager] 找到 ${this.externalRoleFolders.length} 个外部角色文件夹:`, this.externalRoleFolders);
 
             // 添加外部文件夹节点
-            for (const externalFolder of externalRoleFolders) {
+            for (const externalFolder of this.externalRoleFolders) {
+                if (!fs.existsSync(externalFolder)) {
+                    continue;
+                }
                 const isExpanded = this.expandedNodes.has(externalFolder);
                 const externalNode = new PackageNode(
                     vscode.Uri.file(externalFolder),
@@ -274,53 +281,14 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 result.push(externalNode as any);
             }
 
-            if (!fs.existsSync(base)) {
-                result.push(newNode as any);
-                return result;
+            // 4）书籍根目录（可展开的目录节点）
+            if (fs.existsSync(base)) {
+                const isExpanded = this.expandedNodes.has(base);
+                const bookRootNode = new BookRootNode(base, isExpanded);
+                result.push(bookRootNode as any);
             }
 
-            // 扫描真实子项
-            const children = fs.readdirSync(base).reduce<PackageNode[]>((nodes, name) => {
-                if (name === 'outline' || name === '.anh-fsdb' || name === 'typo' || name === 'comments') {
-                    return nodes;
-                }
-                const full = path.join(base, name);
-                const stat = fs.statSync(full);
-
-                if (stat.isDirectory()) {
-                    // 根据保存的状态决定展开状态
-                    const isExpanded = this.expandedNodes.has(full);
-                    nodes.push(
-                        new PackageNode(
-                            vscode.Uri.file(full),
-                            isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
-                        )
-                    );
-                } else {
-                    const ext = path.extname(name).toLowerCase();
-                    const isRoleOrRelationshipFile = ext === '.ojson5' || ext === '.rjson5' || ext === '.ojson' || ext === '.rjson';
-                    const isTimelineFile = ext === '.tjson5';
-                    
-                    if (isRoleOrRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship/.test(name)) {
-                        const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
-                        const fileNode = new PackageNode(
-                            vscode.Uri.file(full),
-                            vscode.TreeItemCollapsibleState.None
-                        );
-                        if (!allowed.includes(ext)) {
-                            fileNode.label += ' (格式错误)';
-                            fileNode.iconPath = new vscode.ThemeIcon('error');
-                            fileNode.contextValue = 'resourceFileError';
-                         }
-                         nodes.push(fileNode);
-                    }
-                }
-                return nodes;
-            }, []);
-
-            // 添加novel-helper占位节点和子节点
-            result.push(newNode as any);
-            return result.concat(children);
+            return result;
         }
 
         // 子节点：扫描目录内容
@@ -345,16 +313,34 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             } else {
                 // 对于文件，分两类处理
                 const ext = path.extname(name).toLowerCase();
-                const isRoleOrRelationshipFile = ext === '.ojson5' || ext === '.rjson5' || ext === '.ojson' || ext === '.rjson';
+                const isRoleFile = ext === '.ojson5' || ext === '.ojson';
+                const isRelationshipFile = ext === '.rjson5' || ext === '.rjson';
                 const isTimelineFile = ext === '.tjson5';
-                
-                if (isRoleOrRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
+
+                if (isRoleFile || isRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
                     const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
                     const fileNode = new PackageNode(
                         vscode.Uri.file(full),
                         vscode.TreeItemCollapsibleState.None
                     );
+
+                    // 根据配置决定是否使用自定义图标
+                    const iconStyle = vscode.workspace.getConfiguration('AndreaNovelHelper.package').get<string>('iconStyle', 'auto');
+                    const useCustomIcon = iconStyle === 'custom' || (iconStyle === 'auto' && (isRoleFile || isRelationshipFile || isTimelineFile));
+
+                    if (useCustomIcon) {
+                        // 根据文件类型设置语义化图标
+                        if (isRoleFile) {
+                            fileNode.iconPath = new vscode.ThemeIcon('person');
+                        } else if (isRelationshipFile) {
+                            fileNode.iconPath = new vscode.ThemeIcon('type-hierarchy');
+                        } else if (isTimelineFile) {
+                            fileNode.iconPath = new vscode.ThemeIcon('git-branch');
+                        }
+                    }
+                    // 如果 iconStyle === 'theme' 或者 auto 但不是特殊文件，则不设置 iconPath，使用主题默认图标
+
                     if (!allowed.includes(ext)) {
                         fileNode.label += ' (格式错误)';
                         fileNode.iconPath = new vscode.ThemeIcon('error');
@@ -368,21 +354,26 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                         vscode.TreeItemCollapsibleState.None
                     );
                     fileNode.contextValue = 'generalResourceFile'; // 普通资源文件，不被监视
-                    
-                    // 根据文件类型设置图标
-                    const ext = path.extname(name).toLowerCase();
-                    if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'].includes(ext)) {
-                        fileNode.iconPath = new vscode.ThemeIcon('file-media');
-                    } else if (['.doc', '.docx', '.pdf', '.txt', '.rtf'].includes(ext)) {
-                        fileNode.iconPath = new vscode.ThemeIcon('file-text');
-                    } else if (['.html', '.htm', '.xml'].includes(ext)) {
-                        fileNode.iconPath = new vscode.ThemeIcon('file-code');
-                    } else if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) {
-                        fileNode.iconPath = new vscode.ThemeIcon('file-zip');
-                    } else {
-                        fileNode.iconPath = new vscode.ThemeIcon('file');
+
+                    // 根据配置决定是否为普通资源文件设置图标
+                    const iconStyle = vscode.workspace.getConfiguration('AndreaNovelHelper.package').get<string>('iconStyle', 'auto');
+                    if (iconStyle === 'custom') {
+                        // custom 模式：为所有文件设置图标
+                        const ext = path.extname(name).toLowerCase();
+                        if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'].includes(ext)) {
+                            fileNode.iconPath = new vscode.ThemeIcon('file-media');
+                        } else if (['.doc', '.docx', '.pdf', '.txt', '.rtf'].includes(ext)) {
+                            fileNode.iconPath = new vscode.ThemeIcon('file-text');
+                        } else if (['.html', '.htm', '.xml'].includes(ext)) {
+                            fileNode.iconPath = new vscode.ThemeIcon('file-code');
+                        } else if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) {
+                            fileNode.iconPath = new vscode.ThemeIcon('file-zip');
+                        } else {
+                            fileNode.iconPath = new vscode.ThemeIcon('file');
+                        }
                     }
-                    
+                    // auto 或 theme 模式：不设置 iconPath，让 VSCode 使用主题默认图标
+
                     nodes.push(fileNode);
                 }
             }
@@ -418,34 +409,51 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
                     if (!urisRaw) return;
                     const uris = urisRaw.split(/\r?\n/).filter(Boolean).map(u=>vscode.Uri.parse(u));
 
-                    // 检查目标是否为外部文件夹
-                    if (target && target.contextValue === 'externalRoleFolder') {
-                        const result = await vscode.window.showWarningMessage(
-                            `您即将文件/文件夹拖拽到外部角色文件夹 "${path.basename(target.resourceUri.fsPath)}" 中。`,
-                            { modal: true },
-                            '继续操作',
-                            '取消'
-                        );
+                    // 确定目标目录
+                    const toDir = target && fs.existsSync(target.resourceUri.fsPath) && fs.statSync(target.resourceUri.fsPath).isDirectory()
+                        ? target.resourceUri.fsPath
+                        : path.join(rootFsPath,'novel-helper');
 
-                        if (result !== '继续操作') {
-                            return;
-                        }
+                    const paths = uris.map(u=>u.fsPath);
+                    const targetName = path.basename(toDir);
 
-                        // 外部文件夹允许拖拽，但使用特殊逻辑
-                        const toDir = target.resourceUri.fsPath;
-                        const paths = uris.map(u=>u.fsPath);
-                        provider.setCut(paths);
-                        await provider.pasteInto(toDir);
+                    // 读取配置
+                    const config = vscode.workspace.getConfiguration('AndreaNovelHelper.package');
+                    const defaultAction = config.get<string>('dragDefaultAction', 'move');
+
+                    let action: 'copy' | 'move' | 'cancel' = 'cancel';
+
+                    if (defaultAction === 'ask') {
+                        // 询问用户
+                        const result = await vscode.window.showQuickPick([
+                            { label: '$(copy) 复制到此处', description: '保留源文件', action: 'copy' as const },
+                            { label: '$(arrow-right) 移动到此处', description: '删除源文件', action: 'move' as const },
+                            { label: '$(x) 取消', description: '不执行任何操作', action: 'cancel' as const }
+                        ], {
+                            placeHolder: `将 ${paths.length} 个项目拖放到 "${targetName}"`,
+                            title: '选择操作'
+                        });
+                        if (!result) return;
+                        action = result.action;
+                    } else {
+                        action = defaultAction === 'copy' ? 'copy' : 'move';
+                    }
+
+                    if (action === 'cancel') {
                         return;
                     }
 
-                    // 默认逻辑：拖拽到novel-helper或其他目录
-                    const toDir = target && fs.existsSync(target.resourceUri.fsPath) && fs.statSync(target.resourceUri.fsPath).isDirectory()? target.resourceUri.fsPath : path.join(rootFsPath,'novel-helper');
-                    const paths = uris.map(u=>u.fsPath);
-                    provider.setCut(paths);
+                    if (action === 'copy') {
+                        provider.setCopy(paths);
+                        provider.setCut(null);
+                    } else {
+                        provider.setCut(paths);
+                        provider.setCopy(null);
+                    }
                     await provider.pasteInto(toDir);
+
                 } catch (err) {
-                    vscode.window.showErrorMessage('拖拽移动失败: '+err);
+                    vscode.window.showErrorMessage('拖拽操作失败: '+err);
                 }
             }
         }
@@ -460,6 +468,24 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             provider.onDidCollapseElement(e.element);
         }),
         treeView
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.package.rescanExternalFolders', async () => {
+            const report = provider.rescanExternalRoleFolders(true);
+            provider.refresh();
+            try {
+                loadRoles(true);
+                updateDecorations();
+            } catch (error) {
+                console.error('[PackageManager] 外部资源重扫后刷新角色失败:', error);
+            }
+            vscode.window.showInformationMessage(`外部资源扫描完成：${report.externalFolderCount} 个目录`);
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.package.showExternalScanReport', async () => {
+            const report = provider.getExternalScanReport() || provider.rescanExternalRoleFolders(false);
+            await openExternalScanReportPage(report);
+        })
     );
 
     // Command: open file with default application
@@ -486,6 +512,13 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.showReferenceMaintenance', async () => {
             showReferenceMaintenancePanel(rootFsPath);
+        })
+    );
+
+    // —— 外部资源目录管理命令 ——
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.showExternalResourceManage', async () => {
+            showExternalResourceManagePanel(provider);
         })
     );
 
@@ -644,15 +677,15 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // 统一创建命令：角色库 / 敏感词库 / 词汇库 （内部选择 json5 / txt / md）
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGallery', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGallery', async (node: PackageNode | BookRootNode) => {
             const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'character-gallery', kind: 'character' });
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWords', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWords', async (node: PackageNode | BookRootNode) => {
             const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'sensitive-words', kind: 'sensitive' });
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createVocabulary', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createVocabulary', async (node: PackageNode | BookRootNode) => {
             const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'vocabulary', kind: 'vocabulary' });
             if (file) provider.refresh();
         })
@@ -660,15 +693,15 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // 新增：创建 ojson5 和 rjson5 文件的命令
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createRoleFile', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createRoleFile', async (node: PackageNode | BookRootNode) => {
             const file = await createRoleFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createRelationshipFile', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createRelationshipFile', async (node: PackageNode | BookRootNode) => {
             const file = await createRelationshipFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         }),
-        vscode.commands.registerCommand('AndreaNovelHelper.createTimelineFile', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createTimelineFile', async (node: PackageNode | BookRootNode) => {
             const file = await createTimelineFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         })
@@ -676,7 +709,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // Command: create sub-package
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createSubPackage', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createSubPackage', async (node: PackageNode | BookRootNode) => {
             const name = await vscode.window.showInputBox({ prompt: 'Sub-package name' });
             if (!name) return;
             const newDir = path.join(node.resourceUri.fsPath, name);
@@ -732,7 +765,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // Command: create regex patterns file
     context.subscriptions.push(
-        vscode.commands.registerCommand('AndreaNovelHelper.createRegexPatterns', async (node: PackageNode | NewFileNode) => {
+        vscode.commands.registerCommand('AndreaNovelHelper.createRegexPatterns', async (node: PackageNode | BookRootNode) => {
             const file = await createRegexPatternsFile(node.resourceUri.fsPath);
             if (file) provider.refresh();
         })
@@ -740,92 +773,83 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // —— 使用全局文件追踪系统 —— 
     const helperRoot = path.join(rootFsPath, 'novel-helper');
-    
-    // 改进的过滤逻辑：只关注相关文件和目录
+
+    const getManagedRoots = () => [helperRoot, ...provider.getExternalRoleFolders()];
+    const isManagedPath = (filePath: string) => isPathUnderAnyRoot(filePath, getManagedRoots());
+    const isHelperPath = (filePath: string) => isPathUnderAnyRoot(filePath, [helperRoot]);
+
+    // 改进的过滤逻辑：只关注受管理目录中的相关文件和目录
     const shouldRefresh = (filePath: string) => {
-        const relativePath = path.relative(helperRoot, filePath);
-        
-        // 排除 outline 目录
-        if (relativePath.startsWith('outline' + path.sep) || relativePath === 'outline') {
+        if (!isManagedPath(filePath)) {
             return false;
         }
-        // 排除内部数据库目录
-        if (relativePath === '.anh-fsdb' || relativePath.startsWith('.anh-fsdb' + path.sep)) {
-            return false;
+
+        // helperRoot 下继续沿用原有排除规则
+        if (isHelperPath(filePath)) {
+            const relativePath = path.relative(helperRoot, filePath);
+            if (relativePath.startsWith('outline' + path.sep) || relativePath === 'outline') {
+                return false;
+            }
+            if (relativePath === '.anh-fsdb' || relativePath.startsWith('.anh-fsdb' + path.sep)) {
+                return false;
+            }
+            if (relativePath.startsWith('typo' + path.sep) || relativePath === 'typo' ||
+                relativePath.startsWith('comments' + path.sep) || relativePath === 'comments') {
+                return false;
+            }
         }
-        // 排除 typo 和 comments 目录
-        if (relativePath.startsWith('typo' + path.sep) || relativePath === 'typo' ||
-            relativePath.startsWith('comments' + path.sep) || relativePath === 'comments') {
-            return false;
-        }
-        
+
         // 如果是目录变化，总是刷新（用于显示结构变化）
         try {
+            if (!fs.existsSync(filePath)) {
+                return true;
+            }
             if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
                 return true;
             }
-        } catch (error) {
+        } catch {
             // 文件可能已被删除，仍需要刷新
         }
-        
-        // 如果是文件，优先按扩展名判断：任意 .ojson5/.rjson5/.ojson/.rjson 均视为角色/关系文件，
-        // 否则使用关键词 + 扩展名组合判断（旧逻辑，兼容其他资源类型）
-        const fileName = path.basename(filePath);
-        const ext = path.extname(fileName).toLowerCase();
-        // 仅允许 .ojson5 和 .rjson5 在无关键词时也被识别为角色/关系文件
-        const autoExts = new Set(['.ojson5', '.rjson5' ,'tjson5']);
 
-        if (autoExts.has(ext)) {
-            return true;
-        }
-
-        const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(fileName);
-        const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5|tjson5)$/i.test(fileName);
-
-        return hasKeywords && hasValidExtension;
+        return isExternalResourceMarkerFile(path.basename(filePath));
     };
 
-    // 改进的角色数据更新判断：任意角色/关系扩展名均触发角色数据更新（即使文件名无关键词）
+    // 角色数据更新：标识文件变化均触发增量角色刷新
     const shouldUpdateRoles = (filePath: string) => {
-    const fileName = path.basename(filePath);
-    const ext = path.extname(fileName).toLowerCase();
-    const autoExts = new Set(['.ojson5', '.rjson5']);
-
-    if (autoExts.has(ext)) return true;
-
-    const hasKeywords = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|timeline|regex/.test(fileName);
-    const hasValidExtension = /\.(json5|txt|md|ojson|rjson|rjson5|ojson5|tjson5)$/i.test(fileName);
-
-    return hasKeywords && hasValidExtension;
+        if (!isManagedPath(filePath)) {
+            return false;
+        }
+        return isExternalResourceMarkerFile(path.basename(filePath));
     };
 
     // 统一的刷新处理函数
     const handleFileChange = (event: FileChangeEvent) => {
-        const filePath = event.filePath;
-        
-        // 只处理 novel-helper 目录下的文件
-        if (!filePath.startsWith(helperRoot)) {
-            return;
+        const touchedPaths = [event.filePath, event.oldPath].filter((p): p is string => !!p);
+        let hasManagedChange = touchedPaths.some(isManagedPath);
+
+        // 外部目录新增标识文件时，先重扫目录列表再判断
+        if (!hasManagedChange && touchedPaths.some(p => isExternalResourceMarkerFile(path.basename(p)))) {
+            provider.rescanExternalRoleFolders(false);
+            hasManagedChange = touchedPaths.some(isManagedPath);
         }
-        
-        if (!shouldRefresh(filePath)) {
+
+        if (!hasManagedChange) {
             return;
         }
 
-        console.log(`包管理器：检测到文件${event.type} ${filePath}`);
+        if (!touchedPaths.some(shouldRefresh)) {
+            return;
+        }
+
+        console.log(`包管理器：检测到文件${event.type} ${event.filePath}`);
         provider.refresh();
-        
+
         // 只有角色相关文件才触发角色数据更新
-        if (shouldUpdateRoles(filePath)) {
+        const changedRolePaths = touchedPaths.filter(shouldUpdateRoles);
+        if (changedRolePaths.length > 0) {
             try {
-                if (event.type === 'delete') {
-                    // 文件删除：强制完整刷新
-                    loadRoles(true);
-                } else {
-                    // 文件创建或修改：增量更新
-                    loadRoles(false, [filePath]);
-                }
-                
+                loadRoles(false, changedRolePaths);
+
                 // 触发装饰器更新
                 try {
                     updateDecorations();
@@ -834,7 +858,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
                 }
                 
                 // 显示用户通知
-                const fileName = path.basename(filePath);
+                const fileName = path.basename(event.filePath);
                 const changeTypeMap: { [key: string]: string } = {
                     'create': '创建',
                     'delete': '删除', 
@@ -854,12 +878,17 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     // 额外监听文本文档保存事件（更精确的文件内容变化检测）
     const saveWatcher = vscode.workspace.onDidSaveTextDocument((document) => {
         const filePath = document.uri.fsPath;
-        
-        // 检查是否在 novel-helper 目录下
-        if (!filePath.startsWith(helperRoot)) {
+
+        if (!isManagedPath(filePath)) {
+            if (isExternalResourceMarkerFile(path.basename(filePath))) {
+                provider.rescanExternalRoleFolders(false);
+            }
+        }
+
+        if (!isManagedPath(filePath)) {
             return;
         }
-        
+
         if (shouldRefresh(filePath)) {
             console.log(`包管理器：检测到相关文件保存 ${filePath}`);
             provider.refresh();
@@ -890,6 +919,70 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             unregisterFileChangeCallback('packageManager');
         }
     });
+}
+
+async function openExternalScanReportPage(report: ExternalRoleFolderScanReport): Promise<void> {
+    const sampleDirs = report.externalFolders.slice(0, 80);
+    const sampleFiles = report.sampleMatchedFiles.slice(0, 80);
+
+    // 获取数据库统计信息
+    const dbBackend = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('database.backend', 'json');
+    const relationshipStats = globalRelationshipManager.getStatistics();
+    const roleCount = relationshipStats.totalRoles;
+    const relationshipCount = relationshipStats.totalRelationships;
+
+    // 统计各类型关系
+    const relationshipTypeStats: string[] = [];
+    relationshipStats.relationshipsByType.forEach((count, type) => {
+        relationshipTypeStats.push(`  - ${type}: ${count}`);
+    });
+
+    const lines: string[] = [
+        '# 资源扫描报告',
+        '',
+        '---',
+        '',
+        '## 📊 数据库统计',
+        '',
+        `- 数据库类型: \`${dbBackend === 'json' ? 'JSON 文件' : dbBackend}\``,
+        `- 已加载角色数: ${roleCount}`,
+        `- 已加载关系数: ${relationshipCount}`,
+        '',
+        relationshipTypeStats.length > 0 ? '### 关系类型分布' : '',
+        ...relationshipTypeStats.slice(0, 20),
+        relationshipTypeStats.length > 20 ? `... 还有 ${relationshipTypeStats.length - 20} 种类型` : '',
+        '',
+        '---',
+        '',
+        '## 📂 外部资源目录',
+        '',
+        `- 生成时间: ${new Date(report.generatedAt).toLocaleString()}`,
+        `- 扫描耗时: ${report.durationMs} ms`,
+        `- 工作区根目录数: ${report.workspaceRoots.length}`,
+        `- 候选文件数: ${report.totalCandidateFiles}`,
+        `- 命中 legacy __init__.ojson5: ${report.matchedLegacyInitFiles}`,
+        `- 命中标识文件: ${report.matchedMarkerFiles}`,
+        `- 外部资源目录数: ${report.externalFolderCount}`,
+        '',
+        '### 工作区根目录',
+        ...report.workspaceRoots.map(root => `- \`${root}\``),
+        '',
+        '### 忽略目录',
+        ...report.ignoredDirectories.map(item => `- \`${item}\``),
+        '',
+        `### 关键字（${report.markerKeywords.length}）`,
+        ...report.markerKeywords.slice(0, 30).map(item => `- \`${item}\``),
+        report.markerKeywords.length > 30 ? `... 还有 ${report.markerKeywords.length - 30} 个关键字` : '',
+        '',
+        `### 外部资源目录（展示前 ${sampleDirs.length}/${report.externalFolders.length}）`,
+        ...sampleDirs.map(item => `- \`${item}\``),
+        '',
+        `### 命中样例文件（展示前 ${sampleFiles.length}/${report.sampleMatchedFiles.length}）`,
+        ...sampleFiles.map(item => `- \`${item}\``),
+        ''
+    ];
+    const doc = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'markdown' });
+    await vscode.window.showTextDocument(doc, { preview: false });
 }
 
 interface ExtensionCustomOptions { defaultBase: string; kind: 'character' | 'sensitive' | 'vocabulary'; }
@@ -1361,5 +1454,253 @@ async function executeReferenceMaintenanceAction(actionLabel: string, workspaceR
         vscode.window.showInformationMessage(`引用维护操作完成: ${actionLabel}`);
     } catch (error) {
         vscode.window.showErrorMessage(`执行引用维护操作失败: ${error}`);
+    }
+}
+
+// 显示外部资源目录管理面板
+async function showExternalResourceManagePanel(provider: PackageManagerProvider) {
+    try {
+        // 获取当前外部资源目录信息
+        const report = provider.getExternalScanReport() || provider.rescanExternalRoleFolders(false);
+        const folders = provider.getExternalRoleFolders();
+
+        // 获取内置资源目录统计
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        let internalFolderCount = 0;
+        let internalFileCount = 0;
+        if (workspaceRoot) {
+            const novelHelperRoot = path.join(workspaceRoot, 'novel-helper');
+            if (fs.existsSync(novelHelperRoot)) {
+                // 统计内部目录和文件
+                const countRecursive = (dir: string) => {
+                    let dirs = 0;
+                    let files = 0;
+                    for (const name of fs.readdirSync(dir)) {
+                        const full = path.join(dir, name);
+                        const st = fs.statSync(full);
+                        if (st.isDirectory()) {
+                            dirs++;
+                            const sub = countRecursive(full);
+                            dirs += sub.dirs;
+                            files += sub.files;
+                        } else {
+                            files++;
+                        }
+                    }
+                    return { dirs, files };
+                };
+                const internalStats = countRecursive(novelHelperRoot);
+                internalFolderCount = internalStats.dirs;
+                internalFileCount = internalStats.files;
+            }
+        }
+
+        // 创建快速选择面板
+        const options: vscode.QuickPickItem[] = [
+            {
+                label: '$(refresh) 重新扫描外部资源目录',
+                description: '扫描工作区外的角色资源目录',
+                detail: '重新搜索并更新外部资源目录列表'
+            },
+            {
+                label: '$(add) 添加外部资源目录',
+                description: '手动添加一个外部资源目录',
+                detail: '选择一个文件夹作为外部资源目录'
+            },
+            {
+                label: '$(list-unordered) 查看外部资源目录列表',
+                description: '显示当前已识别的外部资源目录',
+                detail: `当前共 ${folders.length} 个外部资源目录`
+            },
+            {
+                label: '$(file-text) 查看扫描报告',
+                description: '查看详细的资源扫描报告（含内置目录）',
+                detail: `外部 ${report.externalFolderCount} 个目录，内部 ${internalFolderCount} 个目录、${internalFileCount} 个文件`
+            }
+        ];
+
+        const selected = await vscode.window.showQuickPick(options, {
+            placeHolder: `外部：${folders.length} 个目录 | 内部：${internalFolderCount} 个目录、${internalFileCount} 个文件`,
+            title: '资源目录管理'
+        });
+
+        if (selected) {
+            await executeExternalResourceAction(selected.label, provider);
+        }
+    } catch (error) {
+        vscode.window.showErrorMessage(`显示外部资源目录管理面板失败: ${error}`);
+    }
+}
+
+// 执行外部资源管理操作
+async function executeExternalResourceAction(actionLabel: string, provider: PackageManagerProvider): Promise<void> {
+    try {
+        if (actionLabel.includes('重新扫描外部资源目录')) {
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: '扫描外部资源目录',
+                cancellable: false
+            }, async (progress) => {
+                progress.report({ increment: 0, message: '正在扫描...' });
+                const report = provider.rescanExternalRoleFolders(true);
+                provider.refresh();
+                progress.report({ increment: 50, message: '刷新角色数据...' });
+                try {
+                    loadRoles(true);
+                    updateDecorations();
+                } catch (e) {
+                    console.error('[PackageManager] 外部资源重扫后刷新角色失败:', e);
+                }
+                progress.report({ increment: 100, message: '完成' });
+                vscode.window.showInformationMessage(`外部资源扫描完成：${report.externalFolderCount} 个目录`);
+            });
+        } else if (actionLabel.includes('添加外部资源目录')) {
+            const folders = await vscode.window.showOpenDialog({
+                canSelectFiles: false,
+                canSelectFolders: true,
+                canSelectMany: false,
+                openLabel: '选择外部资源目录'
+            });
+            if (folders && folders.length > 0) {
+                const selectedPath = folders[0].fsPath;
+                const initFilePath = path.join(selectedPath, '__init__.ojson5');
+                const ignoreFilePath = path.join(selectedPath, '.anh-ignore');
+
+                // 检查目录是否已经被识别
+                const currentFolders = provider.getExternalRoleFolders();
+                if (currentFolders.includes(selectedPath)) {
+                    vscode.window.showWarningMessage('该目录已是外部资源目录');
+                    return;
+                }
+
+                // 检查是否已有 __init__.ojson5 文件
+                if (fs.existsSync(initFilePath)) {
+                    vscode.window.showWarningMessage('该目录已包含 __init__.ojson5 文件，请重新扫描');
+                    provider.rescanExternalRoleFolders(false);
+                    provider.refresh();
+                    return;
+                }
+
+                // 询问用户是否创建标记文件
+                const createInit = await vscode.window.showQuickPick([
+                    { label: '$(check) 创建标记文件', description: '创建 __init__.ojson5 标记此目录为外部资源目录' },
+                    { label: '$(x) 取消', description: '不创建文件' }
+                ], {
+                    placeHolder: `是否在 ${path.basename(selectedPath)} 中创建标记文件？`,
+                    title: '添加外部资源目录'
+                });
+
+                if (createInit && createInit.label.includes('创建标记文件')) {
+                    // 删除 .anh-ignore 文件（如果存在）
+                    if (fs.existsSync(ignoreFilePath)) {
+                        fs.unlinkSync(ignoreFilePath);
+                    }
+
+                    // 创建 __init__.ojson5 文件
+                    const initContent = `{
+  // 外部资源目录标记文件
+  // 此文件用于标识此目录为 Andrea Novel Helper 的外部资源目录
+  // 可以在此文件中添加目录级别的配置或备注
+  "description": "外部资源目录",
+  "createdAt": "${new Date().toISOString()}"
+}`;
+                    fs.writeFileSync(initFilePath, initContent, 'utf-8');
+                    provider.rescanExternalRoleFolders(false);
+                    provider.refresh();
+
+                    // 同时刷新角色数据
+                    try {
+                        loadRoles(true);
+                        updateDecorations();
+                    } catch (e) {
+                        console.error('[PackageManager] 添加外部资源目录后刷新角色失败:', e);
+                    }
+
+                    vscode.window.showInformationMessage(`已将 ${path.basename(selectedPath)} 标记为外部资源目录`);
+                }
+            }
+        } else if (actionLabel.includes('查看外部资源目录列表')) {
+            const folders = provider.getExternalRoleFolders();
+            if (folders.length === 0) {
+                vscode.window.showInformationMessage('当前没有外部资源目录');
+                return;
+            }
+            const items = folders.map(f => ({
+                label: path.basename(f),
+                description: f,
+                detail: fs.existsSync(f) ? '已存在' : '路径不存在'
+            }));
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: '外部资源目录列表',
+                title: `共 ${folders.length} 个外部资源目录`
+            });
+            if (selected) {
+                // 提供操作选项
+                const action = await vscode.window.showQuickPick([
+                    { label: '$(folder) 在资源管理器中打开', description: selected.description },
+                    { label: '$(trash) 从列表中移除', description: selected.description }
+                ], { placeHolder: selected.label });
+                if (action) {
+                    if (action.label.includes('在资源管理器中打开')) {
+                        vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(selected.description));
+                    } else if (action.label.includes('从列表中移除')) {
+                        const initFilePath = path.join(selected.description, '__init__.ojson5');
+                        const ignoreFilePath = path.join(selected.description, '.anh-ignore');
+
+                        // 检查是否有标记文件需要处理
+                        const hasInitFile = fs.existsSync(initFilePath);
+
+                        // 选择如何处理
+                        const removeAction = await vscode.window.showQuickPick<vscode.QuickPickItem>([
+                            { label: '$(circle-slash) 排除此目录', description: '创建 .anh-ignore 文件，防止再次被自动识别' },
+                            { label: '$(trash) 删除标记文件', description: '仅删除 __init__.ojson5 标记文件（目录内其他资源文件仍可能被识别）' },
+                            { label: '$(x) 取消', description: '不执行任何操作' }
+                        ], {
+                            placeHolder: `如何处理 ${path.basename(selected.description)}？${hasInitFile ? ' (包含 __init__.ojson5)' : ''}`,
+                            title: '移除外部资源目录'
+                        });
+
+                        if (!removeAction || removeAction.label.includes('取消')) {
+                            return;
+                        }
+
+                        if (removeAction.label.includes('排除此目录')) {
+                            // 创建 .anh-ignore 文件
+                            const ignoreContent = `# Andrea Novel Helper 忽略标记
+# 此文件用于标记此目录不应被自动识别为外部资源目录
+# 创建时间: ${new Date().toISOString()}
+`;
+                            fs.writeFileSync(ignoreFilePath, ignoreContent, 'utf-8');
+
+                            // 同时删除 __init__.ojson5 如果存在
+                            if (hasInitFile) {
+                                fs.unlinkSync(initFilePath);
+                            }
+                        } else if (removeAction.label.includes('删除标记文件')) {
+                            if (hasInitFile) {
+                                fs.unlinkSync(initFilePath);
+                            }
+                        }
+
+                        provider.rescanExternalRoleFolders(false);
+                        provider.refresh();
+
+                        // 同时刷新角色数据
+                        try {
+                            loadRoles(true);
+                            updateDecorations();
+                        } catch (e) {
+                            console.error('[PackageManager] 移除外部资源目录后刷新角色失败:', e);
+                        }
+
+                        vscode.window.showInformationMessage(`已移除外部资源目录: ${selected.description}`);
+                    }
+                }
+            }
+        } else if (actionLabel.includes('查看扫描报告')) {
+            await vscode.commands.executeCommand('AndreaNovelHelper.package.showExternalScanReport');
+        }
+    } catch (error) {
+        vscode.window.showErrorMessage(`执行外部资源管理操作失败: ${error}`);
     }
 }

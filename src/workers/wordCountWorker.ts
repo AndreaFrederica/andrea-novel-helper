@@ -7,6 +7,7 @@ console.log(`🚀 [${WORKER_NAME}] 启动 - 字数统计引擎`);
 import * as fs from 'fs';
 import { createHash } from 'crypto';
 import { countAndAnalyzeRaw } from '../utils/WordCount/wordCountCore';
+import { isRoleCountableFile, countRoleFileWords } from '../utils/WordCount/roleFileWordCount';
 
 interface Task { id: number; filePath: string }
 const queue: Task[] = [];
@@ -28,8 +29,10 @@ async function loop() {
   while (queue.length) {
     const { id, filePath } = queue.shift()!;
     try {
-      // 1) 统计
-      const stats = await countAndAnalyzeRaw(filePath);
+      // 1) 统计（角色结构文件走专用处理器，其余走通用）
+      const stats = isRoleCountableFile(filePath)
+        ? await countRoleFileWords(filePath)
+        : await countAndAnalyzeRaw(filePath);
       // 2) 文件信息（避免主线程重复 stat）
       const st = await fs.promises.stat(filePath).catch(() => null);
       // 3) sha256（重算场景下才由 worker 计算）

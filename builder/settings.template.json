@@ -16,7 +16,12 @@
   "AndreaNovelHelper.supportedFileTypes": [
     "markdown",
     "plaintext",
-    "json5"
+    "json5",
+    "ojson",
+    "ojson5",
+    "rjson",
+    "rjson5",
+    "tjson5"
   ],
   "markdown-preview-enhanced.previewTheme": "monokai.css",
   "markdown-preview-enhanced.codeBlockTheme": "auto.css",
@@ -27,5 +32,4 @@
   },
   "editor.mouseWheelZoom": true,
   "editor.wordWrap": "on"
-
 }

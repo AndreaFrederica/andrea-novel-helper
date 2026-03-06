@@ -685,6 +685,10 @@
         "title": "%command.wordCount.forceRecountHere.title%"
       },
       {
+        "command": "AndreaNovelHelper.wordCount.rescanResourceFilesInFolder",
+        "title": "%command.wordCount.rescanResourceFilesInFolder.title%"
+      },
+      {
         "command": "AndreaNovelHelper.wordCount.copy",
         "title": "%command.wordCount.copy.title%"
       },
@@ -707,6 +711,14 @@
       {
         "command": "AndreaNovelHelper.package.paste",
         "title": "%command.package.paste.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.package.rescanExternalFolders",
+        "title": "%command.package.rescanExternalFolders.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.package.showExternalScanReport",
+        "title": "%command.package.showExternalScanReport.title%"
       },
       {
         "command": "AndreaNovelHelper.setupGitIdentity",
@@ -1314,6 +1326,7 @@
           "anhName": "参考文件扩展名",
           "type": "array",
           "default": [
+            "tjson5",
             "png",
             "jpg",
             "jpeg",
@@ -1326,13 +1339,49 @@
             "pdf",
             "doc",
             "docx",
+            "docm",
+            "dotx",
+            "dotm",
             "xls",
             "xlsx",
+            "xlsm",
+            "xltx",
+            "xltm",
+            "xlsb",
             "csv",
             "ods",
+            "odt",
             "ppt",
             "pptx",
-            "odt"
+            "pptm",
+            "potx",
+            "potm",
+            "pps",
+            "ppsx",
+            "ppsm",
+            "odt",
+            "ods",
+            "odp",
+            "odg",
+            "odf",
+            "rtf",
+            "wps",
+            "et",
+            "dps",
+            "drawio",
+            "dio",
+            "vsdx",
+            "vsd",
+            "vssx",
+            "vstx",
+            "lucidchart",
+            "mmd",
+            "plantuml",
+            "puml",
+            "mindnode",
+            "xmind",
+            "mm",
+            "freemind"
           ],
           "items": {
             "type": "string"
@@ -1804,7 +1853,12 @@
           "default": [
             "markdown",
             "plaintext",
-            "json5"
+            "json5",
+            "ojson",
+            "ojson5",
+            "rjson",
+            "rjson5",
+            "tjson5"
           ],
           "description": "%config.supportedFileTypes.description%"
         },
@@ -2437,7 +2491,80 @@
             ".DS_Store",
             "Thumbs.db"
           ],
-          "markdownDescription": "外部角色文件夹扫描时忽略的目录列表。系统会扫描工作区下所有包含 `__init__.ojson5` 的文件夹，但会跳过这些配置的目录。\n\n📝 **默认忽略**：\n- 版本控制：`.git`\n- 编辑器配置：`.vscode`, `.idea`\n- 依赖包：`node_modules`\n- 构建输出：`dist`, `build`, `out`\n- 系统文件：`.DS_Store`, `Thumbs.db`\n\n📝 **使用示例**：\n```json\n[\n  \".git\",\n  \".vscode\",\n  \"node_modules\",\n  \"dist\",\n  \"temp\",\n  \"logs\"\n]\n```"
+          "markdownDescription": "外部资源目录扫描时忽略的目录列表。扫描器会保留对 `__init__.ojson5` 的兼容识别，同时也会根据标识扩展名与关键字识别目录。\n\n📝 **默认忽略**：\n- 版本控制：`.git`\n- 编辑器配置：`.vscode`, `.idea`\n- 依赖包：`node_modules`\n- 构建输出：`dist`, `build`, `out`\n- 系统文件：`.DS_Store`, `Thumbs.db`\n\n📝 **使用示例**：\n```json\n[\n  \".git\",\n  \".vscode\",\n  \"node_modules\",\n  \"dist\",\n  \"temp\",\n  \"logs\"\n]\n```"
+        },
+        "AndreaNovelHelper.externalFolder.markerKeywords": {
+          "anhName": "外部资源标识关键字",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "character-gallery",
+            "character",
+            "role",
+            "roles",
+            "sensitive-words",
+            "sensitive",
+            "vocabulary",
+            "vocab",
+            "regex-patterns",
+            "regex",
+            "relationship",
+            "relation",
+            "connections",
+            "links",
+            "timeline",
+            "角色",
+            "人物",
+            "敏感词",
+            "词汇",
+            "词庫",
+            "词库",
+            "正则",
+            "正則",
+            "正则表达式",
+            "正則表達式",
+            "关系",
+            "关联",
+            "连接",
+            "联系",
+            "时间线",
+            "時間線"
+          ],
+          "markdownDescription": "外部资源目录识别关键字。若文件名命中这些关键字（并且扩展名在支持集合中），其所在目录会被识别为外部资源目录。\n\n⚠️ 同时保留 legacy 支持：目录内包含 `__init__.ojson5` 也会被识别。\n\n📝 **固定扩展名标识（无需关键字）**：`.ojson5`, `.rjson5`, `.ojson`, `.rjson`, `.tjson5`\n\n📝 **关键字扩展名集合**：`.json5`, `.txt`, `.md`, `.ojson`, `.rjson`, `.rjson5`, `.ojson5`, `.tjson5`"
+        },
+        "AndreaNovelHelper.package.dragDefaultAction": {
+          "anhName": "拖拽默认操作",
+          "type": "string",
+          "enum": [
+            "move",
+            "copy",
+            "ask"
+          ],
+          "enumDescriptions": [
+            "默认移动（剪切）",
+            "默认复制",
+            "每次询问"
+          ],
+          "default": "move",
+          "markdownDescription": "在包管理器中拖拽文件/文件夹时的默认操作。\n\n- **move**：默认移动（删除源文件）\n- **copy**：默认复制（保留源文件）\n- **ask**：每次都询问用户选择"
+        },
+        "AndreaNovelHelper.package.iconStyle": {
+          "anhName": "文件图标样式",
+          "type": "string",
+          "enum": [
+            "auto",
+            "theme",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "自动（优先使用主题图标，无匹配时使用自定义图标）",
+            "仅使用主题图标（不替换任何图标）",
+            "使用自定义图标（始终使用内置语义图标）"
+          ],
+          "default": "auto",
+          "markdownDescription": "包管理器中资源文件的图标显示方式。\n\n- **auto**（推荐）：优先使用当前图标主题的图标，仅对 `.ojson5`（角色）、`.rjson5`（关系）、`.tjson5`（时间线）等特殊文件使用语义化图标\n- **theme**：完全使用图标主题的默认图标\n- **custom**：始终使用自定义的语义化图标（角色=`person`，关系=`type-hierarchy`，时间线=`git-branch`）"
         },
         "AndreaNovelHelper.typo.debug.llmTrace": {
           "anhName": "LLM调试追踪",
@@ -3084,7 +3211,7 @@
       ],
       "view/item/context": [
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createCharacterGallery",
           "group": "0_create@1"
         },
@@ -3112,47 +3239,47 @@
           "group": "inline@1"
         },
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createSensitiveWords",
           "group": "0_create@2"
         },
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createVocabulary",
           "group": "0_create@3"
         },
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createRoleFile",
           "group": "0_create@4"
         },
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createRelationshipFile",
           "group": "0_create@5"
         },
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createTimelineFile",
           "group": "0_create@6"
         },
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createRegexPatterns",
           "group": "0_create@7"
         },
         {
-          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package)",
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createSubPackage",
           "group": "1_package@1"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.deleteNode",
           "group": "2_deletion"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.openFile",
           "group": "3_open"
         },
@@ -3162,12 +3289,12 @@
           "group": "3_open"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.revealInExplorer",
           "group": "3_open"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.renamePackage",
           "group": "1_package@2"
         },
@@ -3262,6 +3389,11 @@
           "group": "9_force@2"
         },
         {
+          "when": "view == wordCountExplorer && viewItem == wordCountFolder",
+          "command": "AndreaNovelHelper.wordCount.rescanResourceFilesInFolder",
+          "group": "9_force@3"
+        },
+        {
           "when": "view == wordCountExplorer && (viewItem == wordCountFolder || viewItem == wordCountFile)",
           "command": "AndreaNovelHelper.wordCount.copy",
           "group": "5_clip@1"
@@ -3297,17 +3429,17 @@
           "group": "navigation"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.package.copy",
           "group": "6_clip@1"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.package.cut",
           "group": "6_clip@2"
         },
         {
-          "when": "view == packageManagerView && viewItem == package",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.package.paste",
           "group": "6_clip@3"
         },

@@ -1634,6 +1634,29 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             }
             vscode.window.showInformationMessage(`已为 ${path.basename(folder)} 重新生成索引`);
             provider.refresh();
+        }),
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.rescanResourceFilesInFolder', async (node: any) => {
+            const targetPath = node?.resourceUri?.fsPath as string | undefined;
+            const folder = targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()
+                ? targetPath
+                : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (!folder) return;
+
+            const result = provider.rescanResourceFilesInFolder(folder);
+            provider.refresh();
+
+            try {
+                // 手动重扫命令使用全量刷新，确保新增/删除都被正确纳入
+                loadRoles(true);
+                updateDecorations();
+            } catch (error) {
+                console.error('[WordCount] 重扫资源文件后刷新角色失败:', error);
+            }
+
+            const sample = result.markerFiles.slice(0, 5).map(f => path.basename(f)).join(', ');
+            const more = result.markerFiles.length > 5 ? ` 等 ${result.markerFiles.length - 5} 个` : '';
+            const suffix = result.markerFiles.length > 0 ? `，示例: ${sample}${more}` : '';
+            vscode.window.showInformationMessage(`资源文件重扫完成：${path.basename(folder)} 命中 ${result.scannedFiles} 个资源文件${suffix}`);
         })
     );
 }

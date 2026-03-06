@@ -9,6 +9,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { countAndAnalyze } from '../utils';
+import { isRoleCountableFile, countRoleFileWords } from './roleFileWordCount';
 import { TextStats } from './wordCountCore';
 import { GitGuard } from '../Git/gitGuard';
 import path from 'path';
@@ -593,24 +594,22 @@ class AsyncWordCounter {
   /** 小工具：派发到统计 worker；失败回退到主线程 countAndAnalyze */
   private recountViaWorkerOrFallback(filePath: string): Promise<RichCountResult> {
     this.ensurePool();
+    // 主线程兜底统计（角色文件走专用处理器）
+    const mainThreadCount = async () => {
+      const stats = isRoleCountableFile(filePath)
+        ? await countRoleFileWords(filePath)
+        : await countAndAnalyze(filePath);
+      const st = await fs.promises.stat(filePath).catch(() => null);
+      return { stats, mtime: st?.mtimeMs, size: st?.size } as RichCountResult;
+    };
     if (!this.workers.length) {
-      // 主线程兜底：只算 stats，避免再读文件算 hash（会阻塞主线程）
-      return (async () => {
-        const stats = await countAndAnalyze(filePath);
-        const st = await fs.promises.stat(filePath).catch(() => null);
-        return { stats, mtime: st?.mtimeMs, size: st?.size } as RichCountResult;
-      })();
+      return mainThreadCount();
     }
     const id = ++this.id;
     return new Promise<RichCountResult>((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.dispatchExisting(id, filePath);
-    }).catch(async (e) => {
-      // 同上兜底
-      const stats = await countAndAnalyze(filePath);
-      const st = await fs.promises.stat(filePath).catch(() => null);
-      return { stats, mtime: st?.mtimeMs, size: st?.size } as RichCountResult;
-    });
+    }).catch(() => mainThreadCount());
   }
 
 

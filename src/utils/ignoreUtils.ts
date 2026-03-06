@@ -100,7 +100,7 @@ export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
     return false;
 }
 
-const DEFAULT_ALLOWED_LANGUAGES = ['md', 'txt', 'json', 'json5'];
+const DEFAULT_ALLOWED_LANGUAGES = ['md', 'txt', 'json', 'json5', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5'];
 
 function getAllowedFileTypes(configAllowed?: string[]): string[] {
     return configAllowed ?? DEFAULT_ALLOWED_LANGUAGES;
