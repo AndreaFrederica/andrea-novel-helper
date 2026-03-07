@@ -1055,6 +1055,27 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                     }
                 }
             }
+            // 为所有子文件夹更新 contextValue / description ⇅ / tooltip（反映其内容排序模式）
+            for (const it of wordCountItems) {
+                if (it.collapsibleState === vscode.TreeItemCollapsibleState.None) continue;
+                const childIsManual = this.orderManager.isManual(it.resourceUri.fsPath);
+                it.contextValue = childIsManual ? 'wordCountFolderManual' : 'wordCountFolder';
+                if (childIsManual) {
+                    const desc = typeof it.description === 'string' ? it.description : '';
+                    it.description = desc ? `${desc} ⇅` : '⇅';
+                }
+                const modeText = childIsManual
+                    ? '手动排序 ✎（可拖拽调整子项顺序）'
+                    : '自动排序（按章节结构识别）';
+                if (it.tooltip instanceof vscode.MarkdownString) {
+                    it.tooltip.appendMarkdown(`\n\n内容排序: **${modeText}**`);
+                } else {
+                    const tip = new vscode.MarkdownString(String(it.tooltip || ''));
+                    tip.appendMarkdown(`\n\n内容排序: **${modeText}**`);
+                    tip.isTrusted = true;
+                    it.tooltip = tip;
+                }
+            }
         }
 
         const sortedItems: (WordCountItem | NewItemNode)[] = [...wordCountItems];

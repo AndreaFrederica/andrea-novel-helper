@@ -1588,6 +1588,39 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
                 provider.refresh();
             }
         }),
+        // 开启手动排序（contextValue == wordCountFolder 时可见）
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.enableManualOrdering', async (node: any) => {
+            const om = (provider as any).getOrderManager?.();
+            if (!om) return;
+            const folder = node.resourceUri.fsPath as string;
+            if (om.isManual(folder)) return;
+            let snapshot: string[] = [];
+            try {
+                const children = await provider.getChildren(node) as any[];
+                snapshot = children
+                    .filter(c => c?.resourceUri && fs.existsSync(c.resourceUri.fsPath) && !c.contextValue?.startsWith('wordCountNew'))
+                    .map(c => c.resourceUri.fsPath);
+            } catch { /* ignore */ }
+            om.toggleManual(folder);
+            const step = om['options']?.step || 10;
+            let seq = step;
+            for (const p of snapshot) {
+                om.setIndex(p, seq);
+                seq += step;
+            }
+            setTimeout(() => provider.refresh(), 150);
+            vscode.window.showInformationMessage(`手动排序已启用: ${path.basename(folder)}`);
+        }),
+        // 关闭手动排序（contextValue == wordCountFolderManual 时可见）
+        vscode.commands.registerCommand('AndreaNovelHelper.wordCount.disableManualOrdering', async (node: any) => {
+            const om = (provider as any).getOrderManager?.();
+            if (!om) return;
+            const folder = node.resourceUri.fsPath as string;
+            if (!om.isManual(folder)) return;
+            om.toggleManual(folder);
+            provider.refresh();
+            vscode.window.showInformationMessage(`手动排序已关闭，恢复自动排序: ${path.basename(folder)}`);
+        }),
         // 根据文件名生成索引（提取数字）
         vscode.commands.registerCommand('AndreaNovelHelper.wordCount.generateIndexFromName', async (node: any) => {
             const om = (provider as any).getOrderManager?.();

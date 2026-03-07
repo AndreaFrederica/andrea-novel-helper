@@ -184,6 +184,8 @@
   "command.wordCount.rename.title": "ANH:Rename",
   "command.wordCount.delete.title": "ANH:Delete",
   "command.wordCount.toggleManualOrdering.title": "ANH:Toggle Manual Ordering",
+  "command.wordCount.enableManualOrdering.title": "ANH:Enable Manual Ordering",
+  "command.wordCount.disableManualOrdering.title": "ANH:Disable Manual Ordering",
   "command.wordCount.generateIndexFromName.title": "ANH:Generate Index From Name",
   "command.wordCount.clearIndex.title": "ANH:Clear Index",
   "command.wordCount.setIndexManual.title": "ANH:Set Index (Manual)",

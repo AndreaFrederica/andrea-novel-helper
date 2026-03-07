@@ -116,6 +116,8 @@
   "command.wordCount.rename.title": "重命名",
   "command.wordCount.delete.title": "刪除",
   "command.wordCount.toggleManualOrdering.title": "切換手動排序",
+  "command.wordCount.enableManualOrdering.title": "開啟手動排序",
+  "command.wordCount.disableManualOrdering.title": "關閉手動排序",
   "command.wordCount.generateIndexFromName.title": "從名稱生成索引",
   "command.wordCount.clearIndex.title": "清除索引",
   "command.wordCount.setIndexManual.title": "設定索引(手動)",

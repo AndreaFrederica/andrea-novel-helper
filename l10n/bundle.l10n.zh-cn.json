@@ -184,6 +184,8 @@
   "command.wordCount.rename.title": "重命名",
   "command.wordCount.delete.title": "删除",
   "command.wordCount.toggleManualOrdering.title": "切换手动排序",
+  "command.wordCount.enableManualOrdering.title": "开启手动排序",
+  "command.wordCount.disableManualOrdering.title": "关闭手动排序",
   "command.wordCount.generateIndexFromName.title": "从名称生成索引",
   "command.wordCount.clearIndex.title": "清除索引",
   "command.wordCount.setIndexManual.title": "设置索引(手动)",

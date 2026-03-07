@@ -116,6 +116,8 @@
   "command.wordCount.rename.title": "名前変更",
   "command.wordCount.delete.title": "削除",
   "command.wordCount.toggleManualOrdering.title": "手動並び替え切替",
+  "command.wordCount.enableManualOrdering.title": "手動並び替えを有効化",
+  "command.wordCount.disableManualOrdering.title": "手動並び替えを無効化",
   "command.wordCount.generateIndexFromName.title": "名前からインデックス生成",
   "command.wordCount.clearIndex.title": "インデックスをクリア",
   "command.wordCount.setIndexManual.title": "インデックス設定(手動)",
