@@ -56,8 +56,17 @@ const EXTERNAL_RESOURCE_AUTO_MARKER_EXTENSIONS = new Set([
 ]);
 
 const EXTERNAL_RESOURCE_KEYWORD_EXTENSIONS = new Set([
-	'.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'
+	'.json5', '.txt', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'
 ]);
+
+const DEFAULT_EXTERNAL_FOLDER_MD_MARKER_BASENAMES = [
+	'character-gallery', 'sensitive-words', 'vocabulary'
+];
+
+const DEFAULT_EXTERNAL_FOLDER_MD_MARKER_SUFFIXES = [
+	'_character', '_sensitive', '_vocabulary',
+	'-character', '-sensitive', '-vocabulary'
+];
 
 export interface ExternalRoleFolderScanReport {
 	generatedAt: string;
@@ -110,6 +119,31 @@ export function getExternalFolderMarkerKeywords(): string[] {
 	return deduped.length ? deduped : [...DEFAULT_EXTERNAL_FOLDER_MARKER_KEYWORDS];
 }
 
+function isMdLibraryMarkerFile(fileName: string): boolean {
+	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+	const enabled = cfg.get<boolean>('externalFolder.enableMdLibraryNameMarkers', true);
+	if (!enabled) {
+		return false;
+	}
+
+	const lowerName = fileName.toLowerCase();
+	const ext = path.extname(lowerName);
+	if (ext !== '.md') {
+		return false;
+	}
+
+	const baseName = path.basename(lowerName, ext);
+	if (!baseName) {
+		return false;
+	}
+
+	if (DEFAULT_EXTERNAL_FOLDER_MD_MARKER_BASENAMES.includes(baseName)) {
+		return true;
+	}
+
+	return DEFAULT_EXTERNAL_FOLDER_MD_MARKER_SUFFIXES.some(suffix => baseName.endsWith(suffix));
+}
+
 function hasMarkerKeyword(fileName: string, markerKeywordsLower: readonly string[]): boolean {
 	const lowerName = fileName.toLowerCase();
 	return markerKeywordsLower.some(k => lowerName.includes(k));
@@ -120,6 +154,9 @@ export function isExternalResourceMarkerFile(fileName: string, markerKeywords?: 
 	const ext = path.extname(lowerName);
 	if (EXTERNAL_RESOURCE_AUTO_MARKER_EXTENSIONS.has(ext)) {
 		return true;
+	}
+	if (ext === '.md') {
+		return isMdLibraryMarkerFile(fileName);
 	}
 	if (!EXTERNAL_RESOURCE_KEYWORD_EXTENSIONS.has(ext)) {
 		return false;
@@ -210,7 +247,7 @@ export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vs
 			if (lowerName === '__init__.ojson5') {
 				matchedLegacyInitFiles++;
 				externalFolderSet.add(dirPath);
-				if (sampleMatchedFiles.length < 120) sampleMatchedFiles.push(filePath);
+				sampleMatchedFiles.push(filePath);
 				continue;
 			}
 			if (!isExternalResourceMarkerFile(baseName, markerKeywordsLower)) {
@@ -218,7 +255,7 @@ export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vs
 			}
 			matchedMarkerFiles++;
 			externalFolderSet.add(dirPath);
-			if (sampleMatchedFiles.length < 120) sampleMatchedFiles.push(filePath);
+			sampleMatchedFiles.push(filePath);
 		}
 	}
 

@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.57",
+  "version": "0.4.59",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -2522,7 +2522,13 @@
             "时间线",
             "時間線"
           ],
-          "markdownDescription": "外部资源目录识别关键字。若文件名命中这些关键字（并且扩展名在支持集合中），其所在目录会被识别为外部资源目录。\n\n⚠️ 同时保留 legacy 支持：目录内包含 `__init__.ojson5` 也会被识别。\n\n📝 **固定扩展名标识（无需关键字）**：`.ojson5`, `.rjson5`, `.ojson`, `.rjson`, `.tjson5`\n\n📝 **关键字扩展名集合**：`.json5`, `.txt`, `.md`, `.ojson`, `.rjson`, `.rjson5`, `.ojson5`, `.tjson5`"
+          "markdownDescription": "外部资源目录识别关键字。若文件名命中这些关键字（并且扩展名在支持集合中），其所在目录会被识别为外部资源目录。\n\n⚠️ 同时保留 legacy 支持：目录内包含 `__init__.ojson5` 也会被识别。\n\n📝 **固定扩展名标识（无需关键字）**：`.ojson5`, `.rjson5`, `.ojson`, `.rjson`, `.tjson5`\n\n📝 **关键字扩展名集合**：`.json5`, `.txt`, `.ojson`, `.rjson`, `.rjson5`, `.ojson5`, `.tjson5`\n\n📝 `.md` 不参与关键字匹配；仅当开启下方“MD库名识别”并命中特定库名规则时，才会识别为外部资源标记文件。"
+        },
+        "AndreaNovelHelper.externalFolder.enableMdLibraryNameMarkers": {
+          "anhName": "MD库名识别",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "是否允许将特定命名规则的 `.md` 文件识别为外部资源标记文件。\n\n开启后，仅以下规则会生效：\n- 精确文件名：`character-gallery.md`、`sensitive-words.md`、`vocabulary.md`\n- 后缀规则：`*_character.md`、`*_sensitive.md`、`*_vocabulary.md`（也支持 `-` 连接）\n\n关闭后，`.md` 文件不会被用于外部资源目录标记识别。"
         },
         "AndreaNovelHelper.package.dragDefaultAction": {
           "anhName": "拖拽默认操作",

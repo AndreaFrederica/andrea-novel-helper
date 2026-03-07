@@ -1107,10 +1107,10 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
      * 前端通过此方法触发后端计算，计算完成后自动刷新UI
      */
     private async scheduleBackendCompute(root: string, dirents: fs.Dirent[], prefetchFiles: string[]): Promise<void> {
-        // 如果初始加载还在进行中，跳过重复计算（初始加载会处理所有文件）
+        // 不再在初始化阶段硬跳过。
+        // 原逻辑会在初始化状态异常或长时间未完成时导致目录节点长期停留“计算中”。
         if (!this.initialProgressCompleted) {
-            wcDebug('scheduleBackendCompute:skip-during-initial-load', root);
-            return;
+            wcDebug('scheduleBackendCompute:run-during-initial-load', root);
         }
 
         const exts = getSupportedExtensions();
@@ -2073,6 +2073,22 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 const total = allFiles.length;
                 if (total === 0) {
                     progress.report({ message: `没有需要统计的文件 ${formatElapsed()}` });
+                    // 没有可统计文件也必须结束初始化，否则后续目录计算会一直被跳过。
+                    this.initialProgressCompleted = true;
+                    wcDebug('maybeShowInitialProgress:no-supported-files');
+
+                    // 仍然触发一次目录聚合，确保空目录也能从“计算中”收敛到 0。
+                    for (const folder of folders) {
+                        const root = folder.uri.fsPath;
+                        try {
+                            const dirents = await fs.promises.readdir(root, { withFileTypes: true });
+                            void this.scheduleBackendCompute(root, dirents, []);
+                        } catch (e) {
+                            wcDebug('maybeShowInitialProgress:no-files-dir-aggregate-error', root, e);
+                        }
+                    }
+
+                    this.refresh();
                     return;
                 }
 

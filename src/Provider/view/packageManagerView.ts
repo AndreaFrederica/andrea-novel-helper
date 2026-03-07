@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
-import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot } from '../../utils/utils';
+import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot, isRoleFile } from '../../utils/utils';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
@@ -113,6 +113,8 @@ export class PackageNode extends vscode.TreeItem {
 export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNode> {
     private _onDidChange = new vscode.EventEmitter<PackageNode | void>();
     readonly onDidChangeTreeData = this._onDidChange.event;
+    private _onDidChangeExternalFolders = new vscode.EventEmitter<string[]>();
+    readonly onDidChangeExternalFolders = this._onDidChangeExternalFolders.event;
     
     // 保存展开状态的键值对
     private expandedNodes = new Set<string>();
@@ -137,9 +139,15 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
     }
 
     public rescanExternalRoleFolders(showMessage: boolean = false): ExternalRoleFolderScanReport {
+        const previous = this.externalRoleFolders;
         const result = scanExternalRoleFoldersWithReport(vscode.workspace.workspaceFolders);
         this.externalRoleFolders = result.externalFolders;
         this.externalScanReport = result.report;
+        const changed = previous.length !== this.externalRoleFolders.length
+            || previous.some((item, idx) => item !== this.externalRoleFolders[idx]);
+        if (changed) {
+            this._onDidChangeExternalFolders.fire([...this.externalRoleFolders]);
+        }
         if (showMessage) {
             vscode.window.setStatusBarMessage(`$(search) 外部资源重扫完成：${result.report.externalFolderCount} 个目录`, 3000);
         }
@@ -557,9 +565,9 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
                 const shouldOpenWithManager = typeof pref === 'boolean' ? pref : !!globalDefault;
 
-                // Decide by extension: .json5 and .ojson are eligible for role manager.
+                // Decide by extension: .json5/.ojson5/.ojson are eligible for role manager.
                 const ext = path.extname(fileUri.fsPath).toLowerCase();
-                if (ext === '.json5' || ext === '.ojson') {
+                if (ext === '.json5' || ext === '.ojson5' || ext === '.ojson') {
                     if (shouldOpenWithManager) {
                         try {
                             // ensure it's recognized as role-related before opening with manager
@@ -777,6 +785,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     const getManagedRoots = () => [helperRoot, ...provider.getExternalRoleFolders()];
     const isManagedPath = (filePath: string) => isPathUnderAnyRoot(filePath, getManagedRoots());
     const isHelperPath = (filePath: string) => isPathUnderAnyRoot(filePath, [helperRoot]);
+    const workspaceRoots = (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.fsPath);
+    const isWorkspacePath = (filePath: string) => isPathUnderAnyRoot(filePath, workspaceRoots);
 
     // 改进的过滤逻辑：只关注受管理目录中的相关文件和目录
     const shouldRefresh = (filePath: string) => {
@@ -819,7 +829,12 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         if (!isManagedPath(filePath)) {
             return false;
         }
-        return isExternalResourceMarkerFile(path.basename(filePath));
+        const baseName = path.basename(filePath);
+        // 标记文件变化会影响外部目录识别；角色文件变化会影响角色/装饰实时结果。
+        if (isExternalResourceMarkerFile(baseName)) {
+            return true;
+        }
+        return isRoleFile(baseName, filePath);
     };
 
     // 统一的刷新处理函数
@@ -837,15 +852,18 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             return;
         }
 
-        if (!touchedPaths.some(shouldRefresh)) {
+        // 只有角色相关文件才触发角色数据更新
+        const changedRolePaths = touchedPaths.filter(shouldUpdateRoles);
+        const needTreeRefresh = touchedPaths.some(shouldRefresh);
+        if (!needTreeRefresh && changedRolePaths.length === 0) {
             return;
         }
 
         console.log(`包管理器：检测到文件${event.type} ${event.filePath}`);
-        provider.refresh();
+        if (needTreeRefresh) {
+            provider.refresh();
+        }
 
-        // 只有角色相关文件才触发角色数据更新
-        const changedRolePaths = touchedPaths.filter(shouldUpdateRoles);
         if (changedRolePaths.length > 0) {
             try {
                 loadRoles(false, changedRolePaths);
@@ -875,6 +893,38 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     // 注册全局文件追踪回调
     registerFileChangeCallback('packageManager', handleFileChange);
 
+    // 为工作区外的外部目录补充监听，确保其修改也能触发热重载。
+    const externalFolderWatchers = new Map<string, vscode.FileSystemWatcher>();
+    const syncExternalFolderWatchers = () => {
+        const expected = new Set(provider.getExternalRoleFolders().map(folder => path.resolve(folder)));
+
+        for (const [folder, watcher] of externalFolderWatchers.entries()) {
+            if (!expected.has(folder)) {
+                watcher.dispose();
+                externalFolderWatchers.delete(folder);
+            }
+        }
+
+        for (const folder of expected) {
+            if (externalFolderWatchers.has(folder)) {
+                continue;
+            }
+            // 工作区内目录已由全局 fileTracker 监听，避免重复触发。
+            if (isWorkspacePath(folder)) {
+                continue;
+            }
+            const pattern = new vscode.RelativePattern(folder, '**/*');
+            const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+            watcher.onDidCreate(uri => handleFileChange({ type: 'create', filePath: uri.fsPath, timestamp: Date.now() }));
+            watcher.onDidChange(uri => handleFileChange({ type: 'change', filePath: uri.fsPath, timestamp: Date.now() }));
+            watcher.onDidDelete(uri => handleFileChange({ type: 'delete', filePath: uri.fsPath, timestamp: Date.now() }));
+            externalFolderWatchers.set(folder, watcher);
+            context.subscriptions.push(watcher);
+        }
+    };
+    context.subscriptions.push(provider.onDidChangeExternalFolders(() => syncExternalFolderWatchers()));
+    syncExternalFolderWatchers();
+
     // 额外监听文本文档保存事件（更精确的文件内容变化检测）
     const saveWatcher = vscode.workspace.onDidSaveTextDocument((document) => {
         const filePath = document.uri.fsPath;
@@ -889,12 +939,16 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             return;
         }
 
-        if (shouldRefresh(filePath)) {
+        const needTreeRefresh = shouldRefresh(filePath);
+        const needRoleUpdate = shouldUpdateRoles(filePath);
+        if (needTreeRefresh || needRoleUpdate) {
             console.log(`包管理器：检测到相关文件保存 ${filePath}`);
-            provider.refresh();
+            if (needTreeRefresh) {
+                provider.refresh();
+            }
             
             // 只有角色相关文件才触发角色数据更新
-            if (shouldUpdateRoles(filePath)) {
+            if (needRoleUpdate) {
                 try {
                     loadRoles(false, [filePath]);
                     
@@ -922,9 +976,6 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 }
 
 async function openExternalScanReportPage(report: ExternalRoleFolderScanReport): Promise<void> {
-    const sampleDirs = report.externalFolders.slice(0, 80);
-    const sampleFiles = report.sampleMatchedFiles.slice(0, 80);
-
     // 获取数据库统计信息
     const dbBackend = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('database.backend', 'json');
     const relationshipStats = globalRelationshipManager.getStatistics();
@@ -949,8 +1000,7 @@ async function openExternalScanReportPage(report: ExternalRoleFolderScanReport):
         `- 已加载关系数: ${relationshipCount}`,
         '',
         relationshipTypeStats.length > 0 ? '### 关系类型分布' : '',
-        ...relationshipTypeStats.slice(0, 20),
-        relationshipTypeStats.length > 20 ? `... 还有 ${relationshipTypeStats.length - 20} 种类型` : '',
+        ...relationshipTypeStats,
         '',
         '---',
         '',
@@ -971,14 +1021,13 @@ async function openExternalScanReportPage(report: ExternalRoleFolderScanReport):
         ...report.ignoredDirectories.map(item => `- \`${item}\``),
         '',
         `### 关键字（${report.markerKeywords.length}）`,
-        ...report.markerKeywords.slice(0, 30).map(item => `- \`${item}\``),
-        report.markerKeywords.length > 30 ? `... 还有 ${report.markerKeywords.length - 30} 个关键字` : '',
+        ...report.markerKeywords.map(item => `- \`${item}\``),
         '',
-        `### 外部资源目录（展示前 ${sampleDirs.length}/${report.externalFolders.length}）`,
-        ...sampleDirs.map(item => `- \`${item}\``),
+        `### 外部资源目录（全量 ${report.externalFolders.length}）`,
+        ...report.externalFolders.map(item => `- \`${item}\``),
         '',
-        `### 命中样例文件（展示前 ${sampleFiles.length}/${report.sampleMatchedFiles.length}）`,
-        ...sampleFiles.map(item => `- \`${item}\``),
+        `### 命中文件（全量 ${report.sampleMatchedFiles.length}）`,
+        ...report.sampleMatchedFiles.map(item => `- \`${item}\``),
         ''
     ];
     const doc = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'markdown' });

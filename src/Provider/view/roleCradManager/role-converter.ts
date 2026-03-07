@@ -209,7 +209,8 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         name: role.name,
         type: role.type,
         uuid: role.uuid,
-        color: role.color,
+        // 兼容：若仅存在 style.color，也回填到 base.color 供前端颜色输入框编辑
+        color: role.color ?? ((role.style && typeof role.style === 'object') ? (role.style as TextStyleOptions).color : undefined),
         priority: role.priority,
         description: role.description,
         affiliation: role.affiliation,
@@ -219,19 +220,17 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         regexFlags: role.regexFlags,
     };
 
-    // 处理 style 字段（优先使用 style 对象，否则从单独字段构建）
+    // 处理 style 字段：优先使用 style 对象，并补齐旧字段缺失项
     const styleObj: TextStyleOptions = {};
     if (role.style && typeof role.style === 'object') {
         Object.assign(styleObj, role.style);
-    } else {
-        // 兼容旧格式：从单独字段构建 style
-        if (role.color) styleObj.color = role.color;
-        if (role.backgroundColor) styleObj.backgroundColor = role.backgroundColor;
-        if (role.bold) styleObj.bold = true;
-        if (role.italic) styleObj.italic = true;
-        if (role.strikethrough) styleObj.strikethrough = true;
-        if (role.underline) styleObj.underline = true;
     }
+    if (!styleObj.color && role.color) styleObj.color = role.color;
+    if (!styleObj.backgroundColor && role.backgroundColor) styleObj.backgroundColor = role.backgroundColor;
+    if (styleObj.bold === undefined && role.bold) styleObj.bold = true;
+    if (styleObj.italic === undefined && role.italic) styleObj.italic = true;
+    if (styleObj.strikethrough === undefined && role.strikethrough) styleObj.strikethrough = true;
+    if (styleObj.underline === undefined && role.underline) styleObj.underline = true;
     if (Object.keys(styleObj).length > 0) {
         base.style = styleObj;
     }
@@ -297,15 +296,30 @@ export function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: R
     const setIf = <K extends keyof RoleFlat>(key: K, val: unknown) => {
         if (!isEmptyish(val)) {(out as any)[key] = val;}
     };
+
+    // 清理旧样式残留，后续按当前前端状态重新生成。
+    delete (out as any).style;
+    delete (out as any).color;
+    delete (out as any).backgroundColor;
+    delete (out as any).bold;
+    delete (out as any).italic;
+    delete (out as any).strikethrough;
+    delete (out as any).underline;
+
     setIf('uuid', base.uuid);
     setIf('affiliation', base.affiliation);
     setIf('aliases', toStringArray(base.aliases));
     setIf('description', base.description);
 
-    // color 字段处理：如果 style.color 存在，则不单独保存 color（避免重复）
-    const hasStyleColor = base.style && typeof base.style === 'object' && (base.style as TextStyleOptions).color;
-    if (!hasStyleColor) {
-        setIf('color', base.color);
+    const normalizedStyle: TextStyleOptions = {};
+    if (base.style && typeof base.style === 'object') {
+        Object.assign(normalizedStyle, base.style as TextStyleOptions);
+    }
+    // 前端颜色输入框编辑的是 base.color，这里统一覆盖到 style.color，避免旧值回写。
+    if (!isEmptyish(base.color)) {
+        normalizedStyle.color = String(base.color);
+    } else {
+        delete normalizedStyle.color;
     }
 
     setIf('regex', base.regex);
@@ -313,13 +327,12 @@ export function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: R
     if (typeof base.priority === 'number' && !Number.isNaN(base.priority)) {out.priority = base.priority;}
     setIf('fixes', toStringArray(base.fixes));
 
-    // 处理 style 字段：仅保存 style 对象，不展开到单独字段
-    if (base.style && typeof base.style === 'object') {
-        const style = base.style as TextStyleOptions;
-        // 只有当 style 对象包含实际内容时才保存
-        if (style.color || style.backgroundColor || style.bold || style.italic || style.strikethrough || style.underline) {
-            setIf('style', style);
-        }
+    // 保留顶层 color 兼容旧渲染逻辑，同时以 style 为主。
+    setIf('color', base.color);
+
+    // 仅保存 style 对象，不展开到单独字段。
+    if (normalizedStyle.color || normalizedStyle.backgroundColor || normalizedStyle.bold || normalizedStyle.italic || normalizedStyle.strikethrough || normalizedStyle.underline) {
+        setIf('style', normalizedStyle);
     }
 
     // 后端专用只保留 existing（无视前端）

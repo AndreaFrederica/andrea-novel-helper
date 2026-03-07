@@ -168,7 +168,8 @@ function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         name: role.name,
         type: role.type,
         uuid: role.uuid,
-        color: role.color,
+        // 兼容：若仅存在 style.color，也回填到 base.color 供前端颜色输入框编辑
+        color: role.color ?? ((role.style && typeof role.style === 'object') ? (role.style as TextStyleOptions).color : undefined),
         priority: role.priority,
         description: role.description,
         affiliation: role.affiliation,
@@ -183,15 +184,14 @@ function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
     const styleObj: TextStyleOptions = {};
     if (role.style && typeof role.style === 'object') {
         Object.assign(styleObj, role.style);
-    } else {
-        // 兼容旧格式：从单独字段构建 style
-        if (role.color) styleObj.color = role.color;
-        if (role.backgroundColor) styleObj.backgroundColor = role.backgroundColor;
-        if (role.bold) styleObj.bold = true;
-        if (role.italic) styleObj.italic = true;
-        if (role.strikethrough) styleObj.strikethrough = true;
-        if (role.underline) styleObj.underline = true;
     }
+    // 兼容旧格式：补齐 style 缺失字段
+    if (!styleObj.color && role.color) styleObj.color = role.color;
+    if (!styleObj.backgroundColor && role.backgroundColor) styleObj.backgroundColor = role.backgroundColor;
+    if (styleObj.bold === undefined && role.bold) styleObj.bold = true;
+    if (styleObj.italic === undefined && role.italic) styleObj.italic = true;
+    if (styleObj.strikethrough === undefined && role.strikethrough) styleObj.strikethrough = true;
+    if (styleObj.underline === undefined && role.underline) styleObj.underline = true;
     if (Object.keys(styleObj).length > 0) {
         base.style = styleObj;
     }
@@ -251,14 +251,29 @@ function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: RoleFlat
     const setIf = <K extends keyof RoleFlat>(key: K, val: unknown) => {
         if (!isEmptyish(val)) (out as any)[key] = val;
     };
+
+    // 清理旧样式残留，后续按当前前端状态重新生成。
+    delete (out as any).style;
+    delete (out as any).color;
+    delete (out as any).backgroundColor;
+    delete (out as any).bold;
+    delete (out as any).italic;
+    delete (out as any).strikethrough;
+    delete (out as any).underline;
+
     setIf('affiliation', base.affiliation);
     setIf('aliases', toStringArray(base.aliases));
     setIf('description', base.description);
 
-    // color 字段处理：如果 style.color 存在，则不单独保存 color（避免重复）
-    const hasStyleColor = base.style && typeof base.style === 'object' && (base.style as TextStyleOptions).color;
-    if (!hasStyleColor) {
-        setIf('color', base.color);
+    const normalizedStyle: TextStyleOptions = {};
+    if (base.style && typeof base.style === 'object') {
+        Object.assign(normalizedStyle, base.style as TextStyleOptions);
+    }
+    // 前端颜色输入框编辑的是 base.color，这里统一覆盖到 style.color，避免旧值回写。
+    if (!isEmptyish(base.color)) {
+        normalizedStyle.color = String(base.color);
+    } else {
+        delete normalizedStyle.color;
     }
 
     setIf('regex', base.regex);
@@ -266,13 +281,12 @@ function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: RoleFlat
     if (typeof base.priority === 'number' && !Number.isNaN(base.priority)) out.priority = base.priority;
     setIf('fixes', toStringArray(base.fixes));
 
-    // 处理 style 字段：仅保存 style 对象，不展开到单独字段
-    if (base.style && typeof base.style === 'object') {
-        const style = base.style as TextStyleOptions;
-        // 只有当 style 对象包含实际内容时才保存
-        if (style.color || style.backgroundColor || style.bold || style.italic || style.strikethrough || style.underline) {
-            setIf('style', style);
-        }
+    // 保留顶层 color 兼容旧渲染逻辑，同时以 style 为主。
+    setIf('color', base.color);
+
+    // 仅保存 style 对象，不展开到单独字段。
+    if (normalizedStyle.color || normalizedStyle.backgroundColor || normalizedStyle.bold || normalizedStyle.italic || normalizedStyle.strikethrough || normalizedStyle.underline) {
+        setIf('style', normalizedStyle);
     }
 
     // 展平：extended -> custom（custom 覆盖 extended）；禁止覆盖基础/隐藏字段或其同义词
@@ -322,6 +336,11 @@ const BASE_KEY_ORDER = [
 ];
 
 function parseRolesFromText(text: string): RoleFlat[] {
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+        return [];
+    }
+
     let data: any;
     try { data = JSON5.parse(text); } catch { return []; }
     if (!Array.isArray(data)) return [];
@@ -359,6 +378,22 @@ function parseRolesFromText(text: string): RoleFlat[] {
         out.push(role);
     }
     return out;
+}
+
+function validateRoleJson5Text(text: string): { ok: boolean; reason?: string } {
+    const trimmed = (text || '').trim();
+    if (!trimmed) {
+        return { ok: true };
+    }
+
+    let data: any;
+    try {
+        data = JSON5.parse(text);
+    } catch (e: any) {
+        return { ok: false, reason: `JSON5 解析失败: ${e?.message ?? String(e)}` };
+    }
+
+    return { ok: true };
 }
 
 function stringifyRolesToJson5(roles: RoleFlat[]): string {
@@ -648,17 +683,26 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
         return Number.isFinite(n) ? Math.max(0, n!) : 1000;
     }
 
-    private scheduleWrite(document: vscode.TextDocument, text: string) {
+    private async scheduleWrite(document: vscode.TextDocument, text: string): Promise<void> {
         const key = document.uri.toString();
         this.pendingText.set(key, text); // 总是先缓存
 
         const mode = this.getAutoSaveMode(document);
+        // autoSave=off: 立即写入 TextDocument 形成 dirty（不自动落盘）。
         if (mode === 'off') {
-            // 不立即写 TextDocument；等用户 Ctrl+S，在 onWillSave 里一次性落盘
+            const old = this.saveTimers.get(key);
+            if (old) {
+                clearTimeout(old);
+                this.saveTimers.delete(key);
+            }
+            this.refreshMuteUntil.set(key, Date.now() + 600);
+            if (document.getText() !== text) {
+                await this.replaceWholeDocument(document, text);
+            }
             return;
         }
 
-        const delay = (mode === 'afterDelay') ? this.getAutoSaveDelay(document) : 200; // 其它模式轻节流
+        const delay = (mode === 'afterDelay') ? this.getAutoSaveDelay(document) : 200;
 
         // —— 新增：预先开启静音窗口 ——
         // 给 doc-change 留个缓冲，避免我们写入引起的回灌打断 webview
@@ -698,6 +742,14 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
 
         const updateWebview = async () => {
             try {
+                const validation = validateRoleJson5Text(document.getText());
+                if (!validation.ok) {
+                    this.existingById.clear();
+                    panel.webview.postMessage({ type: 'roleCards', list: [] });
+                    panel.webview.postMessage({ type: 'parseError', error: validation.reason ?? '角色文件格式无效' });
+                    return;
+                }
+
                 const roles = parseRolesFromText(document.getText());
                 this.existingById.clear();
                 for (const r of roles) if (r.id) this.existingById.set(r.id, r);
@@ -781,6 +833,20 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                 if (msg.type === 'requestRoleCards') {
                     await updateWebview();
                 } else if (msg.type === 'saveRoleCards') {
+                    const validation = validateRoleJson5Text(document.getText());
+                    if (!validation.ok) {
+                        const choice = await vscode.window.showWarningMessage(
+                            `当前文件格式异常（${validation.reason ?? '未知原因'}）。是否覆盖为角色数组格式并继续保存？`,
+                            { modal: true },
+                            '覆盖并保存',
+                            '取消'
+                        );
+                        if (choice !== '覆盖并保存') {
+                            panel.webview.postMessage({ type: 'saveAck', ok: false, error: '已取消保存' });
+                            return;
+                        }
+                    }
+
                     const list: RoleCardModelWithId[] = Array.isArray(msg.list) ? msg.list : [];
                     const merged = cardModelsToRoles(list, this.existingById);
                     const text = stringifyRolesToJson5(merged);
@@ -789,10 +855,10 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                     this.existingById.clear();
                     for (const r of merged) if (r.id) this.existingById.set(r.id, r);
 
-                    // 关键：按 autosave 策略写入/排队
-                    this.scheduleWrite(document, text);
+                    // 关键：按 autosave 策略写入/排队。
+                    // autoSave=off: 写入 TextDocument 形成 dirty，不自动保存到磁盘。
+                    await this.scheduleWrite(document, text);
 
-                    // 立即 ACK，若 autosave=off，提示已排队等待用户保存
                     const queued = this.getAutoSaveMode(document) === 'off';
                     panel.webview.postMessage({ type: 'saveAck', ok: true, queued });
                 }

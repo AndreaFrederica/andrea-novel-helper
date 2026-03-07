@@ -46,6 +46,7 @@ class DocumentRolesModel {
     private lastDocUri: string | undefined;
     private lastVersion: number | undefined;
     private cachedHierarchy: RoleHierarchyAffiliationGroup[] = [];
+    private lastHierarchySignature = '';
     private rebuildScheduled = false; // 保留兜底机制（极端情况下）
     private pendingAsync = new Set<string>(); // 异步匹配中的文档
 
@@ -106,21 +107,51 @@ class DocumentRolesModel {
     private rebuild(force = false): boolean {
         const active = this.getEffectiveDocument();
         if (!active) {
-            if (this.cachedHierarchy.length) {
-                this.cachedHierarchy = [];
-                this.lastDocUri = undefined; this.lastVersion = undefined;
-                return true;
-            }
-            return false;
+            const changed = this.lastHierarchySignature !== '' || this.cachedHierarchy.length > 0;
+            this.cachedHierarchy = [];
+            this.lastHierarchySignature = '';
+            this.lastDocUri = undefined;
+            this.lastVersion = undefined;
+            return changed;
         }
         const uriStr = active.uri.toString();
         if (!force && uriStr === this.lastDocUri && active.version === this.lastVersion) {
             return false;
         }
+
+        const nextHierarchy = this.buildFromDocument(active);
+        const nextSignature = this.buildHierarchySignature(nextHierarchy);
+        const changed = nextSignature !== this.lastHierarchySignature;
+
         this.lastDocUri = uriStr;
         this.lastVersion = active.version;
-        this.cachedHierarchy = this.buildFromDocument(active);
-        return true;
+        if (changed) {
+            this.cachedHierarchy = nextHierarchy;
+            this.lastHierarchySignature = nextSignature;
+        }
+        return changed;
+    }
+
+    private buildHierarchySignature(hierarchy: RoleHierarchyAffiliationGroup[]): string {
+        if (!hierarchy.length) {
+            return '';
+        }
+        const parts: string[] = [];
+        for (const aff of hierarchy) {
+            parts.push(`A:${aff.affiliation}`);
+            for (const t of aff.types) {
+                parts.push(`T:${t.type}`);
+                for (const r of t.roles) {
+                    const src = (r.sourcePath || '').toLowerCase();
+                    const pkg = (r.packagePath || '').toLowerCase();
+                    const name = (r.name || '').toLowerCase();
+                    const type = (r.type || '').toLowerCase();
+                    const affiliation = (r.affiliation || '').toLowerCase();
+                    parts.push(`R:${name}|${type}|${affiliation}|${pkg}|${src}`);
+                }
+            }
+        }
+        return parts.join('\n');
     }
 
     private buildFromDocument(doc: vscode.TextDocument): RoleHierarchyAffiliationGroup[] {

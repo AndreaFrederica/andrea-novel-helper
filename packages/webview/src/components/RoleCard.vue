@@ -151,7 +151,6 @@
                 dense
                 filled
                 :debounce="150"
-                @update:model-value="commit(['base.style'])"
               >
                 <template #append>
                   <q-btn dense flat icon="palette" @click="openBackgroundColor = true" />
@@ -665,6 +664,7 @@ watch(
       delete draft.base.style.backgroundColor;
     }
     backgroundColorPicker.value = v || '#ffffff';
+    commit(['base.style']);
   },
 );
 
