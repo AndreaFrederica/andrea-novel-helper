@@ -9,6 +9,22 @@
         "1": { "name": "entity.name.type.definition.andrea" },
         "2": { "name": "string.unquoted.definition.andrea" }
       }
+    },
+    {
+      "comment": "HTML block comment <!-- ... --> single/multi-line",
+      "name": "comment.block.html.andrea-novel",
+      "begin": "<!--",
+      "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.andrea-novel" } },
+      "end": "-->",
+      "endCaptures": { "0": { "name": "punctuation.definition.comment.end.andrea-novel" } }
+    },
+    {
+      "comment": "Obsidian-style block comment %% ... %% single/multi-line",
+      "name": "comment.block.obsidian.andrea-novel",
+      "begin": "%%",
+      "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.andrea-novel" } },
+      "end": "%%",
+      "endCaptures": { "0": { "name": "punctuation.definition.comment.end.andrea-novel" } }
     }
   ]
 }

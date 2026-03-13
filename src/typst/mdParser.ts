@@ -86,6 +86,15 @@ export function parseMarkdownDoc(text: string): { meta: Record<string, any>; blo
     }
     outLines.push(ln)
   }
-  const { blocks } = parseMarkdownBlocks(outLines.join('\n'))
+  const { blocks } = parseMarkdownBlocks(stripComments(outLines.join('\n')))
   return { meta, blocks }
+}
+
+/** HTML <!-- ... --> 和 Obsidian %% ... %% / %% EOL 注释剥除（用于导出路径） */
+function stripComments(text: string): string {
+  // 保留换行数以维持行号大致对齐
+  let t = text.replace(/<!--[\s\S]*?-->/g, m => '\n'.repeat((m.match(/\n/g) ?? []).length))
+  t = t.replace(/%%[\s\S]*?%%/g, m => '\n'.repeat((m.match(/\n/g) ?? []).length))
+  t = t.replace(/%%[^\n]*/g, '')  // 剩余未闭合 %% → 行尾注释
+  return t
 }

@@ -1,5 +1,39 @@
 # Change Log
 
+
+## [0.4.63] - 2026-03-14
+### ✨ 新增
+- 支持显式注释语法，作为 Markdown 的扩展用于草稿、作者备注与编写注解：
+  - 支持标准 HTML 注释 `<!-- ... -->`（单行与多行）
+  - 支持 Obsidian 风格行/块注释 `%% ... %%` 与行尾 `%%` 注释
+  - 注释内容在**预览与导出（Typst/PDF/HTML）**中会被剥除，不会渲染或计入字数统计
+- 在语法注入文件中加入注释高亮支持，使注释在编辑器中呈现为注释样式（`syntaxes/andrea-md-injection.tmLanguage.json`）
+
+### ✨ 新增（预览体验）
+- 预览支持**角色名称着色**：根据角色定义的颜色/样式在预览中高亮角色名与别名，提升阅读与校对效率（默认关闭，可在预览设置中开启）。
+- 在预览设置中加入“角色着色”开关（preview 面板的 Reader 设置），并将该选项纳入本地预设（`anhReaderSettings` / `anhReaderPresets`）。
+- 实现机制：扩展侧通过 `PreviewManager.broadcastRoleColors(roles)` 将角色样式下发到 Webview，`media/preview.js` 接收 `roleColors` 消息并在 `#reader-content` 内对匹配到的文本节点用 `.anh-role-color` 包裹以应用样式。匹配支持别名、按名称长度优先匹配以避免短名截断长名。
+- 兼容分页与增量更新：着色器使用 `MutationObserver` 在 DOM 变化后短延迟重入着色，避免与增量补丁冲突并控制性能开销。
+
+
+### 🐛 修复 / 行为变更
+- 预览解析器（`src/utils/md_plain.ts`）在构建纯文本/滚动映射前会剥除注释行，保证 `data-line` 与滚动同步不被注释影响
+- 导出流程（`src/typst/mdParser.ts` / `typstExport.ts` / 资源导出入口）在生成 Typst/导出内容前会剥除注释，避免注释出现在 PDF/HTML 导出中
+- 写作资源管理器与编辑器右键导出的所有路径均采用相同的注释剥离逻辑，保持一致性
+- 修复分页模式下滚动同步失真问题：预览端在收到编辑器的 `topLine` 时使用基于 `data-line` 的 `pageOfLine` / `scrollToLine` 定位，避免因图片高度导致的比例映射错误。
+- 预览端的 `DomPager` 暴露 `_pageStarts()` 接口，`postPreviewRatio` 在分页模式下会同时附带当前页首行的真实 `topLine`，扩展侧可直接使用该行号进行精确对齐。
+- 在 `rebuildIndex` 中加入图片加载完成后的对齐补偿：若在短时窗（500ms）内存在最近一次编辑器请求的 `topLine`，重建索引后会重新调用 `scrollToLine` 完成精确对齐，解决图片异步加载导致的视图偏移。
+- 分页模式下加入鼠标滚轮翻页支持（累积 `deltaY` 并在阈值触发翻页），同时保留 PageUp / PageDown 等键盘翻页行为。
+- 增强增量更新与分页交互：当扩展端发送 `docPatch`（行范围补丁）时，分页端会按页替换片段并在必要时触发 `DomPager.rebuild()`，以保持页边界一致并减少闪烁。
+
+### 🛠️ 相关文件
+- `src/utils/md_plain.ts`：新增 `stripCommentsFromLines()`，在 `mdToPlainText` 入口剥离注释
+- `src/typst/mdParser.ts`：新增 `stripComments()`，在 `parseMarkdownDoc` 前剥离注释以影响导出结果
+- `syntaxes/andrea-md-injection.tmLanguage.json`：注入 HTML 与 `%%` 注释的语法高亮
+
+### ✅ 说明
+- 注释语法向下兼容 CommonMark 的 HTML 注释，并兼顾作者习惯的 `%%` 标记；对未闭合的 `%%`，会作为行尾注释处理直到下一 `%%` 或行尾。
+
 ## [0.4.61] - 2026-03-14
 ### ✨ 新增
 - 新增Markdown图片渲染支持到预览功能

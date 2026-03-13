@@ -62,12 +62,17 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
 
 export class PreviewManager {
     private panels = new Map<string, vscode.WebviewPanel>();
+    // 防抖 / 节流：用 Map 持有 timer，保证同一文档跨事件共享状态
+    private _updateTimers = new Map<string, NodeJS.Timeout>();
+    private _updatePendingChanges = new Map<string, { start: number; end: number; text: string }[]>();
+    private _scrollTimers = new Map<string, NodeJS.Timeout>();
+    private _scrollLast = new Map<string, number>();
     private loopGuard = new Map<string, number>();
     private scrollState = new Map<string, { isScrolling: boolean; lastDirection: 'editor' | 'preview' }>();
     /** 当前被“跟随活动编辑器”复用的主预览面板（用户首次点击按钮后进入跟随模式） */
     private primaryPanel: vscode.WebviewPanel | undefined;
-    private primaryDocUri: string | undefined;
-    // 记录“刚刚是预览端拉我”的状态，用于 sendEditorTop 抑制回传
+    private primaryDocUri: string | undefined;    // 角色列表 getter，由 activate.ts 注入
+    private _getRoles: (() => any[]) | undefined;    // 记录“刚刚是预览端拉我”的状态，用于 sendEditorTop 抑制回传
     private lastAppliedFromPreview = new Map<string, { ratio: number, ts: number }>();
 
     // 记录每个文档上一次的 blocks 快照（做增量用）
@@ -194,22 +199,36 @@ export class PreviewManager {
                 const key = ev.document.uri.toString();
                 const panel = this.panels.get(key);
                 if (!panel) { return; }
-                // 把需要的信息提前拍扁（避免闭包里 VSCode 对象被延迟访问）
-                const changes = ev.contentChanges.map(c => ({
+                // 把需要的信息提前拍扁，并累积当前防抖窗口内的所有变更行范围
+                const incoming = ev.contentChanges.map(c => ({
                     start: c.range.start.line,
                     end: c.range.end.line,
                     text: c.text
                 }));
-                this.debounce(() => this.applyIncrementalUpdate(panel, ev.document, changes), 80)();
+                const accumulated = this._updatePendingChanges.get(key) ?? [];
+                accumulated.push(...incoming);
+                this._updatePendingChanges.set(key, accumulated);
+                // 清除旧 timer，重新计时（真正的防抖）
+                const old = this._updateTimers.get(key);
+                if (old !== undefined) { clearTimeout(old); }
+                const t = setTimeout(() => {
+                    this._updateTimers.delete(key);
+                    const changes = this._updatePendingChanges.get(key) ?? [];
+                    this._updatePendingChanges.delete(key);
+                    this.applyIncrementalUpdate(panel, ev.document, changes);
+                }, 80);
+                this._updateTimers.set(key, t);
             }),
 
             vscode.window.onDidChangeTextEditorVisibleRanges(ev => {
-                if (!this.panels.has(ev.textEditor.document.uri.toString())) { return; }
-                this.throttle(() => this.sendEditorTop(ev.textEditor.document), 100)();
+                const key = ev.textEditor.document.uri.toString();
+                if (!this.panels.has(key)) { return; }
+                this._throttledScroll(ev.textEditor.document, 100);
             }),
             vscode.window.onDidChangeTextEditorSelection(ev => {
-                if (!this.panels.has(ev.textEditor.document.uri.toString())) { return; }
-                this.throttle(() => this.sendEditorTop(ev.textEditor.document), 100)();
+                const key = ev.textEditor.document.uri.toString();
+                if (!this.panels.has(key)) { return; }
+                this._throttledScroll(ev.textEditor.document, 100);
             }),
             // 跟随活动编辑器：若已经打开过一个预览（primaryPanel），则切换文件时复用该面板显示新文件，并在切换前停止 TTS
             vscode.window.onDidChangeActiveTextEditor(ed => {
@@ -291,6 +310,24 @@ export class PreviewManager {
                 docUri: key,
                 isPrimary: (this.primaryPanel === panel)
             });
+        } catch { }
+        // 下发当前角色着色数据（如果已有角色）
+        try {
+            if (this._getRoles) {
+                const payload = this._getRoles()
+                    .filter((r: any) => r && typeof r.name === 'string' && r.name)
+                    .map((r: any) => ({
+                        name: r.name,
+                        aliases: Array.isArray(r.aliases) ? r.aliases.filter(Boolean) : [],
+                        color: r.color ?? r.style?.color,
+                        backgroundColor: r.backgroundColor ?? r.style?.backgroundColor,
+                        bold: r.bold ?? r.style?.bold,
+                        italic: r.italic ?? r.style?.italic,
+                        strikethrough: r.strikethrough ?? r.style?.strikethrough,
+                        underline: r.underline ?? r.style?.underline,
+                    }));
+                panel.webview.postMessage({ type: 'roleColors', roles: payload });
+            }
         } catch { }
     }
 
@@ -402,6 +439,30 @@ export class PreviewManager {
         const panel = this.panels.get(editor.document.uri.toString());
         if (!panel) { return vscode.window.showWarningMessage('没有打开的预览面板'); }
         panel.webview.postMessage({ type: 'ttsControl', command });
+    }
+
+    /** 注入角色列表 getter（由 activate.ts 调用，避免循环依赖） */
+    setRoleColorGetter(fn: () => any[]): void {
+        this._getRoles = fn;
+    }
+
+    /** 向所有打开的预览面板广播角色着色数据 */
+    broadcastRoleColors(roles: any[]): void {
+        const payload = roles
+            .filter(r => r && typeof r.name === 'string' && r.name)
+            .map(r => ({
+                name: r.name,
+                aliases: Array.isArray(r.aliases) ? r.aliases.filter(Boolean) : [],
+                color: r.color ?? r.style?.color,
+                backgroundColor: r.backgroundColor ?? r.style?.backgroundColor,
+                bold: r.bold ?? r.style?.bold,
+                italic: r.italic ?? r.style?.italic,
+                strikethrough: r.strikethrough ?? r.style?.strikethrough,
+                underline: r.underline ?? r.style?.underline,
+            }));
+        for (const panel of this.panels.values()) {
+            try { panel.webview.postMessage({ type: 'roleColors', roles: payload }); } catch { }
+        }
     }
 
     private docOfPanel(panel: vscode.WebviewPanel): vscode.TextDocument | undefined {
@@ -873,16 +934,23 @@ export class PreviewManager {
     private escapeHtml(s: string) {
         return s.replace(/[&<>"']/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;');
     }
-    private debounce<F extends (...args: any[]) => void>(fn: F, ms: number) {
-        let t: NodeJS.Timeout | undefined; return (...args: Parameters<F>) => { if (t) { clearTimeout(t); } t = setTimeout(() => fn(...args), ms); };
-    }
-    private throttle<F extends (...args: any[]) => void>(fn: F, ms: number) {
-        let t: NodeJS.Timeout | undefined, last = 0;
-        return (...args: Parameters<F>) => {
-            const now = Date.now(), remain = ms - (now - last);
-            if (remain <= 0) { last = now; fn(...args); }
-            else if (!t) { t = setTimeout(() => { t = undefined; last = Date.now(); fn(...args); }, remain); }
-        };
+    /** 节流版 sendEditorTop：每个文档独立持有 timer，跨事件正确节流 */
+    private _throttledScroll(doc: vscode.TextDocument, ms: number) {
+        const key = doc.uri.toString();
+        const now = Date.now();
+        const last = this._scrollLast.get(key) ?? 0;
+        const remain = ms - (now - last);
+        if (remain <= 0) {
+            this._scrollLast.set(key, now);
+            this.sendEditorTop(doc);
+        } else if (!this._scrollTimers.has(key)) {
+            const t = setTimeout(() => {
+                this._scrollTimers.delete(key);
+                this._scrollLast.set(key, Date.now());
+                this.sendEditorTop(doc);
+            }, remain);
+            this._scrollTimers.set(key, t);
+        }
     }
     private findEditor(doc: vscode.TextDocument) {
         return vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === doc.uri.toString());

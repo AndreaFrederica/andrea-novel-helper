@@ -10,6 +10,10 @@ var PAGE_HEIGHT_RATIO = 0.7;    // 分页模式下页面高度相对于窗口高
 // 本地字体缓存与扩展下发字体
 var vscodeFontFamily = '';
 var localFontFamilies = [];
+// 角色着色数据（由扩展端下发）
+var roleColorData = [];
+// 角色着色应用中标志（防 MutationObserver 重入）
+var _applyingRoleColors = false;
 
 
 
@@ -61,6 +65,10 @@ function throttle(fn, ms) {
 
 /* ================== 滚动索引 / 同步 ================== */
 var index = []; // [{line, top}]
+// 记录最近一次编辑器请求的行号，用于图片加载完成后重新对齐
+var _lastEditorTopLine = null;
+var _lastEditorTopLineTs = 0;
+
 function rebuildIndexNow() {
     index = [];
     var nodes = document.querySelectorAll('[data-line]');
@@ -72,6 +80,11 @@ function rebuildIndexNow() {
         index.push({ line: line, top: top });
     });
     index.sort(function (a, b) { return a.top - b.top; });
+    // 图片等异步资源加载后触发重建时，重新对齐到上次编辑器请求的行号
+    // 500ms 窗口：覆盖初次渲染后图片加载完成的情形，避免扰动用户主动滚动
+    if (_lastEditorTopLine !== null && (Date.now() - _lastEditorTopLineTs) < 500) {
+        scrollToLine(_lastEditorTopLine, false);
+    }
 }
 var rebuildIndex = throttle(rebuildIndexNow, 100);
 
@@ -551,6 +564,122 @@ window.addEventListener('load', adjustForTTSControls);
 window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
 /* ================== Reader 设置面板与状态（保持自包含作用域） ================== */
+
+/* ================== 角色名着色 ================== */
+(function initRoleColorizer() {
+    function escapeRE(s) {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function buildNameEntries() {
+        var entries = [];
+        roleColorData.forEach(function (r) {
+            var names = [r.name].concat(r.aliases || []);
+            names.forEach(function (n) { if (n && n.trim()) { entries.push({ name: n.trim(), role: r }); } });
+        });
+        // 名称长的排前面，避免短名截断长名
+        entries.sort(function (a, b) { return b.name.length - a.name.length; });
+        return entries;
+    }
+
+    function walkPreTextNodes(root, fn) {
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+        var nodes = [];
+        var node;
+        while ((node = walker.nextNode()) !== null) {
+            var p = node.parentElement;
+            var inPre = false;
+            while (p && p !== root) {
+                if (p.tagName === 'PRE') { inPre = true; break; }
+                if (p.tagName === 'SCRIPT' || p.tagName === 'STYLE') { break; }
+                if (p.classList && p.classList.contains('anh-role-color')) { break; }
+                p = p.parentElement;
+            }
+            if (inPre) { nodes.push(node); }
+        }
+        nodes.forEach(fn);
+    }
+
+    window.applyRoleColors = function () {
+        var container = document.getElementById('reader-content');
+        if (!container) { return; }
+        _applyingRoleColors = true;
+        try {
+            // 先移除旧的着色 span
+            var old = Array.from(container.querySelectorAll('.anh-role-color'));
+            old.forEach(function (span) {
+                var parent = span.parentNode;
+                if (!parent) { return; }
+                while (span.firstChild) { parent.insertBefore(span.firstChild, span); }
+                parent.removeChild(span);
+                try { parent.normalize(); } catch (_) { }
+            });
+
+            // 读取当前预设的 colorizeRoles 开关
+            try {
+                var meta = JSON.parse(localStorage.getItem('anhReaderSettings') || '{}');
+                var presets = JSON.parse(localStorage.getItem('anhReaderPresets') || '{}');
+                var pname = (meta && meta.lastPreset) ? meta.lastPreset : '__default__';
+                var s = (presets && presets[pname]) ? presets[pname] : {};
+                if (!s.colorizeRoles) { return; }
+            } catch (_) { return; }
+
+            if (!roleColorData.length) { return; }
+            var entries = buildNameEntries();
+            if (!entries.length) { return; }
+
+            var pattern = entries.map(function (e) { return escapeRE(e.name); }).join('|');
+            var re = new RegExp('(' + pattern + ')', 'g');
+            var nameMap = {};
+            entries.forEach(function (e) { if (!nameMap[e.name]) { nameMap[e.name] = e.role; } });
+
+            walkPreTextNodes(container, function (textNode) {
+                var text = textNode.nodeValue;
+                if (!text) { return; }
+                re.lastIndex = 0;
+                if (!re.test(text)) { re.lastIndex = 0; return; }
+                re.lastIndex = 0;
+
+                var frag = document.createDocumentFragment();
+                var last = 0, m;
+                while ((m = re.exec(text)) !== null) {
+                    if (m.index > last) { frag.appendChild(document.createTextNode(text.slice(last, m.index))); }
+                    var role = nameMap[m[0]];
+                    var span = document.createElement('span');
+                    span.className = 'anh-role-color';
+                    if (role.color) { span.style.color = role.color; }
+                    if (role.bold) { span.style.fontWeight = 'bold'; }
+                    if (role.italic) { span.style.fontStyle = 'italic'; }
+                    var deco = (role.underline ? 'underline ' : '') + (role.strikethrough ? 'line-through' : '');
+                    if (deco.trim()) { span.style.textDecoration = deco.trim(); }
+                    if (role.backgroundColor) { span.style.backgroundColor = role.backgroundColor; }
+                    span.textContent = m[0];
+                    frag.appendChild(span);
+                    last = m.index + m[0].length;
+                }
+                if (last < text.length) { frag.appendChild(document.createTextNode(text.slice(last))); }
+                if (textNode.parentNode) { textNode.parentNode.replaceChild(frag, textNode); }
+            });
+        } finally {
+            _applyingRoleColors = false;
+        }
+    };
+
+    // MutationObserver：DOM 变化后自动补充着色
+    function setup() {
+        var target = document.getElementById('reader-content');
+        if (!target) { setTimeout(setup, 200); return; }
+        var timer = null;
+        var observer = new MutationObserver(function () {
+            if (_applyingRoleColors) { return; }
+            if (timer) { clearTimeout(timer); }
+            timer = setTimeout(window.applyRoleColors, 80);
+        });
+        observer.observe(target, { childList: true, subtree: true });
+    }
+    setup();
+})();
+
 (function initReaderSettings() {
     var gear = document.getElementById('reader-gear');
     var panel = document.getElementById('reader-settings');
@@ -577,6 +706,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var themeGroup = document.getElementById('rs-themes');
     var heightModeGroup = document.getElementById('rs-heightMode');
     var widthModeGroup = document.getElementById('rs-widthMode');
+    var colorizeRolesGroup = document.getElementById('rs-colorizeRoles');
     var fontModeGroup = document.getElementById('rs-fontMode');
     var fontFamilySelect = document.getElementById('rs-fontFamily');
     var btnReloadFonts = document.getElementById('rs-reloadFonts');
@@ -615,7 +745,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         theme: 'auto',
         align: 'left',
         cols: 1,
-        sync: 'on'
+        sync: 'on',
+        colorizeRoles: false
     };
     var PRESET_TEMPLATES = { '__default__': { name: '默认', data: JSON.parse(JSON.stringify(DEFAULTS)) } };
 
@@ -775,6 +906,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         if (colsGroup) { Array.from(colsGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', Number(b.getAttribute('data-cols')) === state.cols); }); }
         Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme') === state.theme); });
         if (syncGroup) { Array.from(syncGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sync') === state.sync); }); }
+        if (colorizeRolesGroup) { Array.from(colorizeRolesGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', (b.getAttribute('data-croles') === 'on') === !!state.colorizeRoles); }); }
         if (heightModeGroup) { Array.from(heightModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-hmode') === state.heightMode); }); }
         // 字体模式/下拉同步
         try {
@@ -794,6 +926,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         try { meta.lastPreset = activePresetName; saveStateMeta(meta); } catch (_) { }
 
         rebuildIndexNow();
+        if (typeof window.applyRoleColors === 'function') { setTimeout(window.applyRoleColors, 0); }
 
         if (typeof DomPager !== 'undefined') {
             if (state.mode === 'paged') { DomPager.enable({ pageHeight: (state.heightMode === 'manual' && state.height > 0) ? state.height : 0 }); }
@@ -815,6 +948,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     if (colsGroup) { colsGroup.addEventListener('click', function (e) { var c = e.target && e.target.getAttribute('data-cols'); if (c) { state.cols = parseInt(c, 10) || 1; reflect(); } }); }
     if (themeGroup) { themeGroup.addEventListener('click', function (e) { var t = e.target && e.target.getAttribute('data-theme'); if (t) { state.theme = t; reflect(); } }); }
     if (syncGroup) { syncGroup.addEventListener('click', function (e) { var s = e.target && e.target.getAttribute('data-sync'); if (s) { state.sync = s; reflect(); } }); }
+    if (colorizeRolesGroup) { colorizeRolesGroup.addEventListener('click', function (e) { var v = e.target && e.target.getAttribute('data-croles'); if (v) { state.colorizeRoles = (v === 'on'); reflect(); } }); }
     if (heightModeGroup) { heightModeGroup.addEventListener('click', function (e) { var m = e.target && e.target.getAttribute('data-hmode'); if (m) { state.heightMode = m; reflect(); } }); }
     if (widthModeGroup) {
         widthModeGroup.addEventListener('click', function (e) {
@@ -869,6 +1003,9 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         } else if (msg?.type === 'vscodeFontFamily') {
             vscodeFontFamily = String(msg.value || '').trim();
             if (typeof reflect === 'function') { reflect(); }
+        } else if (msg?.type === 'roleColors') {
+            roleColorData = Array.isArray(msg.roles) ? msg.roles : [];
+            if (typeof window.applyRoleColors === 'function') { window.applyRoleColors(); }
         }
         // [PREVIEW_PERSIST:B2] message handlers for persistence
         if (msg?.type === 'init') {
@@ -1076,6 +1213,27 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         }
     });
 
+    // 分页模式下鼠标滚轮翻页
+    var _wheelAcc = 0;
+    var _wheelTimer = null;
+    document.addEventListener('wheel', function (e) {
+        if (state.mode !== 'paged') { return; }
+        if (!(typeof DomPager !== 'undefined' && DomPager.isActive && DomPager.isActive())) { return; }
+        e.preventDefault();
+        _wheelAcc += e.deltaY;
+        // 累积阈值：避免触控板微小滚动触发
+        var threshold = 60;
+        if (_wheelTimer) { clearTimeout(_wheelTimer); }
+        if (Math.abs(_wheelAcc) >= threshold) {
+            var dir = _wheelAcc > 0 ? 1 : -1;
+            _wheelAcc = 0;
+            jumpPage(dir);
+        } else {
+            // 短暂静止后重置累积（防止残余值长期挂着）
+            _wheelTimer = setTimeout(function () { _wheelAcc = 0; }, 400);
+        }
+    }, { passive: false });
+
     /* ---- 段落级分页：构建页面边界（不修改 DOM，只记录滚动位置） ---- */
     var pagesBoundaries = []; // [{top:number, firstEl:Element}]
     function flattenDOM(root) {
@@ -1271,12 +1429,27 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
             applyPage();
         }
+        // 用新的扁平 HTML 整体替换内容并重新分页（供外部增量补丁兜底调用）
+        function setContent(html) {
+            if (!active) { return; }
+            var anchor = currentAnchorLine();
+            originalHTML = String(html || '');
+            buildPages();
+            if (anchor !== null) {
+                var pg = pageOfLine(anchor);
+                if (pg >= 0) { current = Math.min(Math.max(pg, 0), Math.max(0, pages.length - 1)); }
+            } else {
+                current = Math.min(current, Math.max(0, pages.length - 1));
+            }
+            applyPage();
+        }
         function goto(i) { if (!active) { return; } if (i < 0 || i >= pages.length) { return; } current = i; applyPage(); }
         function next() { goto(current + 1); }
         function prev() { goto(current - 1); }
         function isActive() { return active; }
         function totalPages() { return pages.length; }
         function currentPage() { return current; }
+        function getPageStarts() { return pageStarts; }
         function pageOfElement(el) {
             while (el && el !== container) { if (el.classList && el.classList.contains('anh-page')) { return parseInt(el.getAttribute('data-page') || '0', 10); } el = el.parentElement; }
             return -1;
@@ -1403,7 +1576,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
 
         window.addEventListener('resize', throttle(function () { if (active) { rebuild(); } }, 250));
-        return { enable, disable, rebuild, goto, next, prev, isActive, totalPages, currentPage, pageOfElement, pageOfLine, updatePageHTML };
+        return { enable, disable, rebuild, setContent, goto, next, prev, isActive, totalPages, currentPage, pageOfElement, pageOfLine, updatePageHTML, _pageStarts: getPageStarts };
 
     })();
 
@@ -1452,6 +1625,41 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         //       try { window.dispatchEvent(new Event('resize')); } catch (_) { }
         //   }
 
+        // 从当前 .anh-page 元素中提取扁平 HTML（供跨页补丁使用）
+        function getPagedFlatHTML() {
+            var pageEls = document.querySelectorAll('#reader-content .anh-page');
+            return Array.from(pageEls).map(function (p) { return p.innerHTML; }).join('');
+        }
+
+        // 将增量补丁应用到扁平 HTML：移除 [fromLine, toLine] 的节点，插入 patchHTML
+        function applyFlatPatch(flatHTML, fromLine, toLine, patchHTML) {
+            var wrap = document.createElement('div');
+            wrap.innerHTML = flatHTML;
+            var allChildren = Array.from(wrap.children);
+            // 收集需移除的节点
+            var toRemove = allChildren.filter(function (n) {
+                var l = parseInt(n.getAttribute('data-line') || '-1', 10);
+                return l >= fromLine && l <= toLine;
+            });
+            // 找插入锚点（data-line > toLine 的第一个节点）
+            var insertBefore = null;
+            for (var i = 0; i < allChildren.length; i++) {
+                if (toRemove.indexOf(allChildren[i]) !== -1) { continue; }
+                var l = parseInt(allChildren[i].getAttribute('data-line') || '-1', 10);
+                if (l > toLine) { insertBefore = allChildren[i]; break; }
+            }
+            toRemove.forEach(function (n) { wrap.removeChild(n); });
+            var tpl = document.createElement('template');
+            tpl.innerHTML = patchHTML || '';
+            var newNodes = Array.from(tpl.content.children);
+            if (insertBefore) {
+                newNodes.forEach(function (n) { wrap.insertBefore(n.cloneNode(true), insertBefore); });
+            } else {
+                newNodes.forEach(function (n) { wrap.appendChild(n.cloneNode(true)); });
+            }
+            return wrap.innerHTML;
+        }
+
         window.addEventListener('message', function (ev) {
             var msg = ev && ev.data;
             if (!msg) { return; }
@@ -1466,23 +1674,38 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
                 var p1 = DomPager.pageOfLine(msg.fromLine | 0);
                 var p2 = DomPager.pageOfLine(msg.toLine | 0);
 
-                if (p1 < 0 || p2 < 0) { DomPager.rebuild(); bumpUi(); return; }
+                var needFallback = false;
 
-                // 仅处理补丁完全落在同一页的高频场景；跨页直接全量
-                if (p1 !== p2) { DomPager.rebuild(); bumpUi(); return; }
+                if (p1 < 0 || p2 < 0 || p1 !== p2) {
+                    // 补丁跨页或行号超出分页范围，用扁平 patch 后整体重排
+                    needFallback = true;
+                } else {
+                    var pageIdx = p1;
+                    var newPageHTML = buildPatchedPageHTML(pageIdx, msg.fromLine | 0, msg.toLine | 0, msg.html);
+                    if (newPageHTML === null) {
+                        needFallback = true;
+                    } else {
+                        var isLast = (pageIdx === DomPager.totalPages() - 1);
+                        var rPatch = DomPager.updatePageHTML(pageIdx, newPageHTML, { allowSplit: !!isLast });
+                        if (!rPatch.ok) { needFallback = true; }
+                    }
+                }
 
-                var pageIdx = p1;
-                var newPageHTML = buildPatchedPageHTML(pageIdx, msg.fromLine | 0, msg.toLine | 0, msg.html);
-                if (newPageHTML === null) { DomPager.rebuild(); bumpUi(); return; }
-
-                var isLast = (pageIdx === DomPager.totalPages() - 1);
-                var rPatch = DomPager.updatePageHTML(pageIdx, newPageHTML, { allowSplit: !!isLast });
-                if (!rPatch.ok) { DomPager.rebuild(); }
+                if (needFallback) {
+                    DomPager.setContent(applyFlatPatch(getPagedFlatHTML(), msg.fromLine | 0, msg.toLine | 0, msg.html));
+                }
                 bumpUi();
                 return;
             }
 
-            // ② 单页重绘：docRenderPage
+            // ② 全量渲染：docRender（保存或大量修改时触发）
+            if (msg.type === 'docRender' && typeof msg.html === 'string') {
+                DomPager.setContent(msg.html);
+                bumpUi();
+                return;
+            }
+
+            // ③ 单页重绘：docRenderPage
             if (msg.type === 'docRenderPage') {
                 var idx = (msg.pageIndex | 0);
                 var html = String(msg.html || '');
@@ -1818,6 +2041,13 @@ function showConfirm(msg) {
             var total = Math.max(1, window.DomPager.totalPages());
             payload.ratio = total > 1 ? (page / (total - 1)) : 0;
             payload.ratio = +payload.ratio.toFixed(4);
+            // 把当前页第一行的真实行号也带上，扩展侧用行号定位更准
+            try {
+                var pStarts = window.DomPager._pageStarts ? window.DomPager._pageStarts() : null;
+                if (pStarts && pStarts[page] !== undefined && pStarts[page] !== Number.MAX_SAFE_INTEGER) {
+                    payload.topLine = pStarts[page];
+                }
+            } catch (_) { }
         } else {
             var m = getScrollMetrics();
             payload.ratio = +m.ratio.toFixed(4);
@@ -1880,16 +2110,21 @@ function showConfirm(msg) {
                 var total = Math.max(1, window.DomPager.totalPages());
                 var targetIdx = null;
 
-                // 优先用 ratio；没有就用 topLine/totalLines 推出 ratio；都没有则忽略
-                if (typeof msg.ratio === 'number') {
+                // 分页模式：优先用真实行号 + pageOfLine 查页，图片撑高后 ratio 映射失真
+                if (Number.isInteger(msg.topLine) && window.DomPager.pageOfLine) {
+                    var pg = window.DomPager.pageOfLine(msg.topLine);
+                    if (pg >= 0) {
+                        targetIdx = Math.min(total - 1, pg);
+                        lastEditorRatio = total > 1 ? (targetIdx / (total - 1)) : 0;
+                    }
+                }
+                // 回退：用 ratio 线性映射（无行号信息时）
+                if (targetIdx === null && typeof msg.ratio === 'number') {
                     var r = Math.min(1, Math.max(0, msg.ratio));
                     targetIdx = Math.min(total - 1, Math.max(0, Math.round(r * (total - 1))));
                     lastEditorRatio = r;
-                } else if (Number.isInteger(msg.topLine) && Number.isInteger(msg.totalLines) && msg.totalLines > 1) {
-                    var r2 = Math.min(1, Math.max(0, msg.topLine / (msg.totalLines - 1)));
-                    targetIdx = Math.min(total - 1, Math.max(0, Math.round(r2 * (total - 1))));
-                    lastEditorRatio = r2;
-                } else {
+                }
+                if (targetIdx === null) {
                     // 关键信息缺失：不要默认 0（否则会跳第一页）
                     return;
                 }
@@ -1906,18 +2141,16 @@ function showConfirm(msg) {
                 return;
             }
             else {
-                // 滚动模式：优先使用来自编辑器的 topLine 来定位；否则退回比例
+                // 滚动模式：直接按行号用 DOM index 定位，与图片/内容实际高度解耦
                 if (typeof msg.editorScrollHeight === 'number' && msg.editorScrollHeight > 0) {
                     adjustSpacerToTotalHeight(msg.editorScrollHeight);
                 }
-                var doc = document.documentElement;
-                if (Number.isInteger(msg.topLine) && Number.isInteger(msg.totalLines) && msg.totalLines > 1) {
-                    var r = Math.min(1, Math.max(0, msg.topLine / (msg.totalLines - 1)));
-                    var max = Math.max(1, doc.scrollHeight - window.innerHeight);
-                    var top = r * max;
-                    withLock(350, function () { window.scrollTo({ top: top, behavior: 'auto' }); });
+                if (Number.isInteger(msg.topLine)) {
+                    _lastEditorTopLine = msg.topLine;
+                    _lastEditorTopLineTs = Date.now();
+                    withLock(350, function () { scrollToLine(msg.topLine, false); });
                 } else {
-                    var max2 = Math.max(1, doc.scrollHeight - window.innerHeight);
+                    var max2 = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
                     var top2 = ratio * max2;
                     withLock(350, function () { window.scrollTo({ top: top2, behavior: 'auto' }); });
                 }
@@ -2167,6 +2400,18 @@ function showConfirm(msg) {
         // 扩展端若能给出行补丁，优先用它（零闪烁）
         if (msg.type === 'docPatch' && Array.isArray(msg.hunks)) {
             if (!isPagedMode()) { scheduleHunks(msg.hunks); }
+            return;
+        }
+
+        // 扩展端的增量行范围补丁：{ fromLine, toLine, html }（分页模式由 enablePagedIncrementalUpdate 处理）
+        if (msg.type === 'docPatch'
+            && typeof msg.fromLine === 'number'
+            && typeof msg.toLine === 'number'
+            && typeof msg.html === 'string') {
+            if (!isPagedMode()) {
+                // 转换为 hunk 格式：start 含，end 不含
+                scheduleHunks([{ start: msg.fromLine, end: msg.toLine + 1, html: msg.html }]);
+            }
             return;
         }
 

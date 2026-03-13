@@ -1,7 +1,8 @@
 // md_plain.ts
 // 零依赖 Markdown → 纯文本；返回整体文本与“块首行”映射用于滚动对齐
 export function mdToPlainText(src: string): { text: string; blocks: { srcLine: number; text: string }[] } {
-    const lines = src.split(/\r?\n/);
+    const rawLines = src.split(/\r?\n/);
+    const lines = stripCommentsFromLines(rawLines);
     const blocks: { srcLine: number; text: string }[] = [];
     let i = 0;
     const refDefs = collectRefDefinitions(lines);
@@ -201,6 +202,63 @@ function collectRefDefinitions(lines: string[]): Set<string> {
         }
     }
     return defs;
+}
+
+/**
+ * 从行数组中去掉注释内容，保持总行数不变（从而保留 srcLine 索引映射）。
+ * 支持：
+ *  - HTML 注释  <!-- ... -->（单行/多行）
+ *  - Obsidian 风格  %% ... %%（单行/多行）
+ *  - 整行 / 行尾  %% 无闭合 → 从 %% 起到行尾均忽略
+ */
+function stripCommentsFromLines(lines: string[]): string[] {
+    const out = lines.slice();
+
+    // Pass 1: HTML <!-- ... -->
+    let inHtml = false;
+    for (let i = 0; i < out.length; i++) {
+        let s = out[i];
+        if (inHtml) {
+            const e = s.indexOf('-->');
+            if (e !== -1) { s = s.slice(e + 3); inHtml = false; }
+            else { out[i] = ''; continue; }
+        }
+        let res = '';
+        let j = 0;
+        while (j < s.length) {
+            const open = s.indexOf('<!--', j);
+            if (open === -1) { res += s.slice(j); break; }
+            res += s.slice(j, open);
+            const close = s.indexOf('-->', open + 4);
+            if (close !== -1) { j = close + 3; }
+            else { inHtml = true; break; }
+        }
+        out[i] = res;
+    }
+
+    // Pass 2: Obsidian %% ... %%  /  %% EOL
+    let inPct = false;
+    for (let i = 0; i < out.length; i++) {
+        let s = out[i];
+        if (inPct) {
+            const e = s.indexOf('%%');
+            if (e !== -1) { s = s.slice(e + 2); inPct = false; }
+            else { out[i] = ''; continue; }
+        }
+        let res = '';
+        let j = 0;
+        while (j < s.length) {
+            const open = s.indexOf('%%', j);
+            if (open === -1) { res += s.slice(j); break; }
+            res += s.slice(j, open);
+            const close = s.indexOf('%%', open + 2);
+            if (close !== -1) { j = close + 2; }
+            else { inPct = true; break; }  // %% 到行尾或跨行注释
+        }
+        out[i] = res;
+    }
+
+    return out;
 }
 
 function isReferenceDefinitionLine(line: string): boolean {
