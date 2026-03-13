@@ -10,6 +10,7 @@ import { setActivePreview } from '../../context/previewRedirect';
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
 
 type Block = { srcLine: number; text: string };
+type ImgCtx = { srcLines: string[]; docDir: string; webview: vscode.Webview };
 const EPS = 0.02;     // 2% 死区
 const MUTE_MS = 350;  // 与 webview 一致的“静音窗口”
 
@@ -74,8 +75,14 @@ export class PreviewManager {
     // （可选）记录预览端当前模式，来自 previewScroll；暂时不分支，供调试
     private previewMode = new Map<string, 'scroll' | 'paged'>();
 
-    private makeHtmlFromBlocks(blocks: Block[]): string {
-        return blocks.map(b => `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`).join('\n');
+    private makeHtmlFromBlocks(blocks: Block[], imgCtx?: ImgCtx): string {
+        return blocks.map((b, idx) => {
+            if (imgCtx) {
+                const nextLine = idx + 1 < blocks.length ? blocks[idx + 1].srcLine : imgCtx.srcLines.length;
+                return this.renderBlockHtml(b, nextLine, imgCtx);
+            }
+            return `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`;
+        }).join('\n');
     }
     private postWholeHtml(panel: vscode.WebviewPanel, doc: vscode.TextDocument, htmlBody: string) {
         panel.webview.postMessage({ type: 'docRender', sameDoc: true, html: htmlBody });
@@ -97,9 +104,12 @@ export class PreviewManager {
     ) {
         const key = doc.uri.toString();
         const oldBlocks = this.lastBlocks.get(key);
+        const imgCtx: ImgCtx | undefined = (doc.uri.scheme === 'file' && (doc.languageId === 'markdown' || /\.md(i|own)?$/i.test(doc.fileName)))
+            ? { srcLines: doc.getText().split(/\r?\n/), docDir: path.dirname(doc.uri.fsPath), webview: panel.webview }
+            : undefined;
         if (!oldBlocks || changes.length === 0) {
             const { blocks: newBlocks } = this.renderToPlainText(doc);
-            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks));
+            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks, imgCtx));
             this.lastBlocks.set(key, newBlocks);
             return;
         }
@@ -148,13 +158,13 @@ export class PreviewManager {
 
         // 生成新片段 HTML
         const slice = newBlocks.slice(newStartIdx, newEndIdx + 1);
-        const html = this.makeHtmlFromBlocks(slice);
+        const html = this.makeHtmlFromBlocks(slice, imgCtx);
 
         // 若替换范围过大（例如全文件），直接回退整页渲染以免频繁多次 DOM 改动
         const totalLines = doc.lineCount;
         const span = patchTo - patchFrom + 1;
         if (span > Math.max(2000, totalLines * 0.6)) {
-            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks));
+            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks, imgCtx));
             this.lastBlocks.set(key, newBlocks);
             return;
         }
@@ -220,9 +230,14 @@ export class PreviewManager {
 
         // 反序列化后需要明确设置 webview 选项（尤其 localResourceRoots）
         // ✅ 只设置 WebviewOptions 允许的字段
+        const wsDirs = vscode.workspace.workspaceFolders?.map(f => f.uri) ?? [];
         panel.webview.options = {
             enableScripts: true,
-            localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
+            localResourceRoots: [
+                vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+                ...wsDirs,
+                ...(doc.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(doc.uri.fsPath))] : [])
+            ],
         };
 
         // 可选：如果你的 VS Code 类型存在该属性，也可以单独设置（不强求）
@@ -258,7 +273,7 @@ export class PreviewManager {
 
         // 标题与内容
         panel.title = `Preview: ${path.basename(doc.fileName)}`;
-        const { htmlBody, blocks } = this.render(doc);
+        const { htmlBody, blocks } = this.render(doc, panel.webview);
         panel.webview.html = this.wrapHtml(panel, htmlBody);
         this.lastBlocks.set(key, blocks);
 
@@ -402,6 +417,7 @@ export class PreviewManager {
         let panel = this.panels.get(key);
         if (panel) { return panel; }
 
+        const workspaceRoots = vscode.workspace.workspaceFolders?.map(f => f.uri) ?? [];
         panel = vscode.window.createWebviewPanel(
             'myPreview',
             `Preview: ${path.basename(doc.fileName)}`,
@@ -409,7 +425,11 @@ export class PreviewManager {
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
-                localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')],
+                localResourceRoots: [
+                    vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+                    ...workspaceRoots,
+                    ...(doc.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(doc.uri.fsPath))] : [])
+                ],
             }
         );
 
@@ -653,16 +673,24 @@ export class PreviewManager {
 
     private updatePanel(panel: vscode.WebviewPanel, doc: vscode.TextDocument) {
         panel.title = `Preview: ${path.basename(doc.fileName)}`;
-        const { htmlBody, blocks } = this.render(doc);
+        const { htmlBody, blocks } = this.render(doc, panel.webview);
         panel.webview.html = this.wrapHtml(panel, htmlBody);
         this.lastBlocks.set(doc.uri.toString(), blocks);
     }
 
 
-    private render(doc: vscode.TextDocument): { htmlBody: string, blocks: Block[] } {
+    private render(doc: vscode.TextDocument, webview?: vscode.Webview): { htmlBody: string, blocks: Block[] } {
         if (doc.languageId === 'markdown' || /\.md(i|own)?$/i.test(doc.fileName)) {
             const { blocks } = this.renderToPlainText(doc);
-            const htmlBody = blocks.map(b => `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`).join('\n');
+            let imgCtx: ImgCtx | undefined;
+            if (webview && doc.uri.scheme === 'file') {
+                imgCtx = {
+                    srcLines: doc.getText().split(/\r?\n/),
+                    docDir: path.dirname(doc.uri.fsPath),
+                    webview,
+                };
+            }
+            const htmlBody = this.makeHtmlFromBlocks(blocks, imgCtx);
             return { htmlBody, blocks };
         } else {
             const text = doc.getText();
@@ -682,6 +710,64 @@ export class PreviewManager {
         const blocks = (doc.languageId === 'plaintext') ? txtToPlainText(text).blocks : [{ srcLine: 0, text }];
         const outText = (doc.languageId === 'plaintext') ? txtToPlainText(text).text : text;
         return { text: outText, blocks };
+    }
+
+    /** 渲染单个 Block 为 HTML，若包含图片则生成 <img> 标签 */
+    private renderBlockHtml(block: Block, nextLine: number, imgCtx: ImgCtx): string {
+        const { srcLines, docDir, webview } = imgCtx;
+        // 快速判断：block 文本中是否包含图片占位符
+        if (!block.text.includes('[image')) {
+            return `<div data-line="${block.srcLine}"><pre>${this.escapeHtml(block.text)}</pre></div>`;
+        }
+        // 收集本 block 原始源行中所有图片
+        const blockEnd = Math.min(nextLine, srcLines.length);
+        const images: Array<{ alt: string; src: string }> = [];
+        const imgRe = /!\[([^\]]*)\]\(([^)]+)\)/g;
+        for (let l = block.srcLine; l < blockEnd; l++) {
+            let m: RegExpExecArray | null;
+            imgRe.lastIndex = 0;
+            while ((m = imgRe.exec(srcLines[l])) !== null) {
+                images.push({ alt: m[1], src: m[2] });
+            }
+        }
+        if (!images.length) {
+            return `<div data-line="${block.srcLine}"><pre>${this.escapeHtml(block.text)}</pre></div>`;
+        }
+        // 判断 block 是否为纯图片（文本仅包含 [image...] 占位）
+        const trimmed = block.text.trim();
+        const onlyImages = /^(\[image(?:: [^\]]+)?\]\n?)+$/.test(trimmed + '\n');
+        if (onlyImages) {
+            const figuresHtml = images.map(img => {
+                const resolvedSrc = this.resolveImageSrc(img.src, docDir, webview);
+                return `<figure style="margin:0.5em 0;text-align:center"><img src="${resolvedSrc}" alt="${this.escapeHtml(img.alt)}" style="max-width:100%;height:auto;" loading="lazy"></figure>`;
+            }).join('\n');
+            return `<div data-line="${block.srcLine}">${figuresHtml}</div>`;
+        }
+        // 混合段落：在 pre 中内联替换占位为 <img>
+        let html = this.escapeHtml(block.text);
+        for (const img of images) {
+            const escapedAlt = this.escapeHtml(img.alt);
+            const placeholder = img.alt ? `[image: ${escapedAlt}]` : '[image]';
+            const resolvedSrc = this.resolveImageSrc(img.src, docDir, webview);
+            const imgTag = `<img src="${resolvedSrc}" alt="${escapedAlt}" style="max-width:100%;height:auto;vertical-align:middle;" loading="lazy">`;
+            html = html.replace(placeholder, imgTag);
+        }
+        return `<div data-line="${block.srcLine}"><pre>${html}</pre></div>`;
+    }
+
+    /** 将图片路径解析为 webview 可访问的 URI */
+    private resolveImageSrc(src: string, docDir: string, webview: vscode.Webview): string {
+        const trimmed = src.trim();
+        if (/^https?:\/\//i.test(trimmed) || /^data:/i.test(trimmed)) {
+            return this.escapeHtml(trimmed);
+        }
+        try {
+            const decoded = decodeURIComponent(trimmed);
+            const absPath = path.isAbsolute(decoded) ? decoded : path.resolve(docDir, decoded);
+            return webview.asWebviewUri(vscode.Uri.file(absPath)).toString();
+        } catch {
+            return this.escapeHtml(trimmed);
+        }
     }
 
     private sendEditorTop(doc: vscode.TextDocument) {

@@ -141,12 +141,14 @@ export function stripInline(s: string, refDefs?: Set<string>): string {
     // 行内代码
     t = t.replace(/`([^`]+)`/g, '$1');
 
-    // 链接 [text](url) → text；保留裸链接（http...）不处理
-    t = t.replace(/\[([^\]]*?)\]\(([^)]+)\)/g, (_m, a1) => a1 || '');
-    // 图片 ![alt](src) → alt
+    // 图片必须先于链接处理，否则链接正则会先吃掉 [alt](url) 部分，留下多余的 !
+    // 图片 ![alt](src) → [image: alt]
     t = t.replace(/!\[([^\]]*?)\]\([^)]+\)/g, (_m, a1) => formatImageText(a1));
-    // Reference-style image ![alt][id] → alt
+    // Reference-style image ![alt][id] → [image: alt]
     t = t.replace(/!\[([^\]]*?)\]\s*\[[^\]]*?\]/g, (_m, a1) => formatImageText(a1));
+
+    // 链接 [text](url) → text；使用负向后顾排除图片（![ 已被上面处理过，此处做双重保险）
+    t = t.replace(/\[([^\]]*?)\]\(([^)]+)\)/g, (_m, a1) => a1 || '');
     // Reference-style link [text][id] / [text][] → text
     t = t.replace(/\[([^\]]+?)\]\s*\[[^\]]*?\]/g, (_m, a1) => a1 || '');
     // Shortcut reference link [text] (only if defined)
