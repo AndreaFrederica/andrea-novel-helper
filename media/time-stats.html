@@ -17,6 +17,18 @@
             --muted: var(--vscode-editor-inactiveSelectionBackground);
             --accent: var(--vscode-textLink-foreground);
             --border: var(--vscode-editorWidget-border);
+            /* 付加色系主色（默认蓝色，可被 JS 覆盖） */
+            --chart-r: 102;
+            --chart-g: 170;
+            --chart-b: 255;
+            --chart-color: rgb(var(--chart-r), var(--chart-g), var(--chart-b));
+            /* 按钮自定义色（JS 动态覆盖，回落到 VS Code 主题） */
+            --btn-bg:       var(--vscode-button-background);
+            --btn-fg:       var(--vscode-button-foreground);
+            --btn-hover-bg: var(--vscode-button-hoverBackground);
+            --btn2-bg:      var(--vscode-button-secondaryBackground);
+            --btn2-fg:      var(--vscode-button-secondaryForeground);
+            --btn2-hover-bg:var(--vscode-button-secondaryHoverBackground);
         }
 
         body {
@@ -198,6 +210,308 @@
             }
         }
 
+        /* ——— 码字日历 ——— */
+        .cal-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+        }
+
+        .cal-header-cell {
+            text-align: center;
+            font-size: 12px;
+            opacity: 0.55;
+            padding: 2px 0 5px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+        }
+
+        .cal-cell {
+            border-radius: 8px;
+            padding: 6px 4px 5px;
+            text-align: center;
+            min-height: 52px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            border: 1px solid var(--border);
+            box-sizing: border-box;
+            transition: transform .1s ease, box-shadow .1s ease;
+        }
+
+        .cal-cell:hover {
+            transform: scale(1.04);
+            box-shadow: 0 2px 8px rgba(0,0,0,.18);
+            z-index: 1;
+            position: relative;
+        }
+
+        .cal-cell.out-month {
+            opacity: 0.22;
+        }
+
+        .cal-cell .cal-day {
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .cal-cell .cal-count {
+            font-size: 10px;
+            opacity: 0.8;
+            margin-top: 3px;
+            line-height: 1.2;
+        }
+
+        .cal-cell.has-writing {
+            border-color: transparent;
+        }
+
+        .cal-cell.today {
+            box-shadow: 0 0 0 2px var(--chart-color);
+        }
+
+        .cal-cell.today .cal-day {
+            color: var(--chart-color);
+        }
+
+        /* 视图切换按钮 */
+        .view-toggle {
+            display: flex;
+            gap: 2px;
+        }
+
+        .view-toggle button {
+            min-height: 24px;
+            padding: 2px 10px;
+            font-size: 12px;
+            border-radius: 6px;
+        }
+
+        .view-toggle button.view-active {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+
+        .view-toggle button:not(.view-active) {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+
+        #calNavControls button {
+            min-height: 24px;
+            padding: 2px 8px;
+            font-size: 12px;
+        }
+
+        @media (max-width: 560px) {
+            .cal-cell {
+                min-height: 40px;
+                padding: 4px 2px 3px;
+            }
+            .cal-cell .cal-day { font-size: 13px; }
+            .cal-cell .cal-count { font-size: 9px; }
+        }
+
+        /* ——— 设置面板 ——— */
+        #settingsDrawer {
+            display: none;
+            background: var(--vscode-editorWidget-background, var(--bg));
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+        }
+
+        #settingsDrawer.open { display: block; }
+
+        .settings-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 20px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .settings-row:last-child { margin-bottom: 0; }
+
+        .settings-label {
+            font-size: 12px;
+            opacity: .7;
+            min-width: 64px;
+        }
+
+        /* 色样方块 */
+        .color-swatch {
+            width: 22px;
+            height: 22px;
+            border-radius: 5px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform .1s, border-color .1s;
+            flex-shrink: 0;
+        }
+
+        .color-swatch:hover { transform: scale(1.15); }
+
+        .color-swatch.swatch-active {
+            border-color: var(--vscode-focusBorder, #fff);
+            transform: scale(1.15);
+        }
+
+        input[type="color"] {
+            width: 28px;
+            height: 26px;
+            padding: 1px 2px;
+            border-radius: 5px;
+            border: 1px solid var(--vscode-input-border, transparent);
+            background: var(--vscode-input-background);
+            cursor: pointer;
+        }
+
+        /* 布局开关行 */
+        .section-toggle-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .section-toggle-row label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 3px 9px;
+            cursor: pointer;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .section-toggle-row label:has(input:checked) {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-color: transparent;
+        }
+
+        /* 面板排序芯片 */
+        .section-order-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .section-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            background: var(--vscode-editor-background, rgba(128,128,128,0.08));
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: grab;
+            font-size: 12px;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: border-color 0.15s, background 0.15s;
+            width: fit-content;
+        }
+        .section-chip:active { cursor: grabbing; }
+
+        /* ——— 年热力图 ——— */
+        .year-heatmap-wrap {
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+        .year-heatmap-grid {
+            display: grid;
+            /* 行=周几(7)+1月标签行，列=最多53周+1列星期标签 — JS动态写 grid-template-columns */
+            grid-auto-flow: column;
+            gap: 3px;
+            width: max-content;
+        }
+        .yh-month-label {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground, #888);
+            padding-bottom: 2px;
+            white-space: nowrap;
+            grid-row: 1;
+            align-self: end;
+        }
+        .yh-day-label {
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground, #888);
+            text-align: right;
+            padding-right: 4px;
+            line-height: 1;
+            grid-column: 1;
+            align-self: center;
+        }
+        .yh-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background: rgba(128,128,128,0.12);
+            position: relative;
+            transition: transform 0.1s;
+        }
+        .yh-cell:hover {
+            transform: scale(1.35);
+            z-index: 2;
+        }
+        .yh-cell.yh-today {
+            outline: 1.5px solid var(--chart-color, #66aaff);
+            outline-offset: 1px;
+        }
+        /* 年度摘要文字 */
+        .year-summary {
+            font-size: 12px;
+            margin-top: 6px;
+        }
+        /* tooltip */
+        #yhTooltip {
+            position: fixed;
+            background: var(--vscode-editorHoverWidget-background, #1e1e2e);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #444);
+            color: var(--vscode-editorHoverWidget-foreground, #ccc);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.12s;
+            z-index: 9999;
+            white-space: nowrap;
+        }
+        #yhTooltip.visible { opacity: 1; }
+        .section-chip.drag-over {
+            border-color: var(--chart-color, #66aaff);
+            background: rgba(var(--chart-r, 102), var(--chart-g, 170), var(--chart-b, 255), 0.15);
+        }
+        .drag-handle-icon {
+            opacity: 0.5;
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        /* 设置齿轮按钮 */
+        #btnSettings {
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            min-height: 26px;
+            padding: 2px 8px;
+            font-size: 14px;
+            opacity: .75;
+            cursor: pointer;
+        }
+
+        #btnSettings:hover { opacity: 1; }
+
+        /* 组件隐藏 */
+        [data-section].section-hidden { display: none !important; }
+
         /* ——— 统一使用 VS Code 提供的主题变量（--vscode-…）来给按钮/输入控件配色 ——— */
 
         /* 行内控件区域（你的 #lineControls、#weekControls） */
@@ -219,8 +533,8 @@
         [data-week-btn] {
             appearance: none;
             border: 1px solid var(--vscode-button-border, transparent);
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
+            background: var(--btn-bg);
+            color: var(--btn-fg);
             border-radius: 8px;
             padding: 4px 10px;
             min-height: 28px;
@@ -232,7 +546,7 @@
 
         button:hover,
         [data-week-btn]:hover {
-            background: var(--vscode-button-hoverBackground);
+            background: var(--btn-hover-bg);
         }
 
         button:active,
@@ -255,13 +569,13 @@
 
         /* —— 次按钮（如需：给任一按钮加 .btn-secondary 即可） —— */
         .btn-secondary {
-            background: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
+            background: var(--btn2-bg);
+            color: var(--btn2-fg);
             border-color: var(--vscode-button-border, transparent);
         }
 
         .btn-secondary:hover {
-            background: var(--vscode-button-secondaryHoverBackground);
+            background: var(--btn2-hover-bg);
         }
 
         /* —— 下拉框 —— */
@@ -371,7 +685,68 @@
 </head>
 
 <body data-gap-minutes="10" data-continuity-gap-minutes="120">
-    <h2>写作统计仪表板 <span id="scopeTag" class="tag"></span></h2>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+        <h2 style="margin:0;">写作统计仪表板 <span id="scopeTag" class="tag"></span></h2>
+        <button id="btnSettings" type="button" title="仪表盘设置">⚙ 设置</button>
+    </div>
+
+    <!-- 设置抽屉 -->
+    <div id="settingsDrawer">
+        <div class="settings-row">
+            <span class="settings-label">图表色系</span>
+            <!-- 预设色样 -->
+            <div id="colorSwatches" style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                <div class="color-swatch" data-chart-preset="vscode" style="background:var(--vscode-button-background);" title="跟随 VS Code 主题"></div>
+                <div class="color-swatch" data-r="102" data-g="170" data-b="255" style="background:#66aaff" title="蓝色"></div>
+                <div class="color-swatch" data-r="80" data-g="185" data-b="120" style="background:#50b978" title="绿色"></div>
+                <div class="color-swatch" data-r="255" data-g="160" data-b="60" style="background:#ffa03c" title="橙色"></div>
+                <div class="color-swatch" data-r="180" data-g="100" data-b="255" style="background:#b464ff" title="紫色"></div>
+                <div class="color-swatch" data-r="255" data-g="90" data-b="90" style="background:#ff5a5a" title="红色"></div>
+                <div class="color-swatch" data-r="0" data-g="190" data-b="200" style="background:#00bec8" title="青色"></div>
+            </div>
+            <label style="font-size:12px; display:inline-flex; align-items:center; gap:5px;">
+                自定义
+                <input type="color" id="colorPicker" value="#66aaff" title="自定义颜色" />
+            </label>
+        </div>
+        <div class="settings-row">
+            <span class="settings-label">按钮色系</span>
+            <div id="btnColorSwatches" style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                <div class="color-swatch" data-btn-preset="vscode" style="background:var(--vscode-button-background);" title="跟随 VS Code 主题"></div>
+                <div class="color-swatch" data-btn-hex="#3b82f6" style="background:#3b82f6" title="蓝色"></div>
+                <div class="color-swatch" data-btn-hex="#22c55e" style="background:#22c55e" title="绿色"></div>
+                <div class="color-swatch" data-btn-hex="#f97316" style="background:#f97316" title="橙色"></div>
+                <div class="color-swatch" data-btn-hex="#a855f7" style="background:#a855f7" title="紫色"></div>
+                <div class="color-swatch" data-btn-hex="#ef4444" style="background:#ef4444" title="红色"></div>
+                <div class="color-swatch" data-btn-hex="#06b6d4" style="background:#06b6d4" title="青色"></div>
+            </div>
+            <label style="font-size:12px; display:inline-flex; align-items:center; gap:5px;">
+                自定义
+                <input type="color" id="btnColorPicker" value="#3b82f6" title="自定义按钮色" />
+            </label>
+        </div>
+        <div class="settings-row" style="align-items:flex-start;">
+            <span class="settings-label">日历选项</span>
+            <label style="font-size:12px; display:inline-flex; align-items:center; gap:5px;">
+                <input type="checkbox" id="calShowZero" /> 显示0字数格子
+            </label>
+        </div>
+        <div class="settings-row" style="align-items:flex-start;">
+            <span class="settings-label">面板顺序</span>
+            <div id="sectionOrderList" class="section-order-list"><!-- JS 动态填充 --></div>
+        </div>
+        <div class="settings-row" style="align-items:flex-start;">
+            <span class="settings-label">显示组件</span>
+            <div class="section-toggle-row">
+                <label><input type="checkbox" data-sec="secLine" checked />速度曲线</label>
+                <label><input type="checkbox" data-sec="secTodayBars" checked />今日按小时</label>
+                <label><input type="checkbox" data-sec="secTodayHeatmap" checked />今日热力图</label>
+                <label><input type="checkbox" data-sec="secWeek" checked />7天窗口</label>
+                <label><input type="checkbox" data-sec="secMonthly" checked />月度统计</label>
+                <label><input type="checkbox" data-sec="secYearHeatmap" checked />年热力图</label>
+            </div>
+        </div>
+    </div>
 
     <div class="row" id="kpis">
         <div class="kpi">
@@ -392,7 +767,9 @@
         </div>
     </div>
 
-    <div class="grid" style="margin-top:16px;">
+    <div id="sectionsContainer">
+    <div data-section="secLine" style="margin-top:16px;">
+    <div class="grid">
         <div class="card">
             <div class="row muted" id="lineControls" style="justify-content: space-between; align-items: center;">
                 <span>当前文件速度曲线（CPM）- 若无活动文件则为空</span>
@@ -423,20 +800,26 @@
             <div class="chart h300"><canvas id="lineChart"></canvas></div>
         </div>
     </div>
+    </div><!-- /secLine -->
 
-    <div class="grid" style="margin-top:16px;">
+    <div data-section="secTodayBars" style="margin-top:16px;">
+    <div class="grid">
         <div class="card">
             <div class="muted">今日码字（按小时）</div>
             <div class="chart h260"><canvas id="todayBars"></canvas></div>
         </div>
     </div>
+    </div><!-- /secTodayBars -->
 
-    <div class="card" style="margin-top:16px;">
+    <div data-section="secTodayHeatmap" style="margin-top:16px;">
+    <div class="card">
         <div class="muted">今日热力图（24小时 × 4刻钟，共96个时间点）</div>
         <div class="chart h140"><canvas id="todayHeatmap"></canvas></div>
     </div>
+    </div><!-- /secTodayHeatmap -->
 
-    <div class="card" style="margin-top:16px;">
+    <div data-section="secWeek" style="margin-top:16px;">
+    <div class="card">
         <div class="row muted" id="weekControls" style="justify-content: space-between; align-items:center;">
             <span>7 天滑动窗口（默认结束于今天，今天在最右侧）</span>
             <div>
@@ -450,13 +833,63 @@
         <div class="muted">本周统计</div>
         <div class="chart h180"><canvas id="weekBars"></canvas></div>
     </div>
+    </div><!-- /secWeek -->
 
-
-    <div class="card" style="margin-top:16px;">
-        <div class="muted">热力图（最近 一个月，每天码字量）</div>
-        <div class="chart h220"><canvas id="heatmap"></canvas></div>
+    <div data-section="secMonthly" style="margin-top:16px;">
+    <div class="card">
+        <!-- 标题行：视图切换 + 月份导航 -->
+        <div class="row" style="justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <span class="muted">码字统计</span>
+                <div class="view-toggle">
+                    <button id="calViewHeatmap" type="button" title="热力图视图">热力图</button>
+                    <button id="calViewCalendar" type="button" title="日历视图">日历</button>
+                    <button id="calViewBoth" type="button" title="同时显示两者">两者</button>
+                </div>
+            </div>
+            <div id="calNavControls" style="display:flex; align-items:center; gap:4px;">
+                <button id="calPrevMonth" type="button" class="btn-secondary">‹</button>
+                <span id="calMonthLabel" style="min-width:80px; text-align:center; font-size:13px;"></span>
+                <button id="calNextMonth" type="button" class="btn-secondary">›</button>
+                <button id="calResetMonth" type="button" class="btn-secondary">本月</button>
+            </div>
+        </div>
+        <!-- 月度摘要 -->
+        <div id="calSummary" class="muted" style="margin-bottom:8px; font-size:12px;"></div>
+        <!-- 热力图（Chart.js） -->
+        <div id="heatmapSection">
+            <div class="muted" style="font-size:11px; margin-bottom:4px;">热力图</div>
+            <div class="chart h220"><canvas id="heatmap"></canvas></div>
+        </div>
+        <!-- 日历卡片视图 -->
+        <div id="calendarSection" style="display:none; margin-top:8px;">
+            <div id="calGrid" class="cal-grid"></div>
+        </div>
     </div>
+    </div><!-- /secMonthly -->
 
+    <div data-section="secYearHeatmap" style="margin-top:16px;">
+    <div class="card">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+            <span class="muted">年度码字热力图</span>
+            <div style="display:flex; align-items:center; gap:4px;">
+                <button id="yhPrevYear" type="button" class="btn-secondary">‹</button>
+                <span id="yhYearLabel" style="min-width:52px; text-align:center; font-size:13px;"></span>
+                <button id="yhNextYear" type="button" class="btn-secondary">›</button>
+                <button id="yhResetYear" type="button" class="btn-secondary">今年</button>
+            </div>
+        </div>
+        <div id="yearSummary" class="year-summary muted"></div>
+        <div class="year-heatmap-wrap">
+            <div id="yearHeatmapGrid" class="year-heatmap-grid"></div>
+        </div>
+    </div>
+    </div><!-- /secYearHeatmap -->
+    </div><!-- /sectionsContainer -->
+
+
+    <!-- 年热力图 tooltip -->
+    <div id="yhTooltip"></div>
 
     <!-- Chart.js 库 -->
     <script src="%CHARTJS_URI%"></script>
