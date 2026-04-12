@@ -31,11 +31,11 @@ The `novel-helper/` directory is the single most important directory. It contain
 ```
 <workspace-root>/
 ├── anhproject.md                  # Project config (Markdown-based)
-├── novel-helper/                  # ANH data root
+├── novel-helper/                  # ANH data root (internal)
 │   ├── <package-name>/            # A "character package" (any folder name)
+│   │   ├── roles.md               # Character list — PREFERRED Markdown format
 │   │   ├── characters.json5       # Character list (JSON5 format)
 │   │   ├── characters.ojson5      # Ordered character list (OJSON5 format)
-│   │   ├── roles.md               # Character list (Markdown format)
 │   │   ├── relationships.rjson5   # Relationship graph
 │   │   └── ...
 │   ├── mcp.json                   # MCP server config
@@ -45,6 +45,9 @@ The `novel-helper/` directory is the single most important directory. It contain
 │       └── snapshots/
 │           ├── wordcount-files.json
 │           └── tracker-files.json
+├── <any-other-folder>/            # External resource directory (auto-detected)
+│   ├── roles.md                   # Marker file — triggers ANH to scan this folder
+│   └── ...
 └── <chapter-files>.md / .txt      # The actual novel chapters
 ```
 
@@ -386,8 +389,8 @@ A standard MCP server configuration used to connect external tools. Edit only if
 1. **Never edit** `.anh-fsdb/` contents, `file-tracking.json`, or any snapshot files — these are managed by the extension.
 2. **Character files in `novel-helper/`** are the correct place to add or edit characters.
 3. When adding a character, choose the appropriate file format:
-   - Use `.json5` or `.ojson5` for structured data and programmatic access.
-   - Use `.md` for human-readable, prose-style character sheets.
+   - **Prefer `.md` (Markdown) format** — it is the recommended default for new character files because it is human-readable and easy to maintain.
+   - Use `.json5` or `.ojson5` for structured/programmatic access when needed.
 4. **`name` and `type` are always required** for a character entry.
 5. **`uuid`** should be a UUID v7 string. If omitting it, ANH will generate one at runtime.
 6. The `packagePath` and `sourcePath` fields are **runtime-only** — never write them to disk.
@@ -398,7 +401,172 @@ A standard MCP server configuration used to connect external tools. Edit only if
 
 ---
 
-## 8. Common Tasks
+## 8. Creating Characters — Two Modes
+
+### Mode A: Extract from Novel Text
+
+When the user provides novel text (chapters, excerpts, or a full manuscript), analyse it to extract characters, then create or update character files.
+
+**Step-by-step process:**
+
+1. **Read the provided text** — scan for character mentions, dialogue speakers, and narrative references.
+2. **Identify candidates** — collect all names, pronouns, and aliases that appear to represent distinct individuals.
+3. **Infer attributes from context:**
+   - `type`: Determine if each character is `主角`, `配角`, or other. Protagonists appear most frequently, drive the plot, and have POV scenes.
+   - `aliases`: Alternative names or nicknames used for the same character.
+   - `description`: Summarise who the character is from context clues.
+   - `gender`: Infer from pronouns or explicit mentions.
+   - `age`: If stated or implied.
+   - `occupation` / `affiliation`: From role in the story.
+   - `personality`: From behaviour, dialogue, and narrative descriptions.
+   - `appearance`: From physical descriptions in the text.
+   - `background`: Origin or backstory clues.
+   - `relationship`: Inter-character relationships described in the text.
+   - `skill` / `ability`: Powers, talents, or specialties.
+4. **Choose a target file:**
+   - If a character file already exists under `novel-helper/<package>/`, add new characters there.
+   - Otherwise, create `novel-helper/<package-name>/roles.md` (e.g., `novel-helper/characters/roles.md`) — "characters" here is just an example package name.
+5. **Write in Markdown format (preferred)** — use the template in Section 3b. For each extracted character, write a `## <name>` block with all inferred fields.
+6. **Present a summary** to the user listing every character created, and ask if any data needs correction.
+
+**Important:** Do not blindly extract every word that looks like a name. Limit to characters that have dialogue, actions, or recurring mentions. Filter out places and objects.
+
+---
+
+### Mode B: Create from Scratch (Interactive)
+
+When the user wants to create a character without source material, follow this interactive question-and-answer process. **Ask questions one group at a time; do not dump all questions at once.**
+
+**Phase 1 — Core identity (always ask)**
+
+Ask the user each of the following, offering concrete options where appropriate:
+
+| Question | Options to offer |
+|---|---|
+| 角色名是什么？ | (free text) |
+| 这是哪种角色？ | `主角` / `配角` / `联动角色` / `词汇` / 其他（自定义）|
+| 性别？ | 男 / 女 / 不明 / 其他 |
+| 大概多大？ | 数字，或"未知"/"不详" |
+
+**Phase 2 — Appearance & personality (ask next)**
+
+| Question | Options or guidance |
+|---|---|
+| 外貌特征是什么？ | 自由描述（身高、发色、眼色、服装风格等） |
+| 性格如何？ | 自由描述，或选择典型词语：开朗 / 冷静 / 腹黑 / 热血 / 内敛 / 傲慢 / 善良 |
+
+**Phase 3 — Background & role (ask next)**
+
+| Question | Options or guidance |
+|---|---|
+| 从属什么组织 / 阵营 / 势力？ | 自由描述，或"无" |
+| 职业或在故事中的身份？ | 自由描述 |
+| 有什么特殊技能或能力？ | 自由描述，或"普通人" |
+| 这个角色的核心目标/动机是什么？ | 自由描述 |
+
+**Phase 4 — Optional details (offer as optional)**
+
+Offer to fill in: `background`（背景故事）, `secret`（秘密）, `fear`（恐惧）, `quote`（代表台词）, `note`（备注）, custom fields. Tell the user they can skip if not needed.
+
+**After collecting answers:**
+
+1. Generate the character entry in **Markdown format** (see Section 3b template).
+2. Show the preview to the user and ask: "请确认以上内容是否正确，或告诉我需要修改哪里？"
+3. After confirmation, write to `novel-helper/characters/roles.md` (create file and directory if they don't exist).
+4. Inform the user the file has been saved and ANH will reload automatically.
+
+---
+
+## 9. External Resource Directories
+
+External resource directories are folders **outside** `novel-helper/` that ANH automatically detects and scans for character/relationship files.
+
+### How ANH Detects an External Resource Directory
+
+ANH scans all non-ignored folders in the workspace and marks a folder as an external resource directory when it contains **at least one** of the following "marker files":
+
+| Condition | Example |
+|---|---|
+| File with auto-marker extension (always triggers) | Any `*.ojson5`, `*.rjson5`, `*.ojson`, `*.rjson`, `*.tjson5` file |
+| Legacy init file | `__init__.ojson5` (any content, even empty `{}`) |
+| `.json5` or `.txt` file whose **filename** contains a marker keyword (see below) | `my-characters.json5`, `角色库.txt` |
+| `.md` file with a recognised library basename or suffix | `roles.md`, `character-gallery.md`, `*_character.md` |
+
+**Default marker keywords** (case-insensitive match inside filename):
+
+```
+character-gallery, character, role, roles,
+sensitive-words, sensitive, vocabulary, vocab,
+regex-patterns, regex,
+relationship, relation, connections, links,
+timeline,
+角色, 人物, 敏感词, 词汇, 词庫, 词库,
+正则, 正則, 正则表达式, 正則表達式,
+关系, 关联, 连接, 联系,
+时间线, 時間線
+```
+
+**Recognised `.md` library basenames** (exact): `character-gallery`, `sensitive-words`, `vocabulary`
+**Recognised `.md` library suffixes**: `_character`, `_sensitive`, `_vocabulary`, `-character`, `-sensitive`, `-vocabulary`
+
+**Ignored directories** (never scanned): `.git`, `.vscode`, `.idea`, `node_modules`, `dist`, `build`, `out`
+
+A folder can also be **manually excluded** by placing an empty `.anh-ignore` file inside it.
+
+### How to Create an External Resource Directory
+
+To make ANH scan a folder outside `novel-helper/` for characters:
+
+1. **Create the folder** anywhere in the workspace (not inside `novel-helper/`).
+   ```
+   <workspace-root>/
+   └── my-characters/         ← new external resource folder
+   ```
+
+2. **Add a marker file** so ANH detects it. The simplest and most reliable method is to create a character file with a recognised name — **`roles.md`** is recommended:
+   ```
+   my-characters/
+   └── roles.md               ← marker file (also the character file)
+   ```
+   Alternative marker approaches:
+   - Any `*.ojson5` or `*.rjson5` file (auto-detected by extension alone)
+   - A `__init__.ojson5` file with content `{}` (legacy but still supported)
+   - A `.json5` file whose name contains `character`, `role`, `角色`, etc.
+
+3. **Add character data** to the marker file (or other files in the same folder) using the formats described in Section 3.
+
+4. **Verify detection** — After saving, ANH will rescan and the folder will appear in the Package Manager sidebar under the external resources section.
+
+### Excluding a Folder from ANH Scanning
+
+To prevent ANH from scanning a directory that was accidentally detected:
+
+1. Create an empty file named `.anh-ignore` inside that directory.
+   ```
+   some-folder/
+   └── .anh-ignore            ← presence of this file tells ANH to skip the folder
+   ```
+2. ANH will exclude this folder on the next scan.
+
+### Recommended Structure for an External Resource Directory
+
+```
+<workspace-root>/
+└── characters/                     # External resource directory
+    ├── roles.md                    # Main character file (marker + data)
+    ├── side-characters.md          # Additional character file
+    └── relationships.rjson5        # Relationship file (optional)
+```
+
+---
+
+## 10. Common Tasks (Updated)
+
+### Add a new character to an existing Markdown file (preferred)
+
+1. Open the `.md` character file under `novel-helper/<package>/` (or an external resource directory).
+2. Append `---` then `## <角色名>` with `### 类型` as a minimum.
+3. Add additional `###` field headings as needed.
 
 ### Add a new character to an existing JSON5 file
 
@@ -407,21 +575,27 @@ A standard MCP server configuration used to connect external tools. Edit only if
 3. Optionally add `uuid` (UUID v7), `aliases`, `description`, `color`, extended fields.
 4. Save the file. ANH will hot-reload automatically.
 
-### Add a new character to an existing Markdown file
+### Create characters from novel text (Mode A)
 
-1. Open the `.md` character file under `novel-helper/<package>/`.
-2. Append `---` then `## <角色名>` with `### 类型` as a minimum.
-3. Add additional `###` field headings as needed.
+Follow the step-by-step process described in **Section 8, Mode A**.
 
-### Create a new character package
+### Create a character interactively from scratch (Mode B)
+
+Follow the interactive Q&A process described in **Section 8, Mode B**.
+
+### Create a new character package inside novel-helper
 
 1. Create a new subdirectory under `novel-helper/`, e.g., `novel-helper/side-characters/`.
-2. Create a new file inside: `characters.json5` (array format) or `roles.md`.
+2. Create `roles.md` inside it (preferred) or `characters.json5`.
 3. Add character entries following the formats above.
+
+### Create an external resource directory
+
+Follow the step-by-step process described in **Section 9**.
 
 ### Read what characters are defined in a project
 
-1. Enumerate all files under `novel-helper/` with extensions `.json5`, `.ojson5`, `.md`.
+1. Enumerate all files under `novel-helper/` and all detected external resource directories with extensions `.json5`, `.ojson5`, `.md`.
 2. For each file, parse according to its extension (JSON5 array or Markdown headings).
 3. Merge characters from all files, respecting file-type priority.
 
