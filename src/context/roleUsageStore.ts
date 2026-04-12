@@ -153,6 +153,10 @@ class RoleUsageStore {
         return this.docs.get(uri);
     }
 
+    getAllDocEntries(): RoleUsageDocEntry[] {
+        return Array.from(this.docs.values());
+    }
+
     private loadFromStorage() {
         if (!this.context) { return; }
         const raw = this.context.workspaceState.get<RoleUsageStoragePayload>(STORAGE_KEY);
@@ -471,3 +475,7 @@ export function getRoleReferencesForKey(roleKey: string): RoleReferenceHit[] {
 }
 
 export const onDidChangeRoleUsage = store.onDidChange;
+
+export function getAllRoleUsageDocEntries(): RoleUsageDocEntry[] {
+    return store.getAllDocEntries();
+}

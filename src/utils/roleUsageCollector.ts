@@ -11,9 +11,22 @@ export interface RoleUsageRangeOptions {
     cancellationToken?: vscode.CancellationToken;
 }
 
+export type RoleMatchSource = 'name' | 'alias' | 'fix' | 'regex';
+
+export interface RoleDecorationEntry {
+    range: vscode.Range;
+    role: Role;
+    matchedText: string;
+    pattern: string;
+    matchSource: RoleMatchSource;
+    priority: number;
+    partial: boolean;
+}
+
 export interface RoleUsageRangeResult {
     roleToRanges: Map<Role, vscode.Range[]>;
     hoverEntries: { range: vscode.Range; role: Role }[];
+    decorationEntries: RoleDecorationEntry[];
     snapshot: Map<string, vscode.Range[]>;
     fullText: string;
     hits: Array<[number, string[]]>;
@@ -28,14 +41,14 @@ export async function collectRoleUsageRanges(
     let fullText = options.fullText;
 
     if (cancellation?.isCancellationRequested) {
-        return { roleToRanges: new Map(), hoverEntries: [], snapshot: new Map(), fullText: fullText ?? '', hits: hits ?? [] };
+        return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText: fullText ?? '', hits: hits ?? [] };
     }
 
     if (!hits) {
         try {
             const matches = await getRoleMatches(doc, fullText);
             if (cancellation?.isCancellationRequested) {
-                return { roleToRanges: new Map(), hoverEntries: [], snapshot: new Map(), fullText: fullText ?? '', hits: [] };
+                return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText: fullText ?? '', hits: [] };
             }
             hits = matches.map(m => [m.end, m.pats]);
             if ((!hits || hits.length === 0) && roles.length > 0) {
@@ -54,35 +67,62 @@ export async function collectRoleUsageRanges(
     fullText = fullText ?? doc.getText();
 
     const patternRoleMap = new Map<string, Role>();
+    const patternMetaMap = new Map<string, { role: Role; matchSource: RoleMatchSource; pattern: string }>();
     for (const r of roles) {
-        patternRoleMap.set(r.name.trim().normalize('NFC'), r);
+        const normalizedName = r.name.trim().normalize('NFC');
+        patternRoleMap.set(normalizedName, r);
+        patternMetaMap.set(normalizedName, { role: r, matchSource: 'name', pattern: r.name });
         for (const al of r.aliases || []) {
             if (!al) continue;
-            patternRoleMap.set(al.trim().normalize('NFC'), r);
+            const normalizedAlias = al.trim().normalize('NFC');
+            patternRoleMap.set(normalizedAlias, r);
+            patternMetaMap.set(normalizedAlias, { role: r, matchSource: 'alias', pattern: al });
         }
         for (const fix of r.fixes || []) {
             const f = fix.trim().normalize('NFC');
             if (f) {
-                patternRoleMap.set(f.trim().normalize('NFC'), r);
+                patternRoleMap.set(f, r);
+                patternMetaMap.set(f, { role: r, matchSource: 'fix', pattern: fix });
             }
         }
     }
 
-    type Candidate = { role: Role; text: string; start: number; end: number; priority: number };
+    type Candidate = {
+        role: Role;
+        text: string;
+        start: number;
+        end: number;
+        priority: number;
+        pattern: string;
+        matchSource: RoleMatchSource;
+        partial: boolean;
+    };
     const candidates: Candidate[] = [];
 
     for (const [endIdx, arr] of hits) {
         if (cancellation?.isCancellationRequested) {
-            return { roleToRanges: new Map(), hoverEntries: [], snapshot: new Map(), fullText, hits };
+            return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText, hits };
         }
         for (const raw of arr) {
             const pat = raw.trim().normalize('NFC');
-            let role = patternRoleMap.get(pat) || ahoCorasickManager.getRole(pat);
+            const meta = patternMetaMap.get(pat);
+            let role = meta?.role || patternRoleMap.get(pat) || ahoCorasickManager.getRole(pat);
             if (!role) {
                 role = roles.find(r => r.name === pat || r.aliases?.includes(pat));
             }
             if (!role) {
                 continue;
+            }
+            let matchSource: RoleMatchSource = meta?.matchSource || 'name';
+            let pattern = meta?.pattern || pat;
+            if (!meta) {
+                if ((role.aliases || []).includes(pat)) {
+                    matchSource = 'alias';
+                } else if ((role.fixes || []).includes(pat)) {
+                    matchSource = 'fix';
+                } else {
+                    pattern = role.name;
+                }
             }
             const start = endIdx - pat.length + 1;
             const end = endIdx + 1;
@@ -91,7 +131,10 @@ export async function collectRoleUsageRanges(
                 text: pat,
                 start,
                 end,
-                priority: role.priority ?? (role.type === '敏感词' ? 0 : 100)
+                priority: role.priority ?? (role.type === '敏感词' ? 0 : 100),
+                pattern,
+                matchSource,
+                partial: false,
             });
         }
     }
@@ -99,7 +142,7 @@ export async function collectRoleUsageRanges(
     const regexRoles = roles.filter(r => r.type === '正则表达式' && r.regex);
     for (const role of regexRoles) {
         if (cancellation?.isCancellationRequested) {
-            return { roleToRanges: new Map(), hoverEntries: [], snapshot: new Map(), fullText, hits };
+            return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText, hits };
         }
         try {
             const regex = new RegExp(role.regex!, role.regexFlags || 'g');
@@ -113,7 +156,10 @@ export async function collectRoleUsageRanges(
                     text: m[0],
                     start,
                     end,
-                    priority: (role.priority ?? 500) + 500
+                    priority: (role.priority ?? 500) + 500,
+                    pattern: role.regex!,
+                    matchSource: 'regex',
+                    partial: false,
                 });
                 if (m[0].length === 0) {
                     regex.lastIndex++;
@@ -156,18 +202,22 @@ export async function collectRoleUsageRanges(
 
     for (const candidate of candidates) {
         if (cancellation?.isCancellationRequested) {
-            return { roleToRanges: new Map(), hoverEntries: [], snapshot: new Map(), fullText, hits };
+            return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText, hits };
         }
         if (candidate.role.type === '正则表达式') {
             const segments = calculateFreeSegments(candidate.start, candidate.end);
             for (const segment of segments) {
                 if (segment.end > segment.start) {
+                    const matchedText = fullText.substring(segment.start, segment.end);
                     selected.push({
                         role: candidate.role,
-                        text: fullText.substring(segment.start, segment.end),
+                        text: matchedText,
                         start: segment.start,
                         end: segment.end,
-                        priority: candidate.priority
+                        priority: candidate.priority,
+                        pattern: candidate.pattern,
+                        matchSource: candidate.matchSource,
+                        partial: matchedText !== candidate.text,
                     });
                 }
             }
@@ -182,9 +232,19 @@ export async function collectRoleUsageRanges(
 
     const roleToRanges = new Map<Role, vscode.Range[]>();
     const hoverEntries: { range: vscode.Range; role: Role }[] = [];
+    const decorationEntries: RoleDecorationEntry[] = [];
     for (const c of selected) {
         const range = new vscode.Range(doc.positionAt(c.start), doc.positionAt(c.end));
         hoverEntries.push({ range, role: c.role });
+        decorationEntries.push({
+            range,
+            role: c.role,
+            matchedText: c.text,
+            pattern: c.pattern,
+            matchSource: c.matchSource,
+            priority: c.priority,
+            partial: c.partial,
+        });
         if (!roleToRanges.has(c.role)) {
             roleToRanges.set(c.role, []);
         }
@@ -196,5 +256,5 @@ export async function collectRoleUsageRanges(
         snapshot.set(role.name, ranges);
     }
 
-    return { roleToRanges, hoverEntries, snapshot, fullText, hits };
+    return { roleToRanges, hoverEntries, decorationEntries, snapshot, fullText, hits };
 }

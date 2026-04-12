@@ -422,6 +422,11 @@
         "category": "Andrea Novel Helper"
       },
       {
+        "command": "andrea.copilot.exportPromptsToWorkspace",
+        "title": "导出内置 Copilot 提示到当前项目",
+        "category": "Andrea Novel Helper"
+      },
+      {
         "command": "andrea.scripts.toggleSingleServer",
         "title": "切换 MCP 服务器启用状态",
         "icon": "$(toggle-layout)",
@@ -1756,7 +1761,10 @@
           "properties": {
             "strategy": {
               "type": "string",
-              "enum": ["loadOrder", "custom"],
+              "enum": [
+                "loadOrder",
+                "custom"
+              ],
               "default": "loadOrder",
               "description": "%config.rolePriority.strategy.description%"
             },
@@ -3120,7 +3128,7 @@
         "AndreaNovelHelper.autoScroll.ratio": {
           "anhName": "滚动比例",
           "type": "number",
-          "default": 1.0,
+          "default": 1,
           "minimum": 0.1,
           "maximum": 0.7,
           "markdownDescription": "自动滚动的目标比例（0.1-0.7）。1.0 表示完全滚动到底部，0.5 表示滚动到中间位置。"
@@ -3818,6 +3826,7 @@
     "liquidjs": "^10.24.0",
     "memfs": "^4.17.2",
     "uuid": "^11.1.0",
-    "webdav": "^5.7.0"
+    "webdav": "^5.7.0",
+    "zod": "^4.3.6"
   }
 }
