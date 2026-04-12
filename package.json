@@ -1521,6 +1521,18 @@
           "anhName": "角色名称着色",
           "markdownDescription": "用角色颜色在名称旁显示色块标记（全部角色视图；当未与 docRoles 同步时生效）。"
         },
+        "AndreaNovelHelper.package.roleNodes.display.useRoleSvgIfPresent": {
+          "type": "boolean",
+          "default": false,
+          "anhName": "包管理器角色节点使用角色SVG图标",
+          "markdownDescription": "在包管理器的文件子角色节点中，如果角色对象包含 svg 字段，是否优先使用该 svg 作为图标。"
+        },
+        "AndreaNovelHelper.package.roleNodes.display.colorizeRoleName": {
+          "type": "boolean",
+          "default": false,
+          "anhName": "包管理器角色节点名称着色",
+          "markdownDescription": "在包管理器的文件子角色节点中，用角色颜色在名称旁显示色块标记。"
+        },
         "andrea.typeset.statusBar.compact": {
           "type": "boolean",
           "default": false,
@@ -2342,6 +2354,32 @@
           "default": true,
           "anhName": "启用角色展开",
           "markdownDescription": "是否允许角色节点可展开以查看属性详情；关闭后角色节点将不再可展开。"
+        },
+        "AndreaNovelHelper.package.roleNodes.details.showColorOnValue": {
+          "type": "boolean",
+          "default": true,
+          "anhName": "包管理器角色详情显示颜色预览",
+          "markdownDescription": "在包管理器的文件子角色节点详情中，是否在颜色字段值行显示颜色预览色块。"
+        },
+        "AndreaNovelHelper.package.roleNodes.details.alwaysExpandable": {
+          "type": "boolean",
+          "default": true,
+          "anhName": "包管理器角色详情总是可展开",
+          "markdownDescription": "包管理器的文件子角色节点中，角色属性详情是否总是可展开。"
+        },
+        "AndreaNovelHelper.package.roleNodes.details.wrapColumn": {
+          "type": "number",
+          "default": 20,
+          "minimum": 5,
+          "maximum": 200,
+          "anhName": "包管理器角色详情折行宽度",
+          "markdownDescription": "包管理器的文件子角色节点详情在多行显示时的软折行宽度。"
+        },
+        "AndreaNovelHelper.package.roleNodes.details.enableRoleExpansion": {
+          "type": "boolean",
+          "default": true,
+          "anhName": "包管理器启用角色展开",
+          "markdownDescription": "包管理器的文件子角色节点是否允许展开查看属性详情。"
         },
         "AndreaNovelHelper.typo.service.baseUrl": {
           "anhName": "错别字服务地址",

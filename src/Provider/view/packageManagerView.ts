@@ -194,7 +194,14 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
     private cutClipboard: string[] | null = null;  // 剪切
     private externalRoleFolders: string[] = [];
     private externalScanReport: ExternalRoleFolderScanReport | undefined;
-    private readonly roleTreeProvider = new RoleTreeDataProvider();
+    private readonly roleTreeProvider = new RoleTreeDataProvider({
+        roleSvgConfigKey: 'package.roleNodes.display.useRoleSvgIfPresent',
+        colorizeRoleNameConfigKey: 'package.roleNodes.display.colorizeRoleName',
+        showColorOnValueConfigKey: 'package.roleNodes.details.showColorOnValue',
+        enableRoleExpansionConfigKey: 'package.roleNodes.details.enableRoleExpansion',
+        alwaysExpandableConfigKey: 'package.roleNodes.details.alwaysExpandable',
+        wrapColumnConfigKey: 'package.roleNodes.details.wrapColumn'
+    });
 
     constructor(private workspaceRoot: string, memento: vscode.Memento) { 
         this.memento = memento;
