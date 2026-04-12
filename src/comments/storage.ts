@@ -54,6 +54,19 @@ export function getDocUuidForDocument(doc: vscode.TextDocument): string | undefi
   }
 }
 
+/** 返回当前工作区所有有批注记录的文档 UUID 列表（扫描 comments 目录的 *.json 索引文件）。 */
+export function listAllCommentDocUuids(): string[] {
+  const dir = commentsDir();
+  if (!dir || !fs.existsSync(dir)) return [];
+  try {
+    return fs.readdirSync(dir)
+      .filter((f: string) => f.endsWith('.json'))
+      .map((f: string) => f.slice(0, -5)); // strip ".json"
+  } catch {
+    return [];
+  }
+}
+
 // 文档索引文件路径
 function indexFilePathForUuid(docUuid: string): string | undefined {
   const dir = commentsDir();

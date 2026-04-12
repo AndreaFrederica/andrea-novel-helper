@@ -104,6 +104,8 @@ import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 import { registerSettingsView } from './Provider/view/settingView'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
+import { registerCopilotDocsCommands } from './commands/copilotDocs'
+import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -118,6 +120,9 @@ let smartTabGroupLockStatusBar: SmartTabGroupLockStatusBar | undefined;
 
 // 自动滚动提供器
 let autoScrollProvider: AutoScrollProvider | undefined;
+
+// Novel MCP HTTP 服务器（供 VSCode Copilot、Cursor 等 AI 编辑器使用）
+let novelMcpHttpServer: NovelHttpMcpServer | undefined;
 
 
 export let dir_outline_url = 'andrea-outline://outline/outline_dir.md';
@@ -315,6 +320,7 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }
     };
+    registerCopilotDocsCommands(context, log);
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
 
     const outlineRel = cfg1.get<string>('outlinePath', 'novel-helper/outline');
@@ -1286,6 +1292,16 @@ export async function activate(context: vscode.ExtensionContext) {
         autoScrollProvider = new AutoScrollProvider();
         autoScrollProvider.activate(context);
 
+        // 启动内嵌 MCP HTTP 服务器（供 VSCode Copilot Agent Mode 及其他 AI 编辑器使用）
+        startNovelHttpMcpServer(() => roles, context.extensionPath, DEFAULT_MCP_PORT)
+            .then(srv => {
+                novelMcpHttpServer = srv;
+                log(`Novel MCP HTTP 服务器已启动: ${srv.url}`);
+                // 将服务地址写入 .vscode/mcp.json，让 VSCode Copilot 自动发现
+                ensureVscodeMcpJson(wsRoot, srv.url, log);
+            })
+            .catch(e => log('Novel MCP HTTP 服务器启动失败（端口可能已占用）', e));
+
         // 启动后异步检查（避免阻塞激活）
         setTimeout(() => {
             if (projectInitWizardRunning) { return; }
@@ -1312,6 +1328,12 @@ export function deactivate() {
     deactivateHeatmap();
     try { stopAllPreviewTTS(_previewManager); } catch { }
     try { disposeRoleUsageStore(); } catch { }
+
+    // 停止 MCP HTTP 服务器
+    if (novelMcpHttpServer) {
+        novelMcpHttpServer.stop().catch(() => {})
+        novelMcpHttpServer = undefined
+    }
     
     // 清理智能标签组锁定管理器
     if (smartTabGroupLockManager) {
@@ -1345,6 +1367,33 @@ export function deactivate() {
 let _previewManager: PreviewManager | undefined;
 
 export { loadRoles };
+
+// --------------------------------------------------------------------------
+// Helper: write MCP server URL into .vscode/mcp.json so VSCode Copilot
+// Agent Mode and Cursor 0.50+ can auto-discover the novel-helper server.
+// --------------------------------------------------------------------------
+function ensureVscodeMcpJson(wsRoot: string, mcpUrl: string, log: (msg: string, err?: any) => void) {
+    try {
+        const vscodDir = path.join(wsRoot, '.vscode')
+        if (!fs.existsSync(vscodDir)) fs.mkdirSync(vscodDir, { recursive: true })
+        const mcpJsonPath = path.join(vscodDir, 'mcp.json')
+        let data: any = {}
+        if (fs.existsSync(mcpJsonPath)) {
+            try { data = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8')) } catch { data = {} }
+        }
+        if (!data.servers) data.servers = {}
+        const entry = { type: 'http', url: mcpUrl }
+        // Only write if missing or URL changed
+        const existing = data.servers['andrea-novel-helper']
+        if (!existing || existing.url !== mcpUrl || existing.type !== 'http') {
+            data.servers['andrea-novel-helper'] = entry
+            fs.writeFileSync(mcpJsonPath, JSON.stringify(data, null, 2))
+            log(`已更新 .vscode/mcp.json: andrea-novel-helper → ${mcpUrl}`)
+        }
+    } catch (e) {
+        log('写入 .vscode/mcp.json 失败', e)
+    }
+}
 
 // —— 新增：注册 WordCount 视图上下文命令 ——
 function registerWordCountContextCommands(context: vscode.ExtensionContext, provider: WordCountProvider) {

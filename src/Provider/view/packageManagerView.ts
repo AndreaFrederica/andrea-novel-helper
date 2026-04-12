@@ -66,6 +66,24 @@ class ExternalResourceManageNode extends vscode.TreeItem {
     }
 }
 
+// Copilot 文档释放节点
+class CopilotDocsManageNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ Copilot 文档释放', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'copilotDocsManage';
+        this.iconPath = new vscode.ThemeIcon('hubot');
+        this.description = '释放内置指令与 Prompt 到当前项目';
+        this.command = {
+            command: 'andrea.copilot.exportPromptsToWorkspace',
+            title: '导出内置 Copilot 提示到当前项目',
+            arguments: []
+        };
+    }
+}
+
 // 书籍根目录节点（真正的目录，可展开）
 class BookRootNode extends vscode.TreeItem {
     public readonly resourceUri: vscode.Uri;
@@ -264,8 +282,9 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             // 2）创建功能按钮节点
             const refMaintenanceNode = new ReferenceMaintenanceNode(this.workspaceRoot);
             const externalManageNode = new ExternalResourceManageNode(this.workspaceRoot);
+            const copilotDocsManageNode = new CopilotDocsManageNode(this.workspaceRoot);
 
-            const result: PackageNode[] = [refMaintenanceNode as any, externalManageNode as any];
+            const result: PackageNode[] = [refMaintenanceNode as any, externalManageNode as any, copilotDocsManageNode as any];
 
             // 3) 外部资源目录（由 fast-glob 扫描器提供）
             if (this.externalRoleFolders.length === 0 || this.externalRoleFolders.some(folder => !fs.existsSync(folder))) {
