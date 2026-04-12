@@ -3,6 +3,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { roles, onDidChangeRoles } from '../../activate';
+import { Role } from '../../extension';
 import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
 import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot, isRoleFile } from '../../utils/utils';
@@ -11,6 +13,55 @@ import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 import { generateCustomFileName, generateDefaultFileName } from '../../utils/Parser/markdownParser';
 import { globalRelationshipManager } from '../../utils/globalRelationshipManager';
+import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
+
+type PackageManagerNode = PackageNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | BookRootNode | AnyNode;
+
+function normalizeFsPathForCompare(p: string): string {
+    const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+function isRoleHierarchyNode(node: PackageManagerNode): node is AnyNode {
+    return !!node && typeof node === 'object' && 'kind' in node;
+}
+
+function isFileSystemTreeNode(node: PackageManagerNode | undefined): node is PackageNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | BookRootNode {
+    return !!node && node instanceof vscode.TreeItem && 'resourceUri' in node;
+}
+
+const ROLE_CARRIER_EXTENSIONS = new Set([
+    '.md',
+    '.markdown',
+    '.txt',
+    '.json',
+    '.json5',
+    '.ojson',
+    '.ojson5',
+    '.rjson',
+    '.rjson5',
+    '.tjson5'
+]);
+
+function supportsRoleChildren(fullPath: string): boolean {
+    const baseName = path.basename(fullPath);
+    const lower = fullPath.toLowerCase();
+    const ext = path.extname(lower);
+
+    if (ROLE_CARRIER_EXTENSIONS.has(ext)) {
+        return true;
+    }
+
+    return isRoleFile(baseName, fullPath) || isExternalResourceMarkerFile(baseName);
+}
+
+function applyExpandableFileIcon(node: PackageNode, _fullPath: string): void {
+    if (node.collapsibleState === vscode.TreeItemCollapsibleState.None || node.iconPath) {
+        return;
+    }
+
+    node.iconPath = vscode.ThemeIcon.File;
+}
 
 // 解析文件名冲突：如果同名存在，则追加 _YYYYMMDD_HHmmss 或递增索引
 function resolveFileConflict(dir: string, baseName: string, ext: string): { path: string; conflicted: boolean; } {
@@ -128,8 +179,8 @@ export class PackageNode extends vscode.TreeItem {
 /**
  * TreeDataProvider for novel-helper packages
  */
-export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNode> {
-    private _onDidChange = new vscode.EventEmitter<PackageNode | void>();
+export class PackageManagerProvider implements vscode.TreeDataProvider<PackageManagerNode> {
+    private _onDidChange = new vscode.EventEmitter<PackageManagerNode | void>();
     readonly onDidChangeTreeData = this._onDidChange.event;
     private _onDidChangeExternalFolders = new vscode.EventEmitter<string[]>();
     readonly onDidChangeExternalFolders = this._onDidChangeExternalFolders.event;
@@ -143,6 +194,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
     private cutClipboard: string[] | null = null;  // 剪切
     private externalRoleFolders: string[] = [];
     private externalScanReport: ExternalRoleFolderScanReport | undefined;
+    private readonly roleTreeProvider = new RoleTreeDataProvider();
 
     constructor(private workspaceRoot: string, memento: vscode.Memento) { 
         this.memento = memento;
@@ -258,22 +310,60 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
     }
 
     // 处理节点展开
-    onDidExpandElement(node: PackageNode): void {
+    onDidExpandElement(node: PackageManagerNode): void {
+        if (!('id' in node) || !node.id) { return; }
         this.expandedNodes.add(node.id!);
         this.saveExpandedState();
     }
 
     // 处理节点折叠
-    onDidCollapseElement(node: PackageNode): void {
+    onDidCollapseElement(node: PackageManagerNode): void {
+        if (!('id' in node) || !node.id) { return; }
         this.expandedNodes.delete(node.id!);
         this.saveExpandedState();
     }
 
-    getTreeItem(node: PackageNode): vscode.TreeItem {
+    getTreeItem(node: PackageManagerNode): vscode.TreeItem {
+        if (isRoleHierarchyNode(node)) {
+            return this.roleTreeProvider.getTreeItem(node);
+        }
         return node;
     }
 
-    async getChildren(node?: PackageNode): Promise<PackageNode[]> {
+    private getRolesForFile(filePath: string): Role[] {
+        const normalized = normalizeFsPathForCompare(filePath);
+        return roles
+            .filter(role => role.sourcePath && normalizeFsPathForCompare(role.sourcePath) === normalized)
+            .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+    }
+
+    private createRoleNodesForFile(filePath: string): AnyNode[] {
+        return this.getRolesForFile(filePath).map(role => ({
+            kind: 'role',
+            key: role.name,
+            role,
+            affiliation: role.affiliation?.trim() || '(未分组)',
+            roleType: role.type || 'unknown',
+        } as AnyNode));
+    }
+
+    private createFileNode(fullPath: string, contextValue: string, collapsibleState?: vscode.TreeItemCollapsibleState): PackageNode {
+        const fileRoles = this.getRolesForFile(fullPath);
+        const canShowRoleChildren = supportsRoleChildren(fullPath);
+        const shouldExpandForRoles = canShowRoleChildren && fileRoles.length > 0;
+        const fileNode = new PackageNode(
+            vscode.Uri.file(fullPath),
+            collapsibleState ?? (shouldExpandForRoles ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
+        );
+        fileNode.contextValue = contextValue;
+        if (shouldExpandForRoles) {
+            fileNode.description = `${fileRoles.length} 个角色`;
+            fileNode.tooltip = `${fullPath}\n承载角色: ${fileRoles.map(role => role.name).join('、')}`;
+        }
+        return fileNode;
+    }
+
+    async getChildren(node?: PackageManagerNode): Promise<PackageManagerNode[]> {
         // 根节点：展示功能按钮 + 书籍根目录
         if (!node) {
             // 1）算出 novel-helper 根目录
@@ -284,7 +374,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
             const externalManageNode = new ExternalResourceManageNode(this.workspaceRoot);
             const copilotDocsManageNode = new CopilotDocsManageNode(this.workspaceRoot);
 
-            const result: PackageNode[] = [refMaintenanceNode as any, externalManageNode as any, copilotDocsManageNode as any];
+            const result: PackageManagerNode[] = [refMaintenanceNode, externalManageNode, copilotDocsManageNode];
 
             // 3) 外部资源目录（由 fast-glob 扫描器提供）
             if (this.externalRoleFolders.length === 0 || this.externalRoleFolders.some(folder => !fs.existsSync(folder))) {
@@ -305,17 +395,27 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 // 标记为外部文件夹，用于后续拖放处理
                 externalNode.contextValue = 'externalRoleFolder';
                 externalNode.tooltip = `外部角色文件夹: ${externalFolder}`;
-                result.push(externalNode as any);
+                result.push(externalNode);
             }
 
             // 4）书籍根目录（可展开的目录节点）
             if (fs.existsSync(base)) {
                 const isExpanded = this.expandedNodes.has(base);
                 const bookRootNode = new BookRootNode(base, isExpanded);
-                result.push(bookRootNode as any);
+                result.push(bookRootNode);
             }
 
             return result;
+        }
+
+        if (isRoleHierarchyNode(node)) {
+            const children = this.roleTreeProvider.getChildren(node);
+            return Array.isArray(children) ? children : [];
+        }
+
+        if (node instanceof PackageNode && !fs.statSync(node.resourceUri.fsPath).isDirectory()) {
+            const filePath = node.resourceUri.fsPath;
+            return supportsRoleChildren(filePath) ? this.createRoleNodesForFile(filePath) : [];
         }
 
         // 子节点：扫描目录内容
@@ -323,7 +423,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
         if (!fs.existsSync(dir)) {
             return [];
         }
-        return fs.readdirSync(dir).reduce<PackageNode[]>((nodes, name) => {
+        return fs.readdirSync(dir).reduce<PackageManagerNode[]>((nodes, name) => {
             const full = path.join(dir, name);
             const stat = fs.statSync(full);
 
@@ -347,10 +447,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                 if (isRoleFile || isRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
                     const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
-                    const fileNode = new PackageNode(
-                        vscode.Uri.file(full),
-                        vscode.TreeItemCollapsibleState.None
-                    );
+                    const fileNode = this.createFileNode(full, 'resourceFile');
 
                     // 根据配置决定是否使用自定义图标
                     const iconStyle = vscode.workspace.getConfiguration('AndreaNovelHelper.package').get<string>('iconStyle', 'auto');
@@ -373,33 +470,13 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageNo
                         fileNode.iconPath = new vscode.ThemeIcon('error');
                         fileNode.contextValue = 'resourceFileError';
                     }
+                    applyExpandableFileIcon(fileNode, full);
                     nodes.push(fileNode);
                 } else {
                     // 其他资源文件：全部显示，设置为普通资源文件
-                    const fileNode = new PackageNode(
-                        vscode.Uri.file(full),
-                        vscode.TreeItemCollapsibleState.None
-                    );
-                    fileNode.contextValue = 'generalResourceFile'; // 普通资源文件，不被监视
+                    const fileNode = this.createFileNode(full, 'generalResourceFile'); // 普通资源文件，不被监视
 
-                    // 根据配置决定是否为普通资源文件设置图标
-                    const iconStyle = vscode.workspace.getConfiguration('AndreaNovelHelper.package').get<string>('iconStyle', 'auto');
-                    if (iconStyle === 'custom') {
-                        // custom 模式：为所有文件设置图标
-                        const ext = path.extname(name).toLowerCase();
-                        if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp'].includes(ext)) {
-                            fileNode.iconPath = new vscode.ThemeIcon('file-media');
-                        } else if (['.doc', '.docx', '.pdf', '.txt', '.rtf'].includes(ext)) {
-                            fileNode.iconPath = new vscode.ThemeIcon('file-text');
-                        } else if (['.html', '.htm', '.xml'].includes(ext)) {
-                            fileNode.iconPath = new vscode.ThemeIcon('file-code');
-                        } else if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) {
-                            fileNode.iconPath = new vscode.ThemeIcon('file-zip');
-                        } else {
-                            fileNode.iconPath = new vscode.ThemeIcon('file');
-                        }
-                    }
-                    // auto 或 theme 模式：不设置 iconPath，让 VSCode 使用主题默认图标
+                    applyExpandableFileIcon(fileNode, full);
 
                     nodes.push(fileNode);
                 }
@@ -424,20 +501,22 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         treeDataProvider: provider,
         showCollapseAll: true,
         canSelectMany: true,
-        dragAndDropController: new class implements vscode.TreeDragAndDropController<PackageNode> {
+        dragAndDropController: new class implements vscode.TreeDragAndDropController<PackageManagerNode> {
             dropMimeTypes = ['application/vnd.code.tree.packageManagerView','text/uri-list'];
             dragMimeTypes = ['text/uri-list'];
-            async handleDrag(source: readonly PackageNode[], data: vscode.DataTransfer) {
-                data.set('text/uri-list', new vscode.DataTransferItem(source.map(s=>s.resourceUri.toString()).join('\n')));
+            async handleDrag(source: readonly PackageManagerNode[], data: vscode.DataTransfer) {
+                const dragSources = source.filter(isFileSystemTreeNode);
+                if (dragSources.length === 0) { return; }
+                data.set('text/uri-list', new vscode.DataTransferItem(dragSources.map(s=>s.resourceUri.toString()).join('\n')));
             }
-            async handleDrop(target: PackageNode | undefined, data: vscode.DataTransfer, _token: vscode.CancellationToken) {
+            async handleDrop(target: PackageManagerNode | undefined, data: vscode.DataTransfer, _token: vscode.CancellationToken) {
                 try {
                     const urisRaw = data.get('text/uri-list')?.value as string | undefined;
                     if (!urisRaw) return;
                     const uris = urisRaw.split(/\r?\n/).filter(Boolean).map(u=>vscode.Uri.parse(u));
 
                     // 确定目标目录
-                    const toDir = target && fs.existsSync(target.resourceUri.fsPath) && fs.statSync(target.resourceUri.fsPath).isDirectory()
+                    const toDir = isFileSystemTreeNode(target) && fs.existsSync(target.resourceUri.fsPath) && fs.statSync(target.resourceUri.fsPath).isDirectory()
                         ? target.resourceUri.fsPath
                         : path.join(rootFsPath,'novel-helper');
 
@@ -488,6 +567,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
     // 监听树视图展开/折叠事件以保存状态
     context.subscriptions.push(
+        onDidChangeRoles(() => provider.refresh()),
         treeView.onDidExpandElement(e => {
             provider.onDidExpandElement(e.element);
         }),
@@ -552,13 +632,15 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     // —— 复制 / 剪切 / 粘贴 命令 ——
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.package.copy', (node: PackageNode | PackageNode[]) => {
-            const nodes = Array.isArray(node)? node: treeView.selection.length? treeView.selection: [node];
+            const nodes = (Array.isArray(node)? node: treeView.selection.length? treeView.selection: [node]).filter(isFileSystemTreeNode);
+            if (nodes.length === 0) { return; }
             provider.setCopy(nodes.map(n=>n.resourceUri.fsPath));
             provider.setCut(null);
             vscode.window.setStatusBarMessage(`已复制 ${nodes.length} 个项目`, 2000);
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.package.cut', (node: PackageNode | PackageNode[]) => {
-            const nodes = Array.isArray(node)? node: treeView.selection.length? treeView.selection: [node];
+            const nodes = (Array.isArray(node)? node: treeView.selection.length? treeView.selection: [node]).filter(isFileSystemTreeNode);
+            if (nodes.length === 0) { return; }
             provider.setCut(nodes.map(n=>n.resourceUri.fsPath));
             provider.setCopy(null);
             vscode.window.setStatusBarMessage(`已剪切 ${nodes.length} 个项目`, 2000);
