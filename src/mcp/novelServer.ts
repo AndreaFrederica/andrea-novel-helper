@@ -22,11 +22,15 @@ import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
 import { Role } from '../extension'
+import { BUNDLED_COPILOT_DOC_IDS, listBundledCopilotDocs, readBundledCopilotDoc } from '../copilot/assets'
 import { getAllRoleUsageDocEntries } from '../context/roleUsageStore'
 import { getDocumentRoleOccurrences } from '../context/documentRolesCache'
 import { loadComments, loadCommentContent, listAllCommentDocUuids } from '../comments/storage'
+import { collectRoleUsageRanges } from '../utils/roleUsageCollector'
 import { getFileUuid, getFileByUuid } from '../utils/tracker/globalFileTracking'
+import { getSupportedExtensions, getSupportedLanguages, isHugeFile, typeColorMap } from '../utils/utils'
 import { mdToPlainText } from '../utils/md_plain'
 import { txtToPlainText } from '../utils/txt_plain'
 
@@ -82,6 +86,184 @@ function roleDetail(r: Role): Record<string, unknown> {
   if (r.color) obj.color = r.color
   if (r.packagePath) obj.packagePath = r.packagePath
   return obj
+}
+
+interface TextStyleOptions {
+  color?: string
+  backgroundColor?: string
+  bold?: boolean
+  italic?: boolean
+  strikethrough?: boolean
+  underline?: boolean
+}
+
+function getTextStyleFromRole(role: Role): TextStyleOptions {
+  if (role.style && typeof role.style === 'object') {
+    return role.style as TextStyleOptions
+  }
+
+  const style: TextStyleOptions = {}
+  if (role.color) style.color = role.color
+  if (role.backgroundColor) style.backgroundColor = role.backgroundColor
+  if (role.bold) style.bold = true
+  if (role.italic) style.italic = true
+  if (role.strikethrough) style.strikethrough = true
+  if (role.underline) style.underline = true
+  return style
+}
+
+function buildTextDecoration(style: TextStyleOptions): string | undefined {
+  const parts: string[] = []
+  if (style.underline) parts.push('underline')
+  if (style.strikethrough) parts.push('line-through')
+  return parts.length > 0 ? parts.join(' ') : undefined
+}
+
+function getRoleDecorationStyle(role: Role): Record<string, unknown> {
+  const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper')
+  const defaultColor = cfg.get<string>('defaultColor') || '#E60033'
+  const textStyle = getTextStyleFromRole(role)
+  const color = textStyle.color ?? role.color ?? typeColorMap[role.type] ?? defaultColor
+  const textDecoration = buildTextDecoration(textStyle)
+
+  return {
+    color,
+    backgroundColor: textStyle.backgroundColor ?? null,
+    bold: Boolean(textStyle.bold),
+    italic: Boolean(textStyle.italic),
+    strikethrough: Boolean(textStyle.strikethrough),
+    underline: Boolean(textStyle.underline),
+    fontWeight: textStyle.bold ? 'bold' : null,
+    fontStyle: textStyle.italic ? 'italic' : null,
+    textDecoration: textDecoration ?? null,
+  }
+}
+
+function serializePosition(pos: vscode.Position, offset: number): Record<string, unknown> {
+  return {
+    line: pos.line,
+    character: pos.character,
+    offset,
+  }
+}
+
+function getDocExtension(doc: vscode.TextDocument): string {
+  const source = (doc.fileName || doc.uri.path || '').toLowerCase()
+  const match = source.match(/\.([a-z0-9_\-]+)$/)
+  return match ? match[1] : ''
+}
+
+function shouldDecorateDoc(doc: vscode.TextDocument): { ok: true } | { ok: false; reason: string } {
+  const supportedLangs = getSupportedLanguages()
+  const supportedExts = new Set(getSupportedExtensions().map(ext => ext.toLowerCase()))
+  const ext = getDocExtension(doc)
+  if (!supportedLangs.includes(doc.languageId) && !supportedExts.has(ext)) {
+    return { ok: false, reason: 'unsupported_document_type' }
+  }
+
+  const hugeTh = vscode.workspace.getConfiguration('AndreaNovelHelper').get<number>('hugeFile.thresholdBytes', 50 * 1024) || 50 * 1024
+  if (isHugeFile(doc, hugeTh)) {
+    return { ok: false, reason: 'huge_file_skipped' }
+  }
+
+  return { ok: true }
+}
+
+async function resolveDocumentForTool(filePath?: string): Promise<{ doc?: vscode.TextDocument; source?: string; error?: string }> {
+  if (!filePath) {
+    const active = vscode.window.activeTextEditor?.document
+    if (!active) return { error: 'no_active_editor' }
+    return { doc: active, source: 'active_editor' }
+  }
+
+  try {
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath))
+    return { doc, source: 'file_path' }
+  } catch (e: any) {
+    return { error: `cannot_open_document: ${e?.message || String(e)}` }
+  }
+}
+
+async function getDocumentDecorationsPayload(filePath: string | undefined, maxEntries: number, includeLineText: boolean): Promise<unknown> {
+  const resolved = await resolveDocumentForTool(filePath)
+  if (!resolved.doc) {
+    return { error: resolved.error || 'cannot_resolve_document' }
+  }
+
+  const doc = resolved.doc
+  const eligibility = shouldDecorateDoc(doc)
+  if (!eligibility.ok) {
+    return {
+      uri: doc.uri.toString(),
+      filePath: doc.fileName || undefined,
+      fileName: path.basename(doc.fileName || doc.uri.path),
+      languageId: doc.languageId,
+      source: resolved.source,
+      skipped: true,
+      reason: eligibility.reason,
+      decorationCount: 0,
+      decorations: [],
+    }
+  }
+
+  const result = await collectRoleUsageRanges(doc)
+  const limitedEntries = maxEntries > 0 ? result.decorationEntries.slice(0, maxEntries) : result.decorationEntries
+  const truncated = limitedEntries.length < result.decorationEntries.length
+  const styleGroups = new Map<string, { style: Record<string, unknown>; count: number; roleNames: Set<string> }>()
+
+  const decorations = limitedEntries.map(entry => {
+    const startOffset = doc.offsetAt(entry.range.start)
+    const endOffset = doc.offsetAt(entry.range.end)
+    const style = getRoleDecorationStyle(entry.role)
+    const styleKey = JSON.stringify(style)
+    const group = styleGroups.get(styleKey)
+    if (group) {
+      group.count += 1
+      group.roleNames.add(entry.role.name)
+    } else {
+      styleGroups.set(styleKey, { style, count: 1, roleNames: new Set([entry.role.name]) })
+    }
+
+    return {
+      role: roleDetail(entry.role),
+      matchedText: entry.matchedText,
+      matchSource: entry.matchSource,
+      pattern: entry.pattern,
+      priority: entry.priority,
+      partial: entry.partial,
+      range: {
+        start: serializePosition(entry.range.start, startOffset),
+        end: serializePosition(entry.range.end, endOffset),
+      },
+      lineText: includeLineText ? doc.lineAt(entry.range.start.line).text : undefined,
+      style,
+      reason: {
+        type: entry.matchSource,
+        roleType: entry.role.type,
+        sourcePath: entry.role.sourcePath,
+        packagePath: entry.role.packagePath,
+        regexFlags: entry.matchSource === 'regex' ? entry.role.regexFlags || 'g' : undefined,
+        sensitive: entry.role.type === SENSITIVE_TYPE,
+      },
+    }
+  })
+
+  return {
+    uri: doc.uri.toString(),
+    filePath: doc.fileName || undefined,
+    fileName: path.basename(doc.fileName || doc.uri.path),
+    languageId: doc.languageId,
+    source: resolved.source,
+    decorationCount: result.decorationEntries.length,
+    returnedCount: decorations.length,
+    truncated,
+    styleGroups: Array.from(styleGroups.values()).map(group => ({
+      style: group.style,
+      count: group.count,
+      roleNames: Array.from(group.roleNames),
+    })),
+    decorations,
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -278,6 +460,41 @@ function searchRolesPayload(
   return { keyword, count: results.length, roles: results }
 }
 
+function listSkillDocumentsPayload(): unknown {
+  const docs = listBundledCopilotDocs().map(doc => ({
+    id: doc.id,
+    title: doc.title,
+    description: doc.description,
+    kind: doc.kind,
+    workspaceRelativePath: doc.workspaceRelativePath,
+  }))
+
+  return {
+    count: docs.length,
+    documents: docs,
+  }
+}
+
+function getSkillDocumentPayload(extensionPath: string, id: string): unknown {
+  const doc = readBundledCopilotDoc(extensionPath, id)
+  if (!doc) {
+    return {
+      error: 'skill_document_not_found',
+      id,
+      availableIds: BUNDLED_COPILOT_DOC_IDS,
+    }
+  }
+
+  return {
+    id: doc.id,
+    title: doc.title,
+    description: doc.description,
+    kind: doc.kind,
+    workspaceRelativePath: doc.workspaceRelativePath,
+    content: doc.content,
+  }
+}
+
 // --------------------------------------------------------------------------
 // Tool: get_comments_for_file
 // --------------------------------------------------------------------------
@@ -419,7 +636,7 @@ function getProjectRoleUsageStatsPayload(topN: number): unknown {
  * @param rolesGetter  A zero-argument function returning the live roles array.
  *                     Called on every request so it always reflects latest state.
  */
-export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
+export function createNovelMcpServer(rolesGetter: RolesGetter, extensionPath: string): McpServer {
   const server = new McpServer(
     { name: 'andrea-novel-helper', version: '1.0.0' },
     {
@@ -428,7 +645,7 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
         tools: {},
       },
       instructions:
-        'Novel Helper MCP server — provides structured access to the novel project: characters, roles, comments, and the active document. Use the tools to query specific data; use resources for a snapshot overview.',
+        'Novel Helper MCP server — provides structured access to the novel project: characters, roles, comments, the active document, and bundled Copilot skill documents. Use the tools to query specific data; use resources for a snapshot overview.',
     },
   )
 
@@ -487,7 +704,12 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
     {
       title: '按类型分页获取角色',
       description:
-        '返回指定类型（如"配角"、"主角"、"词汇"）的角色列表，支持分页。适合 novel://roles/all 返回索引后按需查询某一类型的详情。参数: type(string), page(number, 默认1), pageSize(number, 默认50, 最大200)。',
+        '返回指定类型（如"配角"、"主角"、"词汇"）的角色列表，支持分页。适合 novel://roles/all 返回索引后按需查询某一类型的详情。',
+      inputSchema: z.object({
+        type: z.string().describe('角色类型，如"配角"、"主角"、"词汇"'),
+        page: z.number().optional().default(1).describe('页码，默认1'),
+        pageSize: z.number().optional().default(50).describe('每页数量，默认50，最大200'),
+      }),
     },
     async (args: any) => {
       const type: string = String(args?.type ?? '')
@@ -505,7 +727,12 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
     {
       title: '搜索角色',
       description:
-        '按名称关键字模糊搜索角色。支持搜索别名（includeAliases=true）。敏感词默认不返回，除非 includeSensitive=true 或其出现在当前活跃文档中。参数: keyword(string), includeAliases(boolean, 默认true), includeSensitive(boolean, 默认false)。',
+        '按名称关键字模糊搜索角色。支持搜索别名（includeAliases=true）。敏感词默认不返回，除非 includeSensitive=true 或其出现在当前活跃文档中。',
+      inputSchema: z.object({
+        keyword: z.string().describe('搜索关键词'),
+        includeAliases: z.boolean().optional().default(true).describe('是否搜索别名，默认true'),
+        includeSensitive: z.boolean().optional().default(false).describe('是否包含敏感词，默认false'),
+      }),
     },
     async (args: any) => {
       const keyword: string = String(args?.keyword ?? '')
@@ -523,7 +750,10 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
     {
       title: '查找文档中出现的角色',
       description:
-        '扫描指定文件并返回出现的所有角色（含计数），包括敏感词（因为调用方已提供文件路径，说明有读取权限）。参数: filePath(string, 文件的完整绝对路径)。',
+        '扫描指定文件并返回出现的所有角色（含计数），包括敏感词（因为调用方已提供文件路径，说明有读取权限）。',
+      inputSchema: z.object({
+        filePath: z.string().describe('文件的完整绝对路径'),
+      }),
     },
     async (args: any) => {
       const filePath: string = String(args?.filePath ?? '')
@@ -539,7 +769,10 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
     {
       title: '获取文件的批注列表',
       description:
-        '返回指定文件的所有批注线程的摘要（id、状态、锚定文本、消息数量等）。参数: filePath(string, 文件的完整绝对路径)。',
+        '返回指定文件的所有批注线程的摘要（id、状态、锚定文本、消息数量等）。',
+      inputSchema: z.object({
+        filePath: z.string().describe('文件的完整绝对路径'),
+      }),
     },
     async (args: any) => {
       const filePath: string = String(args?.filePath ?? '')
@@ -555,7 +788,10 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
     {
       title: '获取批注详细内容',
       description:
-        '返回单个批注线程的完整 Markdown 内容。参数: threadId(string，从 get_comments_for_file 返回的列表中获取)。',
+        '返回单个批注线程的完整 Markdown 内容。',
+      inputSchema: z.object({
+        threadId: z.string().describe('批注线程ID，从 get_comments_for_file 返回的列表中获取'),
+      }),
     },
     async (args: any) => {
       const threadId: string = String(args?.threadId ?? '')
@@ -572,6 +808,7 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
       title: '获取整个项目的批注汇总',
       description:
         '扫描整个项目，统计所有有批注记录的文档及各自的线程数量、开放/已解决批注数。返回按线程数降序排列的文件列表。无需参数。',
+      inputSchema: z.object({}),
     },
     async (_args: any) => {
       const payload = await getProjectCommentsSummaryPayload()
@@ -586,11 +823,74 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
     {
       title: '获取整个项目的角色应用统计',
       description:
-        '汇总所有已索引文档中的角色出现次数，返回按总出现次数降序排列的角色列表（含角色名、类型、总出现次数、出现文档数）。参数: topN(number, 默认50, 0=全部)。',
+        '汇总所有已索引文档中的角色出现次数，返回按总出现次数降序排列的角色列表（含角色名、类型、总出现次数、出现文档数）。',
+      inputSchema: z.object({
+        topN: z.number().optional().default(50).describe('返回前N个角色，默认50，0表示全部'),
+      }),
     },
     async (args: any) => {
       const topN: number = Math.max(0, Number(args?.topN ?? 50))
       const payload = getProjectRoleUsageStatsPayload(topN)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_document_decorations',
+    {
+      title: '获取文档着色结果',
+      description:
+        '返回当前文档或指定文件中，ANH 角色/敏感词/正则等文本装饰的范围、颜色样式、匹配来源和原因元数据。可用于让模型理解“哪些文本被什么颜色标记”。',
+      inputSchema: z.object({
+        filePath: z.string().optional().describe('可选。要分析的文件完整绝对路径；不传则使用当前活跃编辑器文档'),
+        maxEntries: z.number().optional().default(500).describe('最多返回多少个着色条目，默认500；传0或负数表示返回全部'),
+        includeLineText: z.boolean().optional().default(true).describe('是否返回命中所在行文本，默认true'),
+      }),
+    },
+    async (args: any) => {
+      const filePathValue = String(args?.filePath ?? '').trim()
+      const filePath = filePathValue || undefined
+      const maxEntriesRaw = Number(args?.maxEntries ?? 500)
+      const maxEntries = Number.isFinite(maxEntriesRaw) ? Math.trunc(maxEntriesRaw) : 500
+      const includeLineText = Boolean(args?.includeLineText ?? true)
+      const payload = await getDocumentDecorationsPayload(filePath, maxEntries, includeLineText)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'list_skill_documents',
+    {
+      title: '列出内置 Skill 文档',
+      description:
+        '列出扩展内置的 Copilot 指令与 Prompt 文档，可用于导出到当前项目或进一步读取具体文档内容。',
+      inputSchema: z.object({}),
+    },
+    async (_args: any) => {
+      const payload = listSkillDocumentsPayload()
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_skill_document',
+    {
+      title: '获取内置 Skill 文档内容',
+      description:
+        '读取扩展内置的 Copilot 指令或 Prompt 文档全文。可用 id: copilot-instructions, anh-project, anh-script-runtime, anh-typst-templates。',
+      inputSchema: z.object({
+        id: z.enum(BUNDLED_COPILOT_DOC_IDS).describe('要读取的 Skill 文档 ID'),
+      }),
+    },
+    async (args: any) => {
+      const id: string = String(args?.id ?? '')
+      const payload = getSkillDocumentPayload(extensionPath, id)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
       }

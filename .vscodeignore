@@ -1,6 +1,8 @@
 .vscode/**
 .vscode-test/**
 src/**
+!.github/copilot-instructions.md
+!.github/prompts/**
 .gitignore
 .yarnrc
 vsc-extension-quickstart.md

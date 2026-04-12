@@ -37,9 +37,10 @@ export interface NovelHttpMcpServer {
  */
 export async function startNovelHttpMcpServer(
   rolesGetter: RolesGetter,
+  extensionPath: string,
   port = DEFAULT_MCP_PORT,
 ): Promise<NovelHttpMcpServer> {
-  const mcpServer = createNovelMcpServer(rolesGetter)
+  const mcpServer = createNovelMcpServer(rolesGetter, extensionPath)
 
   const httpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
     // CORS headers for browser-based tools

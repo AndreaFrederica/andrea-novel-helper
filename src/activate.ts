@@ -104,6 +104,7 @@ import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 import { registerSettingsView } from './Provider/view/settingView'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
+import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
 
 // 避免重复注册相同命令
@@ -319,6 +320,7 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }
     };
+    registerCopilotDocsCommands(context, log);
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
 
     const outlineRel = cfg1.get<string>('outlinePath', 'novel-helper/outline');
@@ -1291,7 +1293,7 @@ export async function activate(context: vscode.ExtensionContext) {
         autoScrollProvider.activate(context);
 
         // 启动内嵌 MCP HTTP 服务器（供 VSCode Copilot Agent Mode 及其他 AI 编辑器使用）
-        startNovelHttpMcpServer(() => roles, DEFAULT_MCP_PORT)
+        startNovelHttpMcpServer(() => roles, context.extensionPath, DEFAULT_MCP_PORT)
             .then(srv => {
                 novelMcpHttpServer = srv;
                 log(`Novel MCP HTTP 服务器已启动: ${srv.url}`);
