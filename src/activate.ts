@@ -1296,7 +1296,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 novelMcpHttpServer = srv;
                 log(`Novel MCP HTTP 服务器已启动: ${srv.url}`);
                 // 将服务地址写入 .vscode/mcp.json，让 VSCode Copilot 自动发现
-                ensureVscodeMcpJson(wsRoot, srv.url);
+                ensureVscodeMcpJson(wsRoot, srv.url, log);
             })
             .catch(e => log('Novel MCP HTTP 服务器启动失败（端口可能已占用）', e));
 
@@ -1370,7 +1370,7 @@ export { loadRoles };
 // Helper: write MCP server URL into .vscode/mcp.json so VSCode Copilot
 // Agent Mode and Cursor 0.50+ can auto-discover the novel-helper server.
 // --------------------------------------------------------------------------
-function ensureVscodeMcpJson(wsRoot: string, mcpUrl: string) {
+function ensureVscodeMcpJson(wsRoot: string, mcpUrl: string, log: (msg: string, err?: any) => void) {
     try {
         const vscodDir = path.join(wsRoot, '.vscode')
         if (!fs.existsSync(vscodDir)) fs.mkdirSync(vscodDir, { recursive: true })
@@ -1386,10 +1386,10 @@ function ensureVscodeMcpJson(wsRoot: string, mcpUrl: string) {
         if (!existing || existing.url !== mcpUrl || existing.type !== 'http') {
             data.servers['andrea-novel-helper'] = entry
             fs.writeFileSync(mcpJsonPath, JSON.stringify(data, null, 2))
-            console.log(`[AndreaNovelHelper] 已更新 .vscode/mcp.json: andrea-novel-helper → ${mcpUrl}`)
+            log(`已更新 .vscode/mcp.json: andrea-novel-helper → ${mcpUrl}`)
         }
     } catch (e) {
-        console.error('[AndreaNovelHelper] 写入 .vscode/mcp.json 失败', e)
+        log('写入 .vscode/mcp.json 失败', e)
     }
 }
 

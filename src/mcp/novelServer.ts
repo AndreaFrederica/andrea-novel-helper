@@ -285,11 +285,10 @@ async function getCommentsForFilePayload(filePath: string): Promise<unknown> {
   const uuid = getFileUuid(filePath)
   if (!uuid) return { error: 'file_not_tracked', filePath }
   const threads = await loadComments(uuid)
-  const visible = threads.filter(t => t.status !== 'resolved' || true) // return all
   return {
     filePath,
-    threadCount: visible.length,
-    threads: visible.map(t => ({
+    threadCount: threads.length,
+    threads: threads.map(t => ({
       id: t.id,
       status: t.status,
       createdAt: t.createdAt,
