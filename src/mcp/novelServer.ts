@@ -23,9 +23,10 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { Role } from '../extension'
+import { getAllRoleUsageDocEntries } from '../context/roleUsageStore'
 import { getDocumentRoleOccurrences } from '../context/documentRolesCache'
-import { loadComments, loadCommentContent } from '../comments/storage'
-import { getFileUuid } from '../utils/tracker/globalFileTracking'
+import { loadComments, loadCommentContent, listAllCommentDocUuids } from '../comments/storage'
+import { getFileUuid, getFileByUuid } from '../utils/tracker/globalFileTracking'
 import { mdToPlainText } from '../utils/md_plain'
 import { txtToPlainText } from '../utils/txt_plain'
 
@@ -309,6 +310,106 @@ async function getCommentContentPayload(threadId: string): Promise<unknown> {
 }
 
 // --------------------------------------------------------------------------
+// Tool: get_project_comments_summary
+// --------------------------------------------------------------------------
+
+async function getProjectCommentsSummaryPayload(): Promise<unknown> {
+  const docUuids = listAllCommentDocUuids()
+  let totalThreads = 0
+  let openThreads = 0
+  let resolvedThreads = 0
+  const files: Array<{
+    docUuid: string
+    filePath?: string
+    fileName?: string
+    threadCount: number
+    openCount: number
+    resolvedCount: number
+  }> = []
+
+  for (const uuid of docUuids) {
+    let threads: Awaited<ReturnType<typeof loadComments>>
+    try {
+      threads = await loadComments(uuid)
+    } catch {
+      continue
+    }
+    if (!threads.length) continue
+
+    const fileInfo = getFileByUuid(uuid)
+    const open = threads.filter(t => t.status !== 'resolved').length
+    const resolved = threads.filter(t => t.status === 'resolved').length
+
+    totalThreads += threads.length
+    openThreads += open
+    resolvedThreads += resolved
+
+    files.push({
+      docUuid: uuid,
+      filePath: fileInfo?.filePath,
+      fileName: fileInfo?.fileName,
+      threadCount: threads.length,
+      openCount: open,
+      resolvedCount: resolved,
+    })
+  }
+
+  files.sort((a, b) => b.threadCount - a.threadCount)
+
+  return {
+    totalDocuments: files.length,
+    totalThreads,
+    openThreads,
+    resolvedThreads,
+    files,
+  }
+}
+
+// --------------------------------------------------------------------------
+// Tool: get_project_role_usage_stats
+// --------------------------------------------------------------------------
+
+function getProjectRoleUsageStatsPayload(topN: number): unknown {
+  const allDocs = getAllRoleUsageDocEntries()
+
+  // Aggregate occurrences per role key across all documents
+  const roleAgg = new Map<
+    string,
+    { key: string; name: string; type?: string; totalOccurrences: number; docCount: number }
+  >()
+
+  for (const doc of allDocs) {
+    for (const roleEntry of doc.roles) {
+      const existing = roleAgg.get(roleEntry.key)
+      if (existing) {
+        existing.totalOccurrences += roleEntry.occurrences
+        existing.docCount += 1
+      } else {
+        roleAgg.set(roleEntry.key, {
+          key: roleEntry.key,
+          name: roleEntry.name,
+          type: roleEntry.type,
+          totalOccurrences: roleEntry.occurrences,
+          docCount: 1,
+        })
+      }
+    }
+  }
+
+  const sorted = Array.from(roleAgg.values()).sort(
+    (a, b) => b.totalOccurrences - a.totalOccurrences,
+  )
+
+  const top = topN > 0 ? sorted.slice(0, topN) : sorted
+
+  return {
+    indexedDocuments: allDocs.length,
+    totalRoles: roleAgg.size,
+    roles: top,
+  }
+}
+
+// --------------------------------------------------------------------------
 // Factory
 // --------------------------------------------------------------------------
 
@@ -459,6 +560,37 @@ export function createNovelMcpServer(rolesGetter: RolesGetter): McpServer {
     async (args: any) => {
       const threadId: string = String(args?.threadId ?? '')
       const payload = await getCommentContentPayload(threadId)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_project_comments_summary',
+    {
+      title: '获取整个项目的批注汇总',
+      description:
+        '扫描整个项目，统计所有有批注记录的文档及各自的线程数量、开放/已解决批注数。返回按线程数降序排列的文件列表。无需参数。',
+    },
+    async (_args: any) => {
+      const payload = await getProjectCommentsSummaryPayload()
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_project_role_usage_stats',
+    {
+      title: '获取整个项目的角色应用统计',
+      description:
+        '汇总所有已索引文档中的角色出现次数，返回按总出现次数降序排列的角色列表（含角色名、类型、总出现次数、出现文档数）。参数: topN(number, 默认50, 0=全部)。',
+    },
+    async (args: any) => {
+      const topN: number = Math.max(0, Number(args?.topN ?? 50))
+      const payload = getProjectRoleUsageStatsPayload(topN)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
       }
