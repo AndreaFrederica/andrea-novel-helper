@@ -3053,6 +3053,14 @@
           "default": true,
           "markdownDescription": "启用SQLite的内存映射IO，提升读取性能"
         },
+        "AndreaNovelHelper.database.sqlite.initQueueTimeoutMs": {
+          "anhName": "初始化队列等待时长",
+          "type": "number",
+          "default": 15000,
+          "minimum": 1000,
+          "maximum": 120000,
+          "markdownDescription": "SQLite 后端初始化时，文件追踪写操作在内存队列中等待的最长时间（毫秒）。超过该时长后，会临时回退到 JSON 分片持久化以避免继续堆积。"
+        },
         "AndreaNovelHelper.database.autoMigrate": {
           "anhName": "自动迁移",
           "type": "boolean",

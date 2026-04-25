@@ -3,22 +3,120 @@
  * 包装现有的 FileTrackingDataManager 以实现统一接口
  */
 
+import * as fs from 'fs';
 import * as path from 'path';
-import { IDatabaseBackend, DatabaseConfig } from './IDatabaseBackend';
+import {
+    IDatabaseBackend,
+    DatabaseConfig,
+    WritingFileSummary,
+    WritingFileSummaryIndex,
+    WritingProjectSummary,
+} from './IDatabaseBackend';
 import { FileTrackingDataManager } from '../utils/tracker/fileTrackingData';
 
 export class JSONBackend implements IDatabaseBackend {
     private manager: FileTrackingDataManager | null = null;
     private config: DatabaseConfig;
     private initialized = false;
+    private dbDir: string;
+    private writingSummaryPath: string;
+    private writingFileIndexPath: string;
+    private writingProjectSummaryCache: WritingProjectSummary | null | undefined = undefined;
+    private writingFileSummaryLoaded = false;
+    private writingFileSummaryCache: Map<string, WritingFileSummary> = new Map();
 
     constructor(config: DatabaseConfig) {
         this.config = config;
+        const dataPath = config.json?.dataPath || 'novel-helper/.anh-fsdb';
+        this.dbDir = path.join(config.workspaceRoot, dataPath);
+        this.writingSummaryPath = path.join(this.dbDir, 'writing-summary.json');
+        this.writingFileIndexPath = path.join(this.dbDir, 'writing-file-index.json');
+    }
+
+    private toRelKey(p: string): string {
+        const rootAbs = path.resolve(this.config.workspaceRoot).replace(/\\/g, '/');
+        const absBase = path.isAbsolute(p) || /^[a-z]:[\\/]/i.test(p) ? p : path.join(this.config.workspaceRoot, p);
+        const abs = path.resolve(absBase).replace(/\\/g, '/');
+        const lower = process.platform === 'win32';
+        const absCmp = lower ? abs.toLowerCase() : abs;
+        const rootCmp = lower ? rootAbs.toLowerCase() : rootAbs;
+        if (absCmp === rootCmp) {
+            return '';
+        }
+        if (absCmp.startsWith(rootCmp + '/')) {
+            return absCmp.slice(rootCmp.length + 1);
+        }
+        return absCmp;
+    }
+
+    private toAbsPath(key: string): string {
+        if (path.isAbsolute(key) || /^[a-z]:[\\/]/i.test(key)) {
+            return path.resolve(key);
+        }
+        return path.resolve(path.join(this.config.workspaceRoot, key));
+    }
+
+    private readJsonFile<T>(filePath: string): T | null {
+        if (!fs.existsSync(filePath)) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
+        } catch {
+            return null;
+        }
+    }
+
+    private writeJsonFile(filePath: string, data: unknown): void {
+        fs.writeFileSync(filePath, JSON.stringify(data));
+    }
+
+    private loadWritingFileSummaryCache(): void {
+        if (this.writingFileSummaryLoaded) {
+            return;
+        }
+
+        this.writingFileSummaryLoaded = true;
+        this.writingFileSummaryCache.clear();
+        const index = this.readJsonFile<WritingFileSummaryIndex>(this.writingFileIndexPath);
+        const entries = index?.entries || {};
+        for (const [uuid, summary] of Object.entries(entries)) {
+            if (!summary || typeof summary !== 'object') {
+                continue;
+            }
+            this.writingFileSummaryCache.set(uuid, {
+                ...summary,
+                uuid,
+                path: summary.path ? this.toAbsPath(summary.path) : summary.path,
+            });
+        }
+    }
+
+    private persistWritingFileSummaryCache(): void {
+        const entries: Record<string, WritingFileSummary> = {};
+        for (const [uuid, summary] of this.writingFileSummaryCache.entries()) {
+            entries[uuid] = {
+                ...summary,
+                path: this.toRelKey(summary.path || ''),
+            };
+        }
+
+        const payload: WritingFileSummaryIndex = {
+            version: 1,
+            updatedAt: Date.now(),
+            entries,
+        };
+        this.writeJsonFile(this.writingFileIndexPath, payload);
     }
 
     async initialize(): Promise<void> {
         if (this.initialized) {
             return;
+        }
+
+        if (!fs.existsSync(this.dbDir)) {
+            fs.mkdirSync(this.dbDir, { recursive: true });
         }
 
         // 使用现有的 FileTrackingDataManager
@@ -35,6 +133,9 @@ export class JSONBackend implements IDatabaseBackend {
             await this.manager.forceSave();
             this.manager = null;
             this.initialized = false;
+            this.writingProjectSummaryCache = undefined;
+            this.writingFileSummaryLoaded = false;
+            this.writingFileSummaryCache.clear();
 
             if (this.config.debug) {
                 console.log('[JSON] 数据库已关闭');
@@ -173,6 +274,66 @@ export class JSONBackend implements IDatabaseBackend {
 
         const db = (this.manager as any).database;
         return db || null;
+    }
+
+    async saveWritingProjectSummary(summary: WritingProjectSummary): Promise<void> {
+        const normalized: WritingProjectSummary = {
+            ...summary,
+            updatedAt: summary.updatedAt || Date.now(),
+        };
+        this.writingProjectSummaryCache = normalized;
+        this.writeJsonFile(this.writingSummaryPath, normalized);
+    }
+
+    async loadWritingProjectSummary(): Promise<WritingProjectSummary | null> {
+        if (this.writingProjectSummaryCache !== undefined) {
+            return this.writingProjectSummaryCache;
+        }
+
+        this.writingProjectSummaryCache = this.readJsonFile<WritingProjectSummary>(this.writingSummaryPath);
+        return this.writingProjectSummaryCache;
+    }
+
+    async saveWritingFileSummary(summary: WritingFileSummary): Promise<void> {
+        this.loadWritingFileSummaryCache();
+        this.writingFileSummaryCache.set(summary.uuid, {
+            ...summary,
+            path: summary.path ? this.toAbsPath(summary.path) : summary.path,
+            updatedAt: summary.updatedAt || Date.now(),
+        });
+        this.persistWritingFileSummaryCache();
+    }
+
+    async saveWritingFileSummaryBatch(entries: WritingFileSummary[]): Promise<void> {
+        this.loadWritingFileSummaryCache();
+        for (const summary of entries) {
+            this.writingFileSummaryCache.set(summary.uuid, {
+                ...summary,
+                path: summary.path ? this.toAbsPath(summary.path) : summary.path,
+                updatedAt: summary.updatedAt || Date.now(),
+            });
+        }
+        this.persistWritingFileSummaryCache();
+    }
+
+    async loadWritingFileSummary(uuid: string): Promise<WritingFileSummary | null> {
+        this.loadWritingFileSummaryCache();
+        const summary = this.writingFileSummaryCache.get(uuid);
+        return summary ? { ...summary } : null;
+    }
+
+    async loadAllWritingFileSummaries(): Promise<Map<string, WritingFileSummary>> {
+        this.loadWritingFileSummaryCache();
+        return new Map(
+            Array.from(this.writingFileSummaryCache.entries()).map(([uuid, summary]) => [uuid, { ...summary }])
+        );
+    }
+
+    async deleteWritingFileSummary(uuid: string): Promise<void> {
+        this.loadWritingFileSummaryCache();
+        if (this.writingFileSummaryCache.delete(uuid)) {
+            this.persistWritingFileSummaryCache();
+        }
     }
 
     async getStats(): Promise<{ totalFiles: number; totalMappings: number; dbSize?: number }> {

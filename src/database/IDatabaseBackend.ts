@@ -3,6 +3,44 @@
  * 支持多种存储后端（JSON文件、SQLite等）
  */
 
+export interface WritingProjectSummary {
+    version: number;
+    bucketSizeMs: number;
+    todayKey: number;
+    totalMillisAll: number;
+    today: {
+        millis: number;
+        chars: number;
+        avgCPM: number;
+        peakCPM: number;
+        hourly: Record<number, number>;
+        quarterHourly: Record<number, number>;
+    };
+    heatmap: Record<number, number>;
+    filesWithWritingStats: number;
+    updatedAt: number;
+}
+
+export interface WritingFileSummary {
+    uuid: string;
+    path: string;
+    totalMillis: number;
+    charsAdded: number;
+    charsDeleted: number;
+    sessionsCount: number;
+    averageCPM: number;
+    lastActiveTime: number;
+    todayKey: number;
+    todayPeakCPM: number;
+    updatedAt: number;
+}
+
+export interface WritingFileSummaryIndex {
+    version: number;
+    updatedAt: number;
+    entries: Record<string, WritingFileSummary>;
+}
+
 export interface IDatabaseBackend {
     /**
      * 初始化数据库
@@ -65,6 +103,12 @@ export interface IDatabaseBackend {
     deletePathMapping(path: string): Promise<void>;
 
     /**
+     * 按持久层原始 key 删除路径映射。
+     * 用于清理历史脏 key；普通调用应继续使用 deletePathMapping。
+     */
+    deletePathMappingRaw?(path: string): Promise<void>;
+
+    /**
      * 获取所有路径映射
      */
     getAllPathMappings(): Promise<Map<string, string>>;
@@ -83,6 +127,41 @@ export interface IDatabaseBackend {
      * 加载索引信息
      */
     loadIndex(): Promise<any | null>;
+
+    /**
+     * 保存项目级写作汇总
+     */
+    saveWritingProjectSummary(summary: WritingProjectSummary): Promise<void>;
+
+    /**
+     * 读取项目级写作汇总
+     */
+    loadWritingProjectSummary(): Promise<WritingProjectSummary | null>;
+
+    /**
+     * 保存单文件轻量写作索引
+     */
+    saveWritingFileSummary(summary: WritingFileSummary): Promise<void>;
+
+    /**
+     * 批量保存单文件轻量写作索引
+     */
+    saveWritingFileSummaryBatch(entries: WritingFileSummary[]): Promise<void>;
+
+    /**
+     * 读取单文件轻量写作索引
+     */
+    loadWritingFileSummary(uuid: string): Promise<WritingFileSummary | null>;
+
+    /**
+     * 读取全部单文件轻量写作索引
+     */
+    loadAllWritingFileSummaries(): Promise<Map<string, WritingFileSummary>>;
+
+    /**
+     * 删除单文件轻量写作索引
+     */
+    deleteWritingFileSummary(uuid: string): Promise<void>;
 
     /**
      * 获取数据库统计信息

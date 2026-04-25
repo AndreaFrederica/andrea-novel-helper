@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { DatabaseMigration } from '../database/DatabaseMigration';
 import { SQLiteBackend } from '../database/SQLiteBackend';
-import { JSONBackend } from '../database/JSONBackend';
+import { JSONShardedBackend } from '../database/JSONShardedBackend';
 import { IDatabaseBackend, DatabaseConfig } from '../database/IDatabaseBackend';
 
 /**
@@ -403,7 +403,7 @@ async function createBackend(
     if (type === 'sqlite') {
         return new SQLiteBackend(dbConfig);
     } else if (type === 'json') {
-        return new JSONBackend(dbConfig);
+        return new JSONShardedBackend(dbConfig);
     }
 
     return null;

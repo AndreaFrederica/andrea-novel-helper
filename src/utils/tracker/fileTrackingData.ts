@@ -5,7 +5,11 @@ import { v4 as uuidv4 } from 'uuid';
 // 仅在需要判断编辑器是否打开数据库文件时使用 vscode API
 // 避免循环依赖：此文件不被激活阶段直接 import 其它使用本模块的代码
 import * as vscode from 'vscode';
-import { IDatabaseBackend } from '../../database/IDatabaseBackend';
+import {
+    IDatabaseBackend,
+    WritingFileSummary,
+    WritingProjectSummary,
+} from '../../database/IDatabaseBackend';
 import { DatabaseFactory } from '../../database/DatabaseFactory';
 import { getFileMetadataFromCache } from '../WordCount/asyncWordCounter.js';
 // 文件级数据库对象，供外部直接访问和读写
@@ -26,6 +30,20 @@ type WritingStatsRow = {
     averageCPM: number;
     buckets?: { start: number; end: number; charsAdded: number }[];
     sessions?: { start: number; end: number }[];
+};
+
+export type WritingProjectOverview = {
+    totalMillisAll: number;
+    filesWithWritingStats: number;
+    lastActiveTime: number;
+    updatedAt: number;
+    approximate: boolean;
+    source: 'project-summary' | 'file-summaries';
+};
+
+type PendingBackendMutation = {
+    reason: string;
+    run: (backend: IDatabaseBackend) => Promise<void>;
 };
 
 // 文件元数据接口
@@ -88,6 +106,28 @@ export class FileTrackingDataManager {
     // 数据库后端
     private backend: IDatabaseBackend | null = null;
     private backendInitialized = false;
+    private backendType: 'json' | 'sqlite' = 'json';
+    private backendInitQueueTimer: NodeJS.Timeout | null = null;
+    private readonly BACKEND_INIT_QUEUE_TIMEOUT_MS = 15000;
+    private backendQueueTimedOut = false;
+    private pendingBackendMutations: PendingBackendMutation[] = [];
+    private legacyDatabaseForBackendImport: FileTrackingDatabase | null = null;
+    private writingProjectSummaryCache: WritingProjectSummary | null | undefined = undefined;
+    private writingFileSummaryCache: Map<string, WritingFileSummary> = new Map();
+    private writingSummaryState: {
+        ready: boolean;
+        rebuilding: boolean;
+        staleReason?: string;
+        lastValidatedAt?: number;
+    } = {
+        ready: false,
+        rebuilding: false,
+    };
+    private writingSummaryRebuildTimer: NodeJS.Timeout | null = null;
+    private writingSummaryRebuildPromise: Promise<void> | null = null;
+    private pendingWritingSummaryRebuildReason: string | null = null;
+    private readonly WRITING_SUMMARY_SCHEMA_VERSION = 1;
+    private readonly WRITING_SUMMARY_REBUILD_DEBOUNCE_MS = 250;
     /**
      * 直接写入或更新某个文件的元数据（外部可用，提升写入速度）
      */
@@ -99,16 +139,14 @@ export class FileTrackingDataManager {
         const key = this.toRelKey(filePath);
         this.database.pathToUuid[key] = meta.uuid;
         
-        // 使用数据库后端持久化
-        if (this.backend && this.backendInitialized) {
-            await this.backend.saveFileMetadata(meta.uuid, meta);
-            await this.backend.savePathMapping(key, meta.uuid);
-        } else {
-            // 后端未初始化时使用JSON分片
-            this.markChanged();
-            this.markShardDirty(meta.uuid, 'setFileMetadata external update');
-            this.scheduleSave();
-        }
+        await this.persistBackendMutation(
+            'setFileMetadata external update',
+            async (backend) => {
+                await backend.saveFileMetadata(meta.uuid, meta);
+                await backend.savePathMapping(key, meta.uuid);
+            },
+            { dirtyUuids: [meta.uuid] }
+        );
     }
 
     // 标志：是否检测到需要路径迁移（index / 分片）
@@ -129,7 +167,7 @@ export class FileTrackingDataManager {
     private trackerSnapshotPath: string; // 文件追踪快照文件
     private wcSnapshotPath: string; // WordCount 列表快照文件
     private startupSnapshotLoaded = false;
-    private useSharded: boolean = true; // 始终启用分片
+    private useSharded: boolean = true; // JSON 后端或 SQLite 初始化超时回退时启用分片
     private lazyLoadShards: boolean = true; // 启动仅加载索引按需加载
     private trustCallerFilters: boolean = false; // 如果启用，则信任调用者已应用过滤，可跳过部分重复检查
     private indexDirFlag: Set<string> = new Set();
@@ -183,6 +221,29 @@ export class FileTrackingDataManager {
      */
 
     public async rewriteAllShardsToRelative(): Promise<void> {
+        if (this.shouldQueueBackendMutations()) {
+            const metadataEntries = Object.values(this.database.files);
+            this.stageJsonFallback('rewrite to relative path', { dirtyUuids: metadataEntries.map((metadata) => metadata.uuid) });
+            this.pendingBackendMutations.push({
+                reason: 'rewrite to relative path',
+                run: async (backend) => {
+                    if (metadataEntries.length > 0) {
+                        await backend.saveFileMetadataBatch(metadataEntries.map((metadata) => ({ uuid: metadata.uuid, metadata })));
+                    }
+                    await backend.savePathMappingBatch(
+                        Object.entries(this.database.pathToUuid).map(([pathKey, uuid]) => ({ path: pathKey, uuid }))
+                    );
+                    await backend.saveIndex({
+                        version: this.DB_VERSION + '+idx1',
+                        lastUpdated: Date.now(),
+                        entries: this.collectCanonicalIndexEntries()
+                    });
+                }
+            });
+            this.writeIndex();
+            return;
+        }
+
         for (const uuid of Object.keys(this.database.files)) {
             this.markShardDirty(uuid, 'rewrite to relative path');
         }
@@ -231,8 +292,7 @@ export class FileTrackingDataManager {
     private async loadMetaForRepair(uuid: string): Promise<FileMetadata | undefined> {
         let meta: FileMetadata | undefined = this.database.files[uuid];
         if (!meta) {
-            meta = this.readSingleShard(uuid);
-            if (!meta && this.backend && this.backendInitialized) {
+            if (this.backend && this.backendInitialized) {
                 try {
                     const loaded = await this.backend.loadFileMetadata(uuid);
                     if (loaded) {
@@ -242,6 +302,9 @@ export class FileTrackingDataManager {
                 } catch {
                     meta = undefined;
                 }
+            }
+            if (!meta) {
+                meta = this.readSingleShard(uuid);
             }
             if (meta) {
                 this.database.files[uuid] = meta;
@@ -450,6 +513,7 @@ export class FileTrackingDataManager {
 
     constructor(workspaceRoot: string) {
         this.workspaceRoot = workspaceRoot;
+        this.backendType = DatabaseFactory.getCurrentBackendType();
         this.dbPath = path.join(workspaceRoot, 'novel-helper', 'file-tracking.json');
         this.dbDir = path.join(workspaceRoot, 'novel-helper', '.anh-fsdb');
         this.indexPath = path.join(this.dbDir, 'index.json');
@@ -458,6 +522,10 @@ export class FileTrackingDataManager {
         this.trackerSnapshotPath = path.join(this.snapshotDir, 'tracker-snapshot.json');
         this.wcSnapshotPath = path.join(this.snapshotDir, 'wordcount-files.json');
         this.ensureDbDir();
+        if (this.backendType === 'sqlite') {
+            this.useSharded = false;
+            this.beginBackendInitQueueWindow();
+        }
         // 读取配置：是否信任调用者的过滤器（可略过部分重复检查）
         try {
             this.trustCallerFilters = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker').get<boolean>('trustCallerFilters', false) === true;
@@ -483,22 +551,26 @@ export class FileTrackingDataManager {
         // 启动时清理遗留的 .git 目录内条目
         try { this.purgeGitEntries(); } catch (e) { console.warn('[FileTracking] purgeGitEntries 失败（忽略）', e); }
         // 迁移：如果存在旧的 file-tracking.json 且 index 未建立，则迁移到分片
-        this.migrateIfNeeded();
-        const loadRoutine = () => {
-            try {
-                if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
-                    this.loadIndexOnly();
-                } else {
-                    this.loadShardedFiles();
+        if (this.backendType !== 'sqlite') {
+            this.migrateIfNeeded();
+        }
+        if (this.backendType !== 'sqlite') {
+            const loadRoutine = () => {
+                try {
+                    if (this.lazyLoadShards && fs.existsSync(this.indexPath)) {
+                        this.loadIndexOnly();
+                    } else {
+                        this.loadShardedFiles();
+                    }
+                } catch (e) {
+                    console.warn('[FileTracking] 启动快照后的后台加载失败', e);
                 }
-            } catch (e) {
-                console.warn('[FileTracking] 启动快照后的后台加载失败', e);
+            };
+            if (this.startupSnapshotLoaded) {
+                setTimeout(loadRoutine, 0);
+            } else {
+                loadRoutine();
             }
-        };
-        if (this.startupSnapshotLoaded) {
-            setTimeout(loadRoutine, 0);
-        } else {
-            loadRoutine();
         }
         // 同步初始化数据库后端（确保后端的path2uuid在使用前已加载）
         this.initializeBackendSync();
@@ -507,6 +579,141 @@ export class FileTrackingDataManager {
         this.getAllFilesAsync = this.getAllFilesAsync.bind(this);
         this.filterFilesAsync = this.filterFilesAsync.bind(this);
         this.getStatsAsync = this.getStatsAsync.bind(this);
+    }
+
+    private beginBackendInitQueueWindow(): void {
+        if (this.backendType !== 'sqlite') {
+            return;
+        }
+
+        const timeoutMs = vscode.workspace.getConfiguration('AndreaNovelHelper.database')
+            .get<number>('sqlite.initQueueTimeoutMs', this.BACKEND_INIT_QUEUE_TIMEOUT_MS)
+            ?? this.BACKEND_INIT_QUEUE_TIMEOUT_MS;
+
+        if (this.backendInitQueueTimer) {
+            clearTimeout(this.backendInitQueueTimer);
+        }
+
+        this.backendInitQueueTimer = setTimeout(() => {
+            if (this.backendInitialized || this.backendType !== 'sqlite') {
+                return;
+            }
+
+            this.backendQueueTimedOut = true;
+            this.useSharded = true;
+            console.warn(`[FileTracking] SQLite 后端初始化超过 ${timeoutMs}ms，回退到 JSON 分片持久化`);
+            if (this.hasUnsavedChanges || this.dirtyShardUuids.size > 0 || this.removedShardUuids.size > 0) {
+                this.scheduleSave();
+            }
+        }, timeoutMs);
+    }
+
+    private clearBackendInitQueueWindow(): void {
+        if (this.backendInitQueueTimer) {
+            clearTimeout(this.backendInitQueueTimer);
+            this.backendInitQueueTimer = null;
+        }
+    }
+
+    private shouldQueueBackendMutations(): boolean {
+        return this.backendType === 'sqlite' && !this.backendInitialized && !this.backendQueueTimedOut;
+    }
+
+    private shouldUseLocalShardFallback(): boolean {
+        return this.backendType !== 'sqlite' || this.backendQueueTimedOut;
+    }
+
+    private stageJsonFallback(reason: string, options?: { dirtyUuids?: string[]; removedUuids?: string[] }): void {
+        this.markChanged();
+        for (const uuid of options?.dirtyUuids || []) {
+            this.markShardDirty(uuid, reason);
+        }
+        for (const uuid of options?.removedUuids || []) {
+            this.removedShardUuids.add(uuid);
+        }
+    }
+
+    private async persistBackendMutation(
+        reason: string,
+        run: (backend: IDatabaseBackend) => Promise<void>,
+        fallback?: { dirtyUuids?: string[]; removedUuids?: string[] }
+    ): Promise<void> {
+        if (this.backend && this.backendInitialized) {
+            await run(this.backend);
+            return;
+        }
+
+        if (fallback) {
+            this.stageJsonFallback(reason, fallback);
+        }
+
+        if (this.shouldQueueBackendMutations()) {
+            this.pendingBackendMutations.push({ reason, run });
+            return;
+        }
+
+        if (fallback) {
+            this.useSharded = true;
+            this.scheduleSave();
+        }
+    }
+
+    private async drainPendingBackendMutations(backend: IDatabaseBackend): Promise<void> {
+        while (this.pendingBackendMutations.length > 0) {
+            const pending = this.pendingBackendMutations.splice(0);
+            for (const mutation of pending) {
+                await mutation.run(backend);
+            }
+        }
+    }
+
+    private async importLegacyDatabaseIntoBackendIfNeeded(backend: IDatabaseBackend): Promise<void> {
+        if (this.backendType !== 'sqlite' || !this.legacyDatabaseForBackendImport) {
+            return;
+        }
+
+        const existingMappings = await backend.getAllPathMappings();
+        if (existingMappings.size > 0) {
+            console.log('[FileTracking] SQLite 后端已有数据，跳过 legacy file-tracking.json 导入');
+            this.legacyDatabaseForBackendImport = null;
+            return;
+        }
+
+        const legacy = this.legacyDatabaseForBackendImport;
+        const files = new Map<string, any>(Object.entries(legacy.files || {}));
+        const pathMappings = new Map<string, string>(Object.entries(legacy.pathToUuid || {}));
+
+        await backend.importAll({
+            files,
+            pathMappings,
+            index: {
+                version: this.DB_VERSION + '+idx1',
+                lastUpdated: Date.now(),
+                entries: this.collectCanonicalIndexEntries()
+            }
+        });
+
+        try {
+            if (fs.existsSync(this.dbPath)) {
+                fs.unlinkSync(this.dbPath);
+                console.log('[FileTracking] 已将 legacy file-tracking.json 导入 SQLite 并删除旧文件');
+            }
+        } catch (error) {
+            console.warn('[FileTracking] 删除 legacy file-tracking.json 失败', error);
+        }
+
+        this.legacyDatabaseForBackendImport = null;
+    }
+
+    private clearQueuedFallbackStateAfterBackendReady(): void {
+        this.dirtyShardUuids.clear();
+        this.removedShardUuids.clear();
+        if (this.saveTimer) {
+            clearTimeout(this.saveTimer);
+            this.saveTimer = null;
+        }
+        this.hasUnsavedChanges = false;
+        this.lastSavedHash = this.calculateDatabaseHash();
     }
     /** 判断绝对路径是否在工作区内（大小写不敏感，仅用于 Win） */
     private isInsideWorkspace(absPath: string): boolean {
@@ -633,21 +840,32 @@ export class FileTrackingDataManager {
      */
     private async initializeBackend(): Promise<void> {
         try {
-            const backendType = DatabaseFactory.getCurrentBackendType();
+            const backendType = this.backendType;
             console.log(`[FileTracking] 初始化数据库后端: ${backendType}`);
             
-            this.backend = await DatabaseFactory.createBackend(this.workspaceRoot);
+            const backend = await DatabaseFactory.createBackend(this.workspaceRoot);
+            this.backend = backend;
+
+            if (backendType === 'sqlite') {
+                await this.importLegacyDatabaseIntoBackendIfNeeded(backend);
+                await this.drainPendingBackendMutations(backend);
+                console.log('[FileTracking] SQLite 后端已接管初始化窗口中的待写操作');
+            }
+
             this.backendInitialized = true;
 
-            // 如果使用SQLite后端，禁用JSON分片写入
             if (backendType === 'sqlite') {
+                await this.drainPendingBackendMutations(backend);
                 this.useSharded = false;
+                this.backendQueueTimedOut = false;
+                this.clearBackendInitQueueWindow();
+                this.clearQueuedFallbackStateAfterBackendReady();
                 console.log('[FileTracking] SQLite后端已启用，JSON分片写入已禁用');
             }
 
             // 后端初始化完成后尝试加载后端中的路径映射（只加载映射，以便查询时能使用后端为权威）
             try {
-                const pathMap = await this.backend.getAllPathMappings();
+                const pathMap = await backend.getAllPathMappings();
                 if (pathMap && pathMap.size > 0) {
                     // 合并到内存 pathToUuid（以后端为准）
                     for (const [p, u] of pathMap.entries()) {
@@ -656,9 +874,64 @@ export class FileTrackingDataManager {
                         this.database.pathToUuid[canonicalKey] = u;
                     }
                     console.log(`[FileTracking] 已从后端加载路径映射 entries=${pathMap.size}`);
+
+                    // 现有 timeStats/statusBar 仍有同步读取路径；SQLite 后端必须把历史
+                    // writingStats 预热到内存，否则启动快照的精简 metadata 会被误判为新文档。
+                    if (backendType === 'sqlite' && typeof backend.loadFileMetadataBatch === 'function') {
+                        const uuids = Array.from(new Set(pathMap.values()));
+                        const metaMap = await backend.loadFileMetadataBatch(uuids);
+                        for (const [uuid, loaded] of metaMap.entries()) {
+                            const meta = this.normalizeLoadedMetadata(loaded);
+                            if (!meta) { continue; }
+                            const cached = this.database.files[uuid];
+                            this.database.files[uuid] = cached
+                                ? this.mergePersistedMetadata(uuid, cached, meta)
+                                : meta;
+                            if (meta.isDirectory) { this.indexDirFlag.add(uuid); }
+                        }
+                        console.log(`[FileTracking] SQLite metadata 预热完成 entries=${metaMap.size}`);
+                    }
                 }
             } catch (e) {
                 console.warn('[FileTracking] 从后端加载路径映射失败，回退到本地索引', e);
+            }
+
+            try {
+                const summary = await backend.loadWritingProjectSummary();
+                const invalidReason = this.validateWritingProjectSummary(summary);
+                if (invalidReason) {
+                    this.writingProjectSummaryCache = null;
+                    this.setWritingSummaryState(null, invalidReason);
+                    this.scheduleWritingSummaryRebuild(`startup:${invalidReason}`);
+                } else {
+                    this.writingProjectSummaryCache = summary;
+                    this.setWritingSummaryState(summary);
+
+                    try {
+                        const fileSummaries = await backend.loadAllWritingFileSummaries();
+                        let fileSummaryReason: string | undefined;
+                        for (const fileSummary of fileSummaries.values()) {
+                            fileSummaryReason = this.validateWritingFileSummary(fileSummary);
+                            if (fileSummaryReason) {
+                                break;
+                            }
+                        }
+
+                        if (fileSummaryReason) {
+                            this.writingFileSummaryCache.clear();
+                            this.scheduleWritingSummaryRebuild(`startup:file-summary-${fileSummaryReason}`);
+                        } else {
+                            this.writingFileSummaryCache = new Map(fileSummaries);
+                        }
+                    } catch (fileSummaryError) {
+                        console.warn('[FileTracking] 读取 writing file summaries 失败', fileSummaryError);
+                        this.scheduleWritingSummaryRebuild('startup:file-summaries-load-failed');
+                    }
+                }
+            } catch (e) {
+                console.warn('[FileTracking] 读取 writing summary 失败', e);
+                this.setWritingSummaryState(null, 'load-failed');
+                this.scheduleWritingSummaryRebuild('startup:load-failed');
             }
 
             console.log('[FileTracking] 数据库后端初始化完成');
@@ -666,6 +939,15 @@ export class FileTrackingDataManager {
             console.error('[FileTracking] 数据库后端初始化失败:', err);
             this.backend = null;
             this.backendInitialized = false;
+            if (this.backendType === 'sqlite') {
+                this.backendQueueTimedOut = true;
+                this.useSharded = true;
+                this.clearBackendInitQueueWindow();
+                if (this.hasUnsavedChanges || this.dirtyShardUuids.size > 0 || this.removedShardUuids.size > 0) {
+                    this.scheduleSave();
+                }
+            }
+            this.setWritingSummaryState(null, 'backend-init-failed');
         }
     }
 
@@ -748,6 +1030,8 @@ export class FileTrackingDataManager {
                     return this.migrateDatabase(db);
                 }
 
+                this.legacyDatabaseForBackendImport = db;
+
                 return db;
             }
         } catch (error) {
@@ -805,6 +1089,16 @@ export class FileTrackingDataManager {
         const t0 = Date.now();
         this.stats.saveCalls++;
         try {
+            if (this.shouldQueueBackendMutations()) {
+                if (!force) {
+                    console.log('[FileTracking] SQLite 后端初始化中，保持数据库操作在队列中等待后端就绪');
+                    return;
+                }
+                console.warn('[FileTracking] 强制保存发生在 SQLite 后端初始化完成前，立即回退到 JSON 分片持久化');
+                this.backendQueueTimedOut = true;
+                this.useSharded = true;
+            }
+
             // 分片模式：写入增量而不是写整个聚合（除非强制或目录未建立）
             if (this.useSharded) {
                 this.saveSharded(force);
@@ -1019,6 +1313,10 @@ export class FileTrackingDataManager {
         return this.database.files[uuid];
     }
 
+    public async getFileByUuidAsync(uuid: string): Promise<FileMetadata | undefined> {
+        return await this.getMetaAsync(uuid, true);
+    }
+
     /**
      * 通过路径获取文件元数据
      * （用工作区相对键查询；需要时惰性加载分片）
@@ -1031,6 +1329,14 @@ export class FileTrackingDataManager {
             this.ensureShardLoaded(uuid);
         }
         return this.database.files[uuid];
+    }
+
+    public async getFileByPathAsync(filePath: string): Promise<FileMetadata | undefined> {
+        const key = this.toRelKey(filePath);
+        const uuid = this.database.pathToUuid[key];
+        if (!uuid) { return undefined; }
+        const meta = await this.getMetaAsync(uuid, true);
+        return meta;
     }
 
     // ===== 相对路径版本的接口（用于索引器等性能敏感场景） =====
@@ -1128,21 +1434,41 @@ export class FileTrackingDataManager {
     public async removePathMappingByRawKey(rawPathKey: string): Promise<void> {
         const uuid = this.database.pathToUuid[rawPathKey];
         if (uuid) {
+            const rawMetadata = this.database.files[uuid] || await this.getMetaAsync(uuid, true);
+            const removedWritingStats = rawMetadata?.writingStats;
+            const hadWritingStats = !!removedWritingStats || !!(await this.getWritingFileSummaryAsync(uuid));
             // 删除内存中的映射
             delete this.database.pathToUuid[rawPathKey];
             
             // 删除文件元数据
             delete this.database.files[uuid];
             
-            // 从后端删除
-            if (this.backend && this.backendInitialized) {
-                await this.backend.deletePathMapping(rawPathKey);
-                await this.backend.deleteFileMetadata(uuid);
-            } else {
-                // 后端未初始化时使用JSON分片
-                this.removedShardUuids.add(uuid);
-                this.markChanged();
-                this.scheduleSave();
+            await this.persistBackendMutation(
+                'remove raw path mapping',
+                async (backend) => {
+                    if (typeof backend.deletePathMappingRaw === 'function') {
+                        await backend.deletePathMappingRaw(rawPathKey);
+                    } else {
+                        await backend.deletePathMapping(rawPathKey);
+                    }
+                    await backend.deleteFileMetadata(uuid);
+                },
+                { removedUuids: [uuid] }
+            );
+
+            try {
+                await this.deleteWritingFileSummary(uuid);
+                if (removedWritingStats) {
+                    const updated = await this.updateWritingProjectSummaryIncrementally(removedWritingStats, undefined);
+                    if (!updated) {
+                        this.invalidateWritingProjectSummary('raw-path-removed');
+                    }
+                } else if (hadWritingStats) {
+                    this.invalidateWritingProjectSummary('raw-path-removed');
+                }
+            } catch (error) {
+                console.warn(`[FileTracking] 清理 raw path 的 writing file summary 失败 uuid=${uuid}`, error);
+                this.invalidateWritingProjectSummary('raw-path-removed');
             }
             
             this.stats.removeFile++;
@@ -1181,6 +1507,9 @@ export class FileTrackingDataManager {
                 this.ensureShardLoaded(uuid);
                 existingFile = this.database.files[uuid];
             }
+            if (uuid && !existingFile) {
+                existingFile = await this.getMetaAsync(uuid, true);
+            }
 
             // 如果文件已存在且哈希/size/mtime 未变化，不需要任何更新
             if (!isDirectory && existingFile && uuid) {
@@ -1198,15 +1527,13 @@ export class FileTrackingDataManager {
                     existingFile.lastTrackedAt = nowLite;
                     existingFile.updatedAt = nowLite;
                     
-                    // 使用数据库后端持久化
-                    if (this.backend && this.backendInitialized) {
-                        await this.backend.saveFileMetadata(uuid, existingFile);
-                    } else {
-                        // 后端未初始化时使用JSON分片
-                        this.markChanged();
-                        this.markShardDirty(uuid, 'existing file content changed (hash/size/mtime)');
-                        this.scheduleSave();
-                    }
+                    await this.persistBackendMutation(
+                        'existing file content changed (hash/size/mtime)',
+                        async (backend) => {
+                            await backend.saveFileMetadata(uuid, existingFile);
+                        },
+                        { dirtyUuids: [uuid] }
+                    );
                     
                     if (!isDirectory) { this.markAncestorsDirty(filePath); }
                 }
@@ -1252,16 +1579,14 @@ export class FileTrackingDataManager {
             this.database.files[uuid] = metadata;
             this.database.pathToUuid[key] = uuid;
 
-            // 使用数据库后端持久化
-            if (this.backend && this.backendInitialized) {
-                await this.backend.saveFileMetadata(uuid, metadata);
-                await this.backend.savePathMapping(key, uuid);
-            } else {
-                // 后端未初始化时使用JSON分片
-                this.markChanged();
-                this.markShardDirty(uuid, existingFile ? 'recreate metadata (missing shard loaded later)' : 'new file tracked');
-                this.scheduleSave();
-            }
+            await this.persistBackendMutation(
+                existingFile ? 'recreate metadata (missing shard loaded later)' : 'new file tracked',
+                async (backend) => {
+                    await backend.saveFileMetadata(uuid, metadata);
+                    await backend.savePathMapping(key, uuid);
+                },
+                { dirtyUuids: [uuid] }
+            );
 
             // 更新父目录聚合哈希
             if (!isDirectory) {
@@ -1289,19 +1614,35 @@ export class FileTrackingDataManager {
         const key = this.toRelKey(filePath);
         const uuid = this.database.pathToUuid[key];
         if (uuid) {
+            const rawMetadata = this.database.files[uuid] || await this.getMetaAsync(uuid, true);
+            const removedWritingStats = rawMetadata?.writingStats;
+            const hadWritingStats = !!removedWritingStats || !!(await this.getWritingFileSummaryAsync(uuid));
             // 更新内存数据库
             delete this.database.files[uuid];
             delete this.database.pathToUuid[key];
             
-            // 使用数据库后端持久化
-            if (this.backend && this.backendInitialized) {
-                await this.backend.deleteFileMetadata(uuid);
-                await this.backend.deletePathMapping(key);
-            } else {
-                // 后端未初始化时使用JSON分片
-                this.removedShardUuids.add(uuid);
-                this.markChanged();
-                this.scheduleSave();
+            await this.persistBackendMutation(
+                'remove file',
+                async (backend) => {
+                    await backend.deleteFileMetadata(uuid);
+                    await backend.deletePathMapping(key);
+                },
+                { removedUuids: [uuid] }
+            );
+
+            try {
+                await this.deleteWritingFileSummary(uuid);
+                if (removedWritingStats) {
+                    const updated = await this.updateWritingProjectSummaryIncrementally(removedWritingStats, undefined);
+                    if (!updated) {
+                        this.invalidateWritingProjectSummary('file-removed');
+                    }
+                } else if (hadWritingStats) {
+                    this.invalidateWritingProjectSummary('file-removed');
+                }
+            } catch (error) {
+                console.warn(`[FileTracking] 删除 writing file summary 失败 uuid=${uuid}`, error);
+                this.invalidateWritingProjectSummary('file-removed');
             }
             
             this.markAncestorsDirty(filePath);
@@ -1329,18 +1670,21 @@ export class FileTrackingDataManager {
             delete this.database.pathToUuid[oldKey];
             this.database.pathToUuid[newKey] = uuid;
 
-            // 使用数据库后端持久化
-            if (this.backend && this.backendInitialized) {
-                if (metadata) {
-                    await this.backend.saveFileMetadata(uuid, metadata);
-                }
-                await this.backend.deletePathMapping(oldKey);
-                await this.backend.savePathMapping(newKey, uuid);
-            } else {
-                // 后端未初始化时使用JSON分片
-                this.markChanged();
-                this.markShardDirty(uuid, 'rename file path/metadata changed');
-                this.scheduleSave();
+            await this.persistBackendMutation(
+                'rename file path/metadata changed',
+                async (backend) => {
+                    if (metadata) {
+                        await backend.saveFileMetadata(uuid, metadata);
+                    }
+                    await backend.deletePathMapping(oldKey);
+                    await backend.savePathMapping(newKey, uuid);
+                },
+                { dirtyUuids: [uuid] }
+            );
+            try {
+                await this.syncWritingFileSummaryPath(uuid, metadata?.filePath || this.toAbsPath(newKey));
+            } catch (error) {
+                console.warn(`[FileTracking] 更新 writing file summary 路径失败 uuid=${uuid}`, error);
             }
             this.markAncestorsDirty(newPath);
             this.stats.renameFile++;
@@ -1360,6 +1704,8 @@ export class FileTrackingDataManager {
         const newRelPrefix = this.normKeyLike(this.toRelKey(newDir)) + '/';
 
         const entries = Object.entries(this.database.pathToUuid);
+        const mappingUpdates: Array<{ oldKey: string; newKey: string; uuid: string }> = [];
+        const touchedUuids: string[] = [];
         let changed = false;
 
         for (const [key, uuid] of entries) {
@@ -1374,6 +1720,8 @@ export class FileTrackingDataManager {
             // 更新 pathToUuid 映射（删旧写新）
             delete this.database.pathToUuid[key];
             this.database.pathToUuid[newKey] = uuid;
+            mappingUpdates.push({ oldKey: key, newKey, uuid });
+            touchedUuids.push(uuid);
 
             // 更新元数据的绝对路径及派生字段
             const meta = this.database.files[uuid];
@@ -1384,19 +1732,35 @@ export class FileTrackingDataManager {
                 meta.fileExtension = path.extname(newAbs).toLowerCase();
                 meta.updatedAt = Date.now();
                 meta.lastTrackedAt = Date.now();
-                this.markShardDirty(uuid, 'rename directory children path update');
             }
 
             changed = true;
         }
 
         if (changed) {
-            this.markChanged();
-            this.scheduleSave();
+            const metadataUpdates = mappingUpdates
+                .map(({ uuid }) => this.database.files[uuid])
+                .filter((meta): meta is FileMetadata => !!meta);
+            void this.persistBackendMutation(
+                'rename directory children path update',
+                async (backend) => {
+                    if (metadataUpdates.length > 0) {
+                        await backend.saveFileMetadataBatch(metadataUpdates.map((metadata) => ({ uuid: metadata.uuid, metadata })));
+                    }
+                    for (const { oldKey } of mappingUpdates) {
+                        await backend.deletePathMapping(oldKey);
+                    }
+                    await backend.savePathMappingBatch(mappingUpdates.map(({ newKey, uuid }) => ({ path: newKey, uuid })));
+                },
+                { dirtyUuids: touchedUuids }
+            );
             // 两侧目录的聚合哈希都可能变化：旧目录失去子项，新目录获得子项
             this.markAncestorsDirty(oldDir);
             this.markAncestorsDirty(newDir);
             this.stats.renameDirChildren++;
+            void this.syncWritingFileSummaryPathsForDirectoryRename(oldDir, newDir).catch((error) => {
+                console.warn('[FileTracking] 批量更新 writing file summary 路径失败', error);
+            });
         }
     }
 
@@ -1415,17 +1779,19 @@ export class FileTrackingDataManager {
         sessions?: { start: number; end: number }[];
         achievedMilestones?: number[]; // 已达成的里程碑目标
     }): Promise<void> {
-        const uuid = this.getFileUuid(filePath);
+        const normalizedPath = this.toAbsPath(this.toRelKey(filePath));
+        if (!this.isInsideWorkspace(normalizedPath)) {
+            return;
+        }
+
+        const uuid = this.getFileUuid(normalizedPath);
         if (uuid) {
-            const metadata = this.database.files[uuid];
+            const metadata = this.database.files[uuid] || await this.getMetaAsync(uuid, true);
             if (metadata) {
                 // 启动快照/索引惰性加载下，内存 meta 可能缺失 writingStats；尝试从后端/分片补全
                 if (!metadata.writingStats) {
                     try {
-                        const persisted = this.backend && this.backendInitialized
-                            ? await this.backend.loadFileMetadata(uuid).catch(() => undefined)
-                            : await this.readSingleShardAsync(uuid);
-                        const persistedObj = typeof persisted === 'string' ? JSON.parse(persisted) : persisted;
+                        const persistedObj = await this.loadPersistedMetadata(uuid);
                         if (persistedObj?.writingStats) {
                             metadata.writingStats = persistedObj.writingStats;
                         }
@@ -1444,6 +1810,12 @@ export class FileTrackingDataManager {
                     };
                 }
                 const prev = metadata.writingStats;
+                const prevSnapshot = {
+                    ...prev,
+                    buckets: prev.buckets ? prev.buckets.map(bucket => ({ ...bucket })) : undefined,
+                    sessions: prev.sessions ? prev.sessions.map(session => ({ ...session })) : undefined,
+                    achievedMilestones: prev.achievedMilestones ? [...prev.achievedMilestones] : undefined,
+                };
                 // 构造新的临时对象以比较变化
                 const next = { ...prev } as typeof prev;
                 if (stats.totalMillis !== undefined) { next.totalMillis = stats.totalMillis; }
@@ -1476,18 +1848,26 @@ export class FileTrackingDataManager {
                     if (bucketsChanged) { reasonParts.push('buckets'); }
                     if (sessionsChanged) { reasonParts.push('sessions'); }
                     if (milestonesChanged) { reasonParts.push('achievedMilestones'); }
-                    console.log(`[FileTracking] writingStats diff -> ${reasonParts.join(',') || 'unknown'} file=${filePath}`);
+                    console.log(`[FileTracking] writingStats diff -> ${reasonParts.join(',') || 'unknown'} file=${normalizedPath}`);
                     Object.assign(prev, next);
                     metadata.updatedAt = Date.now();
 
-                    // 使用数据库后端持久化
-                    if (this.backend && this.backendInitialized) {
-                        await this.backend.saveFileMetadata(uuid, metadata);
-                    } else {
-                        // 后端未初始化时使用JSON分片
-                        this.markChanged();
-                        this.markShardDirty(uuid, 'writingStats changed');
-                        this.scheduleSave();
+                    await this.persistBackendMutation(
+                        'writingStats changed',
+                        async (backend) => {
+                            await backend.saveFileMetadata(uuid, metadata);
+                        },
+                        { dirtyUuids: [uuid] }
+                    );
+                    try {
+                        await this.syncWritingFileSummaryForMetadata(uuid, metadata.filePath || normalizedPath, metadata.writingStats);
+                        const updated = await this.updateWritingProjectSummaryIncrementally(prevSnapshot, metadata.writingStats);
+                        if (!updated) {
+                            this.invalidateWritingProjectSummary('writing-stats-updated');
+                        }
+                    } catch (error) {
+                        console.warn(`[FileTracking] 持久化 writing file summary 失败 uuid=${uuid}`, error);
+                        this.invalidateWritingProjectSummary('writing-stats-updated');
                     }
                     this.stats.writingStatsUpdates++;
                 }
@@ -1520,15 +1900,13 @@ export class FileTrackingDataManager {
         metadata.updatedAt = Date.now();
         metadata.lastTrackedAt = Date.now();
         
-        // 使用数据库后端持久化
-        if (this.backend && this.backendInitialized) {
-            await this.backend.saveFileMetadata(uuid, metadata);
-        } else {
-            // 后端未初始化时使用JSON分片
-            this.markChanged();
-            this.markShardDirty(uuid, 'wordCountStats changed');
-            this.scheduleSave();
-        }
+        await this.persistBackendMutation(
+            'wordCountStats changed',
+            async (backend) => {
+                await backend.saveFileMetadata(uuid, metadata);
+            },
+            { dirtyUuids: [uuid] }
+        );
         this.stats.wordCountUpdates++;
     }
 
@@ -1542,9 +1920,13 @@ export class FileTrackingDataManager {
         meta.isTemporary = true;
         meta.updatedAt = Date.now();
         meta.lastTrackedAt = Date.now();
-        this.markChanged();
-        this.markShardDirty(uuid, 'mark temporary');
-        this.scheduleSave();
+        void this.persistBackendMutation(
+            'mark temporary',
+            async (backend) => {
+                await backend.saveFileMetadata(uuid, meta);
+            },
+            { dirtyUuids: [uuid] }
+        );
         this.stats.markTemp++;
     }
     /** 取消临时标记（文件已保存） */
@@ -1557,9 +1939,13 @@ export class FileTrackingDataManager {
         meta.isTemporary = false;
         meta.updatedAt = Date.now();
         meta.lastTrackedAt = Date.now();
-        this.markChanged();
-        this.markShardDirty(uuid, 'mark saved');
-        this.scheduleSave();
+        void this.persistBackendMutation(
+            'mark saved',
+            async (backend) => {
+                await backend.saveFileMetadata(uuid, meta);
+            },
+            { dirtyUuids: [uuid] }
+        );
         this.stats.markSaved++;
     }
 
@@ -1638,7 +2024,10 @@ export class FileTrackingDataManager {
 
     /** 异步读取单个分片（不抛错，失败返回 undefined） */
     private async readSingleShardAsync(uuid: string): Promise<FileMetadata | undefined> {
-        const p = this.shardFilePath(uuid);
+        if (!this.shouldUseLocalShardFallback()) {
+            return undefined;
+        }
+        const p = this.shardFilePath(uuid, false);
         try {
             const raw = await fs.promises.readFile(p, 'utf8'); // 不要先 existsSync
             const meta = JSON.parse(raw) as FileMetadata;
@@ -1652,33 +2041,656 @@ export class FileTrackingDataManager {
         }
     }
 
+    private normalizeLoadedMetadata(raw: any): FileMetadata | undefined {
+        if (!raw) { return undefined; }
+        const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!meta || !meta.uuid) { return undefined; }
+        if (meta.filePath) { meta.filePath = this.toAbsPath(meta.filePath); }
+        return meta as FileMetadata;
+    }
 
-    /** 异步获取某 uuid 的元数据；可选写入内存缓存以便后续同步 API 复用 */
-    private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
-        const mem = this.database.files[uuid];
-        if (mem) { return mem; }
-        // 优先使用后端读取（若已初始化）
+    private mergePersistedMetadata(uuid: string, cached: FileMetadata, persisted?: FileMetadata): FileMetadata {
+        if (!persisted) { return cached; }
+
+        const merged = { ...persisted, ...cached } as FileMetadata;
+        if (!cached.writingStats && persisted.writingStats) {
+            merged.writingStats = persisted.writingStats;
+        }
+        if (!cached.wordCountStats && persisted.wordCountStats) {
+            merged.wordCountStats = persisted.wordCountStats;
+        }
+        if (!cached.createdAt && persisted.createdAt) {
+            merged.createdAt = persisted.createdAt;
+        }
+        if (!cached.lastTrackedAt && persisted.lastTrackedAt) {
+            merged.lastTrackedAt = persisted.lastTrackedAt;
+        }
+        if (!cached.updatedAt && persisted.updatedAt) {
+            merged.updatedAt = persisted.updatedAt;
+        }
+
+        this.database.files[uuid] = merged;
+        if (merged.isDirectory) { this.indexDirFlag.add(uuid); }
+        return merged;
+    }
+
+    private async loadPersistedMetadata(uuid: string): Promise<FileMetadata | undefined> {
         if (this.backend && this.backendInitialized) {
             try {
                 const row = await this.backend.loadFileMetadata(uuid);
-                if (row) {
-                    // 后端中存储可能已经是序列化对象或字符串
-                    const metaObj = typeof row === 'string' ? JSON.parse(row) : row;
-                    if (cacheLoaded && metaObj) {
-                        // 确保 filePath 是绝对路径用于内存使用
-                        if (metaObj.filePath) { metaObj.filePath = this.toAbsPath(metaObj.filePath); }
-                        this.database.files[uuid] = metaObj;
-                        if (metaObj.isDirectory) { this.indexDirFlag.add(uuid); }
-                    }
-                    return metaObj;
-                }
+                const meta = this.normalizeLoadedMetadata(row);
+                if (meta) { return meta; }
             } catch (e) {
-                // 后端读取失败，回退到本地分片读取
                 console.warn('[FileTracking] backend.loadFileMetadata 失败，回退到分片读取', e);
             }
         }
 
-        const meta = await this.readSingleShardAsync(uuid);
+        if (!this.shouldUseLocalShardFallback()) {
+            return undefined;
+        }
+
+        return await this.readSingleShardAsync(uuid);
+    }
+
+    private setWritingSummaryState(summary: WritingProjectSummary | null, staleReason?: string): void {
+        this.writingSummaryState.ready = !!summary;
+        this.writingSummaryState.rebuilding = false;
+        this.writingSummaryState.staleReason = summary ? undefined : staleReason;
+        this.writingSummaryState.lastValidatedAt = Date.now();
+    }
+
+    public getWritingSummaryState(): {
+        ready: boolean;
+        rebuilding: boolean;
+        staleReason?: string;
+        lastValidatedAt?: number;
+    } {
+        return { ...this.writingSummaryState };
+    }
+
+    public async getWritingProjectSummaryAsync(forceReload = false): Promise<WritingProjectSummary | null> {
+        if (!forceReload && this.writingProjectSummaryCache !== undefined) {
+            return this.writingProjectSummaryCache;
+        }
+
+        if (!this.backend || !this.backendInitialized) {
+            return this.writingProjectSummaryCache ?? null;
+        }
+
+        try {
+            const summary = await this.backend.loadWritingProjectSummary();
+            const invalidReason = this.validateWritingProjectSummary(summary);
+            if (invalidReason) {
+                this.writingProjectSummaryCache = null;
+                this.setWritingSummaryState(null, invalidReason);
+                this.scheduleWritingSummaryRebuild(`summary-load:${invalidReason}`);
+                return null;
+            }
+            this.writingProjectSummaryCache = summary;
+            this.setWritingSummaryState(summary);
+            return summary;
+        } catch (error) {
+            console.warn('[FileTracking] 读取 writing project summary 失败', error);
+            this.setWritingSummaryState(null, 'load-failed');
+            this.scheduleWritingSummaryRebuild('summary-load:load-failed');
+            return this.writingProjectSummaryCache ?? null;
+        }
+    }
+
+    public async getWritingProjectOverviewAsync(): Promise<WritingProjectOverview | null> {
+        const summary = await this.getWritingProjectSummaryAsync();
+        if (summary) {
+            let lastActiveTime = 0;
+            for (const fileSummary of this.writingFileSummaryCache.values()) {
+                if (fileSummary.lastActiveTime > lastActiveTime) {
+                    lastActiveTime = fileSummary.lastActiveTime;
+                }
+            }
+
+            return {
+                totalMillisAll: summary.totalMillisAll,
+                filesWithWritingStats: summary.filesWithWritingStats,
+                lastActiveTime,
+                updatedAt: summary.updatedAt,
+                approximate: false,
+                source: 'project-summary',
+            };
+        }
+
+        const fileSummaries = await this.getAllWritingFileSummariesAsync();
+        if (fileSummaries.size === 0) {
+            return null;
+        }
+
+        let totalMillisAll = 0;
+        let lastActiveTime = 0;
+        let updatedAt = 0;
+
+        for (const fileSummary of fileSummaries.values()) {
+            totalMillisAll += fileSummary.totalMillis ?? 0;
+            if ((fileSummary.lastActiveTime ?? 0) > lastActiveTime) {
+                lastActiveTime = fileSummary.lastActiveTime;
+            }
+            if ((fileSummary.updatedAt ?? 0) > updatedAt) {
+                updatedAt = fileSummary.updatedAt;
+            }
+        }
+
+        return {
+            totalMillisAll: Math.max(0, totalMillisAll),
+            filesWithWritingStats: fileSummaries.size,
+            lastActiveTime,
+            updatedAt,
+            approximate: true,
+            source: 'file-summaries',
+        };
+    }
+
+    public async getWritingFileSummaryAsync(uuid: string): Promise<WritingFileSummary | undefined> {
+        const cached = this.writingFileSummaryCache.get(uuid);
+        if (cached) {
+            return cached;
+        }
+
+        if (!this.backend || !this.backendInitialized) {
+            return undefined;
+        }
+
+        try {
+            const summary = await this.backend.loadWritingFileSummary(uuid);
+            if (!summary) {
+                return undefined;
+            }
+            this.writingFileSummaryCache.set(uuid, summary);
+            return summary;
+        } catch (error) {
+            console.warn(`[FileTracking] 读取 writing file summary 失败 uuid=${uuid}`, error);
+            return undefined;
+        }
+    }
+
+    public async getAllWritingFileSummariesAsync(forceReload = false): Promise<Map<string, WritingFileSummary>> {
+        if (!forceReload && this.writingFileSummaryCache.size > 0) {
+            return new Map(this.writingFileSummaryCache);
+        }
+
+        if (!this.backend || !this.backendInitialized) {
+            return new Map(this.writingFileSummaryCache);
+        }
+
+        try {
+            const summaries = await this.backend.loadAllWritingFileSummaries();
+            this.writingFileSummaryCache = new Map(summaries);
+            return new Map(summaries);
+        } catch (error) {
+            console.warn('[FileTracking] 读取全部 writing file summaries 失败', error);
+            return new Map(this.writingFileSummaryCache);
+        }
+    }
+
+    private buildEmptyWritingProjectSummary(bucketSizeMs = this.getTimeStatsBucketSizeMs(), todayKey = this.getTodayKey()): WritingProjectSummary {
+        const hourly: Record<number, number> = {};
+        const quarterHourly: Record<number, number> = {};
+        for (let hour = 0; hour < 24; hour++) {
+            hourly[hour] = 0;
+        }
+        for (let quarter = 0; quarter < 96; quarter++) {
+            quarterHourly[quarter] = 0;
+        }
+
+        return {
+            version: this.WRITING_SUMMARY_SCHEMA_VERSION,
+            bucketSizeMs,
+            todayKey,
+            totalMillisAll: 0,
+            today: {
+                millis: 0,
+                chars: 0,
+                avgCPM: 0,
+                peakCPM: 0,
+                hourly,
+                quarterHourly,
+            },
+            heatmap: {},
+            filesWithWritingStats: 0,
+            updatedAt: Date.now(),
+        };
+    }
+
+    private isFiniteNonNegativeNumber(value: unknown): value is number {
+        return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    }
+
+    private validateWritingProjectSummary(summary: WritingProjectSummary | null): string | undefined {
+        if (!summary) { return 'missing'; }
+        if (summary.version !== this.WRITING_SUMMARY_SCHEMA_VERSION) { return 'version-mismatch'; }
+        if (summary.bucketSizeMs !== this.getTimeStatsBucketSizeMs()) { return 'bucket-size-mismatch'; }
+        if (!this.isFiniteNonNegativeNumber(summary.todayKey)) { return 'invalid-today-key'; }
+        if (!this.isFiniteNonNegativeNumber(summary.totalMillisAll)) { return 'invalid-total-millis'; }
+        if (!this.isFiniteNonNegativeNumber(summary.filesWithWritingStats)) { return 'invalid-files-count'; }
+        if (!summary.today || typeof summary.today !== 'object') { return 'invalid-today'; }
+        if (!summary.heatmap || typeof summary.heatmap !== 'object') { return 'invalid-heatmap'; }
+
+        const today = summary.today;
+        if (!this.isFiniteNonNegativeNumber(today.millis) ||
+            !this.isFiniteNonNegativeNumber(today.chars) ||
+            !this.isFiniteNonNegativeNumber(today.avgCPM) ||
+            !this.isFiniteNonNegativeNumber(today.peakCPM)) {
+            return 'invalid-today-values';
+        }
+
+        for (let hour = 0; hour < 24; hour++) {
+            if (!this.isFiniteNonNegativeNumber(today.hourly?.[hour])) {
+                return 'invalid-hourly';
+            }
+        }
+        for (let quarter = 0; quarter < 96; quarter++) {
+            if (!this.isFiniteNonNegativeNumber(today.quarterHourly?.[quarter])) {
+                return 'invalid-quarter-hourly';
+            }
+        }
+        for (const value of Object.values(summary.heatmap)) {
+            if (!this.isFiniteNonNegativeNumber(value)) {
+                return 'invalid-heatmap-values';
+            }
+        }
+
+        return undefined;
+    }
+
+    private validateWritingFileSummary(summary: WritingFileSummary | null | undefined): string | undefined {
+        if (!summary) { return 'missing'; }
+        if (!summary.uuid || typeof summary.uuid !== 'string') { return 'invalid-uuid'; }
+        if (!summary.path || typeof summary.path !== 'string') { return 'invalid-path'; }
+        if (!this.isFiniteNonNegativeNumber(summary.totalMillis) ||
+            !this.isFiniteNonNegativeNumber(summary.charsAdded) ||
+            !this.isFiniteNonNegativeNumber(summary.charsDeleted) ||
+            !this.isFiniteNonNegativeNumber(summary.sessionsCount) ||
+            !this.isFiniteNonNegativeNumber(summary.averageCPM) ||
+            !this.isFiniteNonNegativeNumber(summary.lastActiveTime) ||
+            !this.isFiniteNonNegativeNumber(summary.todayKey) ||
+            !this.isFiniteNonNegativeNumber(summary.todayPeakCPM)) {
+            return 'invalid-values';
+        }
+        return undefined;
+    }
+
+    private applyWritingStatsContributionToProjectSummary(
+        summary: WritingProjectSummary,
+        stats: NonNullable<FileMetadata['writingStats']>,
+        direction: 1 | -1
+    ): void {
+        summary.totalMillisAll += (stats.totalMillis ?? 0) * direction;
+        summary.filesWithWritingStats += direction;
+
+        const dayEnd = summary.todayKey + 24 * 60 * 60 * 1000;
+        const msDay = 24 * 60 * 60 * 1000;
+        const heatDays = 364;
+        const heatStart = summary.todayKey - heatDays * msDay;
+
+        for (const session of stats.sessions || []) {
+            const start = Math.max(session.start, summary.todayKey);
+            const end = Math.min(session.end, dayEnd);
+            if (end > start) {
+                summary.today.millis += (end - start) * direction;
+            }
+        }
+
+        for (const bucket of stats.buckets || []) {
+            const timestamp = bucket.start;
+            if (timestamp >= heatStart) {
+                const dayTs = this.getTodayKey(timestamp);
+                const nextValue = (summary.heatmap[dayTs] ?? 0) + bucket.charsAdded * direction;
+                if (nextValue <= 0) {
+                    delete summary.heatmap[dayTs];
+                } else {
+                    summary.heatmap[dayTs] = nextValue;
+                }
+            }
+
+            if (timestamp >= summary.todayKey && timestamp < dayEnd) {
+                summary.today.chars += bucket.charsAdded * direction;
+                const date = new Date(timestamp);
+                const hour = date.getHours();
+                const quarterHourIndex = hour * 4 + Math.floor(date.getMinutes() / 15);
+                summary.today.hourly[hour] += bucket.charsAdded * direction;
+                summary.today.quarterHourly[quarterHourIndex] += bucket.charsAdded * direction;
+            }
+        }
+
+        summary.totalMillisAll = Math.max(0, summary.totalMillisAll);
+        summary.filesWithWritingStats = Math.max(0, summary.filesWithWritingStats);
+        summary.today.millis = Math.max(0, summary.today.millis);
+        summary.today.chars = Math.max(0, summary.today.chars);
+        for (let hour = 0; hour < 24; hour++) {
+            summary.today.hourly[hour] = Math.max(0, summary.today.hourly[hour]);
+        }
+        for (let quarter = 0; quarter < 96; quarter++) {
+            summary.today.quarterHourly[quarter] = Math.max(0, summary.today.quarterHourly[quarter]);
+        }
+    }
+
+    private cloneWritingProjectSummary(summary: WritingProjectSummary): WritingProjectSummary {
+        return {
+            ...summary,
+            today: {
+                ...summary.today,
+                hourly: { ...summary.today.hourly },
+                quarterHourly: { ...summary.today.quarterHourly },
+            },
+            heatmap: { ...summary.heatmap },
+        };
+    }
+
+    private recomputeProjectPeakFromFileSummaries(todayKey: number): number {
+        let peak = 0;
+        for (const summary of this.writingFileSummaryCache.values()) {
+            if (summary.todayKey !== todayKey) {
+                continue;
+            }
+            if (summary.todayPeakCPM > peak) {
+                peak = summary.todayPeakCPM;
+            }
+        }
+        return peak;
+    }
+
+    private async persistWritingProjectSummary(summary: WritingProjectSummary): Promise<void> {
+        this.writingProjectSummaryCache = summary;
+        await this.persistBackendMutation(
+            'save writing project summary',
+            async (backend) => {
+                await backend.saveWritingProjectSummary(summary);
+            }
+        );
+        this.setWritingSummaryState(summary);
+    }
+
+    private async updateWritingProjectSummaryIncrementally(
+        prevStats?: NonNullable<FileMetadata['writingStats']>,
+        nextStats?: NonNullable<FileMetadata['writingStats']>
+    ): Promise<boolean> {
+        if (!this.writingProjectSummaryCache) {
+            return false;
+        }
+
+        const invalidReason = this.validateWritingProjectSummary(this.writingProjectSummaryCache);
+        if (invalidReason) {
+            return false;
+        }
+
+        const summary = this.cloneWritingProjectSummary(this.writingProjectSummaryCache);
+        if (prevStats) {
+            this.applyWritingStatsContributionToProjectSummary(summary, prevStats, -1);
+        }
+        if (nextStats) {
+            this.applyWritingStatsContributionToProjectSummary(summary, nextStats, 1);
+        }
+
+        summary.today.peakCPM = this.recomputeProjectPeakFromFileSummaries(summary.todayKey);
+        summary.today.avgCPM = summary.today.millis > 0
+            ? Math.round(summary.today.chars / (summary.today.millis / 60000))
+            : 0;
+        summary.updatedAt = Date.now();
+
+        await this.persistWritingProjectSummary(summary);
+        return true;
+    }
+
+    private async rebuildWritingProjectSummary(reason: string): Promise<void> {
+        if (!this.backend || !this.backendInitialized) {
+            return;
+        }
+
+        if (this.writingSummaryRebuildPromise) {
+            this.pendingWritingSummaryRebuildReason = reason;
+            return this.writingSummaryRebuildPromise;
+        }
+
+        const run = async () => {
+            this.writingSummaryState.rebuilding = true;
+            this.writingSummaryState.staleReason = reason;
+
+            try {
+                const pathMap = await this.backend!.getAllPathMappings();
+                const uniqueUuids = Array.from(new Set(pathMap.values()));
+                const metaMap = typeof this.backend!.loadFileMetadataBatch === 'function'
+                    ? await this.backend!.loadFileMetadataBatch(uniqueUuids)
+                    : new Map<string, any>();
+
+                const projectSummary = this.buildEmptyWritingProjectSummary();
+                const fileSummaries = new Map<string, WritingFileSummary>();
+
+                for (const uuid of uniqueUuids) {
+                    let metadata: FileMetadata | undefined = this.database.files[uuid];
+
+                    if (!metadata || !metadata.writingStats) {
+                        const loaded = metaMap.get(uuid);
+                        const normalized = this.normalizeLoadedMetadata(loaded);
+                        if (normalized) {
+                            metadata = this.database.files[uuid]
+                                ? this.mergePersistedMetadata(uuid, this.database.files[uuid], normalized)
+                                : normalized;
+                        }
+                    }
+
+                    if (!metadata || !metadata.writingStats) {
+                        metadata = await this.getMetaAsync(uuid, true);
+                    }
+
+                    if (!metadata?.writingStats) {
+                        continue;
+                    }
+
+                    this.applyWritingStatsContributionToProjectSummary(projectSummary, metadata.writingStats, 1);
+                    fileSummaries.set(uuid, this.buildWritingFileSummary(uuid, metadata.filePath, metadata.writingStats));
+                }
+
+                projectSummary.today.avgCPM = projectSummary.today.millis > 0
+                    ? Math.round(projectSummary.today.chars / (projectSummary.today.millis / 60000))
+                    : 0;
+                projectSummary.updatedAt = Date.now();
+
+                const existing = await this.backend!.loadAllWritingFileSummaries();
+                await this.backend!.saveWritingFileSummaryBatch(Array.from(fileSummaries.values()));
+                for (const uuid of existing.keys()) {
+                    if (!fileSummaries.has(uuid)) {
+                        await this.backend!.deleteWritingFileSummary(uuid);
+                    }
+                }
+                await this.backend!.saveWritingProjectSummary(projectSummary);
+
+                this.writingFileSummaryCache = fileSummaries;
+                await this.persistWritingProjectSummary(projectSummary);
+            } catch (error) {
+                console.warn('[FileTracking] 写作总表后台重建失败', error);
+                this.writingSummaryState.rebuilding = false;
+                this.writingSummaryState.staleReason = `rebuild-failed:${reason}`;
+                this.writingSummaryState.lastValidatedAt = Date.now();
+                if (!this.writingProjectSummaryCache) {
+                    this.writingSummaryState.ready = false;
+                }
+            }
+        };
+
+        this.writingSummaryRebuildPromise = run().finally(() => {
+            this.writingSummaryRebuildPromise = null;
+            const pendingReason = this.pendingWritingSummaryRebuildReason;
+            this.pendingWritingSummaryRebuildReason = null;
+            if (pendingReason) {
+                this.scheduleWritingSummaryRebuild(pendingReason);
+            }
+        });
+
+        return this.writingSummaryRebuildPromise;
+    }
+
+    private scheduleWritingSummaryRebuild(reason: string): void {
+        if (!this.backend || !this.backendInitialized) {
+            return;
+        }
+
+        this.writingSummaryState.rebuilding = true;
+        this.writingSummaryState.staleReason = reason;
+        if (this.writingSummaryRebuildTimer) {
+            clearTimeout(this.writingSummaryRebuildTimer);
+        }
+
+        this.writingSummaryRebuildTimer = setTimeout(() => {
+            this.writingSummaryRebuildTimer = null;
+            void this.rebuildWritingProjectSummary(reason);
+        }, this.WRITING_SUMMARY_REBUILD_DEBOUNCE_MS);
+    }
+
+    private invalidateWritingProjectSummary(reason: string): void {
+        this.writingSummaryState.ready = !!this.writingProjectSummaryCache;
+        this.writingSummaryState.rebuilding = !!this.backendInitialized;
+        this.writingSummaryState.staleReason = reason;
+        this.writingSummaryState.lastValidatedAt = Date.now();
+        this.scheduleWritingSummaryRebuild(reason);
+    }
+
+    private getTodayKey(ts = Date.now()): number {
+        const date = new Date(ts);
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    }
+
+    private getTimeStatsBucketSizeMs(): number {
+        return vscode.workspace.getConfiguration('AndreaNovelHelper.timeStats').get<number>('bucketSizeMs', 60000) ?? 60000;
+    }
+
+    private buildWritingFileSummary(
+        uuid: string,
+        filePath: string,
+        stats: NonNullable<FileMetadata['writingStats']>
+    ): WritingFileSummary {
+        const todayKey = this.getTodayKey();
+        const dayEnd = todayKey + 24 * 60 * 60 * 1000;
+        const bucketSizeMs = this.getTimeStatsBucketSizeMs();
+        let todayPeakCPM = 0;
+
+        for (const bucket of stats.buckets || []) {
+            if (bucket.start < todayKey || bucket.start >= dayEnd) {
+                continue;
+            }
+            const cpm = Math.round((bucket.charsAdded * 60000) / bucketSizeMs);
+            if (cpm > todayPeakCPM) {
+                todayPeakCPM = cpm;
+            }
+        }
+
+        return {
+            uuid,
+            path: filePath,
+            totalMillis: stats.totalMillis ?? 0,
+            charsAdded: stats.charsAdded ?? 0,
+            charsDeleted: stats.charsDeleted ?? 0,
+            sessionsCount: stats.sessionsCount ?? 0,
+            averageCPM: stats.averageCPM ?? 0,
+            lastActiveTime: stats.lastActiveTime ?? 0,
+            todayKey,
+            todayPeakCPM,
+            updatedAt: Date.now(),
+        };
+    }
+
+    private async persistWritingFileSummary(summary: WritingFileSummary): Promise<void> {
+        this.writingFileSummaryCache.set(summary.uuid, summary);
+        await this.persistBackendMutation(
+            'save writing file summary',
+            async (backend) => {
+                await backend.saveWritingFileSummary(summary);
+            }
+        );
+    }
+
+    private async deleteWritingFileSummary(uuid: string): Promise<void> {
+        this.writingFileSummaryCache.delete(uuid);
+        await this.persistBackendMutation(
+            'delete writing file summary',
+            async (backend) => {
+                await backend.deleteWritingFileSummary(uuid);
+            }
+        );
+    }
+
+    private async syncWritingFileSummaryForMetadata(
+        uuid: string,
+        filePath: string,
+        stats?: FileMetadata['writingStats']
+    ): Promise<void> {
+        if (!stats) {
+            await this.deleteWritingFileSummary(uuid);
+            return;
+        }
+        await this.persistWritingFileSummary(this.buildWritingFileSummary(uuid, filePath, stats));
+    }
+
+    private async syncWritingFileSummaryPath(uuid: string, filePath: string): Promise<void> {
+        const summary = await this.getWritingFileSummaryAsync(uuid);
+        if (!summary) {
+            return;
+        }
+        await this.persistWritingFileSummary({
+            ...summary,
+            path: filePath,
+            updatedAt: Date.now(),
+        });
+    }
+
+    private async syncWritingFileSummaryPathsForDirectoryRename(oldDir: string, newDir: string): Promise<void> {
+        const summaries = await this.getAllWritingFileSummariesAsync();
+        if (summaries.size === 0) {
+            return;
+        }
+
+        const oldRoot = path.resolve(oldDir);
+        const oldPrefix = oldRoot + path.sep;
+        const newRoot = path.resolve(newDir);
+        const updates: WritingFileSummary[] = [];
+
+        for (const summary of summaries.values()) {
+            const currentPath = path.resolve(summary.path);
+            if (!(currentPath === oldRoot || currentPath.startsWith(oldPrefix))) {
+                continue;
+            }
+            const relative = path.relative(oldRoot, currentPath);
+            updates.push({
+                ...summary,
+                path: relative ? path.join(newRoot, relative) : newRoot,
+                updatedAt: Date.now(),
+            });
+        }
+
+        if (updates.length === 0) {
+            return;
+        }
+
+        for (const summary of updates) {
+            this.writingFileSummaryCache.set(summary.uuid, summary);
+        }
+        await this.persistBackendMutation(
+            'batch update writing file summary paths',
+            async (backend) => {
+                await backend.saveWritingFileSummaryBatch(updates);
+            }
+        );
+    }
+
+    /** 异步获取某 uuid 的元数据；可选写入内存缓存以便后续同步 API 复用 */
+    private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
+        const mem = this.database.files[uuid];
+        if (mem) {
+            // 启动快照里的 metadata 是精简版，可能没有 writingStats。
+            // 不能因为内存命中就阻止从 SQLite/分片补全历史写作统计。
+            if (!mem.writingStats) {
+                const persisted = await this.loadPersistedMetadata(uuid).catch(() => undefined);
+                return cacheLoaded ? this.mergePersistedMetadata(uuid, mem, persisted) : (persisted || mem);
+            }
+            return mem;
+        }
+
+        const meta = await this.loadPersistedMetadata(uuid);
         if (cacheLoaded && meta) {
             this.database.files[uuid] = meta;
             if (meta.isDirectory) { this.indexDirFlag.add(uuid); }
@@ -1977,6 +2989,10 @@ export class FileTrackingDataManager {
 
     // ===== 分片存储逻辑 =====
     private migrateIfNeeded(): void {
+        if (this.backendType === 'sqlite') {
+            return;
+        }
+
         if (!fs.existsSync(this.indexPath) && fs.existsSync(this.dbPath)) {
             try {
                 const raw = fs.readFileSync(this.dbPath, 'utf8');
@@ -1999,10 +3015,10 @@ export class FileTrackingDataManager {
         }
     }
 
-    private shardFilePath(uuid: string): string {
+    private shardFilePath(uuid: string, createDir = true): string {
         const prefix = uuid.slice(0, 2);
         const dir = path.join(this.dbDir, prefix);
-        if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
+        if (createDir && !fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
         return path.join(dir, uuid + '.json');
     }
     private writeShard(meta: FileMetadata): void {
@@ -2096,8 +3112,9 @@ export class FileTrackingDataManager {
     }
 
     private readSingleShard(uuid: string): FileMetadata | undefined {
+        if (!this.shouldUseLocalShardFallback()) { return undefined; }
         try {
-            const p = this.shardFilePath(uuid);
+            const p = this.shardFilePath(uuid, false);
             if (!fs.existsSync(p)) { return undefined; }
             let meta = JSON.parse(fs.readFileSync(p, 'utf8')) as FileMetadata;
             if (meta && meta.filePath) {
@@ -2115,7 +3132,7 @@ export class FileTrackingDataManager {
         }
     }
     private ensureAllShardsLoaded(): void {
-        if (!this.lazyLoadShards) { return; }
+        if (!this.lazyLoadShards || !this.shouldUseLocalShardFallback()) { return; }
         const total = Object.keys(this.database.pathToUuid).length;
         if (Object.keys(this.database.files).length >= total) { return; }
         for (const u of Object.values(this.database.pathToUuid)) {
@@ -2186,26 +3203,40 @@ export class FileTrackingDataManager {
         this.database.pathToUuid = canonicalMap;
         this.markChanged();
 
-        if (this.backend && this.backendInitialized) {
-            const oldMappings = await this.backend.getAllPathMappings();
+        const applyBackendRepair = async (backend: IDatabaseBackend) => {
+            const oldMappings = await backend.getAllPathMappings();
             for (const rawKey of oldMappings.keys()) {
                 if (!Object.prototype.hasOwnProperty.call(canonicalMap, rawKey)) {
-                    await this.backend.deletePathMapping(rawKey);
+                    if (typeof backend.deletePathMappingRaw === 'function') {
+                        await backend.deletePathMappingRaw(rawKey);
+                    } else {
+                        await backend.deletePathMapping(rawKey);
+                    }
                 }
             }
-            await this.backend.savePathMappingBatch(
+            await backend.savePathMappingBatch(
                 Object.entries(canonicalMap).map(([pathKey, uuid]) => ({ path: pathKey, uuid }))
             );
             if (touchedMeta.size > 0) {
-                await this.backend.saveFileMetadataBatch(
+                await backend.saveFileMetadataBatch(
                     Array.from(touchedMeta.entries()).map(([uuid, metadata]) => ({ uuid, metadata }))
                 );
             }
-            await this.backend.saveIndex({
+            await backend.saveIndex({
                 version: this.DB_VERSION + '+idx1',
                 lastUpdated: Date.now(),
                 entries: this.collectCanonicalIndexEntries()
             });
+        };
+
+        if (this.backend && this.backendInitialized) {
+            await applyBackendRepair(this.backend);
+        } else if (this.shouldQueueBackendMutations()) {
+            for (const [uuid, meta] of touchedMeta.entries()) {
+                this.database.files[uuid] = meta;
+            }
+            this.stageJsonFallback('repair path mappings', { dirtyUuids: Array.from(touchedMeta.keys()) });
+            this.pendingBackendMutations.push({ reason: 'repair path mappings', run: applyBackendRepair });
         } else {
             for (const [uuid, meta] of touchedMeta.entries()) {
                 this.database.files[uuid] = meta;
@@ -2244,16 +3275,21 @@ export class FileTrackingDataManager {
             if (meta) { this.writeShard(meta); }
         }
         for (const uuid of this.removedShardUuids) {
-            try { const p = this.shardFilePath(uuid); if (fs.existsSync(p)) { fs.unlinkSync(p); } } catch {/* ignore */ }
+            try { const p = this.shardFilePath(uuid, false); if (fs.existsSync(p)) { fs.unlinkSync(p); } } catch {/* ignore */ }
         }
         this.writeIndex();
         this.dirtyShardUuids.clear();
         this.removedShardUuids.clear();
     }
     /** 兼容: 创建临时文件追踪记录 */
-    public createTemporaryFile(filePath: string): string {
-        const existing = this.getFileUuid(filePath);
-        if (existing) { this.markFileTemporary(filePath); return existing; }
+    public createTemporaryFile(filePath: string): string | undefined {
+        const normalizedPath = this.toAbsPath(this.toRelKey(filePath));
+        if (!this.isInsideWorkspace(normalizedPath)) {
+            return undefined;
+        }
+
+        const existing = this.getFileUuid(normalizedPath);
+        if (existing) { this.markFileTemporary(normalizedPath); return existing; }
 
         // 对于工作区内已存在的文件，直接写入“正式”记录，避免写绝对键的临时分片
         const now = Date.now();
@@ -2272,7 +3308,7 @@ export class FileTrackingDataManager {
         const fileExtension = path.extname(filePath).toLowerCase();
         const meta: FileMetadata = {
             uuid,
-            filePath: this.toAbsPath(this.toRelKey(filePath)),
+            filePath: normalizedPath,
             fileName,
             fileExtension,
             size,
@@ -2285,11 +3321,16 @@ export class FileTrackingDataManager {
             updatedAt: now
         };
         this.database.files[uuid] = meta;
-        const key = this.toRelKey(filePath);
+        const key = this.toRelKey(normalizedPath);
         this.database.pathToUuid[key] = uuid;
-        this.markChanged();
-        this.markShardDirty(uuid, meta.isTemporary ? 'create temporary file' : 'create file (from temp path)');
-        this.scheduleSave();
+        void this.persistBackendMutation(
+            meta.isTemporary ? 'create temporary file' : 'create file (from temp path)',
+            async (backend) => {
+                await backend.saveFileMetadata(uuid, meta);
+                await backend.savePathMapping(key, uuid);
+            },
+            { dirtyUuids: [uuid] }
+        );
         this.stats.temporaryCreate++;
         return uuid;
     }

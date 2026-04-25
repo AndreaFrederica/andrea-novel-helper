@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { WritingFileSummary, WritingProjectSummary } from '../../database/IDatabaseBackend';
 import { FileChangeEvent, initializeFileTracker, disposeFileTracker, getFileTracker } from './fileTracker';
 export { getFileTracker, FileChangeEvent } from './fileTracker';
-import { FileMetadata } from './fileTrackingData';
+import { FileMetadata, WritingProjectOverview } from './fileTrackingData';
 
 /**
  * 全局文件追踪管理器
@@ -465,6 +466,8 @@ export type WritingStatsView = {
     sessions?: { start: number; end: number }[];
 };
 
+export type { WritingFileSummary, WritingProjectSummary, WritingProjectOverview };
+
 // ====== 新增：异步便捷函数 ======
 
 /** 异步：获取所有被追踪的文件路径列表 */
@@ -516,7 +519,7 @@ export async function getTrackingStatsAsync(): Promise<{
     return dm.getStats();
 }
 
-/** 异步：一次性获取全部写作统计（这里只取快路径的第一批） */
+/** 异步：一次性获取全部写作统计 */
 export async function getAllWritingStatsAsync(): Promise<WritingStatsView[]> {
     const tracker = getFileTracker();
     if (!tracker) {return [];}
@@ -524,37 +527,96 @@ export async function getAllWritingStatsAsync(): Promise<WritingStatsView[]> {
 
     const fn = dm?.getAllWritingStatsAsync;
     if (typeof fn === 'function') {
-        // 只等第一次 onPartial（就是快路径 fast 批次），随后立刻 resolve
-        return await new Promise<WritingStatsView[]>((resolve) => {
-            let resolved = false;
-
-            // 启动 DataManager 的并发流程，但我们不等待最终 Promise
-            // 只在第一次 onPartial 时返回
-            try {
-                fn.call(dm, {
-                    onPartial: (chunk: WritingStatsView[]) => {
-                        if (!resolved) {
-                            resolved = true;
-                            resolve(chunk ?? []);
-                        }
-                    },
-                    flushIntervalMs: 0, // 让第一次回调更及时；你实现里会 flush(true) 立即触发
-                }).catch(() => { /* 忽略慢路径的错误，反正我们不等它 */ });
-            } catch {
-                // 若签名不匹配或抛错，直接返回空
-                if (!resolved) {resolve([]);}
-            }
-
-            // 兜底：若没有快路径（fast 为空），下一轮事件循环返回空
-            //（即只要没立即触发 onPartial，就视为无快路径）
-            setTimeout(() => {
-                if (!resolved) {resolve([]);}
-            }, 0);
-        });
+        return await fn.call(dm);
     }
 
     // 老版本 DataManager：没有异步方法时走同步快路径（仅内存）
     return typeof dm.getAllWritingStats === 'function' ? dm.getAllWritingStats() : [];
+}
+
+export async function getWritingProjectSummaryAsync(): Promise<{
+    ready: boolean;
+    summary?: WritingProjectSummary;
+    staleReason?: string;
+    lastValidatedAt?: number;
+}> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return { ready: false, staleReason: 'tracker-unavailable' };
+    }
+
+    const dm: any = tracker.getDataManager();
+    const getSummaryState = dm?.getWritingSummaryState;
+    const getSummary = dm?.getWritingProjectSummaryAsync;
+
+    const state = typeof getSummaryState === 'function'
+        ? getSummaryState.call(dm)
+        : { ready: false as boolean };
+
+    if (typeof getSummary === 'function') {
+        const summary = await getSummary.call(dm);
+        return {
+            ready: !!summary,
+            summary: summary || undefined,
+            staleReason: state?.staleReason,
+            lastValidatedAt: state?.lastValidatedAt,
+        };
+    }
+
+    return {
+        ready: false,
+        staleReason: state?.staleReason || 'summary-api-unavailable',
+        lastValidatedAt: state?.lastValidatedAt,
+    };
+}
+
+export async function getWritingProjectOverviewAsync(): Promise<{
+    ready: boolean;
+    overview?: WritingProjectOverview;
+    approximate?: boolean;
+    staleReason?: string;
+    lastValidatedAt?: number;
+}> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return { ready: false, staleReason: 'tracker-unavailable' };
+    }
+
+    const dm: any = tracker.getDataManager();
+    const getSummaryState = dm?.getWritingSummaryState;
+    const getOverview = dm?.getWritingProjectOverviewAsync;
+
+    const state = typeof getSummaryState === 'function'
+        ? getSummaryState.call(dm)
+        : { ready: false as boolean };
+
+    if (typeof getOverview === 'function') {
+        const overview = await getOverview.call(dm);
+        return {
+            ready: !!overview,
+            overview: overview || undefined,
+            approximate: overview?.approximate,
+            staleReason: state?.staleReason,
+            lastValidatedAt: state?.lastValidatedAt,
+        };
+    }
+
+    return {
+        ready: false,
+        staleReason: state?.staleReason || 'overview-api-unavailable',
+        lastValidatedAt: state?.lastValidatedAt,
+    };
+}
+
+export async function getWritingFileSummaryAsync(uuid: string): Promise<WritingFileSummary | undefined> {
+    const tracker = getFileTracker();
+    if (!tracker) {return undefined;}
+    const dm: any = tracker.getDataManager();
+    const fn = dm?.getWritingFileSummaryAsync;
+    if (typeof fn === 'function') {
+        return await fn.call(dm, uuid);
+    }
+    return undefined;
 }
 
 
@@ -580,7 +642,11 @@ export async function* streamAllWritingStats(): AsyncGenerator<WritingStatsView>
 export async function getFileByUuidAsync(uuid: string): Promise<FileMetadata | undefined> {
     const tracker = getFileTracker();
     if (!tracker) {return undefined;}
-    const dm = tracker.getDataManager();
+    const dm: any = tracker.getDataManager();
+
+    if (typeof dm.getFileByUuidAsync === 'function') {
+        return await dm.getFileByUuidAsync(uuid);
+    }
 
     // 若 DataManager 没有公开异步单项读取，则用异步全量再筛选（保证不阻塞）
     const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
@@ -596,7 +662,11 @@ export async function getFileByUuidAsync(uuid: string): Promise<FileMetadata | u
 export async function getFileByPathAsync(filePath: string): Promise<FileMetadata | undefined> {
     const tracker = getFileTracker();
     if (!tracker) {return undefined;}
-    const dm = tracker.getDataManager();
+    const dm: any = tracker.getDataManager();
+
+    if (typeof dm.getFileByPathAsync === 'function') {
+        return await dm.getFileByPathAsync(filePath);
+    }
 
     const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
     if (typeof getAllFilesAsync === 'function') {
@@ -664,15 +734,13 @@ export async function getGlobalFileTrackingAsync(): Promise<{
  */
 export async function cleanAbsolutePathEntries(): Promise<number> {
     const repaired = await repairDirtyPathKeys();
-    if (repaired) {
-        return repaired.repaired + repaired.removed;
-    }
+    const repairedCount = repaired ? repaired.repaired + repaired.removed : 0;
 
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     
     if (!workspaceRoot) {
         console.warn('[FileTracking] No workspace root found');
-        return 0;
+        return repairedCount;
     }
 
     // 标准化为 POSIX 格式（统一使用正斜杠）并转小写（Windows 不区分大小写）
@@ -742,6 +810,11 @@ export async function cleanAbsolutePathEntries(): Promise<number> {
     }
     
     if (pathsToClean.length === 0) {
+        if (repairedCount > 0) {
+            vscode.window.showInformationMessage(`路径索引已修复 ${repairedCount} 项，未发现需要额外清理的绝对路径。`);
+            return repairedCount;
+        }
+
         vscode.window.showInformationMessage('没有发现需要清理的绝对路径');
         return 0;
     }
@@ -811,8 +884,12 @@ export async function cleanAbsolutePathEntries(): Promise<number> {
         if (verboseLogging) {
             console.log(`[FileTracking] Cleanup complete: ${cleanedCount} paths removed`);
         }
-        vscode.window.showInformationMessage(`成功清理 ${cleanedCount} 个绝对路径记录`);
+        if (repairedCount > 0) {
+            vscode.window.showInformationMessage(`路径索引已修复 ${repairedCount} 项，并额外清理 ${cleanedCount} 个绝对路径记录`);
+        } else {
+            vscode.window.showInformationMessage(`成功清理 ${cleanedCount} 个绝对路径记录`);
+        }
         
-        return cleanedCount;
+        return repairedCount + cleanedCount;
     });
 }

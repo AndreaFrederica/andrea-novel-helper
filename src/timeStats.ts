@@ -6,7 +6,8 @@ import {
     unregisterFileChangeCallback,
     getGlobalFileTracking,
     updateFileWritingStats,
-    getAllWritingStatsAsync
+    getWritingProjectOverviewAsync,
+    getWritingProjectSummaryAsync
 } from './utils/tracker/globalFileTracking';
 import { analyzeText, TextStats } from './utils/utils';
 import { countAndAnalyzeOffThread } from './utils/WordCount/asyncWordCounter';
@@ -243,7 +244,21 @@ function ensureIgnoreParser(): void {
         console.warn('TimeStats: 初始化忽略解析器失败', e);
     }
 }
+
+function isWorkspaceTrackedFilePath(filePath: string | undefined): filePath is string {
+    if (!filePath) { return false; }
+    const isAbsolute = path.isAbsolute(filePath) || /^[a-zA-Z]:[\\/]/.test(filePath);
+    if (!isAbsolute) { return false; }
+
+    try {
+        return !!vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath));
+    } catch {
+        return false;
+    }
+}
+
 function isFileIgnoredForTimeStats(filePath: string): boolean {
+    if (!isWorkspaceTrackedFilePath(filePath)) { return true; }
     const cfg = getConfig();
     if (!cfg.respectWcignore) { return false; }
     ensureIgnoreParser();
@@ -427,6 +442,11 @@ export async function computeZhEnCountAsync(filePath: string): Promise<{ zhChars
 // 获取或创建文件统计（接入全局追踪）
 function getOrCreateFileStats(filePath: string): FileStats {
     console.log('TimeStats: getOrCreateFileStats called for:', filePath);
+
+    if (!isWorkspaceTrackedFilePath(filePath)) {
+        console.log('TimeStats: Skip non-workspace file stats for:', filePath);
+        return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
+    }
 
     const g = getGlobalFileTracking?.();
     console.log('TimeStats: getGlobalFileTracking result:', !!g);
@@ -1077,9 +1097,8 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     }
 
     // 跳过输出面板、调试控制台等非文件类型的文档
-    if (editor?.document?.uri.scheme === 'output' || 
-        editor?.document?.uri.scheme === 'debug' || 
-        editor?.document?.uri.scheme === 'vscode') {
+    // 仅文件系统中的工作区文档允许进入时间统计；untitled/output/webview 等都跳过。
+    if (editor?.document?.uri.scheme !== 'file') {
         currentDocPath = undefined;
         currentDocUuid = undefined;
         updateStatusBar();
@@ -1336,6 +1355,20 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
         // 准备数据：当前文件 + 跨文件（若可）
         const { bucketSizeMs } = getConfig();
+        const buildEmptyTodayHourly = () => {
+            const hourly: Record<number, number> = {};
+            for (let hour = 0; hour < 24; hour++) {
+                hourly[hour] = 0;
+            }
+            return hourly;
+        };
+        const buildEmptyTodayQuarterHourly = () => {
+            const quarterHourly: Record<number, number> = {};
+            for (let quarter = 0; quarter < 96; quarter++) {
+                quarterHourly[quarter] = 0;
+            }
+            return quarterHourly;
+        };
 
         // 当前文件的速度曲线数据
         let perFileLine: { t: number; cpm: number }[] = [];
@@ -1361,8 +1394,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
         tsDebug('Per file line data:', perFileLine.slice(0, 5)); // 显示前5个数据点
 
-        // 跨文件汇总（尽量从全局拿；否则降级为当前文件）
-        const globalFileTracking = getGlobalFileTracking?.();
+        // 跨文件汇总（优先精确 summary，次选粗略 overview，否则降级为当前文件）
         type Ws = {
             filePath?: string;
             totalMillis: number;
@@ -1372,54 +1404,108 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
             sessions?: { start: number; end: number }[];
         };
 
-        let allStats: Ws[] = [];
         let globalCapable = false;
+        let projectSummary: Awaited<ReturnType<typeof getWritingProjectSummaryAsync>>['summary'];
+        let projectOverview: Awaited<ReturnType<typeof getWritingProjectOverviewAsync>>['overview'];
 
-        tsDebug('Global file tracking available:', !!globalFileTracking);
+        tsDebug('Global file tracking available:', !!getGlobalFileTracking?.());
 
-        // if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
-        //     try {
-        //         allStats = globalFileTracking.getAllWritingStats(); // 使用新的方法
-        //         globalCapable = true;
-        //         console.log('TimeStats: Successfully retrieved', allStats.length, 'file stats from global tracking');
-        //     } catch (error) {
-        //         console.log('TimeStats: Failed to get all writing stats:', error);
-        //     }
-        // }
-        // 优先走异步全局统计，避免阻塞 UI 线程
         try {
-            const asyncStats = await getAllWritingStatsAsync();
-            if (Array.isArray(asyncStats)) {
-                allStats = asyncStats;
+            const summaryState = await getWritingProjectSummaryAsync();
+            if (summaryState.ready && summaryState.summary) {
+                projectSummary = summaryState.summary;
                 globalCapable = true;
             }
         } catch (error) {
-            // 异步接口不可用或失败时再尝试同步回退（兼容老版本）
-            if (globalFileTracking && typeof globalFileTracking.getAllWritingStats === 'function') {
-                try {
-                    allStats = globalFileTracking.getAllWritingStats();
+            tsDebug('Failed to get writing project summary', error);
+        }
+
+        if (!projectSummary) {
+            try {
+                const overviewState = await getWritingProjectOverviewAsync();
+                if (overviewState.ready && overviewState.overview) {
+                    projectOverview = overviewState.overview;
                     globalCapable = true;
-                } catch {/* ignore */ }
+                }
+            } catch (error) {
+                tsDebug('Failed to get writing project overview', error);
             }
         }
 
-        if (!globalCapable) {
-            // 降级：只用当前文件（如果有的话）
-            if (currentDocPath) {
-                const fileStats = getFileStats(currentDocPath);
-                allStats = [{
-                    filePath: currentDocPath,
-                    totalMillis: fileStats.totalMillis,
-                    charsAdded: fileStats.charsAdded,
-                    lastActiveTime: fileStats.lastSeen,
-                    buckets: fileStats.buckets,
-                    sessions: fileStats.sessions,
-                }];
-            } else {
-                // 没有当前文件，使用空数据
-                allStats = [];
-                tsDebug('No current document and no global tracking, using empty stats');
-            }
+        if (projectSummary) {
+            const result = {
+                type: 'time-stats-data',
+                supportsGlobal: globalCapable,
+                perFileLine,
+                totalMillisAll: projectSummary.totalMillisAll,
+                today: {
+                    millis: projectSummary.today.millis,
+                    avgCPM: projectSummary.today.avgCPM,
+                    peakCPM: projectSummary.today.peakCPM,
+                    hourly: { ...projectSummary.today.hourly },
+                    quarterHourly: { ...projectSummary.today.quarterHourly },
+                    chars: projectSummary.today.chars,
+                },
+                heatmap: { ...projectSummary.heatmap },
+                bucketSizeMs: projectSummary.bucketSizeMs,
+            };
+
+            tsDebug('Generated stats data from project summary:', {
+                globalCapable,
+                perFileLineLength: perFileLine.length,
+                totalMillisAll: projectSummary.totalMillisAll,
+                todayChars: projectSummary.today.chars,
+                heatmapDaysCount: Object.keys(projectSummary.heatmap).length,
+            });
+
+            return result;
+        }
+
+        if (projectOverview) {
+            const result = {
+                type: 'time-stats-data',
+                supportsGlobal: true,
+                approximateGlobal: !!projectOverview.approximate,
+                perFileLine,
+                totalMillisAll: projectOverview.totalMillisAll,
+                today: {
+                    millis: 0,
+                    avgCPM: 0,
+                    peakCPM: 0,
+                    hourly: buildEmptyTodayHourly(),
+                    quarterHourly: buildEmptyTodayQuarterHourly(),
+                    chars: 0,
+                },
+                heatmap: {},
+                bucketSizeMs,
+            };
+
+            tsDebug('Generated stats data from project overview:', {
+                globalCapable,
+                approximate: projectOverview.approximate,
+                source: projectOverview.source,
+                perFileLineLength: perFileLine.length,
+                totalMillisAll: projectOverview.totalMillisAll,
+                filesWithWritingStats: projectOverview.filesWithWritingStats,
+            });
+
+            return result;
+        }
+
+        let allStats: Ws[] = [];
+        if (currentDocPath) {
+            const fileStats = getFileStats(currentDocPath);
+            allStats = [{
+                filePath: currentDocPath,
+                totalMillis: fileStats.totalMillis,
+                charsAdded: fileStats.charsAdded,
+                lastActiveTime: fileStats.lastSeen,
+                buckets: fileStats.buckets,
+                sessions: fileStats.sessions,
+            }];
+        } else {
+            allStats = [];
+            tsDebug('No current document and no global overview, using empty stats');
         }
 
         // 计算：全文件累计时长、今日时长/平均/峰值、热力图（日粒度）、今日按小时柱状图

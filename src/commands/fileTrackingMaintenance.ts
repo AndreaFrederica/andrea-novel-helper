@@ -31,7 +31,7 @@ export function registerFileTrackingMaintenance(context: vscode.ExtensionContext
     }),
     vscode.commands.registerCommand('AndreaNovelHelper.fileTracking.cleanAbsolutePaths', async () => {
       const count = await cleanAbsolutePathEntries()
-      vscode.window.showInformationMessage(`旧版清理入口已执行，共处理 ${count} 个路径条目。`)
+      vscode.window.showInformationMessage(`文件追踪绝对路径清理完成，共处理 ${count} 个路径条目。`)
     })
   )
 }
