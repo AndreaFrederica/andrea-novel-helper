@@ -2,11 +2,12 @@
 // src/completionProvider.ts
 import * as vscode from 'vscode';
 import { Role } from '../extension';
-import { getPrefix, typeColorMap } from '../utils/utils';
+import { typeColorMap } from '../utils/utils';
 // 直接使用 activate.ts 中导出的全局 roles（通过就地清空+push 异步增量保持引用最新）
 import { roles } from '../activate';
 import { FIELD_ALIASES, getExtensionFields } from '../utils/Parser/markdownParser';
-import { containsPrefix, getSegmenterType } from '../utils/segmenter';
+import { containsPrefix, getSegmenterType, segmentText } from '../utils/segmenter';
+import { findBestCompletionPrefix, getCompletionPrefixCandidates } from '../utils/completionPrefix';
 
 const DEFAULT_SYMBOL_PREFIXES = ['@'];
 type TriggerMode = 'loose' | 'startsWith' | 'symbolLoose' | 'symbolStartsWith';
@@ -126,6 +127,35 @@ function matchesStartsWith(name: string, prefix: string): boolean {
     return tokens.some(tok => tok.startsWith(prefix));
 }
 
+function findBestStartsWithPrefix(name: string, candidates: readonly string[]): string | undefined {
+    for (const candidate of candidates) {
+        if (matchesStartsWith(name, candidate)) {
+            return candidate;
+        }
+    }
+    return undefined;
+}
+
+function getBestNamePrefix(
+    name: string,
+    prefixCandidates: readonly string[],
+    useStartsWith: boolean,
+    segmenterType: ReturnType<typeof getSegmenterType>,
+): string | undefined {
+    if (!prefixCandidates.length) {
+        return undefined;
+    }
+    return useStartsWith
+        ? findBestStartsWithPrefix(name, prefixCandidates)
+        : findBestCompletionPrefix(name, prefixCandidates, (target, candidate) => containsPrefix(target, candidate, segmenterType));
+}
+
+type MatchedRoleEntry = {
+    role: Role;
+    matchedPrefixes: Map<string, string>;
+    bestRolePrefix: string;
+};
+
 function buildSymbolMatch(uptoCursor: string, symbols: string[]): { matchedSymbol: string; prefix: string } | undefined {
     if (!symbols.length) return undefined;
     // 构造形如 (@|#)(\S*)$ 的匹配，捕获最后一个符号及其后紧跟的非空白串
@@ -158,10 +188,13 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                 const symbolPrefixes = cfg.get<string[]>('completion.symbolPrefixes', DEFAULT_SYMBOL_PREFIXES) || DEFAULT_SYMBOL_PREFIXES;
                 const debug = cfg.get<boolean>('debug.completionLog', false);
                 const defaultColor = cfg.get<string>('defaultColor')!;
+                const segmenterType = getSegmenterType();
 
                 // 解析符号与实际前缀
                 let matchedSymbol: string | undefined;
                 let prefix = '';
+                let prefixCandidates: string[] = [];
+                let longestPrefix = '';
                 if (isSymbolMode) {
                     const symMatch = buildSymbolMatch(uptoCursor, symbolPrefixes);
                     if (!symMatch) {
@@ -174,18 +207,24 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                     }
                     matchedSymbol = symMatch.matchedSymbol;
                     prefix = symMatch.prefix;
+                    if (prefix) {
+                        prefixCandidates = [prefix];
+                        longestPrefix = prefix;
+                    }
                 } else {
-                    prefix = getPrefix(uptoCursor);
+                    prefixCandidates = getCompletionPrefixCandidates(uptoCursor, input => segmentText(input, segmenterType));
+                    longestPrefix = prefixCandidates[0] ?? '';
+                    prefix = prefixCandidates[prefixCandidates.length - 1] ?? '';
                 }
 
                 const allowEmptyPrefix = isSymbolMode && prefix.length === 0;
+                if (!allowEmptyPrefix && !prefixCandidates.some(candidate => candidate.length >= min)) return;
                 if (!allowEmptyPrefix && prefix.length === 0) return;
-                if (prefix.length < min && !allowEmptyPrefix) return;
 
                 if (debug) {
                     try {
                         const totalRoles = roles.length;
-                        console.log(`[ANH][Completion] invoke prefix='${prefix}' len=${prefix.length} min=${min} mode=${triggerMode} symbol='${matchedSymbol ?? ''}' rolesTotal=${totalRoles}`);
+                        console.log(`[ANH][Completion] invoke prefix='${prefix}' longest='${longestPrefix}' len=${prefix.length} min=${min} mode=${triggerMode} symbol='${matchedSymbol ?? ''}' rolesTotal=${totalRoles}`);
                     } catch {}
                 }
 
@@ -197,16 +236,31 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                     sensitiveNameSet.add(r.name);
                     for (const al of r.aliases || []) sensitiveNameSet.add(al);
                 }
-                const segmenterType = getSegmenterType();
-                const matchedRoles = roles.filter(role => {
-                    if (role.type === '敏感词') { skippedSensitive.push(role.name); return false; }
+                const matchedRoles: MatchedRoleEntry[] = roles.flatMap(role => {
+                    if (role.type === '敏感词') { skippedSensitive.push(role.name); return []; }
                     const names = [role.name, ...(role.aliases || [])];
                     // 若全部名称都在敏感集合（理论上不该出现，因为已被上面剔除），仍返回 false
-                    if (names.every(n => sensitiveNameSet.has(n))) return false;
-                    return names.some(n => {
-                        if (useStartsWith) return prefix ? matchesStartsWith(n, prefix) : true;
-                        return prefix ? containsPrefix(n, prefix, segmenterType) : true;
-                    });
+                    if (names.every(n => sensitiveNameSet.has(n))) return [];
+
+                    const matchedPrefixes = new Map<string, string>();
+                    let bestRolePrefix = '';
+
+                    for (const name of names) {
+                        const matchedPrefix = getBestNamePrefix(name, prefixCandidates, useStartsWith, segmenterType);
+                        if (!matchedPrefix) {
+                            continue;
+                        }
+                        matchedPrefixes.set(name, matchedPrefix);
+                        if (matchedPrefix.length > bestRolePrefix.length) {
+                            bestRolePrefix = matchedPrefix;
+                        }
+                    }
+
+                    if (!bestRolePrefix) {
+                        return [];
+                    }
+
+                    return [{ role, matchedPrefixes, bestRolePrefix }];
                 });
                 if (!matchedRoles.length) {
                     if (debug) console.log(`[ANH][Completion] no matched roles for prefix='${prefix}'`);
@@ -216,25 +270,28 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                 // 2. 生成所有名称的 CompletionItem
                 const items: vscode.CompletionItem[] = [];
                 let roleIdx = 0;
-                for (const role of matchedRoles) {
+                for (const { role, matchedPrefixes, bestRolePrefix } of matchedRoles) {
                     const allNames = [role.name, ...(role.aliases || [])];
                     // 内部排序：开头匹配→包含匹配
                     allNames.sort((a, b) => {
-                        const ak = a.startsWith(prefix) ? 0 : a.includes(prefix) ? 1 : 2;
-                        const bk = b.startsWith(prefix) ? 0 : b.includes(prefix) ? 1 : 2;
+                        const ap = matchedPrefixes.get(a);
+                        const bp = matchedPrefixes.get(b);
+                        const ak = !ap ? 2 : a.startsWith(ap) ? 0 : a.includes(ap) ? 1 : 2;
+                        const bk = !bp ? 2 : b.startsWith(bp) ? 0 : b.includes(bp) ? 1 : 2;
                         if (ak !== bk) return ak - bk;
                         return a.localeCompare(b, 'zh');
                     });
 
                     let nameIdx = 0;
                     for (const nameItem of allNames) {
+                        const matchedPrefix = matchedPrefixes.get(nameItem) ?? bestRolePrefix;
                         const item = new vscode.CompletionItem(nameItem, vscode.CompletionItemKind.Text);
                         item.insertText = nameItem;
-                        const removeLen = prefix.length + (matchedSymbol ? matchedSymbol.length : 0);
+                        const removeLen = matchedPrefix.length + (matchedSymbol ? matchedSymbol.length : 0);
                         const startCol = Math.max(0, position.character - removeLen);
                         item.range = new vscode.Range(position.line, startCol, position.line, position.character);
                         // filterText 需要包含触发符号，避免 VSCode 用 @ 做前缀时过滤掉
-                        const typedInput = (matchedSymbol ?? '') + prefix;
+                        const typedInput = (matchedSymbol ?? '') + matchedPrefix;
                         item.filterText = typedInput + nameItem;
 
                         // detail - 只显示简要信息，避免过长
@@ -305,7 +362,7 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                         item.documentation = md;
 
                         // sortText 保证整体有序
-                        const nameKind = nameItem.startsWith(prefix) ? 0 : 1;
+                        const nameKind = nameItem.startsWith(matchedPrefix) ? 0 : 1;
                         item.sortText =
                             `${roleIdx.toString().padStart(3, '0')}_` +
                             `${nameKind}_` +
@@ -324,17 +381,17 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                     if (r.type !== '敏感词' || !Array.isArray(fixesArr)) continue;
                     for (const fix of fixesArr) {
                         if (!fix || typeof fix !== 'string') continue;
-                        const fixMatched = prefix ? (useStartsWith ? fix.startsWith(prefix) : fix.includes(prefix)) : true;
-                        if (!fixMatched) continue; // 触发逻辑与普通一致
-                        if (fix.length < min) continue;
+                        const matchedPrefix = getBestNamePrefix(fix, prefixCandidates, useStartsWith, segmenterType);
+                        if (!matchedPrefix) continue; // 触发逻辑与普通一致
+                        if (matchedPrefix.length < min) continue;
                         // 避免与已有 item 重复
                         if (items.some(it => typeof it.label === 'string' ? it.label === fix : it.label.label === fix)) continue;
                         const item = new vscode.CompletionItem(fix, vscode.CompletionItemKind.Snippet);
                         item.insertText = fix;
-                        const removeLen = prefix.length + (matchedSymbol ? matchedSymbol.length : 0);
+                        const removeLen = matchedPrefix.length + (matchedSymbol ? matchedSymbol.length : 0);
                         const startCol = Math.max(0, position.character - removeLen);
                         item.range = new vscode.Range(position.line, startCol, position.line, position.character);
-                        const typedInput = (matchedSymbol ?? '') + prefix;
+                        const typedInput = (matchedSymbol ?? '') + matchedPrefix;
                         item.filterText = typedInput + fix;
                         item.detail = `修复: 来自敏感词「${r.name}」`;
                         const md = new vscode.MarkdownString();

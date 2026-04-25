@@ -247,7 +247,9 @@ export function getLastWord(line: string, type?: SegmenterType): string {
  * 支持智能分词匹配
  */
 export function containsPrefix(target: string, prefix: string, segmenterType?: SegmenterType): boolean {
-    if (!prefix) return false;
+    if (!prefix) {
+        return false;
+    }
 
     // 简单的包含匹配（保持原有行为）
     if (target.includes(prefix)) {
