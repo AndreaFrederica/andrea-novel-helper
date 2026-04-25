@@ -285,6 +285,22 @@ export async function removePathMappingByRawKey(rawPathKey: string): Promise<voi
     await dataManager.removePathMappingByRawKey(rawPathKey);
 }
 
+export async function repairDirtyPathKeys(): Promise<{
+    scanned: number;
+    repaired: number;
+    removed: number;
+    conflicts: number;
+    canonicalMappings: number;
+} | null> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return null;
+    }
+
+    const dataManager = tracker.getDataManager();
+    return await dataManager.repairPathMappings();
+}
+
 /**
  * 获取所有文件的元数据
  */
@@ -647,6 +663,11 @@ export async function getGlobalFileTrackingAsync(): Promise<{
  * @returns 清理的文件数量
  */
 export async function cleanAbsolutePathEntries(): Promise<number> {
+    const repaired = await repairDirtyPathKeys();
+    if (repaired) {
+        return repaired.repaired + repaired.removed;
+    }
+
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     
     if (!workspaceRoot) {

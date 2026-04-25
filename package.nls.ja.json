@@ -76,6 +76,7 @@
     "config.timeStats.exitIdleOn.editorChange": "エディタ切替/ウィンドウフォーカス/テキスト変更でアイドル解除",
     "config.fileTracker.respectWcignore.description": "(ファイル追跡のみ) .wcignore を尊重するか (既定 false; .gitignore のみ。執筆時間統計はこのフラグ未使用)。",
     "command.showFileTrackingStats.title": "ファイル追跡統計を表示",
+    "command.fileTracking.repairPathKeys.title": "ファイル追跡パス索引を修復",
     "command.cleanupMissingFiles.title": "存在しないファイルをクリーンアップ",
     "command.exportTrackingData.title": "追跡データをエクスポート",
     "command.fileTracker.openShardForFile.title": "現在のファイルの JSON シャードを開く",
