@@ -5,14 +5,25 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { IDatabaseBackend, DatabaseConfig } from './IDatabaseBackend';
+import {
+    IDatabaseBackend,
+    DatabaseConfig,
+    WritingFileSummary,
+    WritingFileSummaryIndex,
+    WritingProjectSummary,
+} from './IDatabaseBackend';
 
 export class JSONShardedBackend implements IDatabaseBackend {
     private config: DatabaseConfig;
     private dbDir: string;
     private indexPath: string;
+    private writingSummaryPath: string;
+    private writingFileIndexPath: string;
     private initialized = false;
     private indexNeedsRewrite = false;
+    private writingProjectSummaryCache: WritingProjectSummary | null | undefined = undefined;
+    private writingFileSummaryLoaded = false;
+    private writingFileSummaryCache: Map<string, WritingFileSummary> = new Map();
 
     // 内存缓存（用于加速重复查询）
     private memoryCache: Map<string, any> = new Map();
@@ -23,6 +34,64 @@ export class JSONShardedBackend implements IDatabaseBackend {
         const dataPath = config.json?.dataPath || 'novel-helper/.anh-fsdb';
         this.dbDir = path.join(config.workspaceRoot, dataPath);
         this.indexPath = path.join(this.dbDir, 'index.json');
+        this.writingSummaryPath = path.join(this.dbDir, 'writing-summary.json');
+        this.writingFileIndexPath = path.join(this.dbDir, 'writing-file-index.json');
+    }
+
+    private readJsonFile<T>(filePath: string): T | null {
+        if (!fs.existsSync(filePath)) {
+            return null;
+        }
+
+        try {
+            return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
+        } catch {
+            return null;
+        }
+    }
+
+    private writeJsonFile(filePath: string, data: unknown): void {
+        fs.writeFileSync(filePath, JSON.stringify(data));
+    }
+
+    private loadWritingFileSummaryCache(): void {
+        if (this.writingFileSummaryLoaded) {
+            return;
+        }
+
+        this.writingFileSummaryLoaded = true;
+        this.writingFileSummaryCache.clear();
+
+        const index = this.readJsonFile<WritingFileSummaryIndex>(this.writingFileIndexPath);
+        const entries = index?.entries || {};
+        for (const [uuid, summary] of Object.entries(entries)) {
+            if (!summary || typeof summary !== 'object') {
+                continue;
+            }
+            this.writingFileSummaryCache.set(uuid, {
+                ...summary,
+                uuid,
+                path: summary.path ? this.toAbsPath(summary.path) : summary.path,
+            });
+        }
+    }
+
+    private persistWritingFileSummaryCache(): void {
+        const entries: Record<string, WritingFileSummary> = {};
+        for (const [uuid, summary] of this.writingFileSummaryCache.entries()) {
+            entries[uuid] = {
+                ...summary,
+                path: this.toRelKey(summary.path || ''),
+            };
+        }
+
+        const payload: WritingFileSummaryIndex = {
+            version: 1,
+            updatedAt: Date.now(),
+            entries,
+        };
+
+        this.writeJsonFile(this.writingFileIndexPath, payload);
     }
 
     /** 统一化：工作区内返回相对键（POSIX，Win 下小写），否则返回规范化绝对路径 */
@@ -214,6 +283,9 @@ export class JSONShardedBackend implements IDatabaseBackend {
     async close(): Promise<void> {
         // JSON后端不需要特殊关闭操作
         this.memoryCache.clear();
+        this.writingProjectSummaryCache = undefined;
+        this.writingFileSummaryLoaded = false;
+        this.writingFileSummaryCache.clear();
         this.initialized = false;
 
         if (this.config.debug) {
@@ -459,6 +531,66 @@ export class JSONShardedBackend implements IDatabaseBackend {
             return json;
         } catch {
             return null;
+        }
+    }
+
+    async saveWritingProjectSummary(summary: WritingProjectSummary): Promise<void> {
+        const normalized: WritingProjectSummary = {
+            ...summary,
+            updatedAt: summary.updatedAt || Date.now(),
+        };
+        this.writingProjectSummaryCache = normalized;
+        this.writeJsonFile(this.writingSummaryPath, normalized);
+    }
+
+    async loadWritingProjectSummary(): Promise<WritingProjectSummary | null> {
+        if (this.writingProjectSummaryCache !== undefined) {
+            return this.writingProjectSummaryCache;
+        }
+
+        this.writingProjectSummaryCache = this.readJsonFile<WritingProjectSummary>(this.writingSummaryPath);
+        return this.writingProjectSummaryCache;
+    }
+
+    async saveWritingFileSummary(summary: WritingFileSummary): Promise<void> {
+        this.loadWritingFileSummaryCache();
+        this.writingFileSummaryCache.set(summary.uuid, {
+            ...summary,
+            path: summary.path ? this.toAbsPath(summary.path) : summary.path,
+            updatedAt: summary.updatedAt || Date.now(),
+        });
+        this.persistWritingFileSummaryCache();
+    }
+
+    async saveWritingFileSummaryBatch(entries: WritingFileSummary[]): Promise<void> {
+        this.loadWritingFileSummaryCache();
+        for (const summary of entries) {
+            this.writingFileSummaryCache.set(summary.uuid, {
+                ...summary,
+                path: summary.path ? this.toAbsPath(summary.path) : summary.path,
+                updatedAt: summary.updatedAt || Date.now(),
+            });
+        }
+        this.persistWritingFileSummaryCache();
+    }
+
+    async loadWritingFileSummary(uuid: string): Promise<WritingFileSummary | null> {
+        this.loadWritingFileSummaryCache();
+        const summary = this.writingFileSummaryCache.get(uuid);
+        return summary ? { ...summary } : null;
+    }
+
+    async loadAllWritingFileSummaries(): Promise<Map<string, WritingFileSummary>> {
+        this.loadWritingFileSummaryCache();
+        return new Map(
+            Array.from(this.writingFileSummaryCache.entries()).map(([uuid, summary]) => [uuid, { ...summary }])
+        );
+    }
+
+    async deleteWritingFileSummary(uuid: string): Promise<void> {
+        this.loadWritingFileSummaryCache();
+        if (this.writingFileSummaryCache.delete(uuid)) {
+            this.persistWritingFileSummaryCache();
         }
     }
 
