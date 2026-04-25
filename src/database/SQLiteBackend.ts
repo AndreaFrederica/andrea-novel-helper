@@ -372,6 +372,10 @@ export class SQLiteBackend implements IDatabaseBackend {
         await this.run('DELETE FROM path_mappings WHERE path = ?', [rel]);
     }
 
+    async deletePathMappingRaw(path: string): Promise<void> {
+        await this.run('DELETE FROM path_mappings WHERE path = ?', [path]);
+    }
+
     async getAllPathMappings(): Promise<Map<string, string>> {
         const rows = await this.all<{ path: string; uuid: string }>(
             'SELECT path, uuid FROM path_mappings',

@@ -414,6 +414,10 @@ export class JSONShardedBackend implements IDatabaseBackend {
         this.pathToUuid.delete(rel);
     }
 
+    async deletePathMappingRaw(path: string): Promise<void> {
+        this.pathToUuid.delete(path);
+    }
+
     async getAllPathMappings(): Promise<Map<string, string>> {
         return new Map(this.pathToUuid);
     }
@@ -498,6 +502,7 @@ export class JSONShardedBackend implements IDatabaseBackend {
                                 const raw = fs.readFileSync(fullPath, 'utf8');
                                 const data = JSON.parse(raw);
                                 if (data.uuid) {
+                                    if (data.filePath) { data.filePath = this.toAbsPath(data.filePath); }
                                     files.set(data.uuid, data);
                                 }
                             } catch {
@@ -528,7 +533,7 @@ export class JSONShardedBackend implements IDatabaseBackend {
             const entries = fs.readdirSync(this.dbDir);
             for (const sub of entries) {
                 const subPath = path.join(this.dbDir, sub);
-                if (fs.statSync(subPath).isDirectory()) {
+                if (/^[0-9a-f]{2}$/i.test(sub) && fs.statSync(subPath).isDirectory()) {
                     fs.rmSync(subPath, { recursive: true, force: true });
                 }
             }

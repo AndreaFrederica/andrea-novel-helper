@@ -65,6 +65,12 @@ export interface IDatabaseBackend {
     deletePathMapping(path: string): Promise<void>;
 
     /**
+     * 按持久层原始 key 删除路径映射。
+     * 用于清理历史脏 key；普通调用应继续使用 deletePathMapping。
+     */
+    deletePathMappingRaw?(path: string): Promise<void>;
+
+    /**
      * 获取所有路径映射
      */
     getAllPathMappings(): Promise<Map<string, string>>;

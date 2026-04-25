@@ -516,7 +516,7 @@ export async function getTrackingStatsAsync(): Promise<{
     return dm.getStats();
 }
 
-/** 异步：一次性获取全部写作统计（这里只取快路径的第一批） */
+/** 异步：一次性获取全部写作统计 */
 export async function getAllWritingStatsAsync(): Promise<WritingStatsView[]> {
     const tracker = getFileTracker();
     if (!tracker) {return [];}
@@ -524,33 +524,7 @@ export async function getAllWritingStatsAsync(): Promise<WritingStatsView[]> {
 
     const fn = dm?.getAllWritingStatsAsync;
     if (typeof fn === 'function') {
-        // 只等第一次 onPartial（就是快路径 fast 批次），随后立刻 resolve
-        return await new Promise<WritingStatsView[]>((resolve) => {
-            let resolved = false;
-
-            // 启动 DataManager 的并发流程，但我们不等待最终 Promise
-            // 只在第一次 onPartial 时返回
-            try {
-                fn.call(dm, {
-                    onPartial: (chunk: WritingStatsView[]) => {
-                        if (!resolved) {
-                            resolved = true;
-                            resolve(chunk ?? []);
-                        }
-                    },
-                    flushIntervalMs: 0, // 让第一次回调更及时；你实现里会 flush(true) 立即触发
-                }).catch(() => { /* 忽略慢路径的错误，反正我们不等它 */ });
-            } catch {
-                // 若签名不匹配或抛错，直接返回空
-                if (!resolved) {resolve([]);}
-            }
-
-            // 兜底：若没有快路径（fast 为空），下一轮事件循环返回空
-            //（即只要没立即触发 onPartial，就视为无快路径）
-            setTimeout(() => {
-                if (!resolved) {resolve([]);}
-            }, 0);
-        });
+        return await fn.call(dm);
     }
 
     // 老版本 DataManager：没有异步方法时走同步快路径（仅内存）
@@ -580,7 +554,11 @@ export async function* streamAllWritingStats(): AsyncGenerator<WritingStatsView>
 export async function getFileByUuidAsync(uuid: string): Promise<FileMetadata | undefined> {
     const tracker = getFileTracker();
     if (!tracker) {return undefined;}
-    const dm = tracker.getDataManager();
+    const dm: any = tracker.getDataManager();
+
+    if (typeof dm.getFileByUuidAsync === 'function') {
+        return await dm.getFileByUuidAsync(uuid);
+    }
 
     // 若 DataManager 没有公开异步单项读取，则用异步全量再筛选（保证不阻塞）
     const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
@@ -596,7 +574,11 @@ export async function getFileByUuidAsync(uuid: string): Promise<FileMetadata | u
 export async function getFileByPathAsync(filePath: string): Promise<FileMetadata | undefined> {
     const tracker = getFileTracker();
     if (!tracker) {return undefined;}
-    const dm = tracker.getDataManager();
+    const dm: any = tracker.getDataManager();
+
+    if (typeof dm.getFileByPathAsync === 'function') {
+        return await dm.getFileByPathAsync(filePath);
+    }
 
     const getAllFilesAsync = (dm as any).getAllFilesAsync as (opts?: { cacheLoaded?: boolean }) => Promise<FileMetadata[]>;
     if (typeof getAllFilesAsync === 'function') {

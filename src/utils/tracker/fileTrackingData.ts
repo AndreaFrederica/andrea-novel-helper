@@ -656,6 +656,23 @@ export class FileTrackingDataManager {
                         this.database.pathToUuid[canonicalKey] = u;
                     }
                     console.log(`[FileTracking] 已从后端加载路径映射 entries=${pathMap.size}`);
+
+                    // 现有 timeStats/statusBar 仍有同步读取路径；SQLite 后端必须把历史
+                    // writingStats 预热到内存，否则启动快照的精简 metadata 会被误判为新文档。
+                    if (backendType === 'sqlite' && typeof this.backend.loadFileMetadataBatch === 'function') {
+                        const uuids = Array.from(new Set(pathMap.values()));
+                        const metaMap = await this.backend.loadFileMetadataBatch(uuids);
+                        for (const [uuid, loaded] of metaMap.entries()) {
+                            const meta = this.normalizeLoadedMetadata(loaded);
+                            if (!meta) { continue; }
+                            const cached = this.database.files[uuid];
+                            this.database.files[uuid] = cached
+                                ? this.mergePersistedMetadata(uuid, cached, meta)
+                                : meta;
+                            if (meta.isDirectory) { this.indexDirFlag.add(uuid); }
+                        }
+                        console.log(`[FileTracking] SQLite metadata 预热完成 entries=${metaMap.size}`);
+                    }
                 }
             } catch (e) {
                 console.warn('[FileTracking] 从后端加载路径映射失败，回退到本地索引', e);
@@ -1019,6 +1036,10 @@ export class FileTrackingDataManager {
         return this.database.files[uuid];
     }
 
+    public async getFileByUuidAsync(uuid: string): Promise<FileMetadata | undefined> {
+        return await this.getMetaAsync(uuid, true);
+    }
+
     /**
      * 通过路径获取文件元数据
      * （用工作区相对键查询；需要时惰性加载分片）
@@ -1031,6 +1052,14 @@ export class FileTrackingDataManager {
             this.ensureShardLoaded(uuid);
         }
         return this.database.files[uuid];
+    }
+
+    public async getFileByPathAsync(filePath: string): Promise<FileMetadata | undefined> {
+        const key = this.toRelKey(filePath);
+        const uuid = this.database.pathToUuid[key];
+        if (!uuid) { return undefined; }
+        const meta = await this.getMetaAsync(uuid, true);
+        return meta;
     }
 
     // ===== 相对路径版本的接口（用于索引器等性能敏感场景） =====
@@ -1136,7 +1165,11 @@ export class FileTrackingDataManager {
             
             // 从后端删除
             if (this.backend && this.backendInitialized) {
-                await this.backend.deletePathMapping(rawPathKey);
+                if (typeof this.backend.deletePathMappingRaw === 'function') {
+                    await this.backend.deletePathMappingRaw(rawPathKey);
+                } else {
+                    await this.backend.deletePathMapping(rawPathKey);
+                }
                 await this.backend.deleteFileMetadata(uuid);
             } else {
                 // 后端未初始化时使用JSON分片
@@ -1180,6 +1213,9 @@ export class FileTrackingDataManager {
             if (uuid && !existingFile && this.lazyLoadShards) {
                 this.ensureShardLoaded(uuid);
                 existingFile = this.database.files[uuid];
+            }
+            if (uuid && !existingFile) {
+                existingFile = await this.getMetaAsync(uuid, true);
             }
 
             // 如果文件已存在且哈希/size/mtime 未变化，不需要任何更新
@@ -1417,15 +1453,12 @@ export class FileTrackingDataManager {
     }): Promise<void> {
         const uuid = this.getFileUuid(filePath);
         if (uuid) {
-            const metadata = this.database.files[uuid];
+            const metadata = this.database.files[uuid] || await this.getMetaAsync(uuid, true);
             if (metadata) {
                 // 启动快照/索引惰性加载下，内存 meta 可能缺失 writingStats；尝试从后端/分片补全
                 if (!metadata.writingStats) {
                     try {
-                        const persisted = this.backend && this.backendInitialized
-                            ? await this.backend.loadFileMetadata(uuid).catch(() => undefined)
-                            : await this.readSingleShardAsync(uuid);
-                        const persistedObj = typeof persisted === 'string' ? JSON.parse(persisted) : persisted;
+                        const persistedObj = await this.loadPersistedMetadata(uuid);
                         if (persistedObj?.writingStats) {
                             metadata.writingStats = persistedObj.writingStats;
                         }
@@ -1652,33 +1685,67 @@ export class FileTrackingDataManager {
         }
     }
 
+    private normalizeLoadedMetadata(raw: any): FileMetadata | undefined {
+        if (!raw) { return undefined; }
+        const meta = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!meta || !meta.uuid) { return undefined; }
+        if (meta.filePath) { meta.filePath = this.toAbsPath(meta.filePath); }
+        return meta as FileMetadata;
+    }
 
-    /** 异步获取某 uuid 的元数据；可选写入内存缓存以便后续同步 API 复用 */
-    private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
-        const mem = this.database.files[uuid];
-        if (mem) { return mem; }
-        // 优先使用后端读取（若已初始化）
+    private mergePersistedMetadata(uuid: string, cached: FileMetadata, persisted?: FileMetadata): FileMetadata {
+        if (!persisted) { return cached; }
+
+        const merged = { ...persisted, ...cached } as FileMetadata;
+        if (!cached.writingStats && persisted.writingStats) {
+            merged.writingStats = persisted.writingStats;
+        }
+        if (!cached.wordCountStats && persisted.wordCountStats) {
+            merged.wordCountStats = persisted.wordCountStats;
+        }
+        if (!cached.createdAt && persisted.createdAt) {
+            merged.createdAt = persisted.createdAt;
+        }
+        if (!cached.lastTrackedAt && persisted.lastTrackedAt) {
+            merged.lastTrackedAt = persisted.lastTrackedAt;
+        }
+        if (!cached.updatedAt && persisted.updatedAt) {
+            merged.updatedAt = persisted.updatedAt;
+        }
+
+        this.database.files[uuid] = merged;
+        if (merged.isDirectory) { this.indexDirFlag.add(uuid); }
+        return merged;
+    }
+
+    private async loadPersistedMetadata(uuid: string): Promise<FileMetadata | undefined> {
         if (this.backend && this.backendInitialized) {
             try {
                 const row = await this.backend.loadFileMetadata(uuid);
-                if (row) {
-                    // 后端中存储可能已经是序列化对象或字符串
-                    const metaObj = typeof row === 'string' ? JSON.parse(row) : row;
-                    if (cacheLoaded && metaObj) {
-                        // 确保 filePath 是绝对路径用于内存使用
-                        if (metaObj.filePath) { metaObj.filePath = this.toAbsPath(metaObj.filePath); }
-                        this.database.files[uuid] = metaObj;
-                        if (metaObj.isDirectory) { this.indexDirFlag.add(uuid); }
-                    }
-                    return metaObj;
-                }
+                const meta = this.normalizeLoadedMetadata(row);
+                if (meta) { return meta; }
             } catch (e) {
-                // 后端读取失败，回退到本地分片读取
                 console.warn('[FileTracking] backend.loadFileMetadata 失败，回退到分片读取', e);
             }
         }
 
-        const meta = await this.readSingleShardAsync(uuid);
+        return await this.readSingleShardAsync(uuid);
+    }
+
+    /** 异步获取某 uuid 的元数据；可选写入内存缓存以便后续同步 API 复用 */
+    private async getMetaAsync(uuid: string, cacheLoaded = true): Promise<FileMetadata | undefined> {
+        const mem = this.database.files[uuid];
+        if (mem) {
+            // 启动快照里的 metadata 是精简版，可能没有 writingStats。
+            // 不能因为内存命中就阻止从 SQLite/分片补全历史写作统计。
+            if (!mem.writingStats) {
+                const persisted = await this.loadPersistedMetadata(uuid).catch(() => undefined);
+                return cacheLoaded ? this.mergePersistedMetadata(uuid, mem, persisted) : (persisted || mem);
+            }
+            return mem;
+        }
+
+        const meta = await this.loadPersistedMetadata(uuid);
         if (cacheLoaded && meta) {
             this.database.files[uuid] = meta;
             if (meta.isDirectory) { this.indexDirFlag.add(uuid); }
@@ -2190,7 +2257,11 @@ export class FileTrackingDataManager {
             const oldMappings = await this.backend.getAllPathMappings();
             for (const rawKey of oldMappings.keys()) {
                 if (!Object.prototype.hasOwnProperty.call(canonicalMap, rawKey)) {
-                    await this.backend.deletePathMapping(rawKey);
+                    if (typeof this.backend.deletePathMappingRaw === 'function') {
+                        await this.backend.deletePathMappingRaw(rawKey);
+                    } else {
+                        await this.backend.deletePathMapping(rawKey);
+                    }
                 }
             }
             await this.backend.savePathMappingBatch(
