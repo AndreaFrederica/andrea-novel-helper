@@ -20,6 +20,37 @@ export class SQLiteBackend implements IDatabaseBackend {
         this.dbPath = path.join(config.workspaceRoot, dbFileName);
     }
 
+    private toRelKey(p: string): string {
+        const rootAbs = path.resolve(this.config.workspaceRoot).replace(/\\/g, '/');
+        const absBase = path.isAbsolute(p) || /^[a-z]:[\\/]/i.test(p) ? p : path.join(this.config.workspaceRoot, p);
+        const abs = path.resolve(absBase).replace(/\\/g, '/');
+        const lower = process.platform === 'win32';
+        const absCmp = lower ? abs.toLowerCase() : abs;
+        const rootCmp = lower ? rootAbs.toLowerCase() : rootAbs;
+        if (absCmp === rootCmp) {
+            return '';
+        }
+        if (absCmp.startsWith(rootCmp + '/')) {
+            return absCmp.slice(rootCmp.length + 1);
+        }
+        return absCmp;
+    }
+
+    private toAbsPath(key: string): string {
+        if (path.isAbsolute(key) || /^[a-z]:[\\/]/i.test(key)) {
+            return path.resolve(key);
+        }
+        return path.resolve(path.join(this.config.workspaceRoot, key));
+    }
+
+    private async getPathKeyForUuid(uuid: string): Promise<string | null> {
+        const row = await this.get<{ path: string }>(
+            'SELECT path FROM path_mappings WHERE uuid = ? LIMIT 1',
+            [uuid]
+        );
+        return row?.path || null;
+    }
+
     async initialize(): Promise<void> {
         if (this.initialized) {
             return;
@@ -200,7 +231,8 @@ export class SQLiteBackend implements IDatabaseBackend {
 
     async saveFileMetadata(uuid: string, metadata: any): Promise<void> {
         const now = Date.now();
-        const data = JSON.stringify(metadata);
+        const payload = { ...metadata, filePath: this.toRelKey(metadata?.filePath || '') };
+        const data = JSON.stringify(payload);
         const sql = `
             INSERT INTO file_metadata (uuid, data, updated_at, created_at)
             VALUES (?, ?, ?, ?)
@@ -231,7 +263,19 @@ export class SQLiteBackend implements IDatabaseBackend {
             'SELECT data FROM file_metadata WHERE uuid = ?',
             [uuid]
         );
-        return row ? JSON.parse(row.data) : null;
+        if (!row) { return null; }
+
+        const data = JSON.parse(row.data);
+        const mappedKey = await this.getPathKeyForUuid(uuid);
+        const rel = this.toRelKey(data?.filePath || '');
+        const preferredKey = mappedKey || rel;
+        const absPath = this.toAbsPath(preferredKey);
+        const needsRewrite = data?.filePath !== preferredKey && data?.filePath !== absPath;
+        data.filePath = absPath;
+        if (needsRewrite) {
+            try { await this.saveFileMetadata(uuid, { ...data, filePath: absPath }); } catch { /* ignore */ }
+        }
+        return data;
     }
 
     async loadFileMetadataBatch(uuids: string[]): Promise<Map<string, any>> {
@@ -250,7 +294,17 @@ export class SQLiteBackend implements IDatabaseBackend {
             );
 
             for (const row of rows) {
-                result.set(row.uuid, JSON.parse(row.data));
+                const data = JSON.parse(row.data);
+                const mappedKey = await this.getPathKeyForUuid(row.uuid);
+                const rel = this.toRelKey(data?.filePath || '');
+                const preferredKey = mappedKey || rel;
+                const absPath = this.toAbsPath(preferredKey);
+                const needsRewrite = data?.filePath !== preferredKey && data?.filePath !== absPath;
+                data.filePath = absPath;
+                result.set(row.uuid, data);
+                if (needsRewrite) {
+                    try { await this.saveFileMetadata(row.uuid, { ...data, filePath: absPath }); } catch { /* ignore */ }
+                }
             }
         }
 
@@ -277,6 +331,7 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async savePathMapping(path: string, uuid: string): Promise<void> {
+        const rel = this.toRelKey(path);
         const now = Date.now();
         const sql = `
             INSERT INTO path_mappings (path, uuid, updated_at)
@@ -285,7 +340,7 @@ export class SQLiteBackend implements IDatabaseBackend {
                 uuid = excluded.uuid,
                 updated_at = excluded.updated_at
         `;
-        await this.run(sql, [path, uuid, now]);
+        await this.run(sql, [rel, uuid, now]);
     }
 
     async savePathMappingBatch(mappings: Array<{ path: string; uuid: string }>): Promise<void> {
@@ -304,15 +359,17 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async getUuidByPath(path: string): Promise<string | null> {
+        const rel = this.toRelKey(path);
         const row = await this.get<{ uuid: string }>(
             'SELECT uuid FROM path_mappings WHERE path = ?',
-            [path]
+            [rel]
         );
         return row ? row.uuid : null;
     }
 
     async deletePathMapping(path: string): Promise<void> {
-        await this.run('DELETE FROM path_mappings WHERE path = ?', [path]);
+        const rel = this.toRelKey(path);
+        await this.run('DELETE FROM path_mappings WHERE path = ?', [rel]);
     }
 
     async getAllPathMappings(): Promise<Map<string, string>> {

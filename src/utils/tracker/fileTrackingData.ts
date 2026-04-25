@@ -193,25 +193,21 @@ export class FileTrackingDataManager {
 
     /** 统一化：相对键（workspace 内用 POSIX 分隔符；Win 下小写） */
     private toRelKey(p: string): string {
-        const rootAbs = path.resolve(this.workspaceRoot);
-        const abs = path.resolve(p);
-
-        // 尝试用字符串前缀判断是否在工作区内，规避 path.relative 在大小写/盘符差异下返回绝对路径的情况
-        const normRoot = rootAbs.replace(/\\/g, '/');
-        const normAbs = abs.replace(/\\/g, '/');
+        const rootAbs = path.resolve(this.workspaceRoot).replace(/\\/g, '/');
+        // 相对路径必须基于 workspaceRoot 归一化，不能按进程 cwd 解析
+        const absBase = path.isAbsolute(p) || /^[a-z]:[\\/]/i.test(p) ? p : path.join(this.workspaceRoot, p);
+        const abs = path.resolve(absBase).replace(/\\/g, '/');
         const lower = process.platform === 'win32';
-        const inWorkspace = lower
-            ? normAbs.toLowerCase().startsWith(normRoot.toLowerCase() + '/')
-            : normAbs.startsWith(normRoot + '/');
+        const absCmp = lower ? abs.toLowerCase() : abs;
+        const rootCmp = lower ? rootAbs.toLowerCase() : rootAbs;
 
-        if (inWorkspace) {
-            const rel = normAbs.slice(normRoot.length + 1);
-            return lower ? rel.toLowerCase() : rel;
+        if (absCmp === rootCmp) {
+            return '';
         }
-
-        // 回退：不在工作区或路径比较失败时保留绝对路径
-        const canon = normAbs;
-        return lower ? canon.toLowerCase() : canon;
+        if (absCmp.startsWith(rootCmp + '/')) {
+            return absCmp.slice(rootCmp.length + 1);
+        }
+        return absCmp;
     }
 
     /** 由相对键还原为绝对路径（若键本身是绝对的则原样返回） */
@@ -230,6 +226,134 @@ export class FileTrackingDataManager {
     private normKeyLike(k: string): string {
         const s = k.replace(/\\/g, '/');
         return process.platform === 'win32' ? s.toLowerCase() : s;
+    }
+
+    private async loadMetaForRepair(uuid: string): Promise<FileMetadata | undefined> {
+        let meta: FileMetadata | undefined = this.database.files[uuid];
+        if (!meta) {
+            meta = this.readSingleShard(uuid);
+            if (!meta && this.backend && this.backendInitialized) {
+                try {
+                    const loaded = await this.backend.loadFileMetadata(uuid);
+                    if (loaded) {
+                        meta = loaded as FileMetadata;
+                        if (meta.filePath) { meta.filePath = this.toAbsPath(meta.filePath); }
+                    }
+                } catch {
+                    meta = undefined;
+                }
+            }
+            if (meta) {
+                this.database.files[uuid] = meta;
+                if (meta.isDirectory) { this.indexDirFlag.add(uuid); }
+            }
+        }
+        return meta;
+    }
+
+    private getCanonicalPathKeyForUuid(rawKey: string, uuid?: string): string {
+        if (uuid) {
+            const meta = this.database.files[uuid] || this.readSingleShard(uuid);
+            if (meta?.filePath) {
+                return this.toRelKey(meta.filePath);
+            }
+        }
+        const recovered = this.tryRecoverWorkspaceAbsolutePath(rawKey);
+        if (recovered) {
+            return this.toRelKey(recovered);
+        }
+        return this.toRelKey(rawKey);
+    }
+
+    private tryRecoverWorkspaceAbsolutePath(rawPath: string, meta?: FileMetadata): string | undefined {
+        const tryPath = (input?: string): string | undefined => {
+            if (!input) { return undefined; }
+            const abs = path.resolve(input);
+            if (this.isInsideWorkspace(abs)) {
+                return abs;
+            }
+            const norm = abs.replace(/\\/g, '/');
+            const parts = norm.split('/').filter(Boolean);
+            for (let start = 1; start < parts.length; start++) {
+                const suffixParts = parts.slice(start);
+                if (suffixParts.length === 0) { continue; }
+                const candidate = path.join(this.workspaceRoot, ...suffixParts);
+                if (fs.existsSync(candidate)) {
+                    return path.resolve(candidate);
+                }
+            }
+            return undefined;
+        };
+
+        return tryPath(meta?.filePath) || tryPath(rawPath);
+    }
+
+    private async buildRecoveredMetadata(uuid: string, absPath: string, seed?: FileMetadata): Promise<FileMetadata | undefined> {
+        try {
+            const stats = await fs.promises.stat(absPath);
+            const isDirectory = stats.isDirectory();
+            const fileExtension = path.extname(absPath).toLowerCase();
+            let maxHeading: string | undefined;
+            let headingLevel: number | undefined;
+            if (fileExtension === '.md') {
+                const headingInfo = this.parseMarkdownHeading(absPath);
+                maxHeading = headingInfo.maxHeading;
+                headingLevel = headingInfo.headingLevel;
+            }
+            const now = Date.now();
+            return {
+                uuid,
+                filePath: path.resolve(absPath),
+                fileName: path.basename(absPath),
+                fileExtension,
+                size: stats.size,
+                mtime: stats.mtimeMs,
+                hash: isDirectory ? '' : await this.calculateFileHash(absPath),
+                isDirectory,
+                maxHeading,
+                headingLevel,
+                writingStats: seed?.writingStats,
+                wordCountStats: seed?.wordCountStats,
+                createdAt: seed?.createdAt || now,
+                lastTrackedAt: now,
+                updatedAt: now
+            };
+        } catch {
+            return undefined;
+        }
+    }
+
+    private buildNormalizedPathToUuid(
+        input: Record<string, string>,
+        options?: { useShardFallback?: boolean }
+    ): { map: Record<string, string>; changed: number } {
+        const normalized: Record<string, string> = {};
+        let changed = 0;
+        for (const [rawKey, uuid] of Object.entries(input || {})) {
+            const nextKey = options?.useShardFallback
+                ? this.getCanonicalPathKeyForUuid(rawKey, uuid)
+                : this.toRelKey(rawKey);
+            if (nextKey !== rawKey) { changed++; }
+            normalized[nextKey] = uuid;
+        }
+        return { map: normalized, changed };
+    }
+
+    private collectCanonicalIndexEntries(): Array<{ u: string; p: string; d: number }> {
+        const seen = new Set<string>();
+        const entries: Array<{ u: string; p: string; d: number }> = [];
+        for (const [rawKey, uuid] of Object.entries(this.database.pathToUuid)) {
+            if (!uuid || seen.has(uuid)) { continue; }
+            const meta = this.database.files[uuid] || this.readSingleShard(uuid);
+            if (meta) {
+                this.database.files[uuid] = meta;
+            }
+            const canonicalKey = meta?.filePath ? this.toRelKey(meta.filePath) : this.toRelKey(rawKey);
+            const isDir = meta ? !!meta.isDirectory : this.indexDirFlag.has(uuid);
+            entries.push({ u: uuid, p: canonicalKey, d: isDir ? 1 : 0 });
+            seen.add(uuid);
+        }
+        return entries;
     }
 
     /** 一次性迁移：把 pathToUuid 的绝对键改为工作区相对键；冲突去重；刷新 meta.filePath */
@@ -408,12 +532,16 @@ export class FileTrackingDataManager {
             const snap = JSON.parse(raw);
             if (snap && snap.files && snap.pathToUuid) {
                 this.database.files = snap.files;
-                this.database.pathToUuid = snap.pathToUuid;
                 // 规范化：还原绝对路径，填入目录标记
                 for (const [uuid, meta] of Object.entries(this.database.files)) {
                     const m = meta as any;
                     if (m && m.filePath) { m.filePath = this.toAbsPath(m.filePath); }
                     if (m?.isDirectory) { this.indexDirFlag.add(uuid); }
+                }
+                const normalized = this.buildNormalizedPathToUuid(snap.pathToUuid, { useShardFallback: true });
+                this.database.pathToUuid = normalized.map;
+                if (normalized.changed > 0) {
+                    this.needsIndexPathMigration = true;
                 }
                 console.log('[FileTracking] 启动：已载入追踪快照');
                 this.startupSnapshotLoaded = true;
@@ -463,7 +591,7 @@ export class FileTrackingDataManager {
             const enabled = cfg.get<boolean>('enabled', true);
             if (!enabled) { if (cfg.get<boolean>('deleteOnDisable', true)) {this.deleteSnapshotsSafe();} return; }
             if (!fs.existsSync(this.snapshotDir)) { fs.mkdirSync(this.snapshotDir, { recursive: true }); }
-            const minimal: any = { version: this.database.version, lastUpdated: Date.now(), files: {}, pathToUuid: this.database.pathToUuid };
+            const minimal: any = { version: this.database.version, lastUpdated: Date.now(), files: {}, pathToUuid: {} as Record<string, string> };
             // 压缩：仅写必要字段，路径按 toRelKey 存储（跨平台）
             for (const [uuid, meta] of Object.entries(this.database.files)) {
                 const m = meta as any;
@@ -477,6 +605,9 @@ export class FileTrackingDataManager {
                     isDirectory: m.isDirectory,
                     wordCountStats: m.wordCountStats || undefined
                 };
+            }
+            for (const ent of this.collectCanonicalIndexEntries()) {
+                minimal.pathToUuid[ent.p] = ent.u;
             }
             fs.writeFileSync(this.trackerSnapshotPath, JSON.stringify(minimal));
             // WordCount 文件列表由 WordCountProvider 写，若该文件不存在，此处不创建
@@ -520,8 +651,9 @@ export class FileTrackingDataManager {
                 if (pathMap && pathMap.size > 0) {
                     // 合并到内存 pathToUuid（以后端为准）
                     for (const [p, u] of pathMap.entries()) {
-                        // 保持 key 统一（后端中通常存的是相对键或规范化键）
-                        this.database.pathToUuid[p] = u;
+                        const canonicalKey = await this.loadMetaForRepair(u).then(meta => meta?.filePath ? this.toRelKey(meta.filePath) : this.toRelKey(p));
+                        if (canonicalKey !== p) { this.needsIndexPathMigration = true; }
+                        this.database.pathToUuid[canonicalKey] = u;
                     }
                     console.log(`[FileTracking] 已从后端加载路径映射 entries=${pathMap.size}`);
                 }
@@ -1993,15 +2125,105 @@ export class FileTrackingDataManager {
     }
     private writeIndex(): void {
         try {
-            // 使用 pathToUuid 保证即便尚未加载分片也能写出索引
-            const entries = Object.entries(this.database.pathToUuid).map(([p, u]) => {
-                const meta = this.database.files[u];
-                const isDir = meta ? !!meta.isDirectory : this.indexDirFlag.has(u);
-                return { u, p, d: isDir ? 1 : 0 };
-            });
+            const entries = this.collectCanonicalIndexEntries();
             const idx = { version: this.DB_VERSION + '+idx1', lastUpdated: Date.now(), entries };
             fs.writeFileSync(this.indexPath, JSON.stringify(idx));
         } catch (e) { console.warn('写入 index 失败', e); }
+    }
+
+    public async repairPathMappings(): Promise<{
+        scanned: number;
+        repaired: number;
+        removed: number;
+        conflicts: number;
+        canonicalMappings: number;
+    }> {
+        const rawMappings = await this.getRawPathMappings();
+        const entries = Array.from(rawMappings.entries());
+        const rawKeySet = new Set(entries.map(([rawKey]) => rawKey));
+        const canonicalMap: Record<string, string> = {};
+        const touchedMeta = new Map<string, FileMetadata>();
+        let repaired = 0;
+        let conflicts = 0;
+
+        const pickCanonical = (u1: string, u2: string) => {
+            const m1 = this.database.files[u1];
+            const m2 = this.database.files[u2];
+            const p1 = m1?.filePath ? this.toAbsPath(this.toRelKey(m1.filePath)) : undefined;
+            const p2 = m2?.filePath ? this.toAbsPath(this.toRelKey(m2.filePath)) : undefined;
+            const e1 = p1 ? fs.existsSync(p1) : false;
+            const e2 = p2 ? fs.existsSync(p2) : false;
+            if (e1 !== e2) { return e1 ? u1 : u2; }
+            const t1 = m1?.updatedAt ?? 0;
+            const t2 = m2?.updatedAt ?? 0;
+            return t1 >= t2 ? u1 : u2;
+        };
+
+        for (const [rawKey, uuid] of entries) {
+            let meta = await this.loadMetaForRepair(uuid);
+            const recoveredAbs = this.tryRecoverWorkspaceAbsolutePath(rawKey, meta);
+            if (!meta && recoveredAbs) {
+                meta = await this.buildRecoveredMetadata(uuid, recoveredAbs);
+            }
+            const canonicalKey = recoveredAbs
+                ? this.toRelKey(recoveredAbs)
+                : (meta?.filePath ? this.toRelKey(meta.filePath) : this.toRelKey(rawKey));
+            if (canonicalKey !== rawKey) { repaired++; }
+            if (meta) {
+                meta.filePath = recoveredAbs ? path.resolve(recoveredAbs) : this.toAbsPath(canonicalKey);
+                this.database.files[uuid] = meta;
+                touchedMeta.set(uuid, meta);
+            }
+            const existing = canonicalMap[canonicalKey];
+            if (!existing) {
+                canonicalMap[canonicalKey] = uuid;
+            } else if (existing !== uuid) {
+                conflicts++;
+                canonicalMap[canonicalKey] = pickCanonical(existing, uuid);
+            }
+        }
+
+        this.database.pathToUuid = canonicalMap;
+        this.markChanged();
+
+        if (this.backend && this.backendInitialized) {
+            const oldMappings = await this.backend.getAllPathMappings();
+            for (const rawKey of oldMappings.keys()) {
+                if (!Object.prototype.hasOwnProperty.call(canonicalMap, rawKey)) {
+                    await this.backend.deletePathMapping(rawKey);
+                }
+            }
+            await this.backend.savePathMappingBatch(
+                Object.entries(canonicalMap).map(([pathKey, uuid]) => ({ path: pathKey, uuid }))
+            );
+            if (touchedMeta.size > 0) {
+                await this.backend.saveFileMetadataBatch(
+                    Array.from(touchedMeta.entries()).map(([uuid, metadata]) => ({ uuid, metadata }))
+                );
+            }
+            await this.backend.saveIndex({
+                version: this.DB_VERSION + '+idx1',
+                lastUpdated: Date.now(),
+                entries: this.collectCanonicalIndexEntries()
+            });
+        } else {
+            for (const [uuid, meta] of touchedMeta.entries()) {
+                this.database.files[uuid] = meta;
+                this.markShardDirty(uuid, 'repair path mappings');
+            }
+            this.saveSharded(true);
+        }
+
+        this.writeIndex();
+        this.writeStartupSnapshot();
+
+        return {
+            scanned: entries.length,
+            repaired,
+            removed: rawKeySet.size - Object.keys(canonicalMap).length,
+            conflicts,
+            canonicalMappings: Object.keys(canonicalMap).length,
+        };
     }
     private saveSharded(force: boolean): void {
         if (!this.hasUnsavedChanges && !force) { return; }

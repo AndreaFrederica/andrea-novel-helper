@@ -270,5 +270,6 @@
   "sidebar.settings.title": "小说助手:设置",
   "command.package.rescanExternalFolders.title": "重新扫描外部资源目录(包管理器)",
   "command.package.showExternalScanReport.title": "查看外部扫描报告(包管理器)",
-  "command.wordCount.rescanResourceFilesInFolder.title": "重扫资源文件"
+  "command.wordCount.rescanResourceFilesInFolder.title": "重扫资源文件",
+  "command.fileTracking.repairPathKeys.title": "修复文件追踪路径索引"
 }

@@ -271,5 +271,6 @@
   "config.typeset.chineseIMEDelay.description": "Chinese IME keyboard simulation delay in milliseconds. Adjust the waiting time before keyboard simulation to accommodate different system response speeds.",
   "command.package.rescanExternalFolders.title": "ANH:Rescan External Resource Folders",
   "command.package.showExternalScanReport.title": "ANH:Show External Scan Report",
-  "command.wordCount.rescanResourceFilesInFolder.title": "ANH:Rescan Resource Files in Folder"
+  "command.wordCount.rescanResourceFilesInFolder.title": "ANH:Rescan Resource Files in Folder",
+  "command.fileTracking.repairPathKeys.title": "ANH:Repair File Tracking Path Keys"
 }

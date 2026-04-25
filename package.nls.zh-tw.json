@@ -77,6 +77,7 @@
     "config.timeStats.exitIdleOn.editorChange": "編輯器切換、視窗獲得焦點或文字變化時退出閒置狀態",
     "config.fileTracker.respectWcignore.description": "（僅文件追蹤）是否遵循 .wcignore 忽略規則（預設：false，僅遵循 .gitignore；寫作統計目前不讀取此開關）。",
     "command.showFileTrackingStats.title": "顯示文件追蹤統計",
+    "command.fileTracking.repairPathKeys.title": "修復文件追蹤路徑索引",
     "command.cleanupMissingFiles.title": "清理不存在的文件",
     "command.exportTrackingData.title": "匯出追蹤數據",
     "command.fileTracker.openShardForFile.title": "打開當前文件的 JSON 分片",

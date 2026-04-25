@@ -578,6 +578,10 @@
         "title": "%command.showFileTrackingStats.title%"
       },
       {
+        "command": "AndreaNovelHelper.fileTracking.repairPathKeys",
+        "title": "%command.fileTracking.repairPathKeys.title%"
+      },
+      {
         "command": "AndreaNovelHelper.cleanupMissingFiles",
         "title": "%command.cleanupMissingFiles.title%"
       },

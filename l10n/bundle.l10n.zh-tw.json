@@ -148,5 +148,6 @@
   "config.wordCount.debug.description": "WordCount: 啟用詳細除錯日誌 (輸出至主控台)。僅用於診斷問題，可能略微影響效能。",
   "sidebar.settings.title": "小說助手:設定",
   "command.package.rescanExternalFolders.title": "重新掃描外部資源目錄(包管理器)",
-  "command.package.showExternalScanReport.title": "檢視外部掃描報告(包管理器)"
+  "command.package.showExternalScanReport.title": "檢視外部掃描報告(包管理器)",
+  "command.fileTracking.repairPathKeys.title": "修復文件追蹤路徑索引"
 }
