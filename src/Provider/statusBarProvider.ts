@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { getFileByPath } from '../utils/tracker/globalFileTracking';
+import { getFileByPathAsync } from '../utils/tracker/globalFileTracking';
 import { WordCountProvider } from './view/wordCountProvider';
 import { WebDAVSyncStatusManager, WebDAVSyncStatusChangeEvent } from '../sync/webdavSyncStatusManager';
 
@@ -105,7 +105,7 @@ export class StatusBarProvider {
 
         try {
             // 获取文件追踪数据
-            const fileMetadata = getFileByPath(filePath);
+            const fileMetadata = await getFileByPathAsync(filePath);
             
             if (!fileMetadata?.writingStats) {
                 this.statusBarItem.text = '$(file-text) 新文档';
@@ -209,7 +209,7 @@ export class StatusBarProvider {
             return;
         }
 
-        const fileMetadata = getFileByPath(this.currentFilePath);
+        const fileMetadata = await getFileByPathAsync(this.currentFilePath);
         
         if (!fileMetadata?.writingStats) {
             vscode.window.showInformationMessage('此文档暂无写作统计数据');

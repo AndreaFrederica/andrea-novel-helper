@@ -148,5 +148,6 @@
   "config.wordCount.debug.description": "WordCount: 詳細デバッグログを有効化 (コンソール出力)。問題診断用途のみ; パフォーマンスに僅かな影響の可能性。",
   "sidebar.settings.title": "Andrea 小説アシスタント: 設定",
   "command.package.rescanExternalFolders.title": "外部リソースを再スキャン(パッケージ管理)",
-  "command.package.showExternalScanReport.title": "外部スキャンレポートを表示(パッケージ管理)"
+  "command.package.showExternalScanReport.title": "外部スキャンレポートを表示(パッケージ管理)",
+  "command.fileTracking.repairPathKeys.title": "ファイル追跡パス索引を修復"
 }

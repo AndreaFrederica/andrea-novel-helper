@@ -30,6 +30,15 @@ interface SpecialAffiliationNode extends BaseNode { kind: 'specialAffiliation'; 
 
 export type AnyNode = AffiliationNode | TypeNode | RoleNode | DetailNode | DetailLineNode | SpecialRootNode | SpecialTypeNode | SpecialAffiliationNode;
 
+export interface RoleTreeRenderOptions {
+    roleSvgConfigKey?: string;
+    colorizeRoleNameConfigKey?: string;
+    showColorOnValueConfigKey?: string;
+    enableRoleExpansionConfigKey?: string;
+    alwaysExpandableConfigKey?: string;
+    wrapColumnConfigKey?: string;
+}
+
 const UNGROUPED = '(未分组)';
 
 // ---- Persist expanded state (global) for All Roles view ----
@@ -37,8 +46,8 @@ const ROLE_EXPAND_KEY = 'roleHierarchyView.expanded';
 let roleExpandedSet: Set<string> = new Set();
 
 export class RoleTreeItem extends vscode.TreeItem {
-    constructor(public readonly node: AnyNode) {
-        super(RoleTreeItem.getLabel(node), RoleTreeItem.getCollapsibleState(node));
+    constructor(public readonly node: AnyNode, private readonly renderOptions: RoleTreeRenderOptions = {}) {
+        super(RoleTreeItem.getLabel(node), RoleTreeItem.getInitialCollapsibleState(node, renderOptions));
         this.id = this.computeId(node);
         if (node.kind === 'specialRoot') {
             this.description = `${node.count}`;
@@ -66,7 +75,9 @@ export class RoleTreeItem extends vscode.TreeItem {
             // 如果配置允许并且角色提供了 svg 字段，则优先使用该 svg 作为图标
             try {
                 const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                const useSvg = cfg.get<boolean>('roles.display.useRoleSvgIfPresent', false);
+                const useSvg = this.renderOptions.roleSvgConfigKey
+                    ? cfg.get<boolean>(this.renderOptions.roleSvgConfigKey, false)
+                    : cfg.get<boolean>('roles.display.useRoleSvgIfPresent', false);
                 const svgField = roleNode.role.svg;
                 if (useSvg && svgField && typeof svgField === 'string') {
                     try {
@@ -79,8 +90,9 @@ export class RoleTreeItem extends vscode.TreeItem {
             try {
                 const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
                 const root = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                const sync = root.get<boolean>('allRoles.syncWithDocRoles', true);
-                const colorize = cfg.get<boolean>(`${sync ? 'docRoles' : 'allRoles'}.display.colorizeRoleName`, false);
+                const colorize = this.renderOptions.colorizeRoleNameConfigKey
+                    ? cfg.get<boolean>(this.renderOptions.colorizeRoleNameConfigKey, false)
+                    : cfg.get<boolean>(`${root.get<boolean>('allRoles.syncWithDocRoles', true) ? 'docRoles' : 'allRoles'}.display.colorizeRoleName`, false);
                 if (colorize && !this.iconPath) {
                     const r = roleNode.role as any;
                     const colorValue = (r.color || r.colour || r['颜色'] || '').toString().trim();
@@ -133,7 +145,9 @@ export class RoleTreeItem extends vscode.TreeItem {
             // 若父字段是颜色并且设置允许，则在 value 上显示色块图标
             try {
                 const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-                const enabled = cfg.get<boolean>('roles.details.showColorOnValue', true);
+                const enabled = this.renderOptions.showColorOnValueConfigKey
+                    ? cfg.get<boolean>(this.renderOptions.showColorOnValueConfigKey, true)
+                    : cfg.get<boolean>('roles.details.showColorOnValue', true);
                 const fieldKey = (node as any).parentKey as string | undefined;
                 if (enabled && fieldKey) {
                     const keyLower = fieldKey.toLowerCase();
@@ -205,10 +219,42 @@ export class RoleTreeItem extends vscode.TreeItem {
         }
     }
 
-    private static getCollapsibleState(node: AnyNode): vscode.TreeItemCollapsibleState {
+    private static getInitialCollapsibleState(node: AnyNode, renderOptions: RoleTreeRenderOptions): vscode.TreeItemCollapsibleState {
         if (node.kind === 'role') {
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-            const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+            const enableRoleExpansion = renderOptions.enableRoleExpansionConfigKey
+                ? cfg.get<boolean>(renderOptions.enableRoleExpansionConfigKey, true)
+                : cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+            return enableRoleExpansion ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+        }
+        if (node.kind === 'detail') {
+            const dn = node as DetailNode;
+            if ((dn as any).objectValue) {
+                return vscode.TreeItemCollapsibleState.Collapsed;
+            }
+
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const always = renderOptions.alwaysExpandableConfigKey
+                ? cfg.get<boolean>(renderOptions.alwaysExpandableConfigKey, true)
+                : cfg.get<boolean>('roles.details.alwaysExpandable', true);
+            if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
+
+            const wrapCol = Math.max(5, Math.min(200, renderOptions.wrapColumnConfigKey
+                ? (cfg.get<number>(renderOptions.wrapColumnConfigKey, 20) || 20)
+                : (cfg.get<number>('roles.details.wrapColumn', 20) || 20)));
+            const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
+            return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+        }
+        if (node.kind === 'detailLine') { return vscode.TreeItemCollapsibleState.None; }
+        return vscode.TreeItemCollapsibleState.Collapsed;
+    }
+
+    private getCollapsibleState(node: AnyNode): vscode.TreeItemCollapsibleState {
+        if (node.kind === 'role') {
+            const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+            const enableRoleExpansion = this.renderOptions.enableRoleExpansionConfigKey
+                ? cfg.get<boolean>(this.renderOptions.enableRoleExpansionConfigKey, true)
+                : cfg.get<boolean>('roles.details.enableRoleExpansion', true);
             return enableRoleExpansion ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
         if (node.kind === 'detail') {
@@ -220,9 +266,13 @@ export class RoleTreeItem extends vscode.TreeItem {
             }
 
             const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-            const always = cfg.get<boolean>('roles.details.alwaysExpandable', true);
+            const always = this.renderOptions.alwaysExpandableConfigKey
+                ? cfg.get<boolean>(this.renderOptions.alwaysExpandableConfigKey, true)
+                : cfg.get<boolean>('roles.details.alwaysExpandable', true);
             if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
-            const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
+            const wrapCol = Math.max(5, Math.min(200, this.renderOptions.wrapColumnConfigKey
+                ? (cfg.get<number>(this.renderOptions.wrapColumnConfigKey, 20) || 20)
+                : (cfg.get<number>('roles.details.wrapColumn', 20) || 20)));
             const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
             return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
@@ -235,9 +285,11 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
     private _onDidChangeTreeData = new vscode.EventEmitter<AnyNode | void>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+    constructor(private readonly renderOptions: RoleTreeRenderOptions = {}) {}
+
     refresh(): void { this._onDidChangeTreeData.fire(); }
 
-    getTreeItem(element: AnyNode): vscode.TreeItem { return new RoleTreeItem(element); }
+    getTreeItem(element: AnyNode): vscode.TreeItem { return new RoleTreeItem(element, this.renderOptions); }
 
     getChildren(element?: AnyNode): vscode.ProviderResult<AnyNode[]> {
         if (!element) {

@@ -6,7 +6,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Database } from '@vscode/sqlite3';
-import { IDatabaseBackend, DatabaseConfig } from './IDatabaseBackend';
+import {
+    IDatabaseBackend,
+    DatabaseConfig,
+    WritingFileSummary,
+    WritingProjectSummary,
+} from './IDatabaseBackend';
 
 export class SQLiteBackend implements IDatabaseBackend {
     private db: Database | null = null;
@@ -18,6 +23,37 @@ export class SQLiteBackend implements IDatabaseBackend {
         this.config = config;
         const dbFileName = config.sqlite?.dbPath || 'novel-helper/.anh-fsdb/tracking.db';
         this.dbPath = path.join(config.workspaceRoot, dbFileName);
+    }
+
+    private toRelKey(p: string): string {
+        const rootAbs = path.resolve(this.config.workspaceRoot).replace(/\\/g, '/');
+        const absBase = path.isAbsolute(p) || /^[a-z]:[\\/]/i.test(p) ? p : path.join(this.config.workspaceRoot, p);
+        const abs = path.resolve(absBase).replace(/\\/g, '/');
+        const lower = process.platform === 'win32';
+        const absCmp = lower ? abs.toLowerCase() : abs;
+        const rootCmp = lower ? rootAbs.toLowerCase() : rootAbs;
+        if (absCmp === rootCmp) {
+            return '';
+        }
+        if (absCmp.startsWith(rootCmp + '/')) {
+            return absCmp.slice(rootCmp.length + 1);
+        }
+        return absCmp;
+    }
+
+    private toAbsPath(key: string): string {
+        if (path.isAbsolute(key) || /^[a-z]:[\\/]/i.test(key)) {
+            return path.resolve(key);
+        }
+        return path.resolve(path.join(this.config.workspaceRoot, key));
+    }
+
+    private async getPathKeyForUuid(uuid: string): Promise<string | null> {
+        const row = await this.get<{ path: string }>(
+            'SELECT path FROM path_mappings WHERE uuid = ? LIMIT 1',
+            [uuid]
+        );
+        return row?.path || null;
     }
 
     async initialize(): Promise<void> {
@@ -83,12 +119,64 @@ export class SQLiteBackend implements IDatabaseBackend {
                 updated_at INTEGER NOT NULL
             );
 
+            -- 项目级写作总表
+            CREATE TABLE IF NOT EXISTS writing_project_summary (
+                key TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
+            -- 文件级轻量写作索引
+            CREATE TABLE IF NOT EXISTS writing_file_summary (
+                uuid TEXT PRIMARY KEY,
+                path TEXT NOT NULL,
+                total_millis INTEGER,
+                chars_added INTEGER,
+                chars_deleted INTEGER,
+                sessions_count INTEGER,
+                average_cpm INTEGER,
+                last_active_time INTEGER,
+                today_key INTEGER NOT NULL DEFAULT 0,
+                today_peak_cpm INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL
+            );
+
             -- 创建索引
             CREATE INDEX IF NOT EXISTS idx_path_mappings_uuid ON path_mappings(uuid);
             CREATE INDEX IF NOT EXISTS idx_file_metadata_updated ON file_metadata(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_writing_file_summary_path ON writing_file_summary(path);
+            CREATE INDEX IF NOT EXISTS idx_writing_file_summary_today ON writing_file_summary(today_key, today_peak_cpm);
         `;
 
         await this.exec(sql);
+    }
+
+    private mapWritingFileSummaryRow(row: {
+        uuid: string;
+        path: string;
+        total_millis: number | null;
+        chars_added: number | null;
+        chars_deleted: number | null;
+        sessions_count: number | null;
+        average_cpm: number | null;
+        last_active_time: number | null;
+        today_key: number | null;
+        today_peak_cpm: number | null;
+        updated_at: number | null;
+    }): WritingFileSummary {
+        return {
+            uuid: row.uuid,
+            path: this.toAbsPath(row.path),
+            totalMillis: row.total_millis ?? 0,
+            charsAdded: row.chars_added ?? 0,
+            charsDeleted: row.chars_deleted ?? 0,
+            sessionsCount: row.sessions_count ?? 0,
+            averageCPM: row.average_cpm ?? 0,
+            lastActiveTime: row.last_active_time ?? 0,
+            todayKey: row.today_key ?? 0,
+            todayPeakCPM: row.today_peak_cpm ?? 0,
+            updatedAt: row.updated_at ?? 0,
+        };
     }
 
     private async optimizeDatabase(): Promise<void> {
@@ -200,7 +288,8 @@ export class SQLiteBackend implements IDatabaseBackend {
 
     async saveFileMetadata(uuid: string, metadata: any): Promise<void> {
         const now = Date.now();
-        const data = JSON.stringify(metadata);
+        const payload = { ...metadata, filePath: this.toRelKey(metadata?.filePath || '') };
+        const data = JSON.stringify(payload);
         const sql = `
             INSERT INTO file_metadata (uuid, data, updated_at, created_at)
             VALUES (?, ?, ?, ?)
@@ -231,7 +320,19 @@ export class SQLiteBackend implements IDatabaseBackend {
             'SELECT data FROM file_metadata WHERE uuid = ?',
             [uuid]
         );
-        return row ? JSON.parse(row.data) : null;
+        if (!row) { return null; }
+
+        const data = JSON.parse(row.data);
+        const mappedKey = await this.getPathKeyForUuid(uuid);
+        const rel = this.toRelKey(data?.filePath || '');
+        const preferredKey = mappedKey || rel;
+        const absPath = this.toAbsPath(preferredKey);
+        const needsRewrite = data?.filePath !== preferredKey && data?.filePath !== absPath;
+        data.filePath = absPath;
+        if (needsRewrite) {
+            try { await this.saveFileMetadata(uuid, { ...data, filePath: absPath }); } catch { /* ignore */ }
+        }
+        return data;
     }
 
     async loadFileMetadataBatch(uuids: string[]): Promise<Map<string, any>> {
@@ -250,7 +351,17 @@ export class SQLiteBackend implements IDatabaseBackend {
             );
 
             for (const row of rows) {
-                result.set(row.uuid, JSON.parse(row.data));
+                const data = JSON.parse(row.data);
+                const mappedKey = await this.getPathKeyForUuid(row.uuid);
+                const rel = this.toRelKey(data?.filePath || '');
+                const preferredKey = mappedKey || rel;
+                const absPath = this.toAbsPath(preferredKey);
+                const needsRewrite = data?.filePath !== preferredKey && data?.filePath !== absPath;
+                data.filePath = absPath;
+                result.set(row.uuid, data);
+                if (needsRewrite) {
+                    try { await this.saveFileMetadata(row.uuid, { ...data, filePath: absPath }); } catch { /* ignore */ }
+                }
             }
         }
 
@@ -277,6 +388,7 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async savePathMapping(path: string, uuid: string): Promise<void> {
+        const rel = this.toRelKey(path);
         const now = Date.now();
         const sql = `
             INSERT INTO path_mappings (path, uuid, updated_at)
@@ -285,7 +397,7 @@ export class SQLiteBackend implements IDatabaseBackend {
                 uuid = excluded.uuid,
                 updated_at = excluded.updated_at
         `;
-        await this.run(sql, [path, uuid, now]);
+        await this.run(sql, [rel, uuid, now]);
     }
 
     async savePathMappingBatch(mappings: Array<{ path: string; uuid: string }>): Promise<void> {
@@ -304,14 +416,20 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async getUuidByPath(path: string): Promise<string | null> {
+        const rel = this.toRelKey(path);
         const row = await this.get<{ uuid: string }>(
             'SELECT uuid FROM path_mappings WHERE path = ?',
-            [path]
+            [rel]
         );
         return row ? row.uuid : null;
     }
 
     async deletePathMapping(path: string): Promise<void> {
+        const rel = this.toRelKey(path);
+        await this.run('DELETE FROM path_mappings WHERE path = ?', [rel]);
+    }
+
+    async deletePathMappingRaw(path: string): Promise<void> {
         await this.run('DELETE FROM path_mappings WHERE path = ?', [path]);
     }
 
@@ -355,6 +473,133 @@ export class SQLiteBackend implements IDatabaseBackend {
             ['main']
         );
         return row ? JSON.parse(row.data) : null;
+    }
+
+    async saveWritingProjectSummary(summary: WritingProjectSummary): Promise<void> {
+        const updatedAt = summary.updatedAt || Date.now();
+        const sql = `
+            INSERT INTO writing_project_summary (key, data, updated_at)
+            VALUES ('main', ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                data = excluded.data,
+                updated_at = excluded.updated_at
+        `;
+        await this.run(sql, [JSON.stringify({ ...summary, updatedAt }), updatedAt]);
+    }
+
+    async loadWritingProjectSummary(): Promise<WritingProjectSummary | null> {
+        const row = await this.get<{ data: string }>(
+            'SELECT data FROM writing_project_summary WHERE key = ?',
+            ['main']
+        );
+        return row ? JSON.parse(row.data) as WritingProjectSummary : null;
+    }
+
+    async saveWritingFileSummary(summary: WritingFileSummary): Promise<void> {
+        const updatedAt = summary.updatedAt || Date.now();
+        const sql = `
+            INSERT INTO writing_file_summary (
+                uuid, path, total_millis, chars_added, chars_deleted,
+                sessions_count, average_cpm, last_active_time,
+                today_key, today_peak_cpm, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(uuid) DO UPDATE SET
+                path = excluded.path,
+                total_millis = excluded.total_millis,
+                chars_added = excluded.chars_added,
+                chars_deleted = excluded.chars_deleted,
+                sessions_count = excluded.sessions_count,
+                average_cpm = excluded.average_cpm,
+                last_active_time = excluded.last_active_time,
+                today_key = excluded.today_key,
+                today_peak_cpm = excluded.today_peak_cpm,
+                updated_at = excluded.updated_at
+        `;
+
+        await this.run(sql, [
+            summary.uuid,
+            this.toRelKey(summary.path),
+            summary.totalMillis,
+            summary.charsAdded,
+            summary.charsDeleted,
+            summary.sessionsCount,
+            summary.averageCPM,
+            summary.lastActiveTime,
+            summary.todayKey,
+            summary.todayPeakCPM,
+            updatedAt,
+        ]);
+    }
+
+    async saveWritingFileSummaryBatch(entries: WritingFileSummary[]): Promise<void> {
+        if (entries.length === 0) {
+            return;
+        }
+
+        await this.exec('BEGIN TRANSACTION');
+        try {
+            for (const summary of entries) {
+                await this.saveWritingFileSummary(summary);
+            }
+            await this.exec('COMMIT');
+        } catch (err) {
+            await this.exec('ROLLBACK');
+            throw err;
+        }
+    }
+
+    async loadWritingFileSummary(uuid: string): Promise<WritingFileSummary | null> {
+        const row = await this.get<{
+            uuid: string;
+            path: string;
+            total_millis: number | null;
+            chars_added: number | null;
+            chars_deleted: number | null;
+            sessions_count: number | null;
+            average_cpm: number | null;
+            last_active_time: number | null;
+            today_key: number | null;
+            today_peak_cpm: number | null;
+            updated_at: number | null;
+        }>(
+            `SELECT uuid, path, total_millis, chars_added, chars_deleted, sessions_count,
+                    average_cpm, last_active_time, today_key, today_peak_cpm, updated_at
+             FROM writing_file_summary WHERE uuid = ?`,
+            [uuid]
+        );
+        return row ? this.mapWritingFileSummaryRow(row) : null;
+    }
+
+    async loadAllWritingFileSummaries(): Promise<Map<string, WritingFileSummary>> {
+        const rows = await this.all<{
+            uuid: string;
+            path: string;
+            total_millis: number | null;
+            chars_added: number | null;
+            chars_deleted: number | null;
+            sessions_count: number | null;
+            average_cpm: number | null;
+            last_active_time: number | null;
+            today_key: number | null;
+            today_peak_cpm: number | null;
+            updated_at: number | null;
+        }>(
+            `SELECT uuid, path, total_millis, chars_added, chars_deleted, sessions_count,
+                    average_cpm, last_active_time, today_key, today_peak_cpm, updated_at
+             FROM writing_file_summary`,
+            []
+        );
+
+        const result = new Map<string, WritingFileSummary>();
+        for (const row of rows) {
+            result.set(row.uuid, this.mapWritingFileSummaryRow(row));
+        }
+        return result;
+    }
+
+    async deleteWritingFileSummary(uuid: string): Promise<void> {
+        await this.run('DELETE FROM writing_file_summary WHERE uuid = ?', [uuid]);
     }
 
     async getStats(): Promise<{ totalFiles: number; totalMappings: number; dbSize?: number }> {
