@@ -3,10 +3,17 @@ import * as path from 'path';
 import JSON5 from 'json5';
 import { Role } from '../extension';
 import { parseMarkdownRoles } from './Parser/markdownParser';
+import {
+    DEFAULT_ROLE_DELIMITED_HEADERS,
+    type DelimitedRoleFileFormat,
+    parseDelimitedRoleFile,
+    stringifyDelimitedRoleFile,
+} from './delimitedRoleFile';
 
 export interface RoleFileData {
     roles: Role[];
-    fileType: 'json5' | 'ojson5' | 'markdown';
+    fileType: 'json5' | 'ojson5' | 'markdown' | 'csv';
+    delimitedFormat?: DelimitedRoleFileFormat;
 }
 
 /**
@@ -27,6 +34,34 @@ export function readRoleFile(filePath: string): RoleFileData {
             );
             const roles = parseMarkdownRoles(content, filePath, packagePath, '角色');
             return { roles, fileType: 'markdown' };
+        } else if (ext === '.csv') {
+            const packagePath = path.relative(
+                path.join(path.dirname(filePath), '..', '..'),
+                path.dirname(filePath)
+            );
+
+            if (!content.trim()) {
+                return {
+                    roles: [],
+                    fileType: 'csv',
+                    delimitedFormat: {
+                        delimiter: ',',
+                        hasHeader: true,
+                        headers: [...DEFAULT_ROLE_DELIMITED_HEADERS],
+                    },
+                };
+            }
+
+            const parsed = parseDelimitedRoleFile(content, filePath, packagePath, '角色');
+            return {
+                roles: parsed.roles,
+                fileType: 'csv',
+                delimitedFormat: {
+                    delimiter: parsed.delimiter,
+                    hasHeader: parsed.hasHeader,
+                    headers: parsed.headers,
+                },
+            };
         } else if (ext === '.ojson5' || ext === '.json5') {
             // 添加空文件检查
             if (!content || content.trim() === '') {
@@ -75,13 +110,28 @@ export function readRoleFile(filePath: string): RoleFileData {
  * @param roles 角色数组
  * @param fileType 文件类型
  */
-export function writeRoleFile(filePath: string, roles: Role[], fileType: 'json5' | 'ojson5' | 'markdown'): void {
+export function writeRoleFile(
+    filePath: string,
+    roles: Role[],
+    fileType: 'json5' | 'ojson5' | 'markdown' | 'csv',
+    delimitedFormat?: DelimitedRoleFileFormat,
+): void {
     let content: string;
 
     switch (fileType) {
         case 'markdown':
             // 对于 Markdown 格式，智能合并到现有内容
             content = smartMergeMarkdownContent(filePath, roles);
+            break;
+        case 'csv':
+            content = stringifyDelimitedRoleFile(
+                roles,
+                delimitedFormat || {
+                    delimiter: ',',
+                    hasHeader: true,
+                    headers: [...DEFAULT_ROLE_DELIMITED_HEADERS],
+                }
+            );
             break;
         case 'ojson5':
         case 'json5':
@@ -115,7 +165,7 @@ export function addRoleToFile(filePath: string, newRole: Role): boolean {
             fileData.roles.push(newRole);
         }
 
-        writeRoleFile(filePath, fileData.roles, fileData.fileType);
+        writeRoleFile(filePath, fileData.roles, fileData.fileType, fileData.delimitedFormat);
         return true;
     } catch (error) {
         console.error(`添加角色到文件失败 ${filePath}:`, error);
@@ -124,7 +174,18 @@ export function addRoleToFile(filePath: string, newRole: Role): boolean {
         if ((error as Error).message.includes('解析文件失败')) {
             try {
                 console.log(`尝试重新创建损坏的文件: ${filePath}`);
-                writeRoleFile(filePath, [newRole], 'json5');
+                const ext = path.extname(filePath).toLowerCase();
+                if (ext === '.csv') {
+                    writeRoleFile(filePath, [newRole], 'csv', {
+                        delimiter: ',',
+                        hasHeader: true,
+                        headers: [...DEFAULT_ROLE_DELIMITED_HEADERS],
+                    });
+                } else if (ext === '.md') {
+                    writeRoleFile(filePath, [newRole], 'markdown');
+                } else {
+                    writeRoleFile(filePath, [newRole], 'json5');
+                }
                 return true;
             } catch (recreateError) {
                 console.error(`重新创建文件失败:`, recreateError);

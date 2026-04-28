@@ -5,6 +5,7 @@ import { hoverRangesMap } from './hoverProvider';
 import { findDefinitionInFile } from './defProv';
 import { getRoleReferencesForRole, RoleReferenceHit } from '../context/roleUsageStore';
 import { roles } from '../activate';
+import { roleMatchesKey } from '../utils/roleLookupKeys';
 
 /**
  * 从光标位置获取角色
@@ -58,8 +59,7 @@ function roleFromPosition(document: vscode.TextDocument, position: vscode.Positi
     
     // 在全局角色列表中查找匹配
     const matchingRoles = roles.filter(role => 
-        role.name === word || 
-        (role.aliases && role.aliases.includes(word))
+        roleMatchesKey(role, word)
     );
     
     if (matchingRoles.length === 0) {

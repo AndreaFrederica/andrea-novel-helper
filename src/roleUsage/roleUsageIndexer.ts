@@ -7,6 +7,7 @@ import { collectRoleUsageRanges } from '../utils/roleUsageCollector';
 import { updateRoleUsageFromDocument, clearRoleUsageIndex, flushRoleUsageStore } from '../context/roleUsageStore';
 import { Role } from '../extension';
 import { getAsyncRoleMatcher } from '../utils/asyncRoleMatcher';
+import { roleMatchesKey } from '../utils/roleLookupKeys';
 
 /**
  * 角色引用索引重建器
@@ -371,9 +372,7 @@ export class RoleUsageIndexer {
                 for (const pattern of match.pats) {
                     // 查找匹配的角色
                     const role = this.roles.find(r => 
-                        r.name === pattern || 
-                        (r.aliases && r.aliases.includes(pattern)) ||
-                        (r.fixes && r.fixes.includes(pattern))
+                        roleMatchesKey(r, pattern)
                     );
                     
                     if (!role) {

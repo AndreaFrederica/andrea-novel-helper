@@ -2,6 +2,7 @@ import { Worker } from 'worker_threads';
 import * as path from 'path';
 import { roles, onDidChangeRoles } from '../activate';
 import * as vscode from 'vscode';
+import { getRoleLookupKeys } from './roleLookupKeys';
 
 interface WorkerMatch { end:number; pats:string[] }
 interface PendingReq { resolve: (m:WorkerMatch[])=>void; reject:(e:any)=>void; ts:number; docVersion?:number; }
@@ -18,7 +19,7 @@ class AsyncRoleMatcher {
   private lastBuildSerial = 0;
   private buildWaiters: Array<() => void> = [];
   private handleConfigChangeDisposable?: vscode.Disposable;
-  private lastBuiltRoles?: Array<{ name: string; aliases?: string[]; wordSegmentFilter?: any }>;
+  private lastBuiltRoles?: Array<{ name: string; aliases?: string[]; fixes?: string[]; lookupKeys?: string[]; wordSegmentFilter?: any }>;
 
   constructor() {
     this.spawn();
@@ -82,7 +83,7 @@ class AsyncRoleMatcher {
       }
     }
   }
-  build(explicitRoles?: Array<{ name: string; aliases?: string[]; wordSegmentFilter?: any }>) {
+  build(explicitRoles?: Array<{ name: string; aliases?: string[]; fixes?: string[]; lookupKeys?: string[]; wordSegmentFilter?: any }>) {
   if (!this.worker || !this.ready) { return; }
   if (this.building) { return; }
     this.building = true;
@@ -91,6 +92,7 @@ class AsyncRoleMatcher {
       name: r.name,
       aliases: r.aliases,
       fixes: (r as any).fixes || (r as any).fixs,
+      lookupKeys: getRoleLookupKeys(r),
       wordSegmentFilter: (r as any).wordSegmentFilter
     }));
     this.lastBuiltRoles = simpleRoles as any;

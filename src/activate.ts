@@ -97,6 +97,8 @@ import { ProjectConfigLinter } from './projectConfig/projectConfigLinter';
 import { registerNameGeneratorCommands } from './commands/nameGeneratorCommands';
 import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
 import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
+import { ProjectKeywordConfigJson5CompletionProvider, ProjectKeywordConfigJson5Linter } from './projectConfig/projectKeywordConfigJson5';
+import { clearProjectKeywordConfigCache, isProjectKeywordConfigFile } from './projectConfig/projectKeywordConfig';
 import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
 import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
 import { createCirclePackingDataProvider } from './data/circlePackingDataProvider';
@@ -113,6 +115,7 @@ let gitCommandRegistered = false;
 // 全局变量存储lint系统实例
 let projectConfigLinter: ProjectConfigLinter | undefined;
 let projectConfigDecorator: ProjectConfigDecorator | undefined;
+let projectKeywordConfigJson5Linter: ProjectKeywordConfigJson5Linter | undefined;
 
 // 智能标签组锁定管理器
 let smartTabGroupLockManager: SmartTabGroupLockManager | undefined;
@@ -383,13 +386,23 @@ export async function activate(context: vscode.ExtensionContext) {
         // 初始化lint系统
         projectConfigLinter = new ProjectConfigLinter(context);
         projectConfigDecorator = new ProjectConfigDecorator(context, projectConfigLinter);
+        projectKeywordConfigJson5Linter = new ProjectKeywordConfigJson5Linter(context);
         
         // 注册补全提供器
-        const completionProvider = new ProjectConfigCompletionProvider();
+        const projectConfigCompletionProvider = new ProjectConfigCompletionProvider();
+        const keywordConfigCompletionProvider = new ProjectKeywordConfigJson5CompletionProvider();
         context.subscriptions.push(
             vscode.languages.registerCompletionItemProvider(
+                { scheme: 'file', pattern: '**/anhproject.md' },
+                projectConfigCompletionProvider,
+                '#',
+                ' '
+            ),
+            vscode.languages.registerCompletionItemProvider(
                 { scheme: 'file', pattern: '**/project-config.json5' },
-                completionProvider
+                keywordConfigCompletionProvider,
+                '"',
+                '\''
             )
         );
         // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
@@ -729,11 +742,49 @@ export async function activate(context: vscode.ExtensionContext) {
                 if (
                     e.affectsConfiguration('AndreaNovelHelper.rolesFile') ||
                     e.affectsConfiguration('AndreaNovelHelper.minChars') ||
-                    e.affectsConfiguration('AndreaNovelHelper.defaultColor')
+                    e.affectsConfiguration('AndreaNovelHelper.defaultColor') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customCharacterFileKeywords') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customSensitiveWordsFileKeywords') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customVocabularyFileKeywords') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customRegexFileKeywords')
                 ) {
+                    clearProjectKeywordConfigCache();
                     loadRoles(true);
                     updateDecorations();
                 }
+            })
+        );
+
+        const refreshKeywordConfigDrivenRoles = (targetPath?: string) => {
+            clearProjectKeywordConfigCache(targetPath);
+            loadRoles(true);
+            updateDecorations();
+        };
+
+        context.subscriptions.push(
+            vscode.workspace.onDidSaveTextDocument(document => {
+                if (!isProjectKeywordConfigFile(document.uri.fsPath)) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles(document.uri.fsPath);
+            }),
+            vscode.workspace.onDidCreateFiles(event => {
+                if (!event.files.some(file => isProjectKeywordConfigFile(file.fsPath))) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles();
+            }),
+            vscode.workspace.onDidDeleteFiles(event => {
+                if (!event.files.some(file => isProjectKeywordConfigFile(file.fsPath))) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles();
+            }),
+            vscode.workspace.onDidRenameFiles(event => {
+                if (!event.files.some(file => isProjectKeywordConfigFile(file.oldUri.fsPath) || isProjectKeywordConfigFile(file.newUri.fsPath))) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles();
             })
         );
 
@@ -1361,6 +1412,10 @@ export function deactivate() {
     if (projectConfigDecorator) {
         projectConfigDecorator.dispose();
         projectConfigDecorator = undefined;
+    }
+    if (projectKeywordConfigJson5Linter) {
+        projectKeywordConfigJson5Linter.dispose();
+        projectKeywordConfigJson5Linter = undefined;
     }
 }
 

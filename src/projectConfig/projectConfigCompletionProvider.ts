@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PROJECT_KEYWORD_CONFIG_DEFINITIONS } from './projectKeywordConfig';
 
 /**
  * 项目配置文件的补全提供器
@@ -13,6 +14,11 @@ export class ProjectConfigCompletionProvider implements vscode.CompletionItemPro
         { label: '封面', detail: '项目封面图片路径', insertText: '## 封面\n' },
         { label: '项目简介', detail: '项目简介', insertText: '## 项目简介\n' },
         { label: '标签', detail: '项目标签，用逗号分隔', insertText: '## 标签\n' },
+        ...PROJECT_KEYWORD_CONFIG_DEFINITIONS.map(definition => ({
+            label: definition.markdownSection,
+            detail: definition.detail,
+            insertText: `## ${definition.markdownSection}\n`
+        })),
         { label: '创建时间', detail: '项目创建时间', insertText: '## 创建时间\n' },
         { label: '更新时间', detail: '项目更新时间', insertText: '## 更新时间\n' }
     ];

@@ -26,6 +26,7 @@ export const addSensitiveCmd_obj = async () => {
         {
             includeMd: true,      // 支持 Markdown 格式
             includeOjson5: true,   // 支持 OJSON5 格式
+            includeCsv: true,      // 支持 CSV 格式
             // 添加敏感词特定过滤：排除角色和词汇相关文件
             customFilter: (fileName: string) => {
                 const lowerFileName = fileName.toLowerCase();

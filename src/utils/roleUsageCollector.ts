@@ -4,6 +4,7 @@ import { roles } from '../activate';
 import { getRoleMatches } from '../context/roleAsyncShared';
 import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
 import { rangesOverlap } from '../utils/utils';
+import { getRoleLookupKeys, roleMatchesKey } from './roleLookupKeys';
 
 export interface RoleUsageRangeOptions {
     hits?: Array<[number, string[]]>;
@@ -11,7 +12,7 @@ export interface RoleUsageRangeOptions {
     cancellationToken?: vscode.CancellationToken;
 }
 
-export type RoleMatchSource = 'name' | 'alias' | 'fix' | 'regex';
+export type RoleMatchSource = 'name' | 'alias' | 'fix' | 'lookup' | 'regex';
 
 export interface RoleDecorationEntry {
     range: vscode.Range;
@@ -85,6 +86,12 @@ export async function collectRoleUsageRanges(
                 patternMetaMap.set(f, { role: r, matchSource: 'fix', pattern: fix });
             }
         }
+        for (const lookupKey of getRoleLookupKeys(r)) {
+            const normalizedLookup = lookupKey.trim().normalize('NFC');
+            if (!normalizedLookup) continue;
+            patternRoleMap.set(normalizedLookup, r);
+            patternMetaMap.set(normalizedLookup, { role: r, matchSource: 'lookup', pattern: lookupKey });
+        }
     }
 
     type Candidate = {
@@ -108,7 +115,7 @@ export async function collectRoleUsageRanges(
             const meta = patternMetaMap.get(pat);
             let role = meta?.role || patternRoleMap.get(pat) || ahoCorasickManager.getRole(pat);
             if (!role) {
-                role = roles.find(r => r.name === pat || r.aliases?.includes(pat));
+                role = roles.find(r => roleMatchesKey(r, pat));
             }
             if (!role) {
                 continue;
@@ -120,6 +127,8 @@ export async function collectRoleUsageRanges(
                     matchSource = 'alias';
                 } else if ((role.fixes || []).includes(pat)) {
                     matchSource = 'fix';
+                } else if (getRoleLookupKeys(role).includes(pat)) {
+                    matchSource = 'lookup';
                 } else {
                     pattern = role.name;
                 }

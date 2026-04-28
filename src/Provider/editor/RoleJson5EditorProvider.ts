@@ -4,6 +4,11 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as JSON5 from 'json5';
 import { hoverRangesMap } from '../hoverProvider';
+import {
+    applyGeneratedLookupKeys,
+    getRequestedLookupKeyCandidates,
+    type LookupKeyGenerationKind,
+} from '../../utils/roleLookupKeyGeneration';
 
 /* =========================
    类型与模型（内置转换器用）
@@ -41,6 +46,9 @@ export interface BaseFieldsCommon {
     description?: string;
     affiliation?: string;
     aliases?: string[] | undefined;
+    lookupKeys_pinyin?: string[] | undefined;
+    lookupKeys_romanized?: string[] | undefined;
+    lookupKeys_spelling?: string[] | undefined;
     fixes?: string[] | undefined;
     regex?: string | undefined;
     regexFlags?: string | undefined;
@@ -77,6 +85,9 @@ export interface Role {
     regexFlags?: string;
     priority?: number;
     fixes?: string[];
+    lookupKeys_pinyin?: string[];
+    lookupKeys_romanized?: string[];
+    lookupKeys_spelling?: string[];
     // 仅后端隐藏：packagePath/sourcePath（不外发、不写文件）
     packagePath?: string;
     sourcePath?: string;
@@ -94,7 +105,7 @@ const HIDDEN_BACKEND_KEYS = new Set(['packagePath', 'sourcePath']);
 
 // 基础键（动态键不允许覆盖）
 const BASE_KEYS = new Set([
-    'name', 'type', 'uuid', 'affiliation', 'description', 'aliases', 'color', 'regex', 'regexFlags', 'priority', 'fixes',
+    'name', 'type', 'uuid', 'affiliation', 'description', 'aliases', 'lookupKeys_pinyin', 'lookupKeys_romanized', 'lookupKeys_spelling', 'color', 'regex', 'regexFlags', 'priority', 'fixes',
     'wordSegmentFilter',
     'style', 'backgroundColor', 'bold', 'italic', 'strikethrough', 'underline', // 样式字段
     ...Array.from(HIDDEN_BACKEND_KEYS),
@@ -109,6 +120,9 @@ const BASE_SYNONYMS: Record<string, keyof BaseFieldsCommon | 'priority' | 'fixes
     'color': 'color', '颜色': 'color',
     'affiliation': 'affiliation', '从属': 'affiliation',
     'alias': 'aliases', 'aliases': 'aliases', '别名': 'aliases',
+    'lookupkeys_pinyin': 'lookupKeys_pinyin', '拼音查询键': 'lookupKeys_pinyin', '拼音检索键': 'lookupKeys_pinyin',
+    'lookupkeys_romanized': 'lookupKeys_romanized', '罗马字查询键': 'lookupKeys_romanized', '罗马字检索键': 'lookupKeys_romanized',
+    'lookupkeys_spelling': 'lookupKeys_spelling', '拼写查询键': 'lookupKeys_spelling', '拼写检索键': 'lookupKeys_spelling',
     'priority': 'priority', '优先级': 'priority',
     'fixes': 'fixes', 'fixs': 'fixes',
     'wordsegmentfilter': 'wordSegmentFilter', '分词过滤': 'wordSegmentFilter',
@@ -174,6 +188,9 @@ function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         description: role.description,
         affiliation: role.affiliation,
         aliases: role.aliases ? [...role.aliases] : undefined,
+        lookupKeys_pinyin: role.lookupKeys_pinyin ? [...role.lookupKeys_pinyin] : undefined,
+        lookupKeys_romanized: role.lookupKeys_romanized ? [...role.lookupKeys_romanized] : undefined,
+        lookupKeys_spelling: role.lookupKeys_spelling ? [...role.lookupKeys_spelling] : undefined,
         fixes: role.fixes ? [...role.fixes] : undefined,
         regex: role.regex,
         regexFlags: role.regexFlags,
@@ -263,6 +280,9 @@ function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: RoleFlat
 
     setIf('affiliation', base.affiliation);
     setIf('aliases', toStringArray(base.aliases));
+    setIf('lookupKeys_pinyin', toStringArray(base.lookupKeys_pinyin));
+    setIf('lookupKeys_romanized', toStringArray(base.lookupKeys_romanized));
+    setIf('lookupKeys_spelling', toStringArray(base.lookupKeys_spelling));
     setIf('description', base.description);
 
     const normalizedStyle: TextStyleOptions = {};
@@ -330,12 +350,12 @@ function cardModelsToRoles(list: RoleCardModelWithId[], existingById?: Map<strin
    ========================= */
 
 const BASE_KEY_ORDER = [
-    'name', 'type', 'affiliation', 'description', 'aliases',
+    'name', 'type', 'affiliation', 'description', 'aliases', 'lookupKeys_pinyin', 'lookupKeys_romanized', 'lookupKeys_spelling',
     'color', 'style', 'backgroundColor', 'bold', 'italic', 'strikethrough', 'underline',
     'wordSegmentFilter', 'regex', 'regexFlags', 'priority', 'fixes',
 ];
 
-function parseRolesFromText(text: string): RoleFlat[] {
+function parseRolesFromText(text: string, resourcePath?: string): RoleFlat[] {
     const trimmed = (text || '').trim();
     if (!trimmed) {
         return [];
@@ -356,6 +376,9 @@ function parseRolesFromText(text: string): RoleFlat[] {
             affiliation: rec.affiliation ?? rec.从属,
             description: rec.description ?? rec.描述,
             aliases: toStringArray(rec.aliases ?? rec.alias ?? rec.别名),
+            lookupKeys_pinyin: toStringArray(rec.lookupKeys_pinyin ?? rec['拼音查询键'] ?? rec['拼音检索键']),
+            lookupKeys_romanized: toStringArray(rec.lookupKeys_romanized ?? rec['罗马字查询键'] ?? rec['罗马字检索键']),
+            lookupKeys_spelling: toStringArray(rec.lookupKeys_spelling ?? rec['拼写查询键'] ?? rec['拼写检索键']),
             color: rec.color ?? rec.颜色,
             style: rec.style,
             backgroundColor: rec.backgroundColor,
@@ -375,7 +398,7 @@ function parseRolesFromText(text: string): RoleFlat[] {
             if ((role as any)[k] !== undefined) continue;
             if (!isEmptyish(v)) (role as any)[k] = Array.isArray(v) ? v.map(x => String(x)) : v;
         }
-        out.push(role);
+        out.push(applyGeneratedLookupKeys(role, resourcePath));
     }
     return out;
 }
@@ -407,6 +430,9 @@ function stringifyRolesToJson5(roles: RoleFlat[]): string {
         put('affiliation', r.affiliation);
         put('description', r.description);
         put('aliases', toStringArray(r.aliases));
+        put('lookupKeys_pinyin', toStringArray(r.lookupKeys_pinyin));
+        put('lookupKeys_romanized', toStringArray(r.lookupKeys_romanized));
+        put('lookupKeys_spelling', toStringArray(r.lookupKeys_spelling));
         put('color', r.color);
         put('style', r.style);
         put('backgroundColor', r.backgroundColor);
@@ -424,7 +450,7 @@ function stringifyRolesToJson5(roles: RoleFlat[]): string {
         for (const [k, v] of Object.entries(r)) {
             if (HIDDEN_BACKEND_KEYS.has(k)) continue;
             if (BASE_KEY_ORDER.includes(k)) continue;
-            if (['name', 'type', 'affiliation', 'description', 'aliases', 'color', 'style', 'backgroundColor', 'bold', 'italic', 'strikethrough', 'underline', 'regex', 'regexFlags', 'priority', 'fixes', 'id'].includes(k)) continue;
+            if (['name', 'type', 'affiliation', 'description', 'aliases', 'lookupKeys_pinyin', 'lookupKeys_romanized', 'lookupKeys_spelling', 'color', 'style', 'backgroundColor', 'bold', 'italic', 'strikethrough', 'underline', 'regex', 'regexFlags', 'priority', 'fixes', 'id'].includes(k)) continue;
             if (!isEmptyish(v)) rec[k] = Array.isArray(v) ? v.map(x => String(x)) : v;
         }
         return rec;
@@ -750,7 +776,7 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                     return;
                 }
 
-                const roles = parseRolesFromText(document.getText());
+                const roles = parseRolesFromText(document.getText(), document.uri.fsPath);
                 this.existingById.clear();
                 for (const r of roles) if (r.id) this.existingById.set(r.id, r);
                 const payload = rolesToCardModels(roles);
@@ -832,6 +858,35 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
             try {
                 if (msg.type === 'requestRoleCards') {
                     await updateWebview();
+                } else if (msg.type === 'requestLookupKeyCandidates') {
+                    const requestId = typeof msg.requestId === 'string' ? msg.requestId : '';
+                    const kind = msg.kind === 'pinyin' || msg.kind === 'romanized'
+                        ? msg.kind as LookupKeyGenerationKind
+                        : undefined;
+                    const base = msg.role?.base;
+
+                    if (!requestId || !kind || !base || typeof base !== 'object') {
+                        panel.webview.postMessage({
+                            type: 'lookupKeyCandidates',
+                            requestId,
+                            kind,
+                            candidates: [],
+                            error: '候选请求参数无效',
+                        });
+                        return;
+                    }
+
+                    const candidates = await getRequestedLookupKeyCandidates({
+                        name: typeof base.name === 'string' ? base.name : '',
+                        aliases: toStringArray(base.aliases),
+                    }, kind, document.uri.fsPath);
+
+                    panel.webview.postMessage({
+                        type: 'lookupKeyCandidates',
+                        requestId,
+                        kind,
+                        candidates,
+                    });
                 } else if (msg.type === 'saveRoleCards') {
                     const validation = validateRoleJson5Text(document.getText());
                     if (!validation.ok) {
@@ -848,7 +903,7 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                     }
 
                     const list: RoleCardModelWithId[] = Array.isArray(msg.list) ? msg.list : [];
-                    const merged = cardModelsToRoles(list, this.existingById);
+                    const merged = cardModelsToRoles(list, this.existingById).map(role => applyGeneratedLookupKeys(role, document.uri.fsPath));
                     const text = stringifyRolesToJson5(merged);
 
                     // 更新 existingById（即便 off 也要更新，用于后续合并）
@@ -873,7 +928,17 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                     this.pendingDefByDoc.delete(key); // 清队列，避免重复发送
                 }
             } catch (e) {
-                panel.webview.postMessage({ type: 'saveAck', ok: false, error: String(e) });
+                if (msg.type === 'requestLookupKeyCandidates') {
+                    panel.webview.postMessage({
+                        type: 'lookupKeyCandidates',
+                        requestId: typeof msg.requestId === 'string' ? msg.requestId : '',
+                        kind: msg.kind,
+                        candidates: [],
+                        error: String(e),
+                    });
+                } else {
+                    panel.webview.postMessage({ type: 'saveAck', ok: false, error: String(e) });
+                }
             }
         }, undefined, this.ctx.subscriptions);
 

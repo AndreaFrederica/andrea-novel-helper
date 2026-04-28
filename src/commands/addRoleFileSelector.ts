@@ -5,9 +5,14 @@ import * as fs from 'fs';
 import JSON5 from 'json5';
 import { isRoleFile, getPackageDirectory } from '../utils/utils';
 import { generateMarkdownTemplate } from '../templates/templateGenerators';
+import { DEFAULT_ROLE_DELIMITED_HEADERS } from '../utils/delimitedRoleFile';
 
 // 记忆功能：存储每种fileType上次选择的文件
 const lastSelectedFiles = new Map<string, string>();
+
+function generateDelimitedTemplate(): string {
+    return `${DEFAULT_ROLE_DELIMITED_HEADERS.join(',')}\n`;
+}
 
 /**
  * 扫描工作区中的角色文件（使用isRoleFile函数判断）
@@ -21,11 +26,14 @@ export async function scanJson5Files(options?: {
     includeMd?: boolean;
     /** 是否包含 ojson5 文件，默认为 true */
     includeOjson5?: boolean;
+    /** 是否包含 csv 文件，默认为 false */
+    includeCsv?: boolean;
 }, customFilter?: (fileName: string) => boolean): Promise<string[]> {
     const {
         excludeSensitive = true,
         includeMd = false,
-        includeOjson5 = true
+        includeOjson5 = true,
+        includeCsv = false
     } = options || {};
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -45,7 +53,8 @@ export async function scanJson5Files(options?: {
             const validExtension =
                 lowerFile.endsWith('.json5') ||
                 (includeOjson5 && lowerFile.endsWith('.ojson5')) ||
-                (includeMd && lowerFile.endsWith('.md'));
+                (includeMd && lowerFile.endsWith('.md')) ||
+                (includeCsv && lowerFile.endsWith('.csv'));
 
             if (!validExtension) return false;
 
@@ -87,6 +96,8 @@ export async function selectOrCreateFile(
         includeMd?: boolean;
         /** 是否包含 ojson5 文件，默认为 true */
         includeOjson5?: boolean;
+        /** 是否包含 csv 文件，默认为 false */
+        includeCsv?: boolean;
         /** 自定义文件名过滤器 */
         customFilter?: (fileName: string) => boolean;
     }
@@ -95,6 +106,7 @@ export async function selectOrCreateFile(
         excludeSensitive = true,
         includeMd = false,
         includeOjson5 = true,
+        includeCsv = false,
         customFilter
     } = scanOptions || {};
 
@@ -105,7 +117,7 @@ export async function selectOrCreateFile(
     }
 
     // 根据文件类型调整选项
-    let finalScanOptions = { excludeSensitive, includeMd, includeOjson5 };
+    let finalScanOptions = { excludeSensitive, includeMd, includeOjson5, includeCsv };
 
     // 如果是敏感词类型，不过滤敏感词文件
     if (fileType.includes('敏感词')) {
@@ -194,6 +206,7 @@ export async function selectOrCreateFile(
                 if (includeOjson5) validExtensions.push('.ojson5');
                 validExtensions.push('.json5');
                 if (includeMd) validExtensions.push('.md');
+                if (includeCsv) validExtensions.push('.csv');
 
                 const hasValidExtension = validExtensions.some(ext => value.endsWith(ext));
                 if (!hasValidExtension) {
@@ -224,6 +237,8 @@ export async function selectOrCreateFile(
             // 根据文件扩展名创建默认内容
             if (filePath.endsWith('.md')) {
                 content = generateMarkdownTemplate(fileType);
+            } else if (filePath.endsWith('.csv')) {
+                content = generateDelimitedTemplate();
             } else if (filePath.endsWith('.ojson5') || filePath.endsWith('.json5')) {
                 content = JSON5.stringify([], null, 2);
             } else {

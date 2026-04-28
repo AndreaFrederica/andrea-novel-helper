@@ -441,50 +441,50 @@ export async function computeZhEnCountAsync(filePath: string): Promise<{ zhChars
 
 // 获取或创建文件统计（接入全局追踪）
 function getOrCreateFileStats(filePath: string): FileStats {
-    console.log('TimeStats: getOrCreateFileStats called for:', filePath);
+    tsDebug('getOrCreateFileStats', { filePath });
 
     if (!isWorkspaceTrackedFilePath(filePath)) {
-        console.log('TimeStats: Skip non-workspace file stats for:', filePath);
+        tsDebug('getOrCreateFileStats.skipNonWorkspace', { filePath });
         return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
     }
 
     const g = getGlobalFileTracking?.();
-    console.log('TimeStats: getGlobalFileTracking result:', !!g);
+    tsDebug('getOrCreateFileStats.globalFileTracking', { available: !!g });
 
     if (!g) {
-        console.log('TimeStats: No global file tracking, returning empty stats');
+        tsDebug('getOrCreateFileStats.noGlobalTracking', { filePath });
         return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
     }
 
     let uuid = g.getFileUuid(filePath);
-    console.log('TimeStats: File UUID for', filePath, ':', uuid);
+    tsDebug('getOrCreateFileStats.fileUuid', { filePath, uuid });
 
     // 如果文件没有UUID（可能是未保存的新文件），创建临时追踪记录
     if (!uuid) {
-        console.log('TimeStats: No UUID found, creating temporary tracking record');
+        tsDebug('getOrCreateFileStats.createTemporaryTracking.start', { filePath });
         try {
             // 通过数据管理器创建临时文件记录
             const tracker = getFileTracker();
             if (tracker) {
                 const dataManager = tracker.getDataManager();
                 uuid = dataManager.createTemporaryFile(filePath);
-                console.log('TimeStats: Created temporary file record with UUID:', uuid);
+                tsDebug('getOrCreateFileStats.createTemporaryTracking.success', { filePath, uuid });
             }
         } catch (error) {
-            console.log('TimeStats: Failed to create temporary file record:', error);
+            tsDebug('getOrCreateFileStats.createTemporaryTracking.failed', { filePath, error });
         }
 
         if (!uuid) {
-            console.log('TimeStats: Still no UUID, returning empty stats');
+            tsDebug('getOrCreateFileStats.createTemporaryTracking.missingUuid', { filePath });
             return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
         }
     }
 
     const ws = g.getWritingStats(uuid);
-    console.log('TimeStats: Writing stats for UUID', uuid, ':', ws);
+    tsDebug('getOrCreateFileStats.writingStats', { uuid, writingStats: ws });
 
     if (ws) {
-        console.log('TimeStats: Found writing stats, returning populated stats');
+        tsDebug('getOrCreateFileStats.hit', { uuid });
         return {
             totalMillis: ws.totalMillis,
             charsAdded: ws.charsAdded,
@@ -497,7 +497,7 @@ function getOrCreateFileStats(filePath: string): FileStats {
         };
     }
 
-    console.log('TimeStats: No writing stats found, returning empty stats');
+    tsDebug('getOrCreateFileStats.miss', { uuid, filePath });
     return { totalMillis: 0, charsAdded: 0, charsDeleted: 0, firstSeen: now(), lastSeen: now(), buckets: [], sessions: [], achievedMilestones: [] };
 }
 
@@ -542,14 +542,14 @@ function bumpBucket(fsEntry: FileStats, timestamp: number, added: number, bucket
     if (!bucket) {
         // 如果用户处于空闲状态，不创建新桶来节省存储空间
         if (isIdle) {
-            console.log('TimeStats: Skipping bucket creation due to idle state');
+            tsDebug('bucket.skipWhileIdle', { bucketStart });
             return;
         }
 
         // 创建新桶
         bucket = { start: bucketStart, end: bucketStart + bucketSizeMs, charsAdded: 0 };
         fsEntry.buckets.push(bucket);
-        console.log('TimeStats: Created new bucket at', new Date(bucketStart).toLocaleTimeString());
+        tsDebug('bucket.created', { bucketStart });
     }
 
     bucket.charsAdded += added;
@@ -677,7 +677,7 @@ function resetIdleTimer(idleThresholdMs: number) {
 
     if (currentSessionStart > 0) { startStatusBarTicker(); }
     idleTimer = setTimeout(() => {
-        console.log('TimeStats: User is now idle, stopping bucket creation');
+        tsDebug('idle.enter.timeout');
         isIdle = true; // 设置为空闲状态，停止创建新桶
         endSession();
         updateStatusBar();
@@ -1046,7 +1046,7 @@ function handleTextChange(e: vscode.TextDocumentChangeEvent) {
             clearTimeout(idleTimer);
         }
         idleTimer = setTimeout(() => {
-            console.log('TimeStats: User is now idle, stopping bucket creation');
+            tsDebug('idle.enter.timeout');
             isIdle = true;
             endSession();
             updateStatusBar();
@@ -1181,7 +1181,7 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
     } else {
         if (idleTimer) { clearTimeout(idleTimer); }
         idleTimer = setTimeout(() => {
-            console.log('TimeStats: User is now idle, stopping bucket creation');
+            tsDebug('idle.enter.timeout');
             isIdle = true;
             endSession();
             endIgnoredAggregateSession();
@@ -1196,7 +1196,7 @@ function handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
 function handleWindowStateChange(state: vscode.WindowState) {
     windowFocused = state.focused;
     if (!windowFocused) {
-        console.log('TimeStats: Window lost focus, entering idle state');
+        tsDebug('window.blur');
         isIdle = true; // 窗口失焦时进入空闲状态
         if (currentDocPath) {
             const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === currentDocPath);
@@ -1208,23 +1208,23 @@ function handleWindowStateChange(state: vscode.WindowState) {
         endIgnoredAggregateSession();
         updateStatusBar();
     } else {
-        console.log('TimeStats: Window gained focus');
+        tsDebug('window.focus');
         const { idleThresholdMs } = getConfig();
         if (currentDocPath) {
             startSession();
 
             // 根据配置决定是否退出空闲状态
             if (checkExitIdle('window-focus')) {
-                console.log('TimeStats: Exiting idle state due to window focus');
+                tsDebug('idle.exit.windowFocus');
                 resetIdleTimer(idleThresholdMs);
             } else {
-                console.log('TimeStats: Window focused but staying idle until configured trigger');
+                tsDebug('window.focus.stayIdle');
                 // 不退出空闲状态，启动定时器但保持空闲
                 if (idleTimer) {
                     clearTimeout(idleTimer);
                 }
                 idleTimer = setTimeout(() => {
-                    console.log('TimeStats: User is now idle, stopping bucket creation');
+                    tsDebug('idle.enter.timeout');
                     isIdle = true;
                     endSession();
                     endIgnoredAggregateSession();
@@ -1242,7 +1242,7 @@ function handleDocumentSave(doc: vscode.TextDocument) {
     if (g) {
         // 标记文件为已保存（不再是临时文件）
         g.markAsSaved(filePath);
-        console.log('TimeStats: Marked file as saved:', filePath);
+        tsDebug('document.saved', { filePath });
     }
 }
 
@@ -1693,7 +1693,7 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
     const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (ws) {
         registerFileChangeCallback('timeStats', (event) => {
-            console.log(`Time stats: File ${event.type} - ${event.filePath}`);
+            tsDebug('fileChange', event);
         });
     }
 
@@ -1708,7 +1708,7 @@ export function activateTimeStats(context: vscode.ExtensionContext) {
             try {
                 await openDashboard(context);
             } catch (error) {
-                console.log('TimeStats: Failed to open dashboard:', error);
+                tsDebug('openDashboard.failed', { error });
                 vscode.window.showErrorMessage('无法打开写作统计仪表板');
             }
         }),

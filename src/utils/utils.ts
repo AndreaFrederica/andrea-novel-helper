@@ -18,6 +18,9 @@ import { ensureRoleUUIDs, fixInvalidRoleUUIDs } from './roleUuidManager';
 import { loadRelationships, updateRelationships } from './relationshipLoader';
 import { enhanceAllRolesWithRelationships, clearRelationshipProperties } from './roleRelationshipEnhancer';
 import { SmartRoleAdder } from './roleMerger';
+import { isLikelyDelimitedRoleFileContent, parseDelimitedRoleFile } from './delimitedRoleFile';
+import { getProjectKeywordConfig, mergeProjectKeywordConfigs, type ProjectKeywordConfig } from '../projectConfig/projectKeywordConfig';
+import { applyGeneratedLookupKeys } from './roleLookupKeyGeneration';
 
 // 创建全局的角色管理器
 export let roleManager: SmartRoleAdder | null = null;
@@ -27,6 +30,7 @@ export let roleManager: SmartRoleAdder | null = null;
  * 如果 roleManager 存在，使用它来处理合并
  */
 function addRole(role: Role) {
+	applyGeneratedLookupKeys(role, role.sourcePath);
 	if (roleManager) {
 		roleManager.addRole(role);
 	} else {
@@ -56,7 +60,7 @@ const EXTERNAL_RESOURCE_AUTO_MARKER_EXTENSIONS = new Set([
 ]);
 
 const EXTERNAL_RESOURCE_KEYWORD_EXTENSIONS = new Set([
-	'.json5', '.txt', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'
+	'.json5', '.txt', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'
 ]);
 
 const DEFAULT_EXTERNAL_FOLDER_MD_MARKER_BASENAMES = [
@@ -221,7 +225,7 @@ export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vs
 
 	for (const folder of folders) {
 		const workspaceRoot = folder.uri.fsPath;
-		const candidates = fastGlob.sync('**/*.{ojson5,rjson5,ojson,rjson,tjson5,json5,md,txt}', {
+		const candidates = fastGlob.sync('**/*.{ojson5,rjson5,ojson,rjson,tjson5,json5,md,txt,csv}', {
 			cwd: workspaceRoot,
 			absolute: true,
 			onlyFiles: true,
@@ -250,7 +254,8 @@ export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vs
 				sampleMatchedFiles.push(filePath);
 				continue;
 			}
-			if (!isExternalResourceMarkerFile(baseName, markerKeywordsLower)) {
+			const matchedRoleFile = isRoleFile(baseName, filePath);
+			if (!matchedRoleFile && !isExternalResourceMarkerFile(baseName, markerKeywordsLower)) {
 				continue;
 			}
 			matchedMarkerFiles++;
@@ -320,8 +325,8 @@ export const typeColorMap: Record<string, string> = {
  */
 export const getSupportedLanguages = (): string[] => {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-	// 默认包含 markdown / plaintext / json5 / ojson / ojson5 / rjson / rjson5 / tjson5
-	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5'])!;
+	// 默认包含 markdown / plaintext / json5 / csv / ojson / ojson5 / rjson / rjson5 / tjson5
+	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5', 'csv', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5'])!;
 	return fileTypes.map((t: string): string =>
 		t === 'txt' ? 'plaintext' : t
 	);
@@ -333,6 +338,7 @@ export const getSupportedLanguages = (): string[] => {
 const langToExt: Record<string, string> = {
 	markdown: 'md',
 	plaintext: 'txt',
+	csv: 'csv',
 	javascript: 'js',
 	typescript: 'ts',
 	ojson: 'ojson',
@@ -902,55 +908,111 @@ function getPackageDirectoryRecursive(currentDir: string, relativePath: string):
 /**
  * 判断文件是否是角色文件
  */
+function isWithinNovelHelperDataPath(fileFullPath: string): boolean {
+	const normalizedPath = fileFullPath.replace(/\\/g, '/').toLowerCase();
+	return normalizedPath.includes('/novel-helper/');
+}
+
+function roleFileDetectionDebugEnabled(): boolean {
+	try {
+		return vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('debug.roleFileDetection', false) === true;
+	} catch {
+		return false;
+	}
+}
+
+function roleFileDetectionLog(message: string): void {
+	if (!roleFileDetectionDebugEnabled()) {
+		return;
+	}
+	try {
+		console.log(message);
+	} catch {
+		// ignore logging failures
+	}
+}
+
+const DEFAULT_PROJECT_KEYWORD_CONFIG: ProjectKeywordConfig = {
+	characterFileKeywords: ['character-gallery', 'character', 'role', 'roles', '角色', '人物'],
+	sensitiveWordsFileKeywords: ['sensitive-words', 'sensitive', '敏感词'],
+	vocabularyFileKeywords: ['vocabulary', 'vocab', '词汇', '词庫', '词库', '术语'],
+	regexFileKeywords: ['regex-patterns', 'regex', '正则', '正則', '正则表达式', '正則表達式'],
+};
+
+function resolveRoleFileKeywordConfig(fileFullPath?: string): ProjectKeywordConfig {
+	return mergeProjectKeywordConfigs(DEFAULT_PROJECT_KEYWORD_CONFIG, getProjectKeywordConfig(fileFullPath));
+}
+
+function fileNameContainsKeyword(fileName: string, lowerName: string, keywords: string[]): boolean {
+	return keywords.some(keyword => {
+		const trimmedKeyword = keyword.trim();
+		if (!trimmedKeyword) {
+			return false;
+		}
+		return lowerName.includes(trimmedKeyword.toLowerCase()) || fileName.includes(trimmedKeyword);
+	});
+}
+
 export function isRoleFile(fileName: string, fileFullPath?: string): boolean {
 	const lowerName = fileName.toLowerCase();
 	const debugPrefix = `[isRoleFile] name="${fileName}" path="${fileFullPath || ''}"`;
+	const keywordConfig = resolveRoleFileKeywordConfig(fileFullPath);
 	
 	// ojson5 文件一定是角色文件
 	if (lowerName.endsWith('.ojson5')) {
-		console.log(`${debugPrefix} ojson5Extension -> true`);
+		roleFileDetectionLog(`${debugPrefix} ojson5Extension -> true`);
 		return true;
 	}
 	
 	// rjson5 文件一定是关系文件，不是角色文件
 	if (lowerName.endsWith('.rjson5')) {
-		console.log(`${debugPrefix} rjson5Extension -> false`);
+		roleFileDetectionLog(`${debugPrefix} rjson5Extension -> false`);
 		return false;
 	}
 	
 	// 正则表达式文件只支持JSON5格式
-	if (lowerName.includes('regex-patterns') || lowerName.includes('regex')) {
+	if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.regexFileKeywords)) {
 		const ok = lowerName.endsWith('.json5');
-		console.log(`${debugPrefix} keyword=regex -> ${ok}`);
+		roleFileDetectionLog(`${debugPrefix} keyword=regex -> ${ok}`);
 		return ok;
 	}
 	
-	const validExtensions = ['.json5', '.txt', '.md'];
+	const validExtensions = ['.json5', '.txt', '.md', '.csv'];
 	const hasValidExtension = validExtensions.some(ext => lowerName.endsWith(ext));
 	
 	if (!hasValidExtension) {
-		console.log(`${debugPrefix} invalidExt`);
+		roleFileDetectionLog(`${debugPrefix} invalidExt`);
 		return false;
 	}
 
-	// 检查文件名是否包含角色相关关键词
-	const roleKeywords = [
-		'character-gallery', 'character', 'role', 'roles',
-		'sensitive-words', 'sensitive', 'vocabulary', 'vocab',
-		'regex-patterns', 'regex'
-	];
-	// 中文常见命名（不区分繁简，简化为包含这些字即可）
-	const zhKeywords = [
-		'角色', '人物', '敏感词', '词汇', '词庫', '词库', '正则', '正則', '正则表达式', '正則表達式'
-	];
-
-	// 命中任一关键词即可
-	if (roleKeywords.some(k => lowerName.includes(k))) { console.log(`${debugPrefix} matchedEnglishKeyword`); return true; }
-	// 中文匹配：用原始（未 toLower 但 toLower 不影响中文）
-	if (zhKeywords.some(k => fileName.includes(k))) { console.log(`${debugPrefix} matchedChineseKeyword`); return true; }
+	if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.sensitiveWordsFileKeywords)) { roleFileDetectionLog(`${debugPrefix} matchedSensitiveKeyword`); return true; }
+	if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.vocabularyFileKeywords)) { roleFileDetectionLog(`${debugPrefix} matchedVocabularyKeyword`); return true; }
+	if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.characterFileKeywords)) { roleFileDetectionLog(`${debugPrefix} matchedCharacterKeyword`); return true; }
 
 	// 兜底：对于 .md 若包含 “gallery” “list” “lib” 也尝试视为角色文件（常见命名）
-	if (lowerName.endsWith('.md') && /(gallery|list|library)/.test(lowerName)) { console.log(`${debugPrefix} mdFallbackNamePattern`); return true; }
+	if (lowerName.endsWith('.md') && /(gallery|list|library)/.test(lowerName)) { roleFileDetectionLog(`${debugPrefix} mdFallbackNamePattern`); return true; }
+
+	if (fileFullPath && lowerName.endsWith('.csv')) {
+		try {
+			const stat = fs.statSync(fileFullPath);
+			if (isWithinNovelHelperDataPath(fileFullPath)) {
+				roleFileDetectionLog(`${debugPrefix} csvWithinNovelHelper -> true`);
+				return true;
+			}
+			if (stat.size <= 512 * 1024) {
+				const fd = fs.openSync(fileFullPath, 'r');
+				try {
+					const buf = Buffer.alloc(8192);
+					const bytes = fs.readSync(fd, buf, 0, buf.length, 0);
+					const head = buf.slice(0, bytes).toString('utf8');
+					if (isLikelyDelimitedRoleFileContent(head)) {
+						roleFileDetectionLog(`${debugPrefix} csvSniffMatched`);
+						return true;
+					}
+				} finally { fs.closeSync(fd); }
+			}
+		} catch { /* ignore sniff errors */ }
+	}
 
 	// 进一步内容嗅探：对于 .md 未命中关键词的，读取前若干行检测结构（性能：只同步读取小文件前 4KB）
 	if (fileFullPath && lowerName.endsWith('.md')) {
@@ -971,13 +1033,13 @@ export function isRoleFile(fileName: string, fileFullPath?: string): boolean {
 					];
 					const fieldHeaderRegex = new RegExp('^(#{2,4})\\s+(' + sniffFieldWords.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|') + ')\\b','m');
 					const hasFieldHeader = fieldHeaderRegex.test(head);
-					if (hasTopHeader && hasFieldHeader) { console.log(`${debugPrefix} mdSniffMatched hasTopHeader=${hasTopHeader} hasFieldHeader=${hasFieldHeader}`); return true; }
-					else { console.log(`${debugPrefix} mdSniffNoMatch hasTopHeader=${hasTopHeader} hasFieldHeader=${hasFieldHeader}`); }
+					if (hasTopHeader && hasFieldHeader) { roleFileDetectionLog(`${debugPrefix} mdSniffMatched hasTopHeader=${hasTopHeader} hasFieldHeader=${hasFieldHeader}`); return true; }
+					else { roleFileDetectionLog(`${debugPrefix} mdSniffNoMatch hasTopHeader=${hasTopHeader} hasFieldHeader=${hasFieldHeader}`); }
 				} finally { fs.closeSync(fd); }
 			}
 		} catch { /* ignore sniff errors */ }
 	}
-	console.log(`${debugPrefix} noMatch`);
+	roleFileDetectionLog(`${debugPrefix} noMatch`);
 	return false;
 }
 
@@ -998,7 +1060,7 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 			return;
 		}
 		
-		const fileType = getFileType(fileName);
+		const fileType = getFileType(fileName, filePath);
 
 		// JSON5-like role/relationship files: .json5, .ojson5, .rjson5
 		const lower = fileName.toLowerCase();
@@ -1013,6 +1075,8 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 			loadTXTRoleFile(content, filePath, packagePath, fileType);
 		} else if (lower.endsWith('.md')) {
 			loadMarkdownRoleFile(content, filePath, packagePath, fileType);
+		} else if (lower.endsWith('.csv')) {
+			loadDelimitedRoleFile(content, filePath, packagePath, fileType);
 		}
 		// 记录敏感词库源文件（按解析出的角色类型判定）
 		try {
@@ -1027,14 +1091,15 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 /**
  * 根据文件名判断文件类型
  */
-function getFileType(fileName: string): string {
+function getFileType(fileName: string, fileFullPath?: string): string {
 	const lowerName = fileName.toLowerCase();
+	const keywordConfig = resolveRoleFileKeywordConfig(fileFullPath);
 	
-	if (lowerName.includes('sensitive')) {
+	if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.sensitiveWordsFileKeywords)) {
 		return '敏感词';
-	} else if (lowerName.includes('vocabulary') || lowerName.includes('vocab')) {
+	} else if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.vocabularyFileKeywords)) {
 		return '词汇';
-	} else if (lowerName.includes('regex-patterns') || lowerName.includes('regex')) {
+	} else if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.regexFileKeywords) && lowerName.endsWith('.json5')) {
 		return '正则表达式';
 	} else {
 		return '角色';
@@ -1139,6 +1204,27 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 		throw new Error(`解析 Markdown 文件失败: ${error}`);
 	}
 }
+
+function loadDelimitedRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
+	try {
+		const parsed = parseDelimitedRoleFile(content, filePath, packagePath, defaultType);
+		for (const role of parsed.roles) {
+			addRole(role);
+			if (role.type === '敏感词' && role.sourcePath) {
+				try { sensitiveSourceFiles.add(path.resolve(role.sourcePath).toLowerCase()); } catch { /* ignore */ }
+			}
+		}
+		console.log(`loadDelimitedRoleFile: 从 ${filePath} 加载了 ${parsed.roles.length} 个角色`);
+
+		void fixInvalidRoleUUIDs(parsed.roles, true).catch(err => {
+			console.error('[loadDelimitedRoleFile] fixInvalidRoleUUIDs 失败:', err);
+		});
+	} catch (error) {
+		console.error(`loadDelimitedRoleFile: 解析分隔文本文件失败 ${filePath}: ${error}`);
+		throw new Error(`解析 CSV/分隔文本文件失败: ${error}`);
+	}
+}
+
 function loadTXTRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const rawLines = content.split(/\r?\n/);

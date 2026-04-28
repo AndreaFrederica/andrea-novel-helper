@@ -34,6 +34,7 @@ const ROLE_CARRIER_EXTENSIONS = new Set([
     '.md',
     '.markdown',
     '.txt',
+    '.csv',
     '.json',
     '.json5',
     '.ojson',
@@ -453,7 +454,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
 
                 if (isRoleFile || isRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
-                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
+                    const allowed = ['.json5', '.txt', '.md', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
                     const fileNode = this.createFileNode(full, 'resourceFile');
 
                     // 根据配置决定是否使用自定义图标
@@ -929,7 +930,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             // 文件可能已被删除，仍需要刷新
         }
 
-        return isExternalResourceMarkerFile(path.basename(filePath));
+        const baseName = path.basename(filePath);
+        return isExternalResourceMarkerFile(baseName) || isRoleFile(baseName, filePath);
     };
 
     // 角色数据更新：标识文件变化均触发增量角色刷新
@@ -951,7 +953,10 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         let hasManagedChange = touchedPaths.some(isManagedPath);
 
         // 外部目录新增标识文件时，先重扫目录列表再判断
-        if (!hasManagedChange && touchedPaths.some(p => isExternalResourceMarkerFile(path.basename(p)))) {
+        if (!hasManagedChange && touchedPaths.some(p => {
+            const baseName = path.basename(p);
+            return isExternalResourceMarkerFile(baseName) || isRoleFile(baseName, p);
+        })) {
             provider.rescanExternalRoleFolders(false);
             hasManagedChange = touchedPaths.some(isManagedPath);
         }
@@ -1038,7 +1043,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         const filePath = document.uri.fsPath;
 
         if (!isManagedPath(filePath)) {
-            if (isExternalResourceMarkerFile(path.basename(filePath))) {
+            const baseName = path.basename(filePath);
+            if (isExternalResourceMarkerFile(baseName) || isRoleFile(baseName, filePath)) {
                 provider.rescanExternalRoleFolders(false);
             }
         }
@@ -1147,7 +1153,7 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
     const baseInput = await vscode.window.showInputBox({ prompt: '输入基础文件名（不含扩展名，留空使用默认）', value: opts.defaultBase });
     if (baseInput === undefined) return; // 取消
     const baseNameRaw = (baseInput.trim() || opts.defaultBase).replace(/\s+/g,'-');
-    const extPick = await vscode.window.showQuickPick(['json5','txt','md'], { placeHolder: '选择文件格式 (json5 / txt / md)' });
+    const extPick = await vscode.window.showQuickPick(['json5','txt','md','csv'], { placeHolder: '选择文件格式 (json5 / txt / md / csv)' });
     if (!extPick) return;
     const fileInfo = resolveFileConflict(dir, baseNameRaw, '.'+extPick);
     let initialContent = '';
@@ -1165,6 +1171,8 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
         else if (opts.kind === 'sensitive') initialContent = generateMarkdownSensitiveTemplate();
         else if (opts.kind === 'vocabulary') initialContent = generateMarkdownVocabularyTemplate();
         else initialContent = '# 新文件\n';
+    } else if (extPick === 'csv') {
+        initialContent = generateDelimitedCsvTemplate(opts.kind);
     }
     fs.writeFileSync(fileInfo.path, initialContent + (initialContent.endsWith('\n')? '':'\n'), 'utf8');
     // 自动打开新文件
@@ -1176,6 +1184,27 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
     }
     if (fileInfo.conflicted) vscode.window.showInformationMessage(`文件已存在，自动使用名称: ${path.basename(fileInfo.path)}`);
     return fileInfo.path;
+}
+
+function generateDelimitedCsvTemplate(kind: ExtensionCustomOptions['kind']): string {
+    if (kind === 'sensitive') {
+        return [
+            'name,description,fixes,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized,lookupKeys_spelling',
+            '示例敏感词,这是一个示例敏感词,"替换词1;替换词2","示例检索词;示例反查词",shi li min gan ci,shi li min gan ci,shiliminganci'
+        ].join('\n');
+    }
+
+    if (kind === 'vocabulary') {
+        return [
+            'name,description,aliases,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized,lookupKeys_spelling',
+            '示例词汇,这是一个示例词汇,"别名1;别名2","示例检索词;示例反查词",shi li ci hui,shi li ci hui,shilicihui'
+        ].join('\n');
+    }
+
+    return [
+        'name,description,aliases,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized,lookupKeys_spelling',
+        '示例角色,这是一个示例角色,"别名1;别名2","示例检索词;示例反查词",shi li jue se,shi li jue se,shilijuese'
+    ].join('\n');
 }
 
 async function createRegexPatternsFile(dir: string): Promise<string | undefined> {
@@ -1266,8 +1295,8 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
         fs.renameSync(oldPath, newPath);
         return newPath;
     } 
-    // 对于 .json5 和 .txt 文件，使用简化的重命名流程
-    else if (ext === '.json5' || ext === '.txt') {
+    // 对于 .json5 / .txt / .csv 文件，使用简化的重命名流程
+    else if (ext === '.json5' || ext === '.txt' || ext === '.csv') {
         // 选择文件类型
         const roleType = await vscode.window.showQuickPick(
             ['角色', '敏感词', '词汇'], 

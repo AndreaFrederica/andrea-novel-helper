@@ -149,5 +149,15 @@
   "sidebar.settings.title": "小說助手:設定",
   "command.package.rescanExternalFolders.title": "重新掃描外部資源目錄(包管理器)",
   "command.package.showExternalScanReport.title": "檢視外部掃描報告(包管理器)",
-  "command.fileTracking.repairPathKeys.title": "修復文件追蹤路徑索引"
+  "command.fileTracking.repairPathKeys.title": "修復文件追蹤路徑索引",
+  "config.lookupKeys.treatPinyinAsAlias.description": "是否將 lookupKeys_pinyin 以別名層級顯示在補全清單中。關閉後仍會參與匹配，只是不會把拼音鍵當作別名候選顯示。",
+  "config.lookupKeys.treatRomanizedAsAlias.description": "是否將 lookupKeys_romanized 以別名層級顯示在補全清單中。關閉後仍會參與匹配，只是不會把羅馬字鍵當作別名候選顯示。",
+  "config.debug.roleFileDetection.description": "角色檔案識別: 輸出 isRoleFile 的詳細除錯日誌，用於排查 CSV/Markdown 等識別問題。",
+  "config.debug.smartRoleAdder.description": "SmartRoleAdder: 輸出角色優先級比較與合併決策的詳細除錯日誌。",
+  "config.customCharacterFileKeywords.description": "附加的角色檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+  "config.customSensitiveWordsFileKeywords.description": "附加的敏感詞檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+  "config.customVocabularyFileKeywords.description": "附加的詞彙檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+  "config.customRegexFileKeywords.description": "附加的正則檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+  "config.lookupKeys.autoGeneratePinyin.description": "是否在擴充功能本體後端依據角色名與別名自動生成 lookupKeys_pinyin。此設定會影響所有已載入的角色格式，以及 JSON5 視覺化編輯器的顯示與保存流程。",
+  "config.lookupKeys.autoGenerateRomanized.description": "是否在擴充功能本體後端依據角色名與別名自動生成 lookupKeys_romanized。此設定會影響所有已載入的角色格式，以及 JSON5 視覺化編輯器的顯示與保存流程。"
 }

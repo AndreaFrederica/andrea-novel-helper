@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ProjectConfigManager, ProjectConfig } from './projectConfigManager';
+import { PROJECT_KEYWORD_CONFIG_DEFINITIONS, normalizeKeywordList } from './projectKeywordConfig';
 
 export interface ValidationResult {
     isValid: boolean;
@@ -32,7 +33,8 @@ export class ProjectConfigLinter {
     private static readonly OPTIONAL_SECTIONS = [
         '项目简介',
         '创建时间',
-        '更新时间'
+        '更新时间',
+        ...PROJECT_KEYWORD_CONFIG_DEFINITIONS.flatMap(definition => [definition.markdownSection, ...definition.markdownAliases])
     ];
 
     private diagnosticCollection: vscode.DiagnosticCollection;
@@ -224,6 +226,7 @@ export class ProjectConfigLinter {
             .map(line => line.trim())
             .filter(line => line.length > 0)
             .join(' ');
+        const rawSectionContent = lines.slice(contentStart, contentEnd).join('\n').trim();
         
         let isValid = true;
         
@@ -342,7 +345,7 @@ export class ProjectConfigLinter {
                     isValid = false;
                 } else {
                     // 使用新的标签解析逻辑验证标签
-                    const tags = this.parseTags(sectionContent);
+                    const tags = this.parseTags(rawSectionContent);
                     if (tags.length === 0) {
                         errors.push({
                             line: sectionLine + 1,
@@ -357,6 +360,28 @@ export class ProjectConfigLinter {
                     }
                 }
                 break;
+
+            default: {
+                const keywordDefinition = PROJECT_KEYWORD_CONFIG_DEFINITIONS.find(definition =>
+                    [definition.markdownSection, ...definition.markdownAliases].includes(sectionName)
+                );
+                if (keywordDefinition && rawSectionContent) {
+                    const parsedKeywords = normalizeKeywordList(rawSectionContent);
+                    if (parsedKeywords.length === 0) {
+                        errors.push({
+                            line: sectionLine + 1,
+                            column: 0,
+                            length: Math.max(rawSectionContent.length, 1),
+                            message: `${sectionName}格式不正确（应使用逗号或换行分隔，支持 // 注释）`,
+                            severity: vscode.DiagnosticSeverity.Error,
+                            code: 'invalid-keyword-section-format',
+                            source: 'anhproject-linter'
+                        });
+                        isValid = false;
+                    }
+                }
+                break;
+            }
                 
             case '创建时间':
             case '更新时间':

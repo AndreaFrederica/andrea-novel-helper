@@ -24,6 +24,43 @@ import { generateRoleNameHash } from '../../utils/uuidUtils';
 import { addRoleToFile } from '../../utils/roleFileHandler';
 import { loadRoles } from '../../activate';
 import { updateDecorations } from '../../events/updateDecorations';
+import { uniqueRoleKeys } from '../../utils/roleLookupKeys';
+
+function buildSpellingLookupVariants(values: Array<string | undefined | null>): string[] {
+	const variants: string[] = [];
+
+	for (const value of values) {
+		const trimmed = value?.trim();
+		if (!trimmed) {
+			continue;
+		}
+		if (!/[A-Za-z\u00C0-\u024F]/.test(trimmed)) {
+			continue;
+		}
+
+		const noDots = trimmed.replace(/[·・]/g, ' ');
+		const noDiacritics = noDots.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+		const collapsed = noDiacritics.replace(/[\s\-_'’]+/g, '');
+		const hyphenless = noDiacritics.replace(/[\-_'’]+/g, ' ');
+
+		variants.push(trimmed, noDots, noDiacritics, hyphenless, collapsed);
+		variants.push(trimmed.toLowerCase(), noDots.toLowerCase(), noDiacritics.toLowerCase(), hyphenless.toLowerCase(), collapsed.toLowerCase());
+	}
+
+	return uniqueRoleKeys(variants.filter(Boolean));
+}
+
+function shouldPopulatePinyinLookup(selectedName: any): boolean {
+	const signals = [
+		selectedName?.origin,
+		selectedName?.culture,
+		selectedName?.targetCulture,
+		selectedName?.sourceCulture,
+		selectedName?.cultureDisplayName,
+	].filter(Boolean).join(' ').toLowerCase();
+
+	return /(chinese|china|mandarin|pinyin|zhong|han)/.test(signals);
+}
 
 /**
  * 随机生成角色完整工作流程
@@ -481,6 +518,7 @@ async function createCharacterName(selectedName: any, generationOptions?: any): 
 		{
 			includeMd: true,
 			includeOjson5: true,
+			includeCsv: true,
 			customFilter: (fileName: string) => {
 				const lowerFileName = fileName.toLowerCase();
 				const vocabKeywords = ['vocabulary', 'vocab', 'term', '词汇', '术语'];
@@ -556,6 +594,22 @@ async function createCharacterName(selectedName: any, generationOptions?: any): 
 	// 如果有别名，添加到aliases中
 	if (allAliases.length > 0) {
 		newRole.aliases = allAliases;
+	}
+
+	const spellingLookupKeys = buildSpellingLookupVariants([
+		selectedName.fullName,
+		selectedName.romanizedName,
+		translatedName,
+		selectedName.originalCompositeName,
+		selectedName.mappedName,
+		...allAliases,
+	]);
+	if (spellingLookupKeys.length > 0) {
+		newRole.lookupKeys_spelling = spellingLookupKeys;
+		newRole.lookupKeys_romanized = spellingLookupKeys;
+		if (shouldPopulatePinyinLookup(selectedName)) {
+			newRole.lookupKeys_pinyin = spellingLookupKeys;
+		}
 	}
 
 	if (affiliation) newRole.affiliation = affiliation;

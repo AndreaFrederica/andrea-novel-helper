@@ -1,7 +1,7 @@
 <template>
   <q-card bordered class="q-pa-md role-card">
     <!-- ===== 基础字段 ===== -->
-    <q-card-section class="q-gutter-md">
+    <q-card-section>
       <div class="row q-col-gutter-md">
         <div class="col-12 col-md-6">
           <q-input
@@ -231,30 +231,161 @@
           </div>
           <div class="q-pa-sm aliases-list">
             <div
-              v-for="i in aliasesUI"
+              v-for="i in aliasesField.ui.value"
               :key="'alias-' + i"
-              class="row items-center q-col-gutter-sm q-mb-xs"
+              class="array-field-row q-mb-xs"
             >
-              <div class="col">
+              <div class="array-field-input">
                 <q-input
-                  :model-value="i < aliasesModel.length ? aliasesModel[i] : aliasDraft"
+                  :model-value="i < aliasesField.model.value.length ? aliasesField.model.value[i] : aliasesField.draftInput.value"
                   dense
                   filled
                   placeholder="输入别名，回车/离焦以添加"
-                  @update:model-value="(val) => onAliasesInput(i, String(val || ''))"
-                  @keyup.enter="() => onAliasesConfirm(i)"
-                  @blur="() => onAliasesConfirm(i)"
-                />
+                  @update:model-value="(val) => aliasesField.onInput(i, String(val || ''))"
+                  @keyup.enter="() => aliasesField.onConfirm(i)"
+                  @blur="() => aliasesField.onConfirm(i)"
+                >
+                  <template v-if="i < aliasesField.model.value.length" #append>
+                    <q-btn
+                      flat
+                      dense
+                      icon="delete"
+                      color="negative"
+                      @click.stop="aliasesField.remove(i)"
+                    />
+                  </template>
+                </q-input>
               </div>
-              <div class="col-auto">
-                <q-btn
-                  flat
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="row items-center justify-between q-mb-xs lookup-key-toolbar">
+            <div class="row items-center q-gutter-x-sm">
+              <div class="text-subtitle2">拼音查询键</div>
+              <q-badge color="teal" outline>lookupKeys_pinyin</q-badge>
+            </div>
+            <q-btn
+              flat
+              dense
+              size="sm"
+              icon="auto_awesome"
+              label="请求候选"
+              @click="requestLookupCandidates('pinyin')"
+            />
+          </div>
+          <div class="text-caption q-mb-xs">用于中文拼音检索；是否按别名展示由扩展设置控制。</div>
+          <div class="q-pa-sm aliases-list">
+            <div
+              v-for="i in pinyinLookupField.ui.value"
+              :key="'lookup-pinyin-' + i"
+              class="array-field-row q-mb-xs"
+            >
+              <div class="array-field-input">
+                <q-input
+                  :model-value="i < pinyinLookupField.model.value.length ? pinyinLookupField.model.value[i] : pinyinLookupField.draftInput.value"
                   dense
-                  icon="delete"
-                  color="negative"
-                  @click="removeAlias(i)"
-                  v-if="i < aliasesModel.length"
-                />
+                  filled
+                  placeholder="输入拼音查询键，回车/离焦以添加"
+                  @update:model-value="(val) => pinyinLookupField.onInput(i, String(val || ''))"
+                  @keyup.enter="() => pinyinLookupField.onConfirm(i)"
+                  @blur="() => pinyinLookupField.onConfirm(i)"
+                >
+                  <template v-if="i < pinyinLookupField.model.value.length" #append>
+                    <q-btn
+                      flat
+                      dense
+                      icon="delete"
+                      color="negative"
+                      @click.stop="pinyinLookupField.remove(i)"
+                    />
+                  </template>
+                </q-input>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="row items-center justify-between q-mb-xs lookup-key-toolbar">
+            <div class="row items-center q-gutter-x-sm">
+              <div class="text-subtitle2">罗马字查询键</div>
+              <q-badge color="deep-orange" outline>lookupKeys_romanized</q-badge>
+            </div>
+            <q-btn
+              flat
+              dense
+              size="sm"
+              icon="auto_awesome"
+              label="请求候选"
+              @click="requestLookupCandidates('romanized')"
+            />
+          </div>
+          <div class="text-caption q-mb-xs">用于罗马字、romaji、transliteration 等检索形式。</div>
+          <div class="q-pa-sm aliases-list">
+            <div
+              v-for="i in romanizedLookupField.ui.value"
+              :key="'lookup-romanized-' + i"
+              class="array-field-row q-mb-xs"
+            >
+              <div class="array-field-input">
+                <q-input
+                  :model-value="i < romanizedLookupField.model.value.length ? romanizedLookupField.model.value[i] : romanizedLookupField.draftInput.value"
+                  dense
+                  filled
+                  placeholder="输入罗马字查询键，回车/离焦以添加"
+                  @update:model-value="(val) => romanizedLookupField.onInput(i, String(val || ''))"
+                  @keyup.enter="() => romanizedLookupField.onConfirm(i)"
+                  @blur="() => romanizedLookupField.onConfirm(i)"
+                >
+                  <template v-if="i < romanizedLookupField.model.value.length" #append>
+                    <q-btn
+                      flat
+                      dense
+                      icon="delete"
+                      color="negative"
+                      @click.stop="romanizedLookupField.remove(i)"
+                    />
+                  </template>
+                </q-input>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="row items-center q-mb-xs">
+            <div class="text-subtitle2">拼写查询键</div>
+            <q-badge class="q-ml-sm" color="purple" outline>lookupKeys_spelling</q-badge>
+          </div>
+          <div class="text-caption q-mb-xs">用于去音调、去分隔符、折叠空格后的拼写变体检索。</div>
+          <div class="q-pa-sm aliases-list">
+            <div
+              v-for="i in spellingLookupField.ui.value"
+              :key="'lookup-spelling-' + i"
+              class="array-field-row q-mb-xs"
+            >
+              <div class="array-field-input">
+                <q-input
+                  :model-value="i < spellingLookupField.model.value.length ? spellingLookupField.model.value[i] : spellingLookupField.draftInput.value"
+                  dense
+                  filled
+                  placeholder="输入拼写查询键，回车/离焦以添加"
+                  @update:model-value="(val) => spellingLookupField.onInput(i, String(val || ''))"
+                  @keyup.enter="() => spellingLookupField.onConfirm(i)"
+                  @blur="() => spellingLookupField.onConfirm(i)"
+                >
+                  <template v-if="i < spellingLookupField.model.value.length" #append>
+                    <q-btn
+                      flat
+                      dense
+                      icon="delete"
+                      color="negative"
+                      @click.stop="spellingLookupField.remove(i)"
+                    />
+                  </template>
+                </q-input>
               </div>
             </div>
           </div>
@@ -293,30 +424,30 @@
             </div>
             <div class="q-pa-sm fixes-list">
               <div
-                v-for="i in fixesUI"
+                v-for="i in fixesField.ui.value"
                 :key="'fix-' + i"
-                class="row items-center q-col-gutter-sm q-mb-xs"
+                class="array-field-row q-mb-xs"
               >
-                <div class="col">
+                <div class="array-field-input">
                   <q-input
-                    :model-value="i < fixesModel.length ? fixesModel[i] : fixDraft"
+                    :model-value="i < fixesField.model.value.length ? fixesField.model.value[i] : fixesField.draftInput.value"
                     dense
                     filled
                     placeholder="输入修复词，回车/离焦以添加"
-                    @update:model-value="(val) => onFixesInput(i, String(val || ''))"
-                    @keyup.enter="() => onFixesConfirm(i)"
-                    @blur="() => onFixesConfirm(i)"
-                  />
-                </div>
-                <div class="col-auto">
-                  <q-btn
-                    flat
-                    dense
-                    icon="delete"
-                    color="negative"
-                    @click="removeFix(i)"
-                    v-if="i < fixesModel.length"
-                  />
+                    @update:model-value="(val) => fixesField.onInput(i, String(val || ''))"
+                    @keyup.enter="() => fixesField.onConfirm(i)"
+                    @blur="() => fixesField.onConfirm(i)"
+                  >
+                    <template v-if="i < fixesField.model.value.length" #append>
+                      <q-btn
+                        flat
+                        dense
+                        icon="delete"
+                        color="negative"
+                        @click.stop="fixesField.remove(i)"
+                      />
+                    </template>
+                  </q-input>
                 </div>
               </div>
             </div>
@@ -571,10 +702,12 @@ const $q = useQuasar();
 const isDark = computed(() => $q.dark.isActive);
 
 const props = defineProps<{ modelValue: RoleCardModel }>();
+type LookupCandidateKind = 'pinyin' | 'romanized';
 const emit = defineEmits<{
   (e: 'update:modelValue', v: RoleCardModel): void;
   (e: 'changed', payload: { changedPaths: string[]; snapshot: RoleCardModel }): void;
   (e: 'type-changed', payload: { from: RoleType; to: RoleType; snapshot: RoleCardModel }): void;
+  (e: 'request-lookup-candidates', payload: { kind: LookupCandidateKind; snapshot: RoleCardModel }): void;
 }>();
 
 /** ====== 本地草稿 ====== */
@@ -783,105 +916,6 @@ const previewStyle = computed(() => {
 });
 
 /** ====== 别名 / 修复词（基础字段字符串数组） ====== */
-const aliasesModel = ref<string[]>(
-  Array.isArray(draft.base.aliases) ? draft.base.aliases.slice() : [],
-);
-const fixesModel = ref<string[]>(Array.isArray(draft.base.fixes) ? draft.base.fixes.slice() : []);
-
-/** —— 别名/修复词：输入缓存（只对“最后一行”生效，避免输入法合成阶段误提交） —— */
-const aliasDraft = ref<string>(''); // 别名的“新增空行”的输入缓存
-const fixDraft = ref<string>(''); // fixes 的“新增空行”的输入缓存
-
-/** 当用户在最后一行输入时，先写入缓存；在已有项上编辑则直接写回数组 */
-function onAliasesInput(i: number, val: string) {
-  if (i < aliasesModel.value.length) {
-    // 编辑已有项
-    const arr = aliasesModel.value.slice();
-    arr[i] = val.trim();
-    if (!arr[i]) arr.splice(i, 1);
-    onAliasesUpdate(arr);
-  } else {
-    // 正在编辑“新增空行”
-    aliasDraft.value = val;
-  }
-}
-
-/** 确认新增：回车/离焦时，把缓存变成正式项 */
-function onAliasesConfirm(i: number) {
-  if (i === aliasesModel.value.length) {
-    const v = (aliasDraft.value || '').trim();
-    if (v) {
-      const arr = aliasesModel.value.slice();
-      if (!arr.includes(v)) arr.push(v);
-      onAliasesUpdate(arr);
-    }
-    aliasDraft.value = ''; // 清空缓存，保持末行为空
-  }
-}
-
-function onFixesInput(i: number, val: string) {
-  if (i < fixesModel.value.length) {
-    const arr = fixesModel.value.slice();
-    arr[i] = val.trim();
-    if (!arr[i]) arr.splice(i, 1);
-    onFixesUpdate(arr);
-  } else {
-    fixDraft.value = val;
-  }
-}
-
-function onFixesConfirm(i: number) {
-  if (i === fixesModel.value.length) {
-    const v = (fixDraft.value || '').trim();
-    if (v) {
-      const arr = fixesModel.value.slice();
-      if (!arr.includes(v)) arr.push(v);
-      onFixesUpdate(arr);
-    }
-    fixDraft.value = '';
-  }
-}
-
-// 外部变化同步
-watch(
-  () => draft.base.aliases,
-  (v) => {
-    aliasesModel.value = Array.isArray(v) ? v.slice() : [];
-  },
-);
-watch(
-  () => draft.base.fixes,
-  (v) => {
-    fixesModel.value = Array.isArray(v) ? v.slice() : [];
-  },
-);
-
-// 监听本地模型：当用户在 UI 中删除到空数组时，确保把 draft.base.aliases/fixes 置为 undefined 并提交
-watch(aliasesModel, (v) => {
-  if (Array.isArray(v) && v.length === 0 && draft.base.aliases !== undefined) {
-    // 用户清空了别名：确保删除基础字段并触发提交
-    draft.base.aliases = undefined;
-    commit(['base.aliases']);
-  }
-});
-watch(fixesModel, (v) => {
-  if (Array.isArray(v) && v.length === 0 && draft.base.fixes !== undefined) {
-    // 用户清空了 fixes：确保删除基础字段并触发提交
-    draft.base.fixes = undefined;
-    commit(['base.fixes']);
-  }
-});
-
-// 类型切换：敏感词时刷新本地镜像（不清空数据）
-watch(
-  () => draft.base.type,
-  (t) => {
-    if (t === '敏感词') {
-      fixesModel.value = draft.base.fixes ? draft.base.fixes.slice() : [];
-    }
-  },
-);
-
 function normalizeStrList(vals: unknown[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -903,43 +937,80 @@ function normalizeStrList(vals: unknown[]): string[] {
   return out;
 }
 
-function onAliasesUpdate(vals: string[]) {
-  const clean = normalizeStrList(vals);
-  aliasesModel.value = clean;
-  draft.base.aliases = clean.length ? clean : undefined;
-  commit(['base.aliases']);
+function createBaseArrayFieldController(field: ArrayBaseFieldKey) {
+  const model = ref<string[]>(Array.isArray(draft.base[field]) ? draft.base[field]!.slice() : []);
+  const draftInput = ref<string>('');
+
+  const sync = (vals: string[]) => {
+    const clean = normalizeStrList(vals);
+    model.value = clean;
+    draft.base[field] = clean.length ? clean : undefined;
+    commit([`base.${field}`]);
+  };
+
+  const onInput = (i: number, val: string) => {
+    if (i < model.value.length) {
+      const arr = model.value.slice();
+      arr[i] = val.trim();
+      if (!arr[i]) arr.splice(i, 1);
+      sync(arr);
+    } else {
+      draftInput.value = val;
+    }
+  };
+
+  const onConfirm = (i: number) => {
+    if (i === model.value.length) {
+      const v = (draftInput.value || '').trim();
+      if (v) {
+        const arr = model.value.slice();
+        if (!arr.includes(v)) arr.push(v);
+        sync(arr);
+      }
+      draftInput.value = '';
+    }
+  };
+
+  const remove = (i: number) => {
+    const arr = model.value.slice();
+    if (i < arr.length) {
+      arr.splice(i, 1);
+      sync(arr);
+    }
+  };
+
+  watch(
+    () => draft.base[field],
+    (v) => {
+      model.value = Array.isArray(v) ? v.slice() : [];
+    },
+  );
+
+  watch(model, (v) => {
+    if (Array.isArray(v) && v.length === 0 && draft.base[field] !== undefined) {
+      draft.base[field] = undefined;
+      commit([`base.${field}`]);
+    }
+  });
+
+  const ui = computed(() => Array.from({ length: Math.max(1, model.value.length + 1) }, (_, i) => i));
+  return { model, draftInput, ui, onInput, onConfirm, remove, sync };
 }
 
-function onFixesUpdate(vals: string[]) {
-  const clean = normalizeStrList(vals);
-  fixesModel.value = clean;
-  draft.base.fixes = clean.length ? clean : undefined;
-  commit(['base.fixes']);
-}
+const aliasesField = createBaseArrayFieldController('aliases');
+const fixesField = createBaseArrayFieldController('fixes');
+const pinyinLookupField = createBaseArrayFieldController('lookupKeys_pinyin');
+const romanizedLookupField = createBaseArrayFieldController('lookupKeys_romanized');
+const spellingLookupField = createBaseArrayFieldController('lookupKeys_spelling');
 
-// 为逐行编辑提供视图长度（保证始终有一行空行用于添加）
-const aliasesUI = computed(() => {
-  return Array.from({ length: Math.max(1, aliasesModel.value.length + 1) }, (_, i) => i);
-});
-const fixesUI = computed(() => {
-  return Array.from({ length: Math.max(1, fixesModel.value.length + 1) }, (_, i) => i);
-});
-
-function removeAlias(i: number) {
-  const arr = aliasesModel.value.slice();
-  if (i < arr.length) {
-    arr.splice(i, 1);
-    onAliasesUpdate(arr);
-  }
-}
-
-function removeFix(i: number) {
-  const arr = fixesModel.value.slice();
-  if (i < arr.length) {
-    arr.splice(i, 1);
-    onFixesUpdate(arr);
-  }
-}
+watch(
+  () => draft.base.type,
+  (t) => {
+    if (t === '敏感词') {
+      fixesField.model.value = draft.base.fixes ? draft.base.fixes.slice() : [];
+    }
+  },
+);
 
 /** ====== 正则/敏感词适配性清理（最小必要） ====== */
 function cleanupTypeSideFields() {
@@ -958,14 +1029,13 @@ function commit(changedPaths: string[]) {
     if (draft.base.regex) delete draft.base.regex;
     if (draft.base.regexFlags) delete draft.base.regexFlags;
   }
-  // aliases/fixes：空数组 -> undefined
-  if (Array.isArray(draft.base.aliases) && draft.base.aliases.length === 0) {
-    delete draft.base.aliases;
-    if (!changedPaths.includes('base.aliases')) changedPaths.push('base.aliases');
-  }
-  if (Array.isArray(draft.base.fixes) && draft.base.fixes.length === 0) {
-    delete draft.base.fixes;
-    if (!changedPaths.includes('base.fixes')) changedPaths.push('base.fixes');
+  // 基础字符串数组：空数组 -> undefined
+  for (const field of ['aliases', 'fixes', 'lookupKeys_pinyin', 'lookupKeys_romanized', 'lookupKeys_spelling'] as ArrayBaseFieldKey[]) {
+    if (Array.isArray(draft.base[field]) && draft.base[field]!.length === 0) {
+      delete draft.base[field];
+      const fieldPath = `base.${field}`;
+      if (!changedPaths.includes(fieldPath)) changedPaths.push(fieldPath);
+    }
   }
 
   emit('update:modelValue', cloneRole(draft));
@@ -976,8 +1046,13 @@ function emitChanged(paths: string[]) {
   emit('changed', { changedPaths: paths, snapshot: cloneRole(draft) });
 }
 
+function requestLookupCandidates(kind: LookupCandidateKind) {
+  emit('request-lookup-candidates', { kind, snapshot: cloneRole(draft) });
+}
+
 /** ====== 扩展 & 自定义（统一列表） ====== */
 type ValueType = 'string' | 'number' | 'boolean' | 'string[]';
+type ArrayBaseFieldKey = 'aliases' | 'fixes' | 'lookupKeys_pinyin' | 'lookupKeys_romanized' | 'lookupKeys_spelling';
 const valueTypeOptions = [
   { label: '字符串/Markdown', value: 'string' },
   { label: '数字', value: 'number' },
@@ -1029,7 +1104,7 @@ function toEntry(k: string, v: JsonValue, bucket: 'extended' | 'custom'): ExtraE
 }
 
 /** 基础键黑名单：不应进入 扩展/自定义 列表 */
-const BASE_KEYS_BLOCKLIST = new Set(['aliases', 'fixes', 'regex', 'regexFlags', 'affiliation', 'uuid']);
+const BASE_KEYS_BLOCKLIST = new Set(['aliases', 'fixes', 'lookupKeys_pinyin', 'lookupKeys_romanized', 'lookupKeys_spelling', 'regex', 'regexFlags', 'affiliation', 'uuid']);
 
 const mergedEntries = reactive<ExtraEntry[]>([]);
 function reloadExtras() {
@@ -1197,6 +1272,30 @@ function copyUUID() {
 </script>
 
 <style scoped>
+.role-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.role-card :deep(.q-card__section),
+.role-card :deep(.q-field),
+.role-card :deep(.q-field__control),
+.role-card :deep(.q-field__native),
+.role-card :deep(.q-expansion-item),
+.role-card :deep(.q-expansion-item__container) {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.role-card :deep(.col),
+.role-card :deep([class*='col-']) {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .rounded-borders {
   border-radius: 8px;
 }
@@ -1219,5 +1318,33 @@ function copyUUID() {
 .expansion-header-wrap .q-expansion-item__header__label,
 .expansion-header-wrap .q-expansion-item__header__caption {
   white-space: normal !important;
+}
+
+.aliases-list,
+.fixes-list {
+  min-width: 0;
+}
+
+.array-field-row {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.array-field-input {
+  min-width: 0;
+  width: 100%;
+}
+
+.aliases-list .q-field,
+.fixes-list .q-field {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.lookup-key-toolbar {
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>

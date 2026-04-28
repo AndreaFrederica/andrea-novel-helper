@@ -4,6 +4,7 @@ import * as path from 'path';
 import { createCharacterGalleryFile, createSensitiveWordsFile, createVocabularyFile, createRegexPatternsFile, ensureDir } from './packageFileCreators';
 import { generateMarkdownRoleTemplate } from '../templates/templateGenerators';
 import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
+import { generateProjectKeywordConfigTemplate, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../projectConfig/projectKeywordConfig';
 import { exec } from 'child_process';
 
 // 标记：项目初始化向导是否正在运行（用于抑制其它 Git 配置弹窗等）
@@ -250,6 +251,7 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
         // 创建项目配置文件（无论是否创建示例结构都要创建）
         try {
           const configManager = new ProjectConfigManager(ws);
+          let createdKeywordConfigTemplate = false;
           if (!configManager.exists()) {
             // 使用用户输入的信息创建配置
             const customConfig = {
@@ -263,6 +265,14 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
             // 立即更新为用户输入的完整信息
             await configManager.updateConfig(customConfig);
             vscode.window.showInformationMessage('已创建项目配置文件 anhproject.md');
+          }
+          const keywordConfigPath = path.join(ws, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME);
+          if (!fs.existsSync(keywordConfigPath)) {
+            fs.writeFileSync(keywordConfigPath, `${generateProjectKeywordConfigTemplate()}\n`, 'utf8');
+            createdKeywordConfigTemplate = true;
+          }
+          if (createdKeywordConfigTemplate) {
+            vscode.window.showInformationMessage('已创建项目关键词配置模板 project-config.json5');
           }
         } catch (e) {
           vscode.window.showWarningMessage('创建项目配置文件失败: ' + (e as any)?.message);

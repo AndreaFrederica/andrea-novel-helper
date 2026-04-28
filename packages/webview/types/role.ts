@@ -33,6 +33,9 @@ export interface BaseFieldsCommon {
   affiliation?: string;
   wordSegmentFilter?: boolean; // 是否受到分词器影响
   aliases?: string[] | undefined; // 独立：基础字段
+  lookupKeys_pinyin?: string[] | undefined;
+  lookupKeys_romanized?: string[] | undefined;
+  lookupKeys_spelling?: string[] | undefined;
   fixes?: string[] | undefined; // 独立：基础字段（仅敏感词可编辑）
   regex?: string | undefined; // 正则专用：基础字段
   regexFlags?: string | undefined; // 正则专用：基础字段

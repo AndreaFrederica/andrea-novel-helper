@@ -1862,6 +1862,7 @@
             "markdown",
             "plaintext",
             "json5",
+            "csv",
             "ojson",
             "ojson5",
             "rjson",
@@ -1869,6 +1870,42 @@
             "tjson5"
           ],
           "description": "%config.supportedFileTypes.description%"
+        },
+        "AndreaNovelHelper.customCharacterFileKeywords": {
+          "anhName": "自定义角色文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customCharacterFileKeywords.description%"
+        },
+        "AndreaNovelHelper.customSensitiveWordsFileKeywords": {
+          "anhName": "自定义敏感词文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customSensitiveWordsFileKeywords.description%"
+        },
+        "AndreaNovelHelper.customVocabularyFileKeywords": {
+          "anhName": "自定义词汇文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customVocabularyFileKeywords.description%"
+        },
+        "AndreaNovelHelper.customRegexFileKeywords": {
+          "anhName": "自定义正则文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customRegexFileKeywords.description%"
         },
         "AndreaNovelHelper.workspaceDisabled": {
           "anhName": "禁用工作区",
@@ -2291,6 +2328,18 @@
           "default": false,
           "description": "%config.debug.completionLog.description%"
         },
+        "AndreaNovelHelper.debug.roleFileDetection": {
+          "anhName": "角色文件识别调试",
+          "type": "boolean",
+          "default": false,
+          "description": "%config.debug.roleFileDetection.description%"
+        },
+        "AndreaNovelHelper.debug.smartRoleAdder": {
+          "anhName": "角色合并调试",
+          "type": "boolean",
+          "default": false,
+          "description": "%config.debug.smartRoleAdder.description%"
+        },
         "AndreaNovelHelper.completion.triggerMode": {
           "anhName": "补全触发模式",
           "type": "string",
@@ -2319,6 +2368,30 @@
             "type": "string"
           },
           "markdownDescription": "%config.completion.symbolPrefixes.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.treatPinyinAsAlias": {
+          "anhName": "拼音查询键按别名展示",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.treatPinyinAsAlias.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.autoGeneratePinyin": {
+          "anhName": "自动生成拼音查询键",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.autoGeneratePinyin.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias": {
+          "anhName": "罗马字查询键按别名展示",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.treatRomanizedAsAlias.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.autoGenerateRomanized": {
+          "anhName": "自动生成罗马字查询键",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.autoGenerateRomanized.description%"
         },
         "AndreaNovelHelper.completion.segmenterType": {
           "anhName": "分词器类型",
@@ -3873,9 +3946,14 @@
     "jschardet": "^3.1.4",
     "json5": "^2.2.3",
     "jsonc-parser": "^3.3.1",
+    "kuroshiro": "^1.2.0",
+    "kuroshiro-analyzer-kuromoji": "^1.1.0",
     "liquidjs": "^10.24.0",
     "memfs": "^4.17.2",
+    "pinyin-pro": "^3.28.1",
+    "transliteration": "^2.6.1",
     "uuid": "^11.1.0",
+    "wanakana": "^5.3.1",
     "webdav": "^5.7.0",
     "zod": "^4.3.6"
   }

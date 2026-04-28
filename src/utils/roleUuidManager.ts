@@ -12,6 +12,11 @@ import { generateUUIDv7, generateRoleNameHash, isValidUUID } from './uuidUtils';
 import { readTextFileDetectEncoding } from './utils';
 import { globalFileCache } from '../context/fileCache';
 import { parseMarkdownRoles, FIELD_ALIASES } from './Parser/markdownParser';
+import {
+    ensureDelimitedRoleHeaders,
+    parseDelimitedRoleFile,
+    stringifyDelimitedRoleFile,
+} from './delimitedRoleFile';
 
 /**
  * 为所有角色添加 UUID
@@ -26,8 +31,8 @@ export async function ensureRoleUUIDs(roles: Role[], updateFiles: boolean = true
     for (const role of roles) {
         if (!role.uuid && role.sourcePath) {
             // 为角色生成 UUID
-            if (role.sourcePath.endsWith('.txt')) {
-                // txt 文件使用角色名哈希
+            if (role.sourcePath.endsWith('.txt') || role.sourcePath.endsWith('.csv')) {
+                // txt/csv 文件使用角色名哈希，兼容无表头格式
                 role.uuid = generateRoleNameHash(role.name);
             } else {
                 // 其他文件使用 UUID v7
@@ -84,6 +89,8 @@ async function updateRoleFile(filePath: string, rolesWithUuid: Role[]): Promise<
         await updateJSON5File(filePath, rolesWithUuid);
     } else if (fileName.endsWith('.md')) {
         await updateMarkdownFile(filePath, rolesWithUuid);
+    } else if (fileName.endsWith('.csv')) {
+        await updateDelimitedFile(filePath, rolesWithUuid);
     } else if (fileName.endsWith('.txt')) {
         // txt 文件无法修改，只在内存中保持 UUID
         console.log(`[RoleUuidManager] txt 文件无法修改，UUID 仅在内存中保持: ${filePath}`);
@@ -257,6 +264,56 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
     }
 }
 
+async function updateDelimitedFile(filePath: string, rolesWithUuid: Role[]): Promise<void> {
+    try {
+        const content = await readTextFileDetectEncoding(filePath);
+        const packagePath = path.relative(
+            path.join(path.dirname(filePath), '..', '..'),
+            path.dirname(filePath)
+        );
+        const parsed = parseDelimitedRoleFile(content, filePath, packagePath, rolesWithUuid[0]?.type || '角色');
+
+        if (!parsed.hasHeader) {
+            console.log(`[RoleUuidManager] 无表头 CSV 不回写 UUID，内存中保留哈希 UUID: ${filePath}`);
+            return;
+        }
+
+        const roleMap = new Map<string | undefined, string | undefined>(rolesWithUuid.map(role => [role.name, role.uuid]));
+        let changed = false;
+
+        for (const role of parsed.roles) {
+            if (!role.name || !roleMap.has(role.name)) {
+                continue;
+            }
+            const nextUuid = roleMap.get(role.name);
+            if (nextUuid && role.uuid !== nextUuid) {
+                role.uuid = nextUuid;
+                changed = true;
+            }
+        }
+
+        const format = ensureDelimitedRoleHeaders({
+            delimiter: parsed.delimiter,
+            hasHeader: parsed.hasHeader,
+            headers: parsed.headers,
+        }, 'uuid');
+        const updatedContent = stringifyDelimitedRoleFile(parsed.roles, format);
+        const normalizedOriginal = content.replace(/\r\n/g, '\n').trimEnd();
+        const normalizedUpdated = updatedContent.replace(/\r\n/g, '\n').trimEnd();
+
+        if (!changed && normalizedOriginal === normalizedUpdated) {
+            console.log(`[RoleUuidManager] CSV 内容无变化，跳过写入: ${filePath}`);
+            return;
+        }
+
+        await fs.promises.writeFile(filePath, `${updatedContent}\n`, 'utf8');
+        try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
+        console.log(`[RoleUuidManager] 已更新 CSV 文件: ${filePath}`);
+    } catch (error) {
+        throw new Error(`更新 CSV 文件失败: ${error}`);
+    }
+}
+
 /**
  * 在指定位置插入 UUID 字段
  * @param lines 行数组
@@ -313,6 +370,11 @@ export function validateRoleUUID(role: Role): boolean {
         const expectedHash = generateRoleNameHash(role.name);
         return role.uuid === expectedHash;
     }
+
+    if (role.sourcePath?.endsWith('.csv')) {
+        const expectedHash = generateRoleNameHash(role.name);
+        return role.uuid === expectedHash || isValidUUID(role.uuid);
+    }
     
     // 对于其他文件，验证是否为有效的 UUID 格式
     return isValidUUID(role.uuid);
@@ -329,7 +391,7 @@ export async function fixInvalidRoleUUIDs(roles: Role[], updateFiles: boolean = 
     for (const role of roles) {
         if (role.uuid && !validateRoleUUID(role)) {
             // 重新生成 UUID
-            if (role.sourcePath?.endsWith('.txt')) {
+            if (role.sourcePath?.endsWith('.txt') || role.sourcePath?.endsWith('.csv')) {
                 role.uuid = generateRoleNameHash(role.name);
             } else {
                 role.uuid = generateUUIDv7();

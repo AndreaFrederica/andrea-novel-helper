@@ -44,6 +44,9 @@ export interface BaseFieldsCommon {
     description?: string;
     affiliation?: string;
     aliases?: string[] | undefined; // 基础字段
+    lookupKeys_pinyin?: string[] | undefined;
+    lookupKeys_romanized?: string[] | undefined;
+    lookupKeys_spelling?: string[] | undefined;
     fixes?: string[] | undefined;   // 基础字段（仅敏感词可编辑）
     regex?: string | undefined;     // 正则专用
     regexFlags?: string | undefined;// 正则专用
@@ -88,6 +91,9 @@ export interface Role {
     regexFlags?: string;
     priority?: number;
     fixes?: string[];            // 兼容旧字段 fixs -> fixes
+    lookupKeys_pinyin?: string[];
+    lookupKeys_romanized?: string[];
+    lookupKeys_spelling?: string[];
 }
 export type RoleWithId = Role & { id?: string };
 
@@ -99,7 +105,7 @@ export type RoleFlat = RoleWithId & Record<string, JsonValue>;
 // 后端专用/基础键：不能被动态键覆盖，也不应出现在 extended/custom
 const BACKEND_ONLY_KEYS = new Set(['wordSegmentFilter', 'packagePath', 'sourcePath']);
 const BASE_KEYS = new Set([
-    'id', 'name', 'type', 'uuid', 'description', 'color', 'affiliation', 'aliases',
+    'id', 'name', 'type', 'uuid', 'description', 'color', 'affiliation', 'aliases', 'lookupKeys_pinyin', 'lookupKeys_romanized', 'lookupKeys_spelling',
     'regex', 'regexFlags', 'priority', 'fixes', 'fixs',
     'style', 'backgroundColor', 'bold', 'italic', 'strikethrough', 'underline', // 样式字段
     ...BACKEND_ONLY_KEYS,
@@ -119,6 +125,9 @@ const BASE_SYNONYMS: Record<string, keyof BaseFieldsCommon | 'priority' | 'fixes
     'affiliation': 'affiliation', '从属': 'affiliation',
     // aliases
     'alias': 'aliases', 'aliases': 'aliases', '别名': 'aliases',
+    'lookupkeys_pinyin': 'lookupKeys_pinyin', '拼音查询键': 'lookupKeys_pinyin', '拼音检索键': 'lookupKeys_pinyin',
+    'lookupkeys_romanized': 'lookupKeys_romanized', '罗马字查询键': 'lookupKeys_romanized', '罗马字检索键': 'lookupKeys_romanized',
+    'lookupkeys_spelling': 'lookupKeys_spelling', '拼写查询键': 'lookupKeys_spelling', '拼写检索键': 'lookupKeys_spelling',
     // priority（虽是基础字段，这里当作同义词回填）
     'priority': 'priority', '优先级': 'priority',
     // fixes（敏感词专用）
@@ -215,6 +224,9 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
         description: role.description,
         affiliation: role.affiliation,
         aliases: role.aliases ? [...role.aliases] : undefined,
+        lookupKeys_pinyin: role.lookupKeys_pinyin ? [...role.lookupKeys_pinyin] : undefined,
+        lookupKeys_romanized: role.lookupKeys_romanized ? [...role.lookupKeys_romanized] : undefined,
+        lookupKeys_spelling: role.lookupKeys_spelling ? [...role.lookupKeys_spelling] : undefined,
         fixes: role.fixes ? [...role.fixes] : undefined,
         regex: role.regex,
         regexFlags: role.regexFlags,
@@ -309,6 +321,9 @@ export function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: R
     setIf('uuid', base.uuid);
     setIf('affiliation', base.affiliation);
     setIf('aliases', toStringArray(base.aliases));
+    setIf('lookupKeys_pinyin', toStringArray(base.lookupKeys_pinyin));
+    setIf('lookupKeys_romanized', toStringArray(base.lookupKeys_romanized));
+    setIf('lookupKeys_spelling', toStringArray(base.lookupKeys_spelling));
     setIf('description', base.description);
 
     const normalizedStyle: TextStyleOptions = {};
