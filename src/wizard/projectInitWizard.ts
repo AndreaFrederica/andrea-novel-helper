@@ -10,6 +10,10 @@ import { exec } from 'child_process';
 // 标记：项目初始化向导是否正在运行（用于抑制其它 Git 配置弹窗等）
 export let projectInitWizardRunning = false;
 
+export function setProjectInitWizardRunning(value: boolean): void {
+  projectInitWizardRunning = value;
+}
+
 function runGit(args: string[], cwd: string): Promise<{ code: number; stdout: string; stderr: string; cmd: string }> {
   const quoted = args.map(a => /^[A-Za-z0-9._:\/@=-]+$/.test(a) ? a : '"' + a.replace(/"/g, '\"') + '"');
   const cmd = `git ${quoted.join(' ')}`;

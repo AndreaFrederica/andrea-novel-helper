@@ -53,7 +53,7 @@ export function maybePromptProjectInit() {
         vscode.window.showInformationMessage('未检测到角色/词汇/敏感词等描述文件，是否运行项目初始化向导？', '运行向导', '忽略').then(sel => {
           projectInitPromptScheduled = false; // 用户已处理（无论选择哪个）
           if (sel === '运行向导') {
-            vscode.commands.executeCommand('AndreaNovelHelper.projectInitWizard');
+            vscode.commands.executeCommand('AndreaNovelHelper.projectInitWizard.graphical');
           }
         }, () => { projectInitPromptScheduled = false; });
       }, 600);

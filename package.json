@@ -756,6 +756,12 @@
         "title": "%command.projectInitWizard.title%"
       },
       {
+        "command": "AndreaNovelHelper.projectInitWizard.graphical",
+        "title": "打开图形化项目初始化向导",
+        "category": "Andrea Novel Helper",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "AndreaNovelHelper.disableWorkspace",
         "title": "%command.disableWorkspace.title%"
       },
@@ -3370,7 +3376,7 @@
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createCharacterGallery",
-          "group": "0_create@1"
+          "group": "0_create@2"
         },
         {
           "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
@@ -3397,33 +3403,43 @@
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createSensitiveWords",
-          "group": "0_create@2"
+          "command": "andrea.openProjectSettings",
+          "group": "0_create@0"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createVocabulary",
+          "command": "AndreaNovelHelper.projectInitWizard.graphical",
+          "group": "0_create@1"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.createSensitiveWords",
           "group": "0_create@3"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createRoleFile",
+          "command": "AndreaNovelHelper.createVocabulary",
           "group": "0_create@4"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createRelationshipFile",
+          "command": "AndreaNovelHelper.createRoleFile",
           "group": "0_create@5"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createTimelineFile",
+          "command": "AndreaNovelHelper.createRelationshipFile",
           "group": "0_create@6"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createRegexPatterns",
+          "command": "AndreaNovelHelper.createTimelineFile",
           "group": "0_create@7"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.createRegexPatterns",
+          "group": "0_create@8"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",

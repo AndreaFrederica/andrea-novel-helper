@@ -15,7 +15,7 @@ import { generateCustomFileName, generateDefaultFileName } from '../../utils/Par
 import { globalRelationshipManager } from '../../utils/globalRelationshipManager';
 import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
 
-type PackageManagerNode = PackageNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | BookRootNode | AnyNode;
+type PackageManagerNode = PackageNode | ProjectInitWizardNode | ProjectSettingsNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | BookRootNode | AnyNode;
 
 function normalizeFsPathForCompare(p: string): string {
     const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
@@ -26,8 +26,8 @@ function isRoleHierarchyNode(node: PackageManagerNode): node is AnyNode {
     return !!node && typeof node === 'object' && 'kind' in node;
 }
 
-function isFileSystemTreeNode(node: PackageManagerNode | undefined): node is PackageNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | BookRootNode {
-    return !!node && node instanceof vscode.TreeItem && 'resourceUri' in node;
+function isFileSystemTreeNode(node: PackageManagerNode | undefined): node is PackageNode | BookRootNode {
+    return !!node && (node instanceof PackageNode || node instanceof BookRootNode);
 }
 
 const ROLE_CARRIER_EXTENSIONS = new Set([
@@ -79,6 +79,42 @@ function resolveFileConflict(dir: string, baseName: string, ext: string): { path
         const candidate = path.join(dir, `${baseName}_${ts}_${idx}${ext}`);
         if (!fs.existsSync(candidate)) return { path: candidate, conflicted: true };
         idx++;
+    }
+}
+
+// 项目初始化向导节点
+class ProjectInitWizardNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 项目初始化向导', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'projectInitWizard';
+        this.iconPath = new vscode.ThemeIcon('rocket');
+        this.description = '图形化创建项目配置和基础结构';
+        this.command = {
+            command: 'AndreaNovelHelper.projectInitWizard.graphical',
+            title: '打开项目初始化向导',
+            arguments: []
+        };
+    }
+}
+
+// 项目设置节点
+class ProjectSettingsNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 项目设置', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'projectSettings';
+        this.iconPath = new vscode.ThemeIcon('settings-gear');
+        this.description = '编辑 anhproject.md 和 project-config.json5';
+        this.command = {
+            command: 'andrea.openProjectSettings',
+            title: '打开项目设置',
+            arguments: []
+        };
     }
 }
 
@@ -381,8 +417,10 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
             const refMaintenanceNode = new ReferenceMaintenanceNode(this.workspaceRoot);
             const externalManageNode = new ExternalResourceManageNode(this.workspaceRoot);
             const copilotDocsManageNode = new CopilotDocsManageNode(this.workspaceRoot);
+            const projectInitWizardNode = new ProjectInitWizardNode(this.workspaceRoot);
+            const projectSettingsNode = new ProjectSettingsNode(this.workspaceRoot);
 
-            const result: PackageManagerNode[] = [refMaintenanceNode, externalManageNode, copilotDocsManageNode];
+            const result: PackageManagerNode[] = [projectInitWizardNode, projectSettingsNode, refMaintenanceNode, externalManageNode, copilotDocsManageNode];
 
             // 3) 外部资源目录（由 fast-glob 扫描器提供）
             if (this.externalRoleFolders.length === 0 || this.externalRoleFolders.some(folder => !fs.existsSync(folder))) {
