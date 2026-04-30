@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline' __CSP_SOURCE__; script-src __CSP_SOURCE__ 'nonce-__NONCE__';">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目初始化向导</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            color: var(--vscode-editor-foreground);
+            background: var(--vscode-editor-background);
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            line-height: 1.5;
+        }
+
+        /* ── Header ─────────────────────────────────── */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 14px 24px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-editor-background);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .status {
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        /* ── Stepper ────────────────────────────────── */
+        .stepper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 28px 24px 8px;
+            gap: 0;
+        }
+
+        .stepper-item {
+            display: flex;
+            align-items: center;
+            gap: 0;
+        }
+
+        .step-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            border: 2px solid var(--vscode-panel-border);
+            color: var(--vscode-descriptionForeground);
+            background: transparent;
+            transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .step-label {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            margin-left: 8px;
+            white-space: nowrap;
+            transition: color 0.3s ease;
+        }
+
+        .stepper-line {
+            width: 40px;
+            height: 2px;
+            background: var(--vscode-panel-border);
+            margin: 0 6px;
+            position: relative;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .stepper-line::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 0%;
+            background: var(--vscode-button-background);
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .stepper-item.completed .stepper-line::after,
+        .stepper-item.active .stepper-line::after {
+            width: 100%;
+        }
+
+        .stepper-item.active .step-circle {
+            border-color: var(--vscode-button-background);
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            transform: scale(1.1);
+            box-shadow: 0 0 0 4px color-mix(in srgb, var(--vscode-button-background) 20%, transparent);
+        }
+
+        .stepper-item.completed .step-circle {
+            border-color: var(--vscode-testing-iconPassed);
+            background: var(--vscode-testing-iconPassed);
+            color: var(--vscode-editor-background);
+        }
+
+        .stepper-item.active .step-label {
+            color: var(--vscode-editor-foreground);
+            font-weight: 600;
+        }
+
+        .stepper-item.completed .step-label {
+            color: var(--vscode-testing-iconPassed);
+        }
+
+        /* ── Main Content ───────────────────────────── */
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 16px 24px 120px;
+        }
+
+        /* ── Wizard Step Transitions ────────────────── */
+        .wizard-step {
+            display: none;
+            opacity: 0;
+            transform: translateY(12px);
+        }
+
+        .wizard-step.active {
+            display: block;
+            animation: stepEnter 0.35s cubic-bezier(0.2, 0, 0, 1) forwards;
+        }
+
+        .wizard-step.exiting {
+            display: block;
+            animation: stepExit 0.2s ease forwards;
+        }
+
+        @keyframes stepEnter {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes stepExit {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+        }
+
+        /* ── Section Card ───────────────────────────── */
+        .card {
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            padding: 20px;
+            background: color-mix(in srgb, var(--vscode-editor-background) 100%, transparent);
+        }
+
+        .card h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0 0 12px;
+        }
+
+        /* ── Callout ────────────────────────────────── */
+        .callout {
+            border-left: 3px solid var(--vscode-focusBorder);
+            background: var(--vscode-textBlockQuote-background);
+            padding: 10px 14px;
+            margin-bottom: 16px;
+            border-radius: 0 4px 4px 0;
+            line-height: 1.6;
+            font-size: 13px;
+        }
+
+        /* ── Grid & Fields ──────────────────────────── */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .full {
+            grid-column: 1 / -1;
+        }
+
+        label {
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        input,
+        textarea,
+        select {
+            width: 100%;
+            border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border-radius: 4px;
+            padding: 7px 10px;
+            font: inherit;
+            font-size: 13px;
+            transition: border-color 0.2s ease;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--vscode-focusBorder);
+        }
+
+        textarea {
+            min-height: 72px;
+            resize: vertical;
+        }
+
+        /* ── Checkboxes ─────────────────────────────── */
+        .checks {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .check {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            padding: 12px;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .check:hover {
+            border-color: var(--vscode-focusBorder);
+            background: color-mix(in srgb, var(--vscode-focusBorder) 5%, transparent);
+        }
+
+        .check input {
+            width: auto;
+            margin-top: 3px;
+            accent-color: var(--vscode-button-background);
+        }
+
+        .check strong {
+            font-size: 13px;
+        }
+
+        /* ── Hint & Log ─────────────────────────────── */
+        .hint,
+        .log {
+
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .log {
+            margin-top: 8px;
+        }
+
+        .log>div {
+            padding: 4px 0;
+            border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent);
+        }
+
+        .log>div:last-child {
+            border-bottom: none;
+        }
+
+        /* ── Notice (error bar) ─────────────────────── */
+        .notice {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            border-left: 3px solid var(--vscode-inputValidation-errorBorder);
+            background: var(--vscode-inputValidation-errorBackground);
+            padding: 0 12px;
+            margin-bottom: 0;
+            border-radius: 0 4px 4px 0;
+            transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease, margin 0.3s ease;
+        }
+
+        .notice.show {
+            max-height: 80px;
+            opacity: 1;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+        }
+
+        /* ── Footer ─────────────────────────────────── */
+        .setup-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 24px;
+            background: var(--vscode-editor-background);
+            border-top: 1px solid var(--vscode-panel-border);
+            z-index: 10;
+        }
+
+        /* ── Buttons ────────────────────────────────── */
+        button {
+            border: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border-radius: 4px;
+            padding: 7px 14px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.15s ease, transform 0.1s ease;
+        }
+
+        button:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        button.primary {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-color: var(--vscode-button-background);
+            font-weight: 500;
+        }
+
+        button.primary:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+
+        button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .mt-12 {
+            margin-top: 12px;
+        }
+
+        .mb-10 {
+            margin-bottom: 10px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 20px 0 4px;
+            color: var(--vscode-editor-foreground);
+        }
+
+        .compact-textarea {
+            min-height: 48px;
+        }
+
+        .git-actions {
+            justify-content: flex-start;
+            margin-top: 10px;
+        }
+
+        /* ── Responsive ─────────────────────────────── */
+        @media (max-width: 760px) {
+            header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            .stepper {
+                flex-wrap: wrap;
+                gap: 4px;
+                padding: 16px 12px 4px;
+            }
+
+            .stepper-line {
+                width: 20px;
+            }
+
+            .step-label {
+                display: none;
+            }
+
+            .grid,
+            .checks {
+                grid-template-columns: 1fr;
+            }
+
+            main {
+                padding: 12px 16px 110px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div>
+            <h1>项目初始化向导</h1>
+            <div id="state" class="status">正在读取工作区...</div>
+        </div>
+        <div class="toolbar">
+            <button id="reload">刷新检测</button>
+        </div>
+    </header>
+
+    <!-- Stepper -->
+    <div class="stepper" id="stepper"></div>
+
+    <main>
+        <div id="notice" class="notice"></div>
+
+        <!-- Step 0: Welcome -->
+        <section class="wizard-step active" data-step="0">
+            <div class="card">
+                <h2>欢迎</h2>
+                <div class="callout">这个向导会像安装程序一样一步步完成项目初始化。你会先填写项目身份，再配置
+                    Git，最后确认要创建的文件和忽略规则。</div>
+                <p class="hint">如果你不熟悉 Git，按默认推荐项继续即可。向导会在需要时提示你创建本机 Git
+                    用户名和邮箱。</p>
+            </div>
+        </section>
+
+        <!-- Step 1: Project Info -->
+        <section class="wizard-step" data-step="1">
+            <div class="card">
+                <h2>项目信息</h2>
+                <div class="callout">这一步用于告诉 ANH 这个项目叫什么、作者是谁。信息会写入 anhproject.md，后续可在项目设置页修改。</div>
+                <div class="grid">
+                    <div class="field">
+                        <label>项目名称</label>
+                        <input id="projectName">
+                    </div>
+                    <div class="field">
+                        <label>作者</label>
+                        <input id="projectAuthor">
+                    </div>
+                    <div class="field full">
+                        <label>项目描述</label>
+                        <input id="projectDescription" value="这是一个小说项目">
+                    </div>
+                    <div class="field full">
+                        <label>项目简介</label>
+                        <textarea id="projectSummary">项目简介</textarea>
+                    </div>
+                    <div class="field full">
+                        <label>项目标签</label>
+                        <textarea id="projectTags">小说
+创作</textarea>
+                        <div class="hint">支持换行、逗号、顿号、分号分隔。</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 2: Project Config -->
+        <section class="wizard-step" data-step="2">
+            <div class="card">
+                <h2>项目配置</h2>
+                <div class="callout">这些配置控制 ANH 如何识别和管理你的项目资源文件。所有项均可选——留空即使用下方显示的默认值。</div>
+
+                <h3 class="section-title">默认写入目标</h3>
+                <p class="hint mb-10">这些路径只影响"新增角色/词汇/敏感词/正则"命令默认写入到哪个文件，不是项目资源清单。</p>
+                <div class="grid">
+                    <div class="field">
+                        <label>新增角色默认写入</label>
+                        <input id="rolesFile" placeholder="novel-helper/character-gallery.json5">
+                    </div>
+                    <div class="field">
+                        <label>新增敏感词默认写入</label>
+                        <input id="sensitiveWordsFile" placeholder="novel-helper/sensitive-words.json5">
+                    </div>
+                    <div class="field">
+                        <label>新增词汇默认写入</label>
+                        <input id="vocabularyFile" placeholder="novel-helper/vocabulary.json5">
+                    </div>
+                    <div class="field">
+                        <label>新增正则默认写入</label>
+                        <input id="regexPatternsFile" placeholder="novel-helper/regex-patterns.json5">
+                    </div>
+                </div>
+
+                <h3 class="section-title">角色索引键</h3>
+                <p class="hint mb-10">索引键用于在补全和角色查找中匹配角色。可填写后缀（如 日文）或完整键名（如 lookupKeys_jp）。</p>
+                <div class="grid">
+                    <div class="field full">
+                        <label>默认角色索引键</label>
+                        <textarea id="defaultRoleLookupKeys" placeholder="留空使用系统默认" class="compact-textarea"></textarea>
+                    </div>
+                    <div class="field full">
+                        <label>扩展索引键前缀</label>
+                        <textarea id="extendedLookupKeyPrefixes" placeholder="留空使用系统默认" class="compact-textarea"></textarea>
+                    </div>
+                </div>
+
+                <h3 class="section-title">文件识别关键词</h3>
+                <p class="hint mb-10">ANH 通过文件名关键词自动识别资源类型。如果你的文件命名不在默认识别范围内，可以在这里添加额外关键词。</p>
+                <div class="grid">
+                    <div class="field">
+                        <label>角色文件关键词</label>
+                        <textarea id="characterFileKeywords" placeholder="留空使用默认"></textarea>
+                    </div>
+                    <div class="field">
+                        <label>敏感词文件关键词</label>
+                        <textarea id="sensitiveWordsFileKeywords" placeholder="留空使用默认"></textarea>
+                    </div>
+                    <div class="field">
+                        <label>词汇文件关键词</label>
+                        <textarea id="vocabularyFileKeywords" placeholder="留空使用默认"></textarea>
+                    </div>
+                    <div class="field">
+                        <label>正则文件关键词</label>
+                        <textarea id="regexFileKeywords" placeholder="留空使用默认"></textarea>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3: Git Account -->
+        <section class="wizard-step" data-step="3">
+
+            <div class="card">
+                <h2>Git 账户</h2>
+                <div class="callout">Git 提交需要作者信息。如果系统里没有配置用户名和邮箱，建议在这里创建全局配置；这不是网页登录账号，只是本机 Git
+                    作者名片。</div>
+                <div id="gitHint" class="hint"></div>
+                <div class="toolbar git-actions" id="gitInstallActions">
+                    <button id="openGitDownload">打开 Git 下载页</button>
+                </div>
+                <div class="checks mt-12">
+                    <label class="check">
+                        <input id="configureGitUser" type="checkbox">
+                        <span><strong>配置 Git 用户信息</strong><br><span class="hint">可写入全局或当前仓库。</span></span>
+                    </label>
+                </div>
+                <div class="grid mt-12">
+                    <div class="field">
+                        <label>Git 用户名</label>
+                        <input id="gitUserName">
+                    </div>
+                    <div class="field">
+                        <label>Git 邮箱</label>
+                        <input id="gitUserEmail">
+                    </div>
+                    <div class="field">
+                        <label>写入位置</label>
+                        <select id="gitUserScope">
+                            <option value="global">全局 global</option>
+                            <option value="local">当前仓库 local</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 4: Git Repo -->
+        <section class="wizard-step" data-step="4">
+            <div class="card">
+                <h2>Git 仓库</h2>
+                <div class="callout">这里决定是否把当前文件夹交给 Git 管理。推荐初始化仓库并创建初始提交，之后每次重要改动都可以被追踪和回退。</div>
+                <div id="repoHint" class="hint"></div>
+                <div class="checks mt-12">
+                    <label class="check">
+                        <input id="initGitRepo" type="checkbox">
+                        <span><strong>初始化 Git 仓库</strong><br><span class="hint">仅在当前工作区还不是仓库时执行。</span></span>
+                    </label>
+                    <label class="check">
+                        <input id="initialCommit" type="checkbox">
+                        <span><strong>创建初始提交</strong><br><span class="hint">会执行 git add . 和一次 commit。</span></span>
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 5: Project Files -->
+        <section class="wizard-step" data-step="5">
+            <div class="card">
+                <h2>项目文件</h2>
+                <div class="callout">这一步会创建 ANH 推荐的基础结构和忽略规则。你可以先用默认设置，之后通过包管理器继续添加资源文件。</div>
+                <div class="checks">
+                    <label class="check">
+                        <input id="createStructure" type="checkbox" checked>
+                        <span><strong>创建示例资源结构</strong><br><span class="hint">创建 novel-helper 目录及角色、敏感词、词汇、正则模板。</span></span>
+                    </label>
+                    <label class="check">
+                        <input id="ignoreHistory" type="checkbox" checked>
+                        <span><strong>忽略 .history</strong><br><span class="hint">写入 .gitignore。</span></span>
+                    </label>
+                    <label class="check">
+                        <input id="wcIgnoreVscode" type="checkbox" checked>
+                        <span><strong>字数统计忽略 .vscode</strong><br><span class="hint">写入 .wcignore。</span></span>
+                    </label>
+                    <label class="check">
+                        <input id="wcIgnoreOutOfInsights" type="checkbox" checked>
+                        <span><strong>字数统计忽略 .out-of-code-insights</strong><br><span class="hint">写入 .wcignore。</span></span>
+                    </label>
+                </div>
+                <div class="field mt-12">
+                    <label>写作统计数据库</label>
+                    <select id="writingStatsMode">
+                        <option value="ignore">不纳入版本控制（推荐）</option>
+                        <option value="track">纳入版本控制</option>
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 6: Confirm -->
+        <section class="wizard-step" data-step="6">
+            <div class="card">
+                <h2>确认执行</h2>
+                <div class="callout">请确认下面这些动作。点击"执行初始化"后，向导会写入项目配置文件，并执行你选择的 Git 操作。</div>
+                <div id="summary" class="log"></div>
+            </div>
+        </section>
+
+        <!-- Step 7: Done -->
+        <section class="wizard-step" data-step="7">
+            <div class="card">
+                <h2>执行结果</h2>
+                <div id="log" class="log">尚未执行。</div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <div class="setup-footer">
+            <button id="back">上一步</button>
+            <div class="toolbar">
+                <button id="next">下一步</button>
+                <button id="run" class="primary hidden">执行初始化</button>
+            </div>
+        </div>
+    </main>
+
+    <script nonce="__NONCE__" src="__SCRIPT_URI__"></script>
+</body>
+
+</html>

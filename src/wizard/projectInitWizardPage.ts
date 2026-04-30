@@ -3,10 +3,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { v4 as uuidv4 } from 'uuid';
-import { createCharacterGalleryFile, createSensitiveWordsFile, createVocabularyFile, createRegexPatternsFile, ensureDir } from './packageFileCreators';
+import { createCharacterGalleryFile, createCharacterGalleryCsvFile, createSensitiveWordsFile, createVocabularyFile, createRegexPatternsFile, ensureDir } from './packageFileCreators';
 import { generateMarkdownRoleTemplate } from '../templates/templateGenerators';
 import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
-import { generateProjectKeywordConfigTemplate, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME, clearAllProjectConfigCaches } from '../projectConfig/projectKeywordConfig';
+import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME, clearAllProjectConfigCaches } from '../projectConfig/projectKeywordConfig';
 import { setProjectInitWizardRunning } from './projectInitWizard';
 
 interface GitState {
@@ -24,6 +24,16 @@ interface InitPayload {
     projectAuthor: string;
     projectSummary: string;
     projectTags: string[];
+    rolesFile: string;
+    sensitiveWordsFile: string;
+    vocabularyFile: string;
+    regexPatternsFile: string;
+    defaultRoleLookupKeys: string[];
+    extendedLookupKeyPrefixes: string[];
+    characterFileKeywords: string[];
+    sensitiveWordsFileKeywords: string[];
+    vocabularyFileKeywords: string[];
+    regexFileKeywords: string[];
     initGitRepo: boolean;
     configureGitUser: boolean;
     gitUserName: string;
@@ -38,8 +48,11 @@ interface InitPayload {
 }
 
 let currentPanel: vscode.WebviewPanel | undefined;
+let extensionPath: string = '';
 
 export function registerGraphicalProjectInitWizard(context: vscode.ExtensionContext): vscode.Disposable {
+    extensionPath = context.extensionPath;
+
     const command = vscode.commands.registerCommand('AndreaNovelHelper.projectInitWizard.graphical', async () => {
         if (currentPanel) {
             currentPanel.reveal(vscode.ViewColumn.Active);
@@ -196,7 +209,7 @@ async function writeProjectConfig(workspaceRoot: string, payload: InitPayload): 
 
     const keywordPath = path.join(workspaceRoot, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME);
     if (!fs.existsSync(keywordPath)) {
-        fs.writeFileSync(keywordPath, `${generateProjectKeywordConfigTemplate()}\n`, 'utf8');
+        fs.writeFileSync(keywordPath, `${buildJson5Config(payload)}\n`, 'utf8');
     }
 }
 
@@ -204,6 +217,7 @@ function createDefaultStructure(workspaceRoot: string): void {
     const root = path.join(workspaceRoot, 'novel-helper');
     ensureDir(root);
     createCharacterGalleryFile(root);
+    createCharacterGalleryCsvFile(root);
     createSensitiveWordsFile(root);
     createVocabularyFile(root);
     createRegexPatternsFile(root);
@@ -257,6 +271,16 @@ function normalizePayload(data: unknown, workspaceRoot: string): InitPayload {
         projectAuthor: normalizeString(record.projectAuthor) || '作者',
         projectSummary: normalizeString(record.projectSummary) || '项目简介',
         projectTags: tags.length ? tags : ['小说', '创作'],
+        rolesFile: normalizeString(record.rolesFile),
+        sensitiveWordsFile: normalizeString(record.sensitiveWordsFile),
+        vocabularyFile: normalizeString(record.vocabularyFile),
+        regexPatternsFile: normalizeString(record.regexPatternsFile),
+        defaultRoleLookupKeys: normalizeStringArray(record.defaultRoleLookupKeys),
+        extendedLookupKeyPrefixes: normalizeStringArray(record.extendedLookupKeyPrefixes),
+        characterFileKeywords: normalizeStringArray(record.characterFileKeywords),
+        sensitiveWordsFileKeywords: normalizeStringArray(record.sensitiveWordsFileKeywords),
+        vocabularyFileKeywords: normalizeStringArray(record.vocabularyFileKeywords),
+        regexFileKeywords: normalizeStringArray(record.regexFileKeywords),
         initGitRepo: Boolean(record.initGitRepo),
         configureGitUser: Boolean(record.configureGitUser),
         gitUserName: normalizeString(record.gitUserName),
@@ -324,165 +348,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function nonce(): string {
+function formatJson5Array(values: string[]): string {
+    if (values.length === 0) { return '[]'; }
+    return `[\n${values.map(v => `    '${v.replace(/\\/g, '/').replace(/'/g, "\\'")}',`).join('\n')}\n  ]`;
+}
+
+function buildJson5Config(payload: InitPayload): string {
+    const lib = (v: string, d: string) => `'${(v || d).replace(/\\/g, '/')}'`;
+    return [
+        '{',
+        '  // 项目级资源文件目标路径（相对于工作区根目录）',
+        `  rolesFile: ${lib(payload.rolesFile, 'novel-helper/character-gallery.json5')},`,
+        `  sensitiveWordsFile: ${lib(payload.sensitiveWordsFile, 'novel-helper/sensitive-words.json5')},`,
+        `  vocabularyFile: ${lib(payload.vocabularyFile, 'novel-helper/vocabulary.json5')},`,
+        `  regexPatternsFile: ${lib(payload.regexPatternsFile, 'novel-helper/regex-patterns.json5')},`,
+        '',
+        '  // 新建角色时默认补齐的索引键字段',
+        `  defaultRoleLookupKeys: ${formatJson5Array(payload.defaultRoleLookupKeys)},`,
+        '',
+        '  // 扩展索引键家族前缀',
+        `  extendedLookupKeyPrefixes: ${formatJson5Array(payload.extendedLookupKeyPrefixes)},`,
+        '',
+        `  characterFileKeywords: ${formatJson5Array(payload.characterFileKeywords)},`,
+        `  sensitiveWordsFileKeywords: ${formatJson5Array(payload.sensitiveWordsFileKeywords)},`,
+        `  vocabularyFileKeywords: ${formatJson5Array(payload.vocabularyFileKeywords)},`,
+        `  regexFileKeywords: ${formatJson5Array(payload.regexFileKeywords)},`,
+        '}',
+    ].join('\n');
+}
+
+function getWizardHtml(webview: vscode.Webview): string {
+    const scriptNonce = generateNonce();
+    const mediaDir = vscode.Uri.file(path.join(extensionPath, 'media'));
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaDir, 'wizard.js'));
+    const htmlPath = path.join(extensionPath, 'media', 'wizard.html');
+    const template = fs.readFileSync(htmlPath, 'utf8');
+    return template
+        .replace(/__CSP_SOURCE__/g, webview.cspSource)
+        .replace(/__NONCE__/g, scriptNonce)
+        .replace(/__SCRIPT_URI__/g, scriptUri.toString());
+}
+
+function generateNonce(): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let out = '';
     for (let i = 0; i < 32; i++) {
         out += chars[Math.floor(Math.random() * chars.length)];
     }
     return out;
-}
-
-function getWizardHtml(webview: vscode.Webview): string {
-    const scriptNonce = nonce();
-    return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${webview.cspSource}; script-src 'nonce-${scriptNonce}';">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>项目初始化向导</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
-        header { position: sticky; top: 0; z-index: 2; padding: 14px 18px; border-bottom: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-        h1 { margin: 0; font-size: 18px; }
-        .status { color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 4px; }
-        main { max-width: 1000px; padding: 18px; }
-        section { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 16px; margin-bottom: 16px; }
-        h2 { font-size: 15px; margin: 0 0 12px; }
-        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-        .field { display: flex; flex-direction: column; gap: 6px; }
-        .full { grid-column: 1 / -1; }
-        label { color: var(--vscode-descriptionForeground); font-size: 12px; }
-        input, textarea, select { width: 100%; border: 1px solid var(--vscode-input-border, var(--vscode-panel-border)); background: var(--vscode-input-background); color: var(--vscode-input-foreground); border-radius: 4px; padding: 7px 8px; font: inherit; }
-        textarea { min-height: 72px; resize: vertical; }
-        .checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-        .check { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 10px; }
-        .check input { width: auto; margin-top: 2px; }
-        .hint, .log { color: var(--vscode-descriptionForeground); font-size: 12px; line-height: 1.5; }
-        .toolbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-        button { border: 1px solid var(--vscode-panel-border); background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border-radius: 4px; padding: 7px 10px; cursor: pointer; }
-        button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
-        .notice { display: none; border-left: 3px solid var(--vscode-inputValidation-errorBorder); background: var(--vscode-inputValidation-errorBackground); padding: 9px 10px; margin-bottom: 14px; }
-        .notice.show { display: block; }
-        @media (max-width: 760px) { header { align-items: flex-start; flex-direction: column; } .grid, .checks { grid-template-columns: 1fr; } }
-    </style>
-</head>
-<body>
-    <header>
-        <div>
-            <h1>项目初始化向导</h1>
-            <div id="state" class="status">正在读取工作区...</div>
-        </div>
-        <div class="toolbar">
-            <button id="reload">刷新检测</button>
-            <button id="run" class="primary">执行初始化</button>
-        </div>
-    </header>
-    <main>
-        <div id="notice" class="notice"></div>
-        <section>
-            <h2>项目信息</h2>
-            <div class="grid">
-                <div class="field"><label>项目名称</label><input id="projectName"></div>
-                <div class="field"><label>作者</label><input id="projectAuthor"></div>
-                <div class="field full"><label>项目描述</label><input id="projectDescription" value="这是一个小说项目"></div>
-                <div class="field full"><label>项目简介</label><textarea id="projectSummary">项目简介</textarea></div>
-                <div class="field full"><label>项目标签</label><textarea id="projectTags">小说
-创作</textarea><div class="hint">支持换行、逗号、顿号、分号分隔。</div></div>
-            </div>
-        </section>
-        <section>
-            <h2>项目文件</h2>
-            <div class="checks">
-                <label class="check"><input id="createStructure" type="checkbox" checked><span><strong>创建示例资源结构</strong><br><span class="hint">创建 novel-helper 目录及角色、敏感词、词汇、正则模板。</span></span></label>
-                <label class="check"><input id="ignoreHistory" type="checkbox" checked><span><strong>忽略 .history</strong><br><span class="hint">写入 .gitignore。</span></span></label>
-                <label class="check"><input id="wcIgnoreVscode" type="checkbox" checked><span><strong>字数统计忽略 .vscode</strong><br><span class="hint">写入 .wcignore。</span></span></label>
-                <label class="check"><input id="wcIgnoreOutOfInsights" type="checkbox" checked><span><strong>字数统计忽略 .out-of-code-insights</strong><br><span class="hint">写入 .wcignore。</span></span></label>
-            </div>
-            <div class="field" style="margin-top:12px"><label>写作统计数据库</label><select id="writingStatsMode"><option value="ignore">不纳入版本控制（推荐）</option><option value="track">纳入版本控制</option></select></div>
-        </section>
-        <section>
-            <h2>Git</h2>
-            <div id="gitHint" class="hint"></div>
-            <div class="checks" style="margin-top:12px">
-                <label class="check"><input id="initGitRepo" type="checkbox"><span><strong>初始化 Git 仓库</strong><br><span class="hint">仅在当前工作区还不是仓库时执行。</span></span></label>
-                <label class="check"><input id="configureGitUser" type="checkbox"><span><strong>配置 Git 用户信息</strong><br><span class="hint">可写入全局或当前仓库。</span></span></label>
-                <label class="check"><input id="initialCommit" type="checkbox"><span><strong>创建初始提交</strong><br><span class="hint">会执行 git add . 和一次 commit。</span></span></label>
-            </div>
-            <div class="grid" style="margin-top:12px">
-                <div class="field"><label>Git 用户名</label><input id="gitUserName"></div>
-                <div class="field"><label>Git 邮箱</label><input id="gitUserEmail"></div>
-                <div class="field"><label>写入位置</label><select id="gitUserScope"><option value="global">全局 global</option><option value="local">当前仓库 local</option></select></div>
-            </div>
-        </section>
-        <section>
-            <h2>执行结果</h2>
-            <div id="log" class="log">尚未执行。</div>
-        </section>
-    </main>
-    <script nonce="${scriptNonce}">
-        const vscode = acquireVsCodeApi();
-        const $ = id => document.getElementById(id);
-        let gitInstalled = false;
-        let hasRepo = false;
-        function parseList(text) { return String(text || '').split(/[\\r\\n,，;；、\\t]+/).map(v => v.trim()).filter(Boolean); }
-        function notice(text) { $('notice').textContent = text || ''; $('notice').classList.toggle('show', !!text); }
-        function syncGitOptions() {
-            $('initialCommit').disabled = !gitInstalled || (!hasRepo && !$('initGitRepo').checked);
-        }
-        function fill(data) {
-            gitInstalled = !!data.git.installed;
-            hasRepo = !!data.git.hasRepo;
-            $('state').textContent = data.workspaceRoot + ' | ' + (data.configExists ? '已有 anhproject.md' : '未创建 anhproject.md') + '，' + (data.keywordConfigExists ? '已有 project-config.json5' : '未创建 project-config.json5');
-            if (!$('projectName').value) { $('projectName').value = data.workspaceName || '未命名项目'; }
-            if (!$('projectAuthor').value) { $('projectAuthor').value = data.git.localName || data.git.globalName || '作者'; }
-            $('gitUserName').value = data.git.localName || data.git.globalName || $('gitUserName').value;
-            $('gitUserEmail').value = data.git.localEmail || data.git.globalEmail || $('gitUserEmail').value;
-            $('initGitRepo').disabled = !gitInstalled || hasRepo;
-            $('configureGitUser').disabled = !gitInstalled;
-            syncGitOptions();
-            $('gitHint').textContent = gitInstalled ? (hasRepo ? '已检测到 Git 仓库。' : '已安装 Git，但当前工作区还不是仓库。') : '未检测到 Git；Git 相关选项不可用。';
-            if (!gitInstalled) { notice('未检测到 Git。如需 Git 初始化，请先安装 Git。'); } else { notice(''); }
-        }
-        function collect() {
-            return {
-                projectName: $('projectName').value,
-                projectDescription: $('projectDescription').value,
-                projectAuthor: $('projectAuthor').value,
-                projectSummary: $('projectSummary').value,
-                projectTags: parseList($('projectTags').value),
-                initGitRepo: $('initGitRepo').checked && !$('initGitRepo').disabled,
-                configureGitUser: $('configureGitUser').checked && !$('configureGitUser').disabled,
-                gitUserName: $('gitUserName').value,
-                gitUserEmail: $('gitUserEmail').value,
-                gitUserScope: $('gitUserScope').value,
-                createStructure: $('createStructure').checked,
-                writingStatsMode: $('writingStatsMode').value,
-                ignoreHistory: $('ignoreHistory').checked,
-                wcIgnoreVscode: $('wcIgnoreVscode').checked,
-                wcIgnoreOutOfInsights: $('wcIgnoreOutOfInsights').checked,
-                initialCommit: $('initialCommit').checked && !$('initialCommit').disabled
-            };
-        }
-        window.addEventListener('message', event => {
-            const msg = event.data || {};
-            if (msg.command === 'state') { fill(msg.data); }
-            if (msg.command === 'error') { notice(msg.message || '执行失败'); }
-            if (msg.command === 'done') { $('log').innerHTML = (msg.log || []).map(line => '<div>' + line.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) + '</div>').join('') || '已完成。'; }
-        });
-        $('reload').addEventListener('click', () => vscode.postMessage({ command: 'reload' }));
-        $('initGitRepo').addEventListener('change', syncGitOptions);
-        $('run').addEventListener('click', () => {
-            const data = collect();
-            if (!data.projectName.trim()) { notice('项目名称不能为空'); return; }
-            if (data.configureGitUser && (!data.gitUserName.trim() || !/.+@.+/.test(data.gitUserEmail))) { notice('请填写有效的 Git 用户名和邮箱'); return; }
-            $('log').textContent = '正在执行...';
-            vscode.postMessage({ command: 'run', data });
-        });
-        vscode.postMessage({ command: 'ready' });
-    </script>
-</body>
-</html>`;
 }

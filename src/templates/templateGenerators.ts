@@ -266,6 +266,16 @@ export function generateCharacterGalleryJson5(): string {
 ]`;
 }
 
+/** 角色库 CSV 初始模板（含 1 个示例，可删除） */
+export function generateCharacterGalleryCsv(): string {
+    const r = EXAMPLE_ROLE;
+    const aliases = (r.aliases || []).join(';');
+    return [
+        'name,description,aliases,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized',
+        `${r.name},${r.description},${aliases},,,`,
+    ].join('\n') + '\n';
+}
+
 /** 示例敏感词 JSON5 模板（字符串形式，直接写入文件） */
 export function generateSensitiveWordsJson5(): string {
     return `[
