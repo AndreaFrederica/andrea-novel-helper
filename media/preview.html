@@ -81,6 +81,11 @@
             color: #ddd;
         }
 
+        body.reader-theme-custom {
+            background: var(--reader-custom-background, var(--vscode-editor-background, #fafafa));
+            color: var(--reader-custom-foreground, var(--vscode-editor-foreground, #222));
+        }
+
         .reader-root {
             margin: 0 auto;
             padding: var(--reader-page-padding);
@@ -162,6 +167,56 @@
 
         body.reader-md-lists.reader-md-list-plain .reader-content [data-md-kind="list"] pre {
             padding-left: 0;
+        }
+
+        body.reader-md-blockquotes .reader-content [data-md-kind="blockquote"] pre {
+            border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent);
+            padding-left: 1em;
+            opacity: .82;
+        }
+
+        body.reader-md-code .reader-content [data-md-kind="code"] pre {
+            font-family: var(--reader-font-family, Consolas, 'Courier New', monospace);
+            background: color-mix(in srgb, currentColor 8%, transparent);
+            border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+            border-radius: 6px;
+            padding: .75em .9em;
+            white-space: pre-wrap;
+        }
+
+        .md-inline-bold,
+        .md-inline-italic,
+        .md-inline-bold-italic,
+        .md-inline-strike,
+        .md-inline-code {
+            font-weight: inherit;
+            font-style: inherit;
+            text-decoration: inherit;
+        }
+
+        body.reader-md-bold .md-inline-bold {
+            font-weight: 700;
+        }
+
+        body.reader-md-italic .md-inline-italic {
+            font-style: italic;
+        }
+
+        body.reader-md-bold-italic .md-inline-bold-italic {
+            font-weight: 700;
+            font-style: italic;
+        }
+
+        body.reader-md-strike .md-inline-strike {
+            text-decoration: line-through;
+        }
+
+        body.reader-md-code .md-inline-code {
+            font-family: var(--reader-font-family, Consolas, 'Courier New', monospace);
+            background: color-mix(in srgb, currentColor 9%, transparent);
+            border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+            border-radius: 4px;
+            padding: .05em .28em;
         }
 
         body.reader-paged {
@@ -391,7 +446,8 @@
         }
 
         select.rs-select,
-        input.rs-number {
+        input.rs-number,
+        input.rs-color-input {
             background: #2d2d2d;
             color: #ddd;
             border: 1px solid #5557;
@@ -399,6 +455,12 @@
             padding: 4px 6px;
             font-size: 12px;
             width: 70px;
+        }
+
+        input.rs-color-input {
+            padding: 2px;
+            height: 28px;
+            cursor: pointer;
         }
 
         .rs-help {
@@ -579,6 +641,12 @@
             <div class="rs-mode-group" id="rs-markdownStyles">
                 <button data-mdstyle="headings" class="rs-toggle">标题</button>
                 <button data-mdstyle="lists" class="rs-toggle">列表</button>
+                <button data-mdstyle="bold" class="rs-toggle">粗体</button>
+                <button data-mdstyle="italic" class="rs-toggle">斜体</button>
+                <button data-mdstyle="boldItalic" class="rs-toggle">粗斜</button>
+                <button data-mdstyle="strike" class="rs-toggle">删除线</button>
+                <button data-mdstyle="blockquote" class="rs-toggle">引用</button>
+                <button data-mdstyle="code" class="rs-toggle">代码</button>
             </div>
         </div>
         <div class="rs-row"><label>标题样式</label>
@@ -619,7 +687,13 @@
         <div class="rs-row"><label>主题模式</label>
             <div class="rs-theme-group" id="rs-themes"><button data-theme="light" class="rs-toggle">浅色</button><button
                     data-theme="dark" class="rs-toggle">深色</button><button data-theme="auto"
-                    class="rs-toggle">跟随</button></div>
+                    class="rs-toggle">跟随</button><button data-theme="custom" class="rs-toggle">自定义</button></div>
+        </div>
+        <div class="rs-row"><label>背景色</label>
+            <input id="rs-customBg" type="color" value="#fafafa" class="rs-color-input">
+        </div>
+        <div class="rs-row"><label>文本色</label>
+            <input id="rs-customFg" type="color" value="#222222" class="rs-color-input">
         </div>
         <div class="rs-help">* 高度模式=自动 时忽略高度输入按窗口高度(减去余量)分页；手动时用输入值（高度=0 也视为自动）。分页翻页：PgUp/PgDn/空格/方向键；TTS
             自动跨页。列数仅在滚动模式生效。</div>

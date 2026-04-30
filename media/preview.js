@@ -947,6 +947,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         pad: document.getElementById('rs-pad'),
         width: document.getElementById('rs-width'),
         height: document.getElementById('rs-height'),
+        customBg: document.getElementById('rs-customBg'),
+        customFg: document.getElementById('rs-customFg'),
     };
     var vals = {
         font: document.getElementById('rs-font-val'),
@@ -1005,10 +1007,18 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         align: 'left',
         markdownHeadings: false,
         markdownLists: false,
+        markdownBold: false,
+        markdownItalic: false,
+        markdownBoldItalic: false,
+        markdownStrike: false,
+        markdownBlockquotes: false,
+        markdownCode: false,
         markdownHeadingStyle: 'left',
         markdownListStyle: 'indent',
         cols: 1,
         sync: 'on',
+        customBackground: '#fafafa',
+        customForeground: '#222222',
         colorizeRoles: false,
         colorizeRoleTypes: null
     };
@@ -1149,6 +1159,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         inputs.pad.value = state.pad; vals.pad.textContent = state.pad;
         inputs.width.value = state.width || '';
         inputs.height.value = state.height || '';
+        if (inputs.customBg) { inputs.customBg.value = state.customBackground || '#fafafa'; }
+        if (inputs.customFg) { inputs.customFg.value = state.customForeground || '#222222'; }
         document.documentElement.style.setProperty('--reader-font-size', state.font + 'px');
         document.documentElement.style.setProperty('--reader-line-height', state.line);
         document.documentElement.style.setProperty('--reader-para-spacing', state.para + 'px');
@@ -1234,6 +1246,12 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         document.body.classList.toggle('reader-align-justify', state.align === 'justify');
         document.body.classList.toggle('reader-md-headings', !!state.markdownHeadings);
         document.body.classList.toggle('reader-md-lists', !!state.markdownLists);
+        document.body.classList.toggle('reader-md-bold', !!state.markdownBold);
+        document.body.classList.toggle('reader-md-italic', !!state.markdownItalic);
+        document.body.classList.toggle('reader-md-bold-italic', !!state.markdownBoldItalic);
+        document.body.classList.toggle('reader-md-strike', !!state.markdownStrike);
+        document.body.classList.toggle('reader-md-blockquotes', !!state.markdownBlockquotes);
+        document.body.classList.toggle('reader-md-code', !!state.markdownCode);
         document.body.classList.toggle('reader-md-heading-left', state.markdownHeadingStyle !== 'center');
         document.body.classList.toggle('reader-md-heading-center', state.markdownHeadingStyle === 'center');
         document.body.classList.toggle('reader-md-list-indent', state.markdownListStyle !== 'plain');
@@ -1250,16 +1268,28 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             }
         }
 
-        document.body.classList.remove('reader-theme-light', 'reader-theme-dark');
+        document.documentElement.style.setProperty('--reader-custom-background', state.customBackground || '#fafafa');
+        document.documentElement.style.setProperty('--reader-custom-foreground', state.customForeground || '#222222');
+        document.body.classList.remove('reader-theme-light', 'reader-theme-dark', 'reader-theme-custom');
         if (state.theme === 'light') { document.body.classList.add('reader-theme-light'); }
         else if (state.theme === 'dark') { document.body.classList.add('reader-theme-dark'); }
+        else if (state.theme === 'custom') { document.body.classList.add('reader-theme-custom'); }
 
         Array.from(modeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-mode') === state.mode); });
         if (alignGroup) { Array.from(alignGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-align') === state.align); }); }
         if (markdownStylesGroup) {
             Array.from(markdownStylesGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
                 var kind = b.getAttribute('data-mdstyle');
-                b.classList.toggle('active', (kind === 'headings' && !!state.markdownHeadings) || (kind === 'lists' && !!state.markdownLists));
+                b.classList.toggle('active',
+                    (kind === 'headings' && !!state.markdownHeadings) ||
+                    (kind === 'lists' && !!state.markdownLists) ||
+                    (kind === 'bold' && !!state.markdownBold) ||
+                    (kind === 'italic' && !!state.markdownItalic) ||
+                    (kind === 'boldItalic' && !!state.markdownBoldItalic) ||
+                    (kind === 'strike' && !!state.markdownStrike) ||
+                    (kind === 'blockquote' && !!state.markdownBlockquotes) ||
+                    (kind === 'code' && !!state.markdownCode)
+                );
             });
         }
         if (headingStyleGroup) {
@@ -1312,6 +1342,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     });
     if (inputs.width) { inputs.width.addEventListener('change', function () { var v = parseInt(this.value, 10); state.width = (!isNaN(v) && v > 0) ? v : 0; reflect(); }); }
     if (inputs.height) { inputs.height.addEventListener('change', function () { var v = parseInt(this.value, 10); state.height = (!isNaN(v) && v > 0) ? v : 0; reflect(); }); }
+    if (inputs.customBg) { inputs.customBg.addEventListener('input', function () { state.customBackground = this.value || '#fafafa'; state.theme = 'custom'; reflect(); }); }
+    if (inputs.customFg) { inputs.customFg.addEventListener('input', function () { state.customForeground = this.value || '#222222'; state.theme = 'custom'; reflect(); }); }
 
     if (modeGroup) { modeGroup.addEventListener('click', function (e) { var m = e.target && e.target.getAttribute('data-mode'); if (m) { state.mode = m; reflect(); } }); }
     if (alignGroup) { alignGroup.addEventListener('click', function (e) { var a = e.target && e.target.getAttribute('data-align'); if (a) { state.align = a; reflect(); } }); }
@@ -1320,6 +1352,12 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             var kind = e.target && e.target.getAttribute('data-mdstyle');
             if (kind === 'headings') { state.markdownHeadings = !state.markdownHeadings; reflect(); }
             else if (kind === 'lists') { state.markdownLists = !state.markdownLists; reflect(); }
+            else if (kind === 'bold') { state.markdownBold = !state.markdownBold; reflect(); }
+            else if (kind === 'italic') { state.markdownItalic = !state.markdownItalic; reflect(); }
+            else if (kind === 'boldItalic') { state.markdownBoldItalic = !state.markdownBoldItalic; reflect(); }
+            else if (kind === 'strike') { state.markdownStrike = !state.markdownStrike; reflect(); }
+            else if (kind === 'blockquote') { state.markdownBlockquotes = !state.markdownBlockquotes; reflect(); }
+            else if (kind === 'code') { state.markdownCode = !state.markdownCode; reflect(); }
         });
     }
     if (headingStyleGroup) {

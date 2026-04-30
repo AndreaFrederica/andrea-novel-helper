@@ -962,16 +962,80 @@ export class PreviewManager {
     }
 
     private renderPlainBlockHtml(block: Block): string {
+        if (block.kind === 'code') {
+            return this.wrapRenderedBlock(block, `<pre>${this.escapeHtml(block.text)}</pre>`);
+        }
         if (block.kind === 'list') {
             const lines = block.text.split('\n');
             const markers = block.listMarkers || [];
+            let offset = 0;
             const inner = lines.map((line, index) => {
                 const marker = markers[index] || '•';
-                return `<span class="md-list-line"><span class="md-list-marker" aria-hidden="true">${this.escapeHtml(marker)}</span><span class="md-list-text">${this.escapeHtml(line)}</span></span>`;
+                const start = offset;
+                const end = start + line.length;
+                offset = end + 1;
+                const lineStyles = (block.inlineStyles || [])
+                    .filter(style => style.start < end && start < style.end)
+                    .map(style => ({
+                        ...style,
+                        start: Math.max(0, style.start - start),
+                        end: Math.min(line.length, style.end - start),
+                    }));
+                return `<span class="md-list-line"><span class="md-list-marker" aria-hidden="true">${this.escapeHtml(marker)}</span><span class="md-list-text">${this.renderInlineHtml(line, lineStyles)}</span></span>`;
             }).join('\n');
             return this.wrapRenderedBlock(block, `<pre>${inner}</pre>`);
         }
-        return this.wrapRenderedBlock(block, `<pre>${this.escapeHtml(block.text)}</pre>`);
+        return this.wrapRenderedBlock(block, `<pre>${this.renderInlineHtml(block.text, block.inlineStyles || [])}</pre>`);
+    }
+
+    private renderInlineHtml(text: string, styles: NonNullable<Block['inlineStyles']>): string {
+        if (!styles.length) { return this.escapeHtml(text); }
+        type InlineKind = NonNullable<Block['inlineStyles']>[number]['kind'];
+        const events: Array<{ offset: number; kind: InlineKind; close: boolean }> = [];
+        for (const style of styles) {
+            const start = Math.max(0, Math.min(style.start, text.length));
+            const end = Math.max(start, Math.min(style.end, text.length));
+            if (end <= start) { continue; }
+            events.push({ offset: start, kind: style.kind, close: false });
+            events.push({ offset: end, kind: style.kind, close: true });
+        }
+        events.sort((a, b) => a.offset - b.offset || Number(b.close) - Number(a.close));
+        let cursor = 0;
+        let html = '';
+        const stack: InlineKind[] = [];
+        const openTag = (kind: InlineKind) => {
+            switch (kind) {
+                case 'bold': return '<span class="md-inline-bold">';
+                case 'italic': return '<span class="md-inline-italic">';
+                case 'boldItalic': return '<span class="md-inline-bold-italic">';
+                case 'strike': return '<span class="md-inline-strike">';
+                case 'code': return '<span class="md-inline-code">';
+            }
+            return '';
+        };
+        for (const event of events) {
+            if (event.offset > cursor) {
+                html += this.escapeHtml(text.slice(cursor, event.offset));
+                cursor = event.offset;
+            }
+            if (event.close) {
+                const index = stack.lastIndexOf(event.kind);
+                if (index >= 0) {
+                    const reopen = stack.splice(index + 1);
+                    const toReopen = [...reopen];
+                    html += '</span>';
+                    stack.splice(index, 1);
+                    for (const _kind of [...toReopen].reverse()) { html += '</span>'; }
+                    for (const kind of toReopen) { html += openTag(kind); stack.push(kind); }
+                }
+            } else {
+                html += openTag(event.kind);
+                stack.push(event.kind);
+            }
+        }
+        if (cursor < text.length) { html += this.escapeHtml(text.slice(cursor)); }
+        while (stack.length) { html += '</span>'; stack.pop(); }
+        return html;
     }
 
     private wrapRenderedBlock(block: Block, innerHtml: string): string {
