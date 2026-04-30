@@ -14,6 +14,12 @@ var localFontFamilies = [];
 var roleColorData = [];
 // 角色着色应用中标志（防 MutationObserver 重入）
 var _applyingRoleColors = false;
+var _roleColorMutationMuteUntil = 0;
+
+function isReaderSettingsOpen() {
+    var panel = document.getElementById('reader-settings');
+    return !!(panel && panel.classList.contains('open'));
+}
 
 
 
@@ -27,6 +33,12 @@ function dlog(tag, payload) {
 
 /* ================== VS Code API & 错误上报 ================== */
 var vscode = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
+
+function requestRoleColors(reason) {
+    try {
+        if (vscode) { vscode.postMessage({ type: 'requestRoleColors', reason: reason || 'manual' }); }
+    } catch (_) { }
+}
 
 // [PREVIEW_PERSIST:B1] persist state across reload
 let persisted = vscode.getState() || {}; // { docUri, isPrimary, scrollRatio, topLine }
@@ -571,15 +583,223 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    function buildNameEntries() {
+    function getReaderState() {
+        try {
+            var meta = JSON.parse(localStorage.getItem('anhReaderSettings') || '{}');
+            var presets = JSON.parse(localStorage.getItem('anhReaderPresets') || '{}');
+            var pname = (meta && meta.lastPreset) ? meta.lastPreset : '__default__';
+            return (presets && presets[pname]) ? presets[pname] : {};
+        } catch (_) { return {}; }
+    }
+
+    function getRoleType(role) {
+        return role && role.type ? String(role.type) : '角色';
+    }
+
+    function getKnownRoleTypes() {
+        var seen = {};
         var entries = [];
         roleColorData.forEach(function (r) {
-            var names = [r.name].concat(r.aliases || []);
-            names.forEach(function (n) { if (n && n.trim()) { entries.push({ name: n.trim(), role: r }); } });
+            var type = getRoleType(r);
+            if (!seen[type]) { seen[type] = true; entries.push(type); }
         });
-        // 名称长的排前面，避免短名截断长名
-        entries.sort(function (a, b) { return b.name.length - a.name.length; });
+        entries.sort(function (a, b) {
+            var order = ['主角', '配角', '联动角色', '词汇', '敏感词', '正则表达式'];
+            var ia = order.indexOf(a), ib = order.indexOf(b);
+            if (ia !== -1 || ib !== -1) { return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib); }
+            return a.localeCompare(b);
+        });
         return entries;
+    }
+
+    function getEnabledTypeSet(state) {
+        var types = Array.isArray(state.colorizeRoleTypes)
+            ? state.colorizeRoleTypes.filter(Boolean).map(String)
+            : getKnownRoleTypes();
+        var set = {};
+        types.forEach(function (type) { set[type] = true; });
+        return set;
+    }
+
+    function getEnabledTypesArray(state) {
+        return Array.isArray(state.colorizeRoleTypes)
+            ? state.colorizeRoleTypes.filter(Boolean).map(String)
+            : getKnownRoleTypes();
+    }
+
+    function requestRoleHighlights(reason, state) {
+        try {
+            if (vscode) {
+                vscode.postMessage({
+                    type: 'requestRoleHighlights',
+                    reason: reason || 'manual',
+                    enabledTypes: getEnabledTypesArray(state || getReaderState())
+                });
+            }
+        } catch (_) { }
+    }
+
+    function muteRoleColorMutations(ms) {
+        _roleColorMutationMuteUntil = Math.max(_roleColorMutationMuteUntil, Date.now() + (ms || 250));
+    }
+
+    function isRoleColorNode(node) {
+        if (!node) { return false; }
+        if (node.nodeType === Node.TEXT_NODE) { node = node.parentNode; }
+        return !!(node && node.nodeType === Node.ELEMENT_NODE && node.closest && node.closest('.anh-role-color'));
+    }
+
+    function isOnlyRoleColorMutation(mutations) {
+        if (!mutations || !mutations.length) { return false; }
+        return Array.from(mutations).every(function (m) {
+            if (m.type !== 'childList') { return false; }
+            var nodes = Array.from(m.addedNodes || []).concat(Array.from(m.removedNodes || []));
+            return nodes.length > 0 && nodes.every(function (node) {
+                return isRoleColorNode(node) ||
+                    (node.nodeType === Node.ELEMENT_NODE && node.classList && node.classList.contains('anh-role-color'));
+            });
+        });
+    }
+
+    function styleOf(role) {
+        var style = (role && role.style && typeof role.style === 'object') ? role.style : role || {};
+        return {
+            color: style.color || role.color,
+            backgroundColor: style.backgroundColor || role.backgroundColor,
+            bold: !!style.bold || !!role.bold,
+            italic: !!style.italic || !!role.italic,
+            strikethrough: !!style.strikethrough || !!role.strikethrough,
+            underline: !!style.underline || !!role.underline
+        };
+    }
+
+    function applyRoleStyle(span, role) {
+        var style = styleOf(role);
+        if (style.color) { span.style.color = style.color; }
+        if (style.backgroundColor) { span.style.backgroundColor = style.backgroundColor; }
+        if (style.bold) { span.style.fontWeight = 'bold'; }
+        if (style.italic) { span.style.fontStyle = 'italic'; }
+        var deco = [];
+        if (style.underline) { deco.push('underline'); }
+        if (style.strikethrough) { deco.push('line-through'); }
+        if (deco.length) { span.style.textDecoration = deco.join(' '); }
+    }
+
+    function pushUniqueTerm(entries, seen, role, term) {
+        term = String(term || '').trim();
+        if (!term) { return; }
+        var key = term.normalize ? term.normalize('NFC') : term;
+        if (seen[key]) { return; }
+        seen[key] = true;
+        entries.push({ term: term, role: role });
+    }
+
+    function buildLiteralEntries(enabledTypes) {
+        var entries = [];
+        var seen = {};
+        roleColorData.forEach(function (role) {
+            if (!enabledTypes[getRoleType(role)]) { return; }
+            pushUniqueTerm(entries, seen, role, role.name);
+            (role.aliases || []).forEach(function (term) { pushUniqueTerm(entries, seen, role, term); });
+            (role.fixes || []).forEach(function (term) { pushUniqueTerm(entries, seen, role, term); });
+            (role.lookupKeys || []).forEach(function (term) { pushUniqueTerm(entries, seen, role, term); });
+        });
+        entries.sort(function (a, b) { return b.term.length - a.term.length; });
+        return entries;
+    }
+
+    function priorityOf(role, source) {
+        if (typeof role.priority === 'number') {
+            return source === 'regex' ? role.priority + 500 : role.priority;
+        }
+        if (source === 'regex') { return 1000; }
+        return getRoleType(role) === '敏感词' ? 0 : 100;
+    }
+
+    function addLiteralCandidates(text, candidates, enabledTypes) {
+        var entries = buildLiteralEntries(enabledTypes);
+        if (!entries.length) { return; }
+        var pattern = entries.map(function (e) { return escapeRE(e.term); }).join('|');
+        var re = new RegExp('(' + pattern + ')', 'g');
+        var termMap = {};
+        entries.forEach(function (e) { if (!termMap[e.term]) { termMap[e.term] = e.role; } });
+        var m;
+        while ((m = re.exec(text)) !== null) {
+            var role = termMap[m[0]];
+            candidates.push({
+                start: m.index,
+                end: m.index + m[0].length,
+                role: role,
+                source: 'literal',
+                priority: priorityOf(role, 'literal')
+            });
+        }
+    }
+
+    function addRegexCandidates(text, candidates, enabledTypes) {
+        roleColorData.forEach(function (role) {
+            if (!enabledTypes[getRoleType(role)] || getRoleType(role) !== '正则表达式' || !role.regex) { return; }
+            try {
+                var flags = String(role.regexFlags || 'g');
+                if (flags.indexOf('g') < 0) { flags += 'g'; }
+                var re = new RegExp(role.regex, flags);
+                var m;
+                while ((m = re.exec(text)) !== null) {
+                    candidates.push({
+                        start: m.index,
+                        end: m.index + m[0].length,
+                        role: role,
+                        source: 'regex',
+                        priority: priorityOf(role, 'regex')
+                    });
+                    if (m[0].length === 0) { re.lastIndex++; }
+                }
+            } catch (_) { }
+        });
+    }
+
+    function overlaps(a, b) {
+        return a.start < b.end && b.start < a.end;
+    }
+
+    function freeSegments(start, end, occupied) {
+        var blocking = occupied.filter(function (range) { return range.start < end && start < range.end; })
+            .sort(function (a, b) { return a.start - b.start; });
+        if (!blocking.length) { return [{ start: start, end: end }]; }
+        var out = [];
+        var cur = start;
+        blocking.forEach(function (range) {
+            if (cur < range.start) { out.push({ start: cur, end: Math.min(range.start, end) }); }
+            cur = Math.max(cur, range.end);
+        });
+        if (cur < end) { out.push({ start: cur, end: end }); }
+        return out;
+    }
+
+    function selectCandidates(candidates) {
+        candidates.sort(function (a, b) {
+            if (a.priority !== b.priority) { return a.priority - b.priority; }
+            return (b.end - b.start) - (a.end - a.start);
+        });
+        var selected = [];
+        var occupied = [];
+        candidates.forEach(function (candidate) {
+            if (candidate.end <= candidate.start) { return; }
+            if (candidate.source === 'regex') {
+                freeSegments(candidate.start, candidate.end, occupied).forEach(function (segment) {
+                    if (segment.end > segment.start) {
+                        selected.push({ start: segment.start, end: segment.end, role: candidate.role });
+                    }
+                });
+                return;
+            }
+            if (!occupied.some(function (range) { return overlaps(range, candidate); })) {
+                selected.push(candidate);
+                occupied.push({ start: candidate.start, end: candidate.end });
+            }
+        });
+        selected.sort(function (a, b) { return a.start - b.start || a.end - b.end; });
+        return selected;
     }
 
     function walkPreTextNodes(root, fn) {
@@ -600,78 +820,112 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         nodes.forEach(fn);
     }
 
-    window.applyRoleColors = function () {
+    function unwrapRoleColorSpans(container) {
+        var old = Array.from(container.querySelectorAll('.anh-role-color'));
+        old.forEach(function (span) {
+            var parent = span.parentNode;
+            if (!parent) { return; }
+            while (span.firstChild) { parent.insertBefore(span.firstChild, span); }
+            parent.removeChild(span);
+            try { parent.normalize(); } catch (_) { }
+        });
+    }
+
+    function textNodesWithOffsets(root) {
+        var out = [];
+        var offset = 0;
+        var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+        var node;
+        while ((node = walker.nextNode()) !== null) {
+            var len = (node.nodeValue || '').length;
+            out.push({ node: node, start: offset, end: offset + len });
+            offset += len;
+        }
+        return out;
+    }
+
+    function wrapTextNodeSlice(textNode, start, end, role) {
+        if (!textNode || end <= start) { return; }
+        var text = textNode.nodeValue || '';
+        if (start < 0 || end > text.length) { return; }
+        var range = document.createRange();
+        range.setStart(textNode, start);
+        range.setEnd(textNode, end);
+        var span = document.createElement('span');
+        span.className = 'anh-role-color';
+        span.setAttribute('data-role-type', getRoleType(role));
+        applyRoleStyle(span, role);
+        try {
+            range.surroundContents(span);
+        } catch (_) {
+            span.textContent = text.slice(start, end);
+            range.deleteContents();
+            range.insertNode(span);
+        }
+    }
+
+    function applyRoleHighlights(highlights) {
         var container = document.getElementById('reader-content');
         if (!container) { return; }
         _applyingRoleColors = true;
+        muteRoleColorMutations(400);
         try {
-            // 先移除旧的着色 span
-            var old = Array.from(container.querySelectorAll('.anh-role-color'));
-            old.forEach(function (span) {
-                var parent = span.parentNode;
-                if (!parent) { return; }
-                while (span.firstChild) { parent.insertBefore(span.firstChild, span); }
-                parent.removeChild(span);
-                try { parent.normalize(); } catch (_) { }
+            unwrapRoleColorSpans(container);
+            var state = getReaderState();
+            if (!state.colorizeRoles) { return; }
+            var byLine = {};
+            (Array.isArray(highlights) ? highlights : []).forEach(function (h) {
+                if (!Number.isFinite(h.start) || !Number.isFinite(h.end) || h.end <= h.start) { return; }
+                var key = String(h.srcLine);
+                if (!byLine[key]) { byLine[key] = []; }
+                byLine[key].push(h);
             });
-
-            // 读取当前预设的 colorizeRoles 开关
-            try {
-                var meta = JSON.parse(localStorage.getItem('anhReaderSettings') || '{}');
-                var presets = JSON.parse(localStorage.getItem('anhReaderPresets') || '{}');
-                var pname = (meta && meta.lastPreset) ? meta.lastPreset : '__default__';
-                var s = (presets && presets[pname]) ? presets[pname] : {};
-                if (!s.colorizeRoles) { return; }
-            } catch (_) { return; }
-
-            if (!roleColorData.length) { return; }
-            var entries = buildNameEntries();
-            if (!entries.length) { return; }
-
-            var pattern = entries.map(function (e) { return escapeRE(e.name); }).join('|');
-            var re = new RegExp('(' + pattern + ')', 'g');
-            var nameMap = {};
-            entries.forEach(function (e) { if (!nameMap[e.name]) { nameMap[e.name] = e.role; } });
-
-            walkPreTextNodes(container, function (textNode) {
-                var text = textNode.nodeValue;
-                if (!text) { return; }
-                re.lastIndex = 0;
-                if (!re.test(text)) { re.lastIndex = 0; return; }
-                re.lastIndex = 0;
-
-                var frag = document.createDocumentFragment();
-                var last = 0, m;
-                while ((m = re.exec(text)) !== null) {
-                    if (m.index > last) { frag.appendChild(document.createTextNode(text.slice(last, m.index))); }
-                    var role = nameMap[m[0]];
-                    var span = document.createElement('span');
-                    span.className = 'anh-role-color';
-                    if (role.color) { span.style.color = role.color; }
-                    if (role.bold) { span.style.fontWeight = 'bold'; }
-                    if (role.italic) { span.style.fontStyle = 'italic'; }
-                    var deco = (role.underline ? 'underline ' : '') + (role.strikethrough ? 'line-through' : '');
-                    if (deco.trim()) { span.style.textDecoration = deco.trim(); }
-                    if (role.backgroundColor) { span.style.backgroundColor = role.backgroundColor; }
-                    span.textContent = m[0];
-                    frag.appendChild(span);
-                    last = m.index + m[0].length;
-                }
-                if (last < text.length) { frag.appendChild(document.createTextNode(text.slice(last))); }
-                if (textNode.parentNode) { textNode.parentNode.replaceChild(frag, textNode); }
+            Object.keys(byLine).forEach(function (line) {
+                var block = container.querySelector('[data-line="' + line.replace(/"/g, '\\"') + '"]');
+                if (!block) { return; }
+                var targets = byLine[line].slice().sort(function (a, b) { return b.start - a.start || b.end - a.end; });
+                targets.forEach(function (h) {
+                    var nodes = textNodesWithOffsets(block);
+                    nodes.reverse().forEach(function (entry) {
+                        var s = Math.max(h.start, entry.start);
+                        var e = Math.min(h.end, entry.end);
+                        if (e <= s) { return; }
+                        wrapTextNodeSlice(entry.node, s - entry.start, e - entry.start, h.role || {});
+                    });
+                });
             });
         } finally {
             _applyingRoleColors = false;
         }
+    }
+
+    window.applyRoleColors = function () {
+        var container = document.getElementById('reader-content');
+        if (!container) { return; }
+        try {
+            var state = getReaderState();
+            if (!state.colorizeRoles) {
+                _applyingRoleColors = true;
+                muteRoleColorMutations(250);
+                try { unwrapRoleColorSpans(container); } finally { _applyingRoleColors = false; }
+                return;
+            }
+            requestRoleHighlights('apply-role-colors', state);
+        } finally {
+        }
     };
+
+    window.applyRoleHighlights = applyRoleHighlights;
 
     // MutationObserver：DOM 变化后自动补充着色
     function setup() {
         var target = document.getElementById('reader-content');
         if (!target) { setTimeout(setup, 200); return; }
         var timer = null;
-        var observer = new MutationObserver(function () {
+        var observer = new MutationObserver(function (mutations) {
             if (_applyingRoleColors) { return; }
+            if (Date.now() < _roleColorMutationMuteUntil) { return; }
+            if (isOnlyRoleColorMutation(mutations)) { return; }
             if (timer) { clearTimeout(timer); }
             timer = setTimeout(window.applyRoleColors, 80);
         });
@@ -707,6 +961,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var heightModeGroup = document.getElementById('rs-heightMode');
     var widthModeGroup = document.getElementById('rs-widthMode');
     var colorizeRolesGroup = document.getElementById('rs-colorizeRoles');
+    var roleTypesGroup = document.getElementById('rs-roleTypes');
     var fontModeGroup = document.getElementById('rs-fontMode');
     var fontFamilySelect = document.getElementById('rs-fontFamily');
     var btnReloadFonts = document.getElementById('rs-reloadFonts');
@@ -746,7 +1001,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         align: 'left',
         cols: 1,
         sync: 'on',
-        colorizeRoles: false
+        colorizeRoles: false,
+        colorizeRoleTypes: null
     };
     var PRESET_TEMPLATES = { '__default__': { name: '默认', data: JSON.parse(JSON.stringify(DEFAULTS)) } };
 
@@ -768,6 +1024,89 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         savePresets(presets);
     }
     var state = presets[activePresetName];
+
+    function getAvailableRoleTypesForSettings() {
+        var seen = {};
+        var list = [];
+        (roleColorData || []).forEach(function (role) {
+            var type = role && role.type ? String(role.type) : '角色';
+            if (!seen[type]) { seen[type] = true; list.push(type); }
+        });
+        var order = ['主角', '配角', '联动角色', '词汇', '敏感词', '正则表达式'];
+        list.sort(function (a, b) {
+            var ia = order.indexOf(a), ib = order.indexOf(b);
+            if (ia !== -1 || ib !== -1) { return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib); }
+            return a.localeCompare(b);
+        });
+        return list;
+    }
+
+    function getSelectedRoleTypesForSettings(types) {
+        return Array.isArray(state.colorizeRoleTypes) ? state.colorizeRoleTypes.map(String) : types.slice();
+    }
+
+    function renderRoleTypeControls() {
+        if (!roleTypesGroup) { return; }
+        var types = getAvailableRoleTypesForSettings();
+        roleTypesGroup.innerHTML = '';
+        if (!types.length) {
+            var empty = document.createElement('span');
+            empty.style.fontSize = '12px';
+            empty.style.opacity = '.65';
+            empty.textContent = '暂无角色类型';
+            roleTypesGroup.appendChild(empty);
+            return;
+        }
+        var selected = getSelectedRoleTypesForSettings(types);
+        var builtinOrder = ['主角', '配角', '联动角色', '词汇', '敏感词', '正则表达式'];
+        var builtinTypes = builtinOrder.filter(function (type) { return types.indexOf(type) >= 0; });
+        var customTypes = types.filter(function (type) { return builtinOrder.indexOf(type) < 0; });
+        function addSection(title, sectionTypes, group) {
+            if (!sectionTypes.length) { return; }
+            var section = document.createElement('div');
+            section.className = 'rs-type-section';
+            var header = document.createElement('div');
+            header.className = 'rs-type-header';
+            var label = document.createElement('span');
+            label.className = 'rs-type-section-title';
+            label.textContent = title;
+            header.appendChild(label);
+            if (group === 'custom') {
+                var selectedCustomCount = sectionTypes.filter(function (type) { return selected.indexOf(type) >= 0; }).length;
+                var master = document.createElement('button');
+                master.type = 'button';
+                master.className = 'rs-toggle rs-type-master';
+                master.setAttribute('data-rtype-group', 'custom');
+                master.setAttribute('data-action', selectedCustomCount === sectionTypes.length ? 'off' : 'on');
+                master.textContent = selectedCustomCount === sectionTypes.length ? '全部关闭' : '全部开启';
+                header.appendChild(master);
+            }
+            section.appendChild(header);
+            var buttons = document.createElement('div');
+            buttons.className = 'rs-type-buttons';
+            sectionTypes.forEach(function (type) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'rs-toggle';
+                btn.setAttribute('data-rtype', type);
+                btn.textContent = type;
+                btn.classList.toggle('active', selected.indexOf(type) >= 0);
+                buttons.appendChild(btn);
+            });
+            section.appendChild(buttons);
+            roleTypesGroup.appendChild(section);
+        }
+        addSection('内置类型', builtinTypes, 'builtin');
+        addSection('自定义类型', customTypes, 'custom');
+        if (!roleTypesGroup.children.length) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'rs-toggle';
+            btn.disabled = true;
+            btn.textContent = '暂无可选类型';
+            roleTypesGroup.appendChild(btn);
+        }
+    }
 
     /* ---- 分页计算（声明在上，供 reflect 调用） ---- */
     function updatePaging() {
@@ -907,6 +1246,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme') === state.theme); });
         if (syncGroup) { Array.from(syncGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sync') === state.sync); }); }
         if (colorizeRolesGroup) { Array.from(colorizeRolesGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', (b.getAttribute('data-croles') === 'on') === !!state.colorizeRoles); }); }
+        renderRoleTypeControls();
         if (heightModeGroup) { Array.from(heightModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-hmode') === state.heightMode); }); }
         // 字体模式/下拉同步
         try {
@@ -948,7 +1288,37 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     if (colsGroup) { colsGroup.addEventListener('click', function (e) { var c = e.target && e.target.getAttribute('data-cols'); if (c) { state.cols = parseInt(c, 10) || 1; reflect(); } }); }
     if (themeGroup) { themeGroup.addEventListener('click', function (e) { var t = e.target && e.target.getAttribute('data-theme'); if (t) { state.theme = t; reflect(); } }); }
     if (syncGroup) { syncGroup.addEventListener('click', function (e) { var s = e.target && e.target.getAttribute('data-sync'); if (s) { state.sync = s; reflect(); } }); }
-    if (colorizeRolesGroup) { colorizeRolesGroup.addEventListener('click', function (e) { var v = e.target && e.target.getAttribute('data-croles'); if (v) { state.colorizeRoles = (v === 'on'); reflect(); } }); }
+    if (colorizeRolesGroup) { colorizeRolesGroup.addEventListener('click', function (e) { var v = e.target && e.target.getAttribute('data-croles'); if (v) { state.colorizeRoles = (v === 'on'); reflect(); if (state.colorizeRoles) { requestRoleColors('colorize-enabled'); } } }); }
+    if (roleTypesGroup) {
+        roleTypesGroup.addEventListener('click', function (e) {
+            var group = e.target && e.target.getAttribute('data-rtype-group');
+            if (group === 'custom') {
+                var action = e.target && e.target.getAttribute('data-action');
+                var allTypesForGroup = getAvailableRoleTypesForSettings();
+                var builtinOrder = ['主角', '配角', '联动角色', '词汇', '敏感词', '正则表达式'];
+                var customTypes = allTypesForGroup.filter(function (type) { return builtinOrder.indexOf(type) < 0; });
+                var selectedForGroup = getSelectedRoleTypesForSettings(allTypesForGroup)
+                    .filter(function (type) { return action === 'off' ? customTypes.indexOf(type) < 0 : true; });
+                if (action !== 'off') {
+                    customTypes.forEach(function (type) {
+                        if (selectedForGroup.indexOf(type) < 0) { selectedForGroup.push(type); }
+                    });
+                }
+                state.colorizeRoleTypes = selectedForGroup;
+                reflect();
+                return;
+            }
+            var type = e.target && e.target.getAttribute('data-rtype');
+            if (!type) { return; }
+            var allTypes = getAvailableRoleTypesForSettings();
+            var selected = getSelectedRoleTypesForSettings(allTypes);
+            var idx = selected.indexOf(type);
+            if (idx >= 0) { selected.splice(idx, 1); }
+            else { selected.push(type); }
+            state.colorizeRoleTypes = selected;
+            reflect();
+        });
+    }
     if (heightModeGroup) { heightModeGroup.addEventListener('click', function (e) { var m = e.target && e.target.getAttribute('data-hmode'); if (m) { state.heightMode = m; reflect(); } }); }
     if (widthModeGroup) {
         widthModeGroup.addEventListener('click', function (e) {
@@ -1005,7 +1375,12 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             if (typeof reflect === 'function') { reflect(); }
         } else if (msg?.type === 'roleColors') {
             roleColorData = Array.isArray(msg.roles) ? msg.roles : [];
+            if (typeof renderRoleTypeControls === 'function') { renderRoleTypeControls(); }
             if (typeof window.applyRoleColors === 'function') { window.applyRoleColors(); }
+        } else if (msg?.type === 'roleHighlights') {
+            if (typeof window.applyRoleHighlights === 'function') { window.applyRoleHighlights(msg.highlights); }
+        } else if (msg?.type === 'roleColorsChanged') {
+            requestRoleColors('roles-changed');
         }
         // [PREVIEW_PERSIST:B2] message handlers for persistence
         if (msg?.type === 'init') {
@@ -1055,6 +1430,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
     // 首次尝试填充字体（异步）
     loadLocalFonts(false).catch(function () { });
+    requestRoleColors('init');
     // 启动时主动请求扩展下发 editor.fontFamily，便于“跟随 VS Code”立即生效
     try {
         if (vscode && typeof vscode.postMessage === 'function') {
@@ -1062,9 +1438,23 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         }
     } catch (_) { }
     if (btnReset) { btnReset.addEventListener('click', function () { state = JSON.parse(JSON.stringify(DEFAULTS)); try { presets[activePresetName] = JSON.parse(JSON.stringify(state)); savePresets(presets); } catch (_) { } reflect(); }); }
-    if (gear) { gear.addEventListener('click', function () { panel.classList.add('open'); }); }
-    if (btnClose) { btnClose.addEventListener('click', function () { panel.classList.remove('open'); }); }
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && panel.classList.contains('open')) { panel.classList.remove('open'); } });
+    function openSettingsPanel() {
+        panel.classList.add('open');
+        document.body.classList.add('reader-settings-open');
+    }
+    function closeSettingsPanel() {
+        panel.classList.remove('open');
+        document.body.classList.remove('reader-settings-open');
+    }
+    function stopSettingsWheel(e) {
+        if (!panel.classList.contains('open')) { return; }
+        e.stopPropagation();
+    }
+    panel.addEventListener('wheel', stopSettingsWheel, { capture: true, passive: false });
+    panel.addEventListener('touchmove', stopSettingsWheel, { capture: true, passive: false });
+    if (gear) { gear.addEventListener('click', openSettingsPanel); }
+    if (btnClose) { btnClose.addEventListener('click', closeSettingsPanel); }
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && panel.classList.contains('open')) { closeSettingsPanel(); } });
 
     function refreshPresetOptions() {
         if (!presetSelect) { return; }
@@ -1207,6 +1597,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     }
 
     document.addEventListener('keydown', function (e) {
+        if (isReaderSettingsOpen()) { return; }
         if (state.mode === 'paged') {
             if (['PageDown', 'ArrowRight', ' '].includes(e.key)) { e.preventDefault(); jumpPage(1); }
             else if (['PageUp', 'ArrowLeft'].includes(e.key)) { e.preventDefault(); jumpPage(-1); }
@@ -1217,6 +1608,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var _wheelAcc = 0;
     var _wheelTimer = null;
     document.addEventListener('wheel', function (e) {
+        if (isReaderSettingsOpen()) { return; }
         if (state.mode !== 'paged') { return; }
         if (!(typeof DomPager !== 'undefined' && DomPager.isActive && DomPager.isActive())) { return; }
         e.preventDefault();
@@ -2082,6 +2474,7 @@ function showConfirm(msg) {
 
     // —— 预览 → 扩展：本地滚动上报 —— 
     window.addEventListener('scroll', throttle(function () {
+        if (isReaderSettingsOpen()) { return; }
         if (!isSyncOn() || inLock()) { return; }
         // 这里让 postPreviewRatio 自己做死区判断
         postPreviewRatio();

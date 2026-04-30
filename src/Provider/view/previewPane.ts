@@ -6,11 +6,28 @@ import * as fontList from 'font-list';
 import { mdToPlainText } from '../../utils/md_plain';
 import { txtToPlainText } from '../../utils/txt_plain';
 import { setActivePreview } from '../../context/previewRedirect';
+import { getRoleLookupKeys } from '../../utils/roleLookupKeys';
+import { collectRoleUsageRanges } from '../../utils/roleUsageCollector';
+import { ahoCorasickManager } from '../../utils/AhoCorasick/ahoCorasickManager';
 
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
+const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
+    主角: '#FFD700',
+    配角: '#ADD8E6',
+    联动角色: '#90EE90',
+    正则表达式: '#FFA500',
+};
 
 type Block = { srcLine: number; text: string };
 type ImgCtx = { srcLines: string[]; docDir: string; webview: vscode.Webview };
+type RoleTextStyle = {
+    color?: string;
+    backgroundColor?: string;
+    bold?: boolean;
+    italic?: boolean;
+    strikethrough?: boolean;
+    underline?: boolean;
+};
 const EPS = 0.02;     // 2% 死区
 const MUTE_MS = 350;  // 与 webview 一致的“静音窗口”
 
@@ -241,6 +258,150 @@ export class PreviewManager {
     // —— 字体清单缓存（避免频繁枚举系统目录）
     private fontsCache?: { list: string[]; ts: number };
 
+    private getTextStyleFromRole(role: any, defaultColor: string): RoleTextStyle {
+        const rawStyle = role?.style && typeof role.style === 'object' ? role.style : undefined;
+        const style: RoleTextStyle = rawStyle ? { ...rawStyle } : {};
+        if (!rawStyle) {
+            if (role?.color) { style.color = role.color; }
+            if (role?.backgroundColor) { style.backgroundColor = role.backgroundColor; }
+            if (role?.bold) { style.bold = true; }
+            if (role?.italic) { style.italic = true; }
+            if (role?.strikethrough) { style.strikethrough = true; }
+            if (role?.underline) { style.underline = true; }
+        }
+        style.color = style.color ?? role?.color ?? PREVIEW_TYPE_COLOR_MAP[role?.type] ?? defaultColor;
+        return style;
+    }
+
+    private buildRoleColorPayload(roles: any[]): any[] {
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+        const defaultColor = cfg.get<string>('defaultColor') || '#7aa2f7';
+        return roles
+            .filter((r: any) => r && typeof r.name === 'string' && r.name)
+            .map((r: any) => {
+                const style = this.getTextStyleFromRole(r, defaultColor);
+                return {
+                    name: r.name,
+                    type: typeof r.type === 'string' && r.type ? r.type : '角色',
+                    priority: typeof r.priority === 'number' ? r.priority : undefined,
+                    aliases: Array.isArray(r.aliases) ? r.aliases.filter(Boolean) : [],
+                    fixes: Array.isArray(r.fixes || r.fixs) ? (r.fixes || r.fixs).filter(Boolean) : [],
+                    lookupKeys: getRoleLookupKeys(r).filter(Boolean),
+                    regex: typeof r.regex === 'string' ? r.regex : undefined,
+                    regexFlags: typeof r.regexFlags === 'string' ? r.regexFlags : undefined,
+                    style,
+                    color: style.color,
+                    backgroundColor: style.backgroundColor,
+                    bold: style.bold,
+                    italic: style.italic,
+                    strikethrough: style.strikethrough,
+                    underline: style.underline,
+                };
+            });
+    }
+
+    private sendRoleColors(panel: vscode.WebviewPanel): void {
+        try {
+            const roles = this._getRoles ? this._getRoles() : [];
+            panel.webview.postMessage({ type: 'roleColors', roles: this.buildRoleColorPayload(roles) });
+        } catch { }
+    }
+
+    private createVirtualDocument(text: string, sourceUri: vscode.Uri): vscode.TextDocument {
+        const lineStarts: number[] = [0];
+        for (let i = 0; i < text.length; i++) {
+            if (text.charCodeAt(i) === 10) {
+                lineStarts.push(i + 1);
+            }
+        }
+        const positionAt = (offset: number): vscode.Position => {
+            const safeOffset = Math.max(0, Math.min(offset, text.length));
+            let low = 0;
+            let high = lineStarts.length - 1;
+            while (low <= high) {
+                const mid = (low + high) >> 1;
+                if (lineStarts[mid] <= safeOffset) {
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+            const line = Math.max(0, high);
+            return new vscode.Position(line, safeOffset - lineStarts[line]);
+        };
+        const offsetAt = (position: vscode.Position): number => {
+            const line = Math.max(0, Math.min(position.line, lineStarts.length - 1));
+            const nextStart = line + 1 < lineStarts.length ? lineStarts[line + 1] : text.length + 1;
+            return Math.max(lineStarts[line], Math.min(lineStarts[line] + position.character, nextStart - 1, text.length));
+        };
+        return {
+            uri: sourceUri,
+            fileName: sourceUri.fsPath,
+            isUntitled: false,
+            languageId: 'plaintext',
+            version: 1,
+            encoding: 'utf8',
+            isDirty: false,
+            isClosed: false,
+            eol: vscode.EndOfLine.LF,
+            lineCount: lineStarts.length,
+            getText: () => text,
+            positionAt,
+            offsetAt,
+            lineAt: (lineOrPosition: number | vscode.Position) => {
+                const line = typeof lineOrPosition === 'number' ? lineOrPosition : lineOrPosition.line;
+                const start = lineStarts[line] ?? text.length;
+                const nextStart = line + 1 < lineStarts.length ? lineStarts[line + 1] : text.length;
+                const end = text.charCodeAt(nextStart - 1) === 10 ? nextStart - 1 : nextStart;
+                const lineText = text.slice(start, end);
+                const range = new vscode.Range(line, 0, line, lineText.length);
+                return {
+                    lineNumber: line,
+                    text: lineText,
+                    range,
+                    rangeIncludingLineBreak: new vscode.Range(line, 0, line, Math.max(lineText.length, nextStart - start)),
+                    firstNonWhitespaceCharacterIndex: lineText.search(/\S|$/),
+                    isEmptyOrWhitespace: /^\s*$/.test(lineText),
+                } as vscode.TextLine;
+            },
+            getWordRangeAtPosition: () => undefined,
+            validateRange: (range: vscode.Range) => range,
+            validatePosition: (position: vscode.Position) => position,
+            save: async () => false,
+        } as vscode.TextDocument;
+    }
+
+    private async sendRoleHighlights(panel: vscode.WebviewPanel, doc: vscode.TextDocument, enabledTypes?: string[]): Promise<void> {
+        const enabledTypeSet = Array.isArray(enabledTypes) && enabledTypes.length > 0 ? new Set(enabledTypes) : undefined;
+        const { blocks } = this.renderToPlainText(doc);
+        const highlights: any[] = [];
+        for (const block of blocks) {
+            if (!block.text) { continue; }
+            const virtualDoc = this.createVirtualDocument(block.text, doc.uri);
+            const rawHits = ahoCorasickManager.search(block.text);
+            const hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]] as [number, string[]]);
+            const result = await collectRoleUsageRanges(virtualDoc, { fullText: block.text, hits });
+            for (const entry of result.decorationEntries) {
+                const roleType = typeof entry.role.type === 'string' && entry.role.type ? entry.role.type : '角色';
+                if (enabledTypeSet && !enabledTypeSet.has(roleType)) { continue; }
+                const style = this.getTextStyleFromRole(entry.role, vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor') || '#7aa2f7');
+                highlights.push({
+                    srcLine: block.srcLine,
+                    start: virtualDoc.offsetAt(entry.range.start),
+                    end: virtualDoc.offsetAt(entry.range.end),
+                    role: {
+                        name: entry.role.name,
+                        type: roleType,
+                        style,
+                    },
+                    matchSource: entry.matchSource,
+                    partial: entry.partial,
+                });
+            }
+        }
+        try { panel.webview.postMessage({ type: 'roleHighlights', highlights }); } catch { }
+    }
+
 
     /** 把一个已存在的 panel 绑定到指定 doc（统一监听与渲染） */
     private attachPanelToDoc(panel: vscode.WebviewPanel, doc: vscode.TextDocument) {
@@ -311,24 +472,7 @@ export class PreviewManager {
                 isPrimary: (this.primaryPanel === panel)
             });
         } catch { }
-        // 下发当前角色着色数据（如果已有角色）
-        try {
-            if (this._getRoles) {
-                const payload = this._getRoles()
-                    .filter((r: any) => r && typeof r.name === 'string' && r.name)
-                    .map((r: any) => ({
-                        name: r.name,
-                        aliases: Array.isArray(r.aliases) ? r.aliases.filter(Boolean) : [],
-                        color: r.color ?? r.style?.color,
-                        backgroundColor: r.backgroundColor ?? r.style?.backgroundColor,
-                        bold: r.bold ?? r.style?.bold,
-                        italic: r.italic ?? r.style?.italic,
-                        strikethrough: r.strikethrough ?? r.style?.strikethrough,
-                        underline: r.underline ?? r.style?.underline,
-                    }));
-                panel.webview.postMessage({ type: 'roleColors', roles: payload });
-            }
-        } catch { }
+        // Webview 脚本加载完成后会主动 requestRoleColors；这里不抢先推送，避免消息在页面重建时丢失。
     }
 
     /** 供 WebviewPanelSerializer 调用：窗口重载后复活面板 */
@@ -446,22 +590,10 @@ export class PreviewManager {
         this._getRoles = fn;
     }
 
-    /** 向所有打开的预览面板广播角色着色数据 */
-    broadcastRoleColors(roles: any[]): void {
-        const payload = roles
-            .filter(r => r && typeof r.name === 'string' && r.name)
-            .map(r => ({
-                name: r.name,
-                aliases: Array.isArray(r.aliases) ? r.aliases.filter(Boolean) : [],
-                color: r.color ?? r.style?.color,
-                backgroundColor: r.backgroundColor ?? r.style?.backgroundColor,
-                bold: r.bold ?? r.style?.bold,
-                italic: r.italic ?? r.style?.italic,
-                strikethrough: r.strikethrough ?? r.style?.strikethrough,
-                underline: r.underline ?? r.style?.underline,
-            }));
+    /** 通知所有打开的预览面板角色着色状态已变化，由 Webview 主动拉取最新数据 */
+    broadcastRoleColors(): void {
         for (const panel of this.panels.values()) {
-            try { panel.webview.postMessage({ type: 'roleColors', roles: payload }); } catch { }
+            try { panel.webview.postMessage({ type: 'roleColorsChanged' }); } catch { }
         }
     }
 
@@ -593,6 +725,19 @@ export class PreviewManager {
 
         if (msg?.type === 'requestFonts') {
             this.sendFontFamilies(doc); // 异步列举并回发 { type:'fontFamilies', list:[...] }
+            return;
+        }
+        if (msg?.type === 'requestRoleColors') {
+            const panel = this.panels.get(key);
+            if (panel) { this.sendRoleColors(panel); }
+            return;
+        }
+        if (msg?.type === 'requestRoleHighlights') {
+            const panel = this.panels.get(key);
+            const enabledTypes = Array.isArray(msg.enabledTypes)
+                ? msg.enabledTypes.filter((type: unknown): type is string => typeof type === 'string' && type.length > 0)
+                : undefined;
+            if (panel) { this.sendRoleHighlights(panel, doc, enabledTypes).catch(() => { }); }
             return;
         }
         if (msg?.type === 'previewScroll' && typeof msg.ratio === 'number') {

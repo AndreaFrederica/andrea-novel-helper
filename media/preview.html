@@ -274,6 +274,43 @@
             gap: 12px;
         }
 
+        .rs-type-list {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .rs-type-section {
+            flex-basis: 100%;
+            min-width: 0;
+        }
+
+        .rs-type-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 2px 0 6px;
+        }
+
+        .rs-type-section-title {
+            font-size: 11px;
+            opacity: .7;
+        }
+
+        .rs-type-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .rs-type-master {
+            padding: 2px 8px;
+            font-size: 11px;
+        }
+
         .rs-toggle {
             padding: 4px 10px;
             border: 1px solid #5557;
@@ -485,6 +522,9 @@
         <div class="rs-row"><label>角色着色</label>
             <div class="rs-mode-group" id="rs-colorizeRoles"><button data-croles="on" class="rs-toggle">开启</button><button
                     data-croles="off" class="rs-toggle">关闭</button></div>
+        </div>
+        <div class="rs-row"><label>着色类型</label>
+            <div class="rs-type-list" id="rs-roleTypes"></div>
         </div>
         <div class="rs-row"><label>预设</label>
             <div style="flex:1;display:flex;gap:6px;align-items:center;">

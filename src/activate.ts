@@ -507,7 +507,14 @@ export async function activate(context: vscode.ExtensionContext) {
         _previewManager = previewManager; // 模块级保存
         // 注入角色列表 getter，并在角色变更时广播着色数据
         previewManager.setRoleColorGetter(() => roles);
-        context.subscriptions.push(onDidFinishRoles(() => { try { previewManager.broadcastRoleColors(roles); } catch { } }));
+        let previewRoleColorNotifyTimer: ReturnType<typeof setTimeout> | undefined;
+        context.subscriptions.push(onDidChangeRoles(() => {
+            if (previewRoleColorNotifyTimer) { clearTimeout(previewRoleColorNotifyTimer); }
+            previewRoleColorNotifyTimer = setTimeout(() => {
+                try { previewManager.broadcastRoleColors(); } catch { }
+            }, 100);
+        }));
+        context.subscriptions.push(onDidFinishRoles(() => { try { previewManager.broadcastRoleColors(); } catch { } }));
         registerTypstExport(context)
         registerExplorerTypstExport(context)
         try { templateRegistry.init(context) } catch {}
