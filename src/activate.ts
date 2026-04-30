@@ -40,6 +40,7 @@ import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileT
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/Git/gitConfigWizard';
 import { projectInitWizardRunning, registerProjectInitWizard } from './wizard/projectInitWizard';
 import { registerGraphicalProjectInitWizard } from './wizard/projectInitWizardPage';
+import { registerGuidePage } from './guide/guidePage';
 import { clearAllRoleMatchCache } from './context/roleAsyncShared';
 import { initializeRoleUsageStore, disposeRoleUsageStore, renameRoleUsageDirectory, deleteRoleUsageDirectory, clearRoleUsageIndex, updateRoleUsageFromDocument } from './context/roleUsageStore';
 import { collectRoleUsageRanges } from './utils/roleUsageCollector';
@@ -374,6 +375,7 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
         registerProjectInitWizard(context);
         registerGraphicalProjectInitWizard(context);
+        registerGuidePage(context);
         log('项目初始化向导命令已注册');
     } catch (e) { log('注册 项目初始化向导命令 失败', e); }
     // 将后续复杂初始化包裹在 try/catch 内，避免单点异常导致整个扩展未激活（从而命令缺失）

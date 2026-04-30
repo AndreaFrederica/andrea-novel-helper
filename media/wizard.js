@@ -69,6 +69,8 @@
         $('back').disabled = currentStep === 0 || currentStep === 7;
         $('next').classList.toggle('hidden', currentStep >= 6);
         $('run').classList.toggle('hidden', currentStep !== 6);
+        $('openGuide').classList.toggle('hidden', currentStep !== 7);
+        $('close').classList.toggle('hidden', currentStep !== 7);
 
         if (currentStep === 6) {
             renderSummary();
@@ -253,6 +255,9 @@
         $('log').textContent = '正在执行...';
         vscode.postMessage({ command: 'run', data });
     });
+
+    $('openGuide').addEventListener('click', () => vscode.postMessage({ command: 'openGuide' }));
+    $('close').addEventListener('click', () => vscode.postMessage({ command: 'close' }));
 
     // ── Init ───────────────────────────────────────────
 

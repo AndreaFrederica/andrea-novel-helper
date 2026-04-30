@@ -83,6 +83,12 @@ export function registerGraphicalProjectInitWizard(context: vscode.ExtensionCont
                     case 'openGitDownload':
                         await vscode.env.openExternal(vscode.Uri.parse('https://git-scm.com/downloads'));
                         break;
+                    case 'openGuide':
+                        await vscode.commands.executeCommand('AndreaNovelHelper.showGuide');
+                        break;
+                    case 'close':
+                        panel.dispose();
+                        break;
                 }
             } catch (error) {
                 const text = error instanceof Error ? error.message : String(error);

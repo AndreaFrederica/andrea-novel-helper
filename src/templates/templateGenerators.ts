@@ -272,7 +272,7 @@ export function generateCharacterGalleryCsv(): string {
     const aliases = (r.aliases || []).join(';');
     return [
         'name,description,aliases,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized',
-        `${r.name},${r.description},${aliases},,,`,
+        `示例（CSV）,${r.description},${aliases},,,`,
     ].join('\n') + '\n';
 }
 

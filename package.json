@@ -762,6 +762,12 @@
         "icon": "$(rocket)"
       },
       {
+        "command": "AndreaNovelHelper.showGuide",
+        "title": "打开功能引导",
+        "category": "Andrea Novel Helper",
+        "icon": "$(book)"
+      },
+      {
         "command": "AndreaNovelHelper.disableWorkspace",
         "title": "%command.disableWorkspace.title%"
       },
@@ -3440,6 +3446,11 @@
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createRegexPatterns",
           "group": "0_create@8"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.showGuide",
+          "group": "0_create@9"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",

@@ -172,6 +172,24 @@ class CopilotDocsManageNode extends vscode.TreeItem {
     }
 }
 
+// 功能引导节点
+class GuideNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 功能引导', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'guide';
+        this.iconPath = new vscode.ThemeIcon('book');
+        this.description = '查看 ANH 常用功能介绍和快速入口';
+        this.command = {
+            command: 'AndreaNovelHelper.showGuide',
+            title: '打开功能引导',
+            arguments: []
+        };
+    }
+}
+
 // 书籍根目录节点（真正的目录，可展开）
 class BookRootNode extends vscode.TreeItem {
     public readonly resourceUri: vscode.Uri;
@@ -420,7 +438,8 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
             const projectInitWizardNode = new ProjectInitWizardNode(this.workspaceRoot);
             const projectSettingsNode = new ProjectSettingsNode(this.workspaceRoot);
 
-            const result: PackageManagerNode[] = [projectInitWizardNode, projectSettingsNode, refMaintenanceNode, externalManageNode, copilotDocsManageNode];
+            const guideNode = new GuideNode(this.workspaceRoot);
+            const result: PackageManagerNode[] = [projectInitWizardNode, projectSettingsNode, refMaintenanceNode, externalManageNode, copilotDocsManageNode, guideNode];
 
             // 3) 外部资源目录（由 fast-glob 扫描器提供）
             if (this.externalRoleFolders.length === 0 || this.externalRoleFolders.some(folder => !fs.existsSync(folder))) {
