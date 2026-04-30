@@ -1,4 +1,5 @@
 /* eslint-disable curly */
+import { isLookupKeyFamily } from '../../../utils/roleLookupKeys';
 /**
  * Role <-> RoleCardModel 转换器
  * 规则摘要：
@@ -279,6 +280,12 @@ export function roleToRoleCardModel(role: RoleFlat): RoleCardModelWithId {
             continue;
         }
 
+        // lookup key 家族字段（含扩展前缀）归入 base
+        if (isLookupKeyFamily(k)) {
+            (base as any)[k] = Array.isArray(v) ? [...v] : v;
+            continue;
+        }
+
         // 分类：命中扩展白名单 -> extended；否则 -> custom
         if (EXTENDED_WHITELIST.has(nk)) {extended[k] = v;}
         else {custom[k] = v;}
@@ -376,6 +383,16 @@ export function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: R
     };
     flatten(model.extended); // extended 先写
     flatten(model.custom);   // custom 覆盖 extended
+
+    // 把 base 中的扩展 lookup key 字段写回（这些字段不在 BASE_KEYS 静态列表中）
+    for (const [k, v] of Object.entries(base)) {
+        if (BASE_KEYS.has(k)) {continue;}
+        const nk = norm(k);
+        if (BASE_SYNONYMS[nk as keyof typeof BASE_SYNONYMS]) {continue;}
+        if (!isLookupKeyFamily(k)) {continue;}
+        const arr = toStringArray(v);
+        if (arr) {out[k] = arr;}
+    }
 
     return out;
 }

@@ -171,6 +171,7 @@
 
 #### 项目配置
 - **初始化向导**：一键生成项目结构、配置文件及忽略规则（`.gitignore`, `.wcignore`）。
+- **`project-config.json5`**：项目级配置入口，支持自定义资源路径、默认角色索引键及扩展索引键前缀。团队成员克隆项目后无需额外设置即可加载正确资源。
 
 ### 🤖 自动化与扩展
 
@@ -542,6 +543,42 @@ Markdown 中的相对图片 `![](images/a.png)` 会自动转换为绝对 `file:/
 ]
 ```
 
+#### 项目配置示例（project-config.json5）
+
+放在工作区根目录，统一管理项目级资源路径、索引键默认值及扩展前缀：
+
+```json5
+{
+  // 项目级资源文件路径（优先级高于 VS Code 设置）
+  rolesFile: 'novel-helper/character-gallery.json5',
+  sensitiveWordsFile: 'novel-helper/sensitive-words.json5',
+  vocabularyFile: 'novel-helper/vocabulary.json5',
+  regexPatternsFile: 'novel-helper/regex-patterns.json5',
+
+  // 新建角色时默认补齐的索引键字段（与全局设置合并，项目配置优先）
+  defaultRoleLookupKeys: [
+    '日文',   // → lookupKeys_jp
+    '英文',   // → lookupKeys_en
+    '拼音',   // → lookupKeys_pinyin
+  ],
+
+  // 扩展索引键家族前缀（使系统将这些前缀开头的字段也识别为索引键）
+  extendedLookupKeyPrefixes: [
+    'refkeys',   // refkeys_author 等会被识别为索引键
+    'tagkeys',   // tagkeys_main 等会被识别为索引键
+  ],
+
+  // 文件名关键词（附加识别规则）
+  characterFileKeywords: ['cast', '人物设定'],
+  sensitiveWordsFileKeywords: [],
+  vocabularyFileKeywords: [],
+  regexFileKeywords: [],
+}
+```
+
+> **优先级规则**：`project-config.json5` > VS Code 设置 (`AndreaNovelHelper.*`) > 内置默认值。
+> `defaultRoleLookupKeys` 会与 VS Code 设置 `AndreaNovelHelper.defaultRoleLookupKeys` **合并**，项目配置排在前面（去重后优先保留）。
+
 ### Markdown 格式示例
 
 ```markdown
@@ -668,6 +705,8 @@ rgb(255, 30, 64) - 温暖的红色，也可以用 #ff1e40 或 hsl(348, 100%, 56%
 | `AndreaNovelHelper.docRoles.inheritExpandedFromPrevious` | 控制是否启用跨文档展开状态继承 |
 | `AndreaNovelHelper.externalFolder.ignoredDirectories` | 外部资源目录扫描时忽略的目录列表，默认排除 `.git`、`.vscode`、`node_modules` 等（兼容 `__init__.ojson5` 识别） |
 | `AndreaNovelHelper.externalFolder.markerKeywords` | 外部资源目录识别关键字，可扩展文件名匹配规则（配合 `.ojson5/.rjson5/.ojson/.rjson/.tjson5` 等标识扩展名） |
+| `AndreaNovelHelper.defaultRoleLookupKeys` | 新建角色时默认补齐的索引键字段。会与 `project-config.json5` 中的同名配置合并（项目配置优先）。 |
+| `AndreaNovelHelper.extendedLookupKeyPrefixes` | 扩展索引键家族前缀（如 `refkeys`、`tagkeys`），使系统将这些前缀开头的字段也识别为索引键。 |
 
 ## 🛠️ 快速开始
 

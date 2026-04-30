@@ -281,5 +281,7 @@
   "config.customVocabularyFileKeywords.description": "附加的词汇文件名关键词。会与 anhproject.md 和 project-config.json5 中声明的关键词合并。",
   "config.customRegexFileKeywords.description": "附加的正则文件名关键词。会与 anhproject.md 和 project-config.json5 中声明的关键词合并。",
   "config.lookupKeys.autoGeneratePinyin.description": "是否在扩展本体后端根据角色名和别名自动生成 lookupKeys_pinyin。该设置会影响所有已加载的角色格式，以及 JSON5 可视化编辑器的显示与保存链路。",
-  "config.lookupKeys.autoGenerateRomanized.description": "是否在扩展本体后端根据角色名和别名自动生成 lookupKeys_romanized。该设置会影响所有已加载的角色格式，以及 JSON5 可视化编辑器的显示与保存链路。"
+  "config.lookupKeys.autoGenerateRomanized.description": "是否在扩展本体后端根据角色名和别名自动生成 lookupKeys_romanized。该设置会影响所有已加载的角色格式，以及 JSON5 可视化编辑器的显示与保存链路。",
+  "config.defaultRoleLookupKeys.description": "新建角色时默认补齐的索引键字段。会与 project-config.json5 中的 defaultRoleLookupKeys 合并（项目配置优先级更高）。可填写后缀如 pinyin、romanized、jp，或完整键名如 lookupKeys_en。",
+  "config.extendedLookupKeyPrefixes.description": "额外的前缀列表，使系统将其开头的字段也识别为索引键家族成员（如 refkeys、tagkeys）。这些字段将像内置索引键一样参与匹配、补全和编辑器展示。"
 }

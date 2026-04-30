@@ -27,6 +27,12 @@ export const LOOKUP_KEY_PREFIXES = [
 
 export type LookupKeyKind = 'generic' | 'pinyin' | 'romanized' | 'spelling';
 
+let EXTENDED_LOOKUP_KEY_PREFIXES: string[] = [];
+
+export function setExtendedLookupKeyPrefixes(prefixes: string[]): void {
+    EXTENDED_LOOKUP_KEY_PREFIXES = uniqueRoleKeys(prefixes.map(p => normalizeLookupKeyName(p)));
+}
+
 export function normalizeLookupKeyName(key: string): string {
     return key.trim().toLowerCase();
 }
@@ -42,7 +48,8 @@ export function normalizeLookupToken(token: string): string {
 
 export function isLookupKeyFamily(key: string): boolean {
     const normalized = normalizeLookupKeyName(key);
-    return LOOKUP_KEY_PREFIXES.some(prefix => normalized === prefix || normalized.startsWith(prefix));
+    return LOOKUP_KEY_PREFIXES.some(prefix => normalized === prefix || normalized.startsWith(prefix)) ||
+        EXTENDED_LOOKUP_KEY_PREFIXES.some(prefix => normalized === prefix || normalized.startsWith(prefix));
 }
 
 export function getLookupKeyKind(key: string): LookupKeyKind {

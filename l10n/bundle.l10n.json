@@ -282,5 +282,7 @@
   "config.customVocabularyFileKeywords.description": "Additional filename keywords for vocabulary files. Merged with keywords from anhproject.md and project-config.json5.",
   "config.customRegexFileKeywords.description": "Additional filename keywords for regex-pattern files. Merged with keywords from anhproject.md and project-config.json5.",
   "config.lookupKeys.autoGeneratePinyin.description": "Automatically generate lookupKeys_pinyin in the extension backend from role names and aliases. This affects all loaded role formats and the JSON5 visual editor save/display pipeline.",
-  "config.lookupKeys.autoGenerateRomanized.description": "Automatically generate lookupKeys_romanized in the extension backend from role names and aliases. This affects all loaded role formats and the JSON5 visual editor save/display pipeline."
+  "config.lookupKeys.autoGenerateRomanized.description": "Automatically generate lookupKeys_romanized in the extension backend from role names and aliases. This affects all loaded role formats and the JSON5 visual editor save/display pipeline.",
+  "config.defaultRoleLookupKeys.description": "Default lookup key fields to populate when creating a new role. These are merged with project-config.json5 defaultRoleLookupKeys (project config takes precedence). Accepts suffixes like 'pinyin', 'romanized', 'jp' or full field names like 'lookupKeys_en'.",
+  "config.extendedLookupKeyPrefixes.description": "Additional prefixes that should be recognized as lookup key family members (e.g., refkeys, tagkeys). Fields starting with these prefixes will participate in matching, completion, and editor display just like built-in lookup keys."
 }

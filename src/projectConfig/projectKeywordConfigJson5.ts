@@ -7,6 +7,7 @@ import {
     type ProjectKeywordConfigDefinition,
     normalizeKeywordList,
 } from './projectKeywordConfig';
+import { PROJECT_JSON5_EXTRA_FIELD_DEFINITIONS } from './projectJson5Config';
 
 export class ProjectKeywordConfigJson5Linter implements vscode.Disposable {
     private readonly diagnosticCollection: vscode.DiagnosticCollection;
@@ -52,7 +53,10 @@ export class ProjectKeywordConfigJson5Linter implements vscode.Disposable {
         }
 
         const record = parsed as Record<string, unknown>;
-        const allowedKeys = new Set(PROJECT_KEYWORD_CONFIG_DEFINITIONS.map(definition => definition.key));
+        const allowedKeys = new Set([
+            ...PROJECT_KEYWORD_CONFIG_DEFINITIONS.map(definition => definition.key),
+            ...PROJECT_JSON5_EXTRA_FIELD_DEFINITIONS.map(definition => definition.key),
+        ]);
 
         for (const key of Object.keys(record)) {
             if (allowedKeys.has(key as any)) {
@@ -175,12 +179,22 @@ export class ProjectKeywordConfigJson5CompletionProvider implements vscode.Compl
             return [];
         }
 
-        return PROJECT_KEYWORD_CONFIG_DEFINITIONS.map(definition => {
+        const keywordItems = PROJECT_KEYWORD_CONFIG_DEFINITIONS.map(definition => {
             const item = new vscode.CompletionItem(definition.key, vscode.CompletionItemKind.Property);
             item.detail = definition.detail;
             item.insertText = new vscode.SnippetString(`${definition.key}: [\n  '$1'\n],`);
             item.documentation = new vscode.MarkdownString(definition.detail);
             return item;
         });
+
+        const extraItems = PROJECT_JSON5_EXTRA_FIELD_DEFINITIONS.map(definition => {
+            const item = new vscode.CompletionItem(definition.key, vscode.CompletionItemKind.Property);
+            item.detail = definition.detail;
+            item.insertText = new vscode.SnippetString(definition.snippet);
+            item.documentation = new vscode.MarkdownString(definition.detail);
+            return item;
+        });
+
+        return [...keywordItems, ...extraItems];
     }
 }

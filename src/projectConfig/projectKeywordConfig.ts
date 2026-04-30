@@ -2,9 +2,15 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import JSON5 from 'json5';
-
-export const PROJECT_CONFIG_MARKDOWN_FILE_NAME = 'anhproject.md';
-export const PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME = 'project-config.json5';
+import { clearProjectJson5ConfigCache } from './projectJson5Config';
+import {
+    PROJECT_CONFIG_MARKDOWN_FILE_NAME,
+    PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME,
+} from './constants';
+export {
+    PROJECT_CONFIG_MARKDOWN_FILE_NAME,
+    PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME,
+};
 
 export type ProjectKeywordConfigKey =
     | 'characterFileKeywords'
@@ -123,6 +129,11 @@ export function clearProjectKeywordConfigCache(workspaceRootOrPath?: string): vo
     CONFIG_CACHE.delete(getCacheKey(workspaceRoot));
 }
 
+export function clearAllProjectConfigCaches(workspaceRootOrPath?: string): void {
+    clearProjectKeywordConfigCache(workspaceRootOrPath);
+    clearProjectJson5ConfigCache(workspaceRootOrPath);
+}
+
 export function getProjectKeywordConfig(workspaceRootOrFilePath?: string): ProjectKeywordConfig {
     const workspaceRoot = resolveWorkspaceRoot(workspaceRootOrFilePath);
     const cacheKey = getCacheKey(workspaceRoot);
@@ -141,9 +152,33 @@ export function getProjectKeywordConfig(workspaceRootOrFilePath?: string): Proje
     return merged;
 }
 
-export function generateProjectKeywordConfigTemplate(): string {
+export function generateProjectKeywordConfigTemplate(options?: {
+    rolesFile?: string;
+    sensitiveWordsFile?: string;
+    vocabularyFile?: string;
+    regexPatternsFile?: string;
+}): string {
     return [
         '{',
+        '  // 项目级资源文件目标路径（相对于工作区根目录）',
+        `  rolesFile: '${(options?.rolesFile || 'novel-helper/character-gallery.json5').replace(/\\/g, '/')}',`,
+        `  sensitiveWordsFile: '${(options?.sensitiveWordsFile || 'novel-helper/sensitive-words.json5').replace(/\\/g, '/')}',`,
+        `  vocabularyFile: '${(options?.vocabularyFile || 'novel-helper/vocabulary.json5').replace(/\\/g, '/')}',`,
+        `  regexPatternsFile: '${(options?.regexPatternsFile || 'novel-helper/regex-patterns.json5').replace(/\\/g, '/')}',`,
+        '',
+        '  // 新建角色时默认补齐的索引键字段（在全局默认基础上扩充，可写后缀或完整字段名）',
+        '  defaultRoleLookupKeys: [',
+        "    // '日文',",
+        "    // '英文',",
+        "    // 'lookupKeys_kana',",
+        '  ],',
+        '',
+        '  // 扩展索引键家族前缀（使系统将这些前缀开头的字段也识别为索引键）',
+        '  extendedLookupKeyPrefixes: [',
+        "    // 'refkeys',",
+        "    // 'tagkeys',",
+        '  ],',
+        '',
         '  // 附加的角色文件名关键词',
         '  characterFileKeywords: [',
         "    // 'cast',",

@@ -2393,6 +2393,24 @@
           "default": false,
           "markdownDescription": "%config.lookupKeys.autoGenerateRomanized.description%"
         },
+        "AndreaNovelHelper.defaultRoleLookupKeys": {
+          "anhName": "默认角色索引键",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.defaultRoleLookupKeys.description%"
+        },
+        "AndreaNovelHelper.extendedLookupKeyPrefixes": {
+          "anhName": "扩展索引键前缀",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.extendedLookupKeyPrefixes.description%"
+        },
         "AndreaNovelHelper.completion.segmenterType": {
           "anhName": "分词器类型",
           "type": "string",
