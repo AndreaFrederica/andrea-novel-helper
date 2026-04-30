@@ -100,6 +100,70 @@
             margin-bottom: 0;
         }
 
+        .reader-content .md-list-line {
+            display: block;
+        }
+
+        .reader-content .md-list-marker {
+            display: none;
+        }
+
+        body.reader-md-headings .reader-content [data-md-kind="heading"] pre {
+            font-weight: 700;
+            line-height: 1.25;
+            margin-top: calc(var(--reader-para-spacing) * 1.5);
+            margin-bottom: calc(var(--reader-para-spacing) * 1.2);
+        }
+
+        body.reader-md-headings.reader-md-heading-center .reader-content [data-md-kind="heading"] pre {
+            text-align: center;
+        }
+
+        body.reader-md-headings.reader-md-heading-left .reader-content [data-md-kind="heading"] pre {
+            text-align: left;
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="1"] pre {
+            font-size: calc(var(--reader-font-size) * 1.65);
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="2"] pre {
+            font-size: calc(var(--reader-font-size) * 1.45);
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="3"] pre {
+            font-size: calc(var(--reader-font-size) * 1.25);
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="4"] pre,
+        body.reader-md-headings .reader-content [data-md-level="5"] pre,
+        body.reader-md-headings .reader-content [data-md-level="6"] pre {
+            font-size: calc(var(--reader-font-size) * 1.1);
+        }
+
+        body.reader-md-lists.reader-md-list-indent .reader-content [data-md-kind="list"] pre {
+            padding-left: 1.4em;
+        }
+
+        body.reader-md-lists .reader-content .md-list-line {
+            position: relative;
+        }
+
+        body.reader-md-lists .reader-content .md-list-marker {
+            display: inline-block;
+            width: 1.4em;
+            margin-left: -1.4em;
+            opacity: .75;
+        }
+
+        body.reader-md-lists.reader-md-list-plain .reader-content .md-list-marker {
+            display: none;
+        }
+
+        body.reader-md-lists.reader-md-list-plain .reader-content [data-md-kind="list"] pre {
+            padding-left: 0;
+        }
+
         body.reader-paged {
             overflow-y: auto;
         }
@@ -510,6 +574,24 @@
         <div class="rs-row"><label>对齐</label>
             <div class="rs-mode-group" id="rs-aligns"><button data-align="left" class="rs-toggle">左对齐</button><button
                     data-align="justify" class="rs-toggle">两端</button></div>
+        </div>
+        <div class="rs-row"><label>Markdown</label>
+            <div class="rs-mode-group" id="rs-markdownStyles">
+                <button data-mdstyle="headings" class="rs-toggle">标题</button>
+                <button data-mdstyle="lists" class="rs-toggle">列表</button>
+            </div>
+        </div>
+        <div class="rs-row"><label>标题样式</label>
+            <div class="rs-mode-group" id="rs-headingStyle">
+                <button data-heading-style="left" class="rs-toggle">左对齐</button>
+                <button data-heading-style="center" class="rs-toggle">居中</button>
+            </div>
+        </div>
+        <div class="rs-row"><label>列表样式</label>
+            <div class="rs-mode-group" id="rs-listStyle">
+                <button data-list-style="indent" class="rs-toggle">标记缩进</button>
+                <button data-list-style="plain" class="rs-toggle">纯文本</button>
+            </div>
         </div>
         <div class="rs-row"><label>列数*</label>
             <div class="rs-mode-group" id="rs-cols"><button data-cols="1" class="rs-toggle">1 列</button><button

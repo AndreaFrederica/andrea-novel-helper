@@ -837,6 +837,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
         var node;
         while ((node = walker.nextNode()) !== null) {
+            if (node.parentElement && node.parentElement.closest('.md-list-marker')) { continue; }
             var len = (node.nodeValue || '').length;
             out.push({ node: node, start: offset, end: offset + len });
             offset += len;
@@ -955,6 +956,9 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     };
     var modeGroup = document.getElementById('rs-modes');
     var alignGroup = document.getElementById('rs-aligns');
+    var markdownStylesGroup = document.getElementById('rs-markdownStyles');
+    var headingStyleGroup = document.getElementById('rs-headingStyle');
+    var listStyleGroup = document.getElementById('rs-listStyle');
     var colsGroup = document.getElementById('rs-cols');
     var syncGroup = document.getElementById('rs-sync');
     var themeGroup = document.getElementById('rs-themes');
@@ -999,6 +1003,10 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         mode: 'scroll',
         theme: 'auto',
         align: 'left',
+        markdownHeadings: false,
+        markdownLists: false,
+        markdownHeadingStyle: 'left',
+        markdownListStyle: 'indent',
         cols: 1,
         sync: 'on',
         colorizeRoles: false,
@@ -1224,6 +1232,12 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         } catch (_) { }
 
         document.body.classList.toggle('reader-align-justify', state.align === 'justify');
+        document.body.classList.toggle('reader-md-headings', !!state.markdownHeadings);
+        document.body.classList.toggle('reader-md-lists', !!state.markdownLists);
+        document.body.classList.toggle('reader-md-heading-left', state.markdownHeadingStyle !== 'center');
+        document.body.classList.toggle('reader-md-heading-center', state.markdownHeadingStyle === 'center');
+        document.body.classList.toggle('reader-md-list-indent', state.markdownListStyle !== 'plain');
+        document.body.classList.toggle('reader-md-list-plain', state.markdownListStyle === 'plain');
         document.documentElement.style.setProperty('--reader-columns', state.cols);
 
         var content = document.getElementById('reader-content');
@@ -1242,6 +1256,22 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
         Array.from(modeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-mode') === state.mode); });
         if (alignGroup) { Array.from(alignGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-align') === state.align); }); }
+        if (markdownStylesGroup) {
+            Array.from(markdownStylesGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
+                var kind = b.getAttribute('data-mdstyle');
+                b.classList.toggle('active', (kind === 'headings' && !!state.markdownHeadings) || (kind === 'lists' && !!state.markdownLists));
+            });
+        }
+        if (headingStyleGroup) {
+            Array.from(headingStyleGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-heading-style') === (state.markdownHeadingStyle || 'left'));
+            });
+        }
+        if (listStyleGroup) {
+            Array.from(listStyleGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-list-style') === (state.markdownListStyle || 'indent'));
+            });
+        }
         if (colsGroup) { Array.from(colsGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', Number(b.getAttribute('data-cols')) === state.cols); }); }
         Array.from(themeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-theme') === state.theme); });
         if (syncGroup) { Array.from(syncGroup.querySelectorAll('.rs-toggle')).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sync') === state.sync); }); }
@@ -1285,6 +1315,25 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
     if (modeGroup) { modeGroup.addEventListener('click', function (e) { var m = e.target && e.target.getAttribute('data-mode'); if (m) { state.mode = m; reflect(); } }); }
     if (alignGroup) { alignGroup.addEventListener('click', function (e) { var a = e.target && e.target.getAttribute('data-align'); if (a) { state.align = a; reflect(); } }); }
+    if (markdownStylesGroup) {
+        markdownStylesGroup.addEventListener('click', function (e) {
+            var kind = e.target && e.target.getAttribute('data-mdstyle');
+            if (kind === 'headings') { state.markdownHeadings = !state.markdownHeadings; reflect(); }
+            else if (kind === 'lists') { state.markdownLists = !state.markdownLists; reflect(); }
+        });
+    }
+    if (headingStyleGroup) {
+        headingStyleGroup.addEventListener('click', function (e) {
+            var value = e.target && e.target.getAttribute('data-heading-style');
+            if (value) { state.markdownHeadingStyle = value; state.markdownHeadings = true; reflect(); }
+        });
+    }
+    if (listStyleGroup) {
+        listStyleGroup.addEventListener('click', function (e) {
+            var value = e.target && e.target.getAttribute('data-list-style');
+            if (value) { state.markdownListStyle = value; state.markdownLists = true; reflect(); }
+        });
+    }
     if (colsGroup) { colsGroup.addEventListener('click', function (e) { var c = e.target && e.target.getAttribute('data-cols'); if (c) { state.cols = parseInt(c, 10) || 1; reflect(); } }); }
     if (themeGroup) { themeGroup.addEventListener('click', function (e) { var t = e.target && e.target.getAttribute('data-theme'); if (t) { state.theme = t; reflect(); } }); }
     if (syncGroup) { syncGroup.addEventListener('click', function (e) { var s = e.target && e.target.getAttribute('data-sync'); if (s) { state.sync = s; reflect(); } }); }

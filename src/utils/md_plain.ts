@@ -1,14 +1,22 @@
 // md_plain.ts
 // 零依赖 Markdown → 纯文本；返回整体文本与“块首行”映射用于滚动对齐
-export function mdToPlainText(src: string): { text: string; blocks: { srcLine: number; text: string }[] } {
+export type MarkdownPlainBlock = {
+    srcLine: number;
+    text: string;
+    kind?: 'heading' | 'list';
+    level?: number;
+    listMarkers?: string[];
+};
+
+export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlainBlock[] } {
     const rawLines = src.split(/\r?\n/);
     const lines = stripCommentsFromLines(rawLines);
-    const blocks: { srcLine: number; text: string }[] = [];
+    const blocks: MarkdownPlainBlock[] = [];
     let i = 0;
     const refDefs = collectRefDefinitions(lines);
 
-    const pushBlock = (start: number, text: string) =>
-        blocks.push({ srcLine: start, text: text.replace(/\s+$/, '') });
+    const pushBlock = (start: number, text: string, meta?: Omit<MarkdownPlainBlock, 'srcLine' | 'text'>) =>
+        blocks.push({ srcLine: start, text: text.replace(/\s+$/, ''), ...meta });
 
     while (i < lines.length) {
         const line = lines[i];
@@ -39,14 +47,14 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
         // 2) ATX Heading
         const atx = line.match(/^(#{1,6})\s*(.+?)\s*#*\s*$/);
         if (atx) {
-            pushBlock(i, stripInline(atx[2], refDefs));
+            pushBlock(i, stripInline(atx[2], refDefs), { kind: 'heading', level: atx[1].length });
             i++;
             continue;
         }
 
         // 3) Setext Heading
         if (i + 1 < lines.length && /^\s*[-=]{3,}\s*$/.test(lines[i + 1])) {
-            pushBlock(i, stripInline(line, refDefs));
+            pushBlock(i, stripInline(line, refDefs), { kind: 'heading', level: /^\s*=/.test(lines[i + 1]) ? 1 : 2 });
             i += 2;
             continue;
         }
@@ -67,14 +75,17 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
         if (/^\s*([*+\-]|\d+\.)\s+/.test(line)) {
             const start = i;
             const buf: string[] = [];
+            const markers: string[] = [];
             while (i < lines.length && /^\s*([*+\-]|\d+\.)\s+/.test(lines[i])) {
+                const markerMatch = lines[i].match(/^\s*(\d+\.|[*+\-])\s+/);
+                markers.push(markerMatch && /\d+\./.test(markerMatch[1]) ? markerMatch[1] : '•');
                 const li = lines[i]
                     .replace(/^\s*(?:\d+\.|[*+\-])\s+/, '')
                     .replace(/^\[([ xX])\]\s+/, (_m, g1) => (g1 === 'x' || g1 === 'X') ? '[x] ' : '[ ] ');
                 buf.push(li);
                 i++;
             }
-            pushBlock(start, stripInline(buf.join('\n'), refDefs));
+            pushBlock(start, stripInline(buf.join('\n'), refDefs), { kind: 'list', listMarkers: markers });
             continue;
         }
 

@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as fontList from 'font-list';
-import { mdToPlainText } from '../../utils/md_plain';
+import { mdToPlainText, type MarkdownPlainBlock } from '../../utils/md_plain';
 import { txtToPlainText } from '../../utils/txt_plain';
 import { setActivePreview } from '../../context/previewRedirect';
 import { getRoleLookupKeys } from '../../utils/roleLookupKeys';
@@ -18,7 +18,7 @@ const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
     正则表达式: '#FFA500',
 };
 
-type Block = { srcLine: number; text: string };
+type Block = MarkdownPlainBlock;
 type ImgCtx = { srcLines: string[]; docDir: string; webview: vscode.Webview };
 type RoleTextStyle = {
     color?: string;
@@ -103,7 +103,7 @@ export class PreviewManager {
                 const nextLine = idx + 1 < blocks.length ? blocks[idx + 1].srcLine : imgCtx.srcLines.length;
                 return this.renderBlockHtml(b, nextLine, imgCtx);
             }
-            return `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`;
+            return this.renderPlainBlockHtml(b);
         }).join('\n');
     }
     private postWholeHtml(panel: vscode.WebviewPanel, doc: vscode.TextDocument, htmlBody: string) {
@@ -901,7 +901,7 @@ export class PreviewManager {
         } else {
             const text = doc.getText();
             const { blocks } = txtToPlainText(text);
-            const htmlBody = blocks.map(b => `<div data-line="${b.srcLine}"><pre>${this.escapeHtml(b.text)}</pre></div>`).join('\n');
+            const htmlBody = blocks.map(b => this.renderPlainBlockHtml(b)).join('\n');
             return { htmlBody, blocks };
         }
     }
@@ -923,7 +923,7 @@ export class PreviewManager {
         const { srcLines, docDir, webview } = imgCtx;
         // 快速判断：block 文本中是否包含图片占位符
         if (!block.text.includes('[image')) {
-            return `<div data-line="${block.srcLine}"><pre>${this.escapeHtml(block.text)}</pre></div>`;
+            return this.renderPlainBlockHtml(block);
         }
         // 收集本 block 原始源行中所有图片
         const blockEnd = Math.min(nextLine, srcLines.length);
@@ -937,7 +937,7 @@ export class PreviewManager {
             }
         }
         if (!images.length) {
-            return `<div data-line="${block.srcLine}"><pre>${this.escapeHtml(block.text)}</pre></div>`;
+            return this.renderPlainBlockHtml(block);
         }
         // 判断 block 是否为纯图片（文本仅包含 [image...] 占位）
         const trimmed = block.text.trim();
@@ -947,7 +947,7 @@ export class PreviewManager {
                 const resolvedSrc = this.resolveImageSrc(img.src, docDir, webview);
                 return `<figure style="margin:0.5em 0;text-align:center"><img src="${resolvedSrc}" alt="${this.escapeHtml(img.alt)}" style="max-width:100%;height:auto;" loading="lazy"></figure>`;
             }).join('\n');
-            return `<div data-line="${block.srcLine}">${figuresHtml}</div>`;
+            return this.wrapRenderedBlock(block, figuresHtml);
         }
         // 混合段落：在 pre 中内联替换占位为 <img>
         let html = this.escapeHtml(block.text);
@@ -958,7 +958,27 @@ export class PreviewManager {
             const imgTag = `<img src="${resolvedSrc}" alt="${escapedAlt}" style="max-width:100%;height:auto;vertical-align:middle;" loading="lazy">`;
             html = html.replace(placeholder, imgTag);
         }
-        return `<div data-line="${block.srcLine}"><pre>${html}</pre></div>`;
+        return this.wrapRenderedBlock(block, `<pre>${html}</pre>`);
+    }
+
+    private renderPlainBlockHtml(block: Block): string {
+        if (block.kind === 'list') {
+            const lines = block.text.split('\n');
+            const markers = block.listMarkers || [];
+            const inner = lines.map((line, index) => {
+                const marker = markers[index] || '•';
+                return `<span class="md-list-line"><span class="md-list-marker" aria-hidden="true">${this.escapeHtml(marker)}</span><span class="md-list-text">${this.escapeHtml(line)}</span></span>`;
+            }).join('\n');
+            return this.wrapRenderedBlock(block, `<pre>${inner}</pre>`);
+        }
+        return this.wrapRenderedBlock(block, `<pre>${this.escapeHtml(block.text)}</pre>`);
+    }
+
+    private wrapRenderedBlock(block: Block, innerHtml: string): string {
+        const attrs = [`data-line="${block.srcLine}"`];
+        if (block.kind) { attrs.push(`data-md-kind="${block.kind}"`); }
+        if (block.level) { attrs.push(`data-md-level="${block.level}"`); }
+        return `<div ${attrs.join(' ')}>${innerHtml}</div>`;
     }
 
     /** 将图片路径解析为 webview 可访问的 URI */
