@@ -239,6 +239,12 @@
         "title": "%command.andrea.quickSettings.title%"
       },
       {
+        "command": "andrea.openProjectSettings",
+        "title": "打开项目设置",
+        "category": "Andrea Novel Helper",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "andrea.configureMilestones",
         "title": "%command.andrea.configureMilestones.title%"
       },
@@ -3352,6 +3358,12 @@
           "when": "view == andrea.scriptsView",
           "group": "navigation@6",
           "icon": "$(refresh)"
+        },
+        {
+          "command": "andrea.openProjectSettings",
+          "when": "view == andrea.settingsView",
+          "group": "navigation@1",
+          "icon": "$(settings-gear)"
         }
       ],
       "view/item/context": [

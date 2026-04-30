@@ -105,6 +105,7 @@ import { createCirclePackingDataProvider } from './data/circlePackingDataProvide
 import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 import { registerSettingsView } from './Provider/view/settingView'
+import { registerProjectSettingsPage } from './Provider/view/projectSettingsPage'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
 import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
@@ -652,6 +653,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerCommentsTreeView(context);
         registerScriptRunnerView(context);
         registerSettingsView(context);
+        registerProjectSettingsPage(context);
         registerEditorSettingsPage(context);
 
         // 初始化 AhoCorasick 管理器
