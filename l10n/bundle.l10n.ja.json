@@ -6,6 +6,7 @@
   "command.refreshSensitiveWords.title": "センシティブワードを更新",
   "command.addVocabulary.title": "選択範囲から語彙を作成",
   "command.refreshVocabulary.title": "語彙ライブラリを更新",
+  "command.showGuideDoc.title": "ドキュメントセンターを開く",
   "command.openDoubleOutline.title": "二重アウトラインを開く",
   "command.refreshOutlineDir.title": "ディレクトリアウトラインを更新",
   "command.refreshOutlineFile.title": "ファイルアウトラインを更新",
@@ -149,5 +150,17 @@
   "sidebar.settings.title": "Andrea 小説アシスタント: 設定",
   "command.package.rescanExternalFolders.title": "外部リソースを再スキャン(パッケージ管理)",
   "command.package.showExternalScanReport.title": "外部スキャンレポートを表示(パッケージ管理)",
-  "command.fileTracking.repairPathKeys.title": "ファイル追跡パス索引を修復"
+  "command.fileTracking.repairPathKeys.title": "ファイル追跡パス索引を修復",
+  "config.lookupKeys.treatPinyinAsAlias.description": "lookupKeys_pinyin の値を補完一覧で別名レベルの候補として表示します。無効でも照合には使われ、この設定は補完一覧で別名のように見せるかだけを制御します。",
+  "config.lookupKeys.treatRomanizedAsAlias.description": "lookupKeys_romanized の値を補完一覧で別名レベルの候補として表示します。無効でも照合には使われ、この設定は補完一覧で別名のように見せるかだけを制御します。",
+  "config.debug.roleFileDetection.description": "役割ファイル判定: isRoleFile の詳細デバッグログを出力します。CSV/Markdown 判定の問題調査用。",
+  "config.debug.smartRoleAdder.description": "SmartRoleAdder: 役割の優先度比較とマージ判定の詳細デバッグログを出力します。",
+  "config.customCharacterFileKeywords.description": "キャラクターファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+  "config.customSensitiveWordsFileKeywords.description": "センシティブワードファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+  "config.customVocabularyFileKeywords.description": "語彙ファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+  "config.customRegexFileKeywords.description": "正規表現ファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+  "config.lookupKeys.autoGeneratePinyin.description": "拡張機能本体のバックエンドで、役名と別名から lookupKeys_pinyin を自動生成します。読み込まれたすべての役割ファイル形式と JSON5 ビジュアルエディターの表示・保存経路に反映されます。",
+  "config.lookupKeys.autoGenerateRomanized.description": "拡張機能本体のバックエンドで、役名と別名から lookupKeys_romanized を自動生成します。読み込まれたすべての役割ファイル形式と JSON5 ビジュアルエディターの表示・保存経路に反映されます。",
+  "config.defaultRoleLookupKeys.description": "新規役割作成時に自動的に補完するルックアップキーフィールド。project-config.json5 の defaultRoleLookupKeys とマージされます（プロジェクト設定が優先）。'pinyin'、'romanized'、'jp' などの接尾辞、または 'lookupKeys_en' のような完全なフィールド名が指定可能です。",
+  "config.extendedLookupKeyPrefixes.description": "ルックアップキー家族として認識する追加の接頭辞リスト（例：refkeys、tagkeys）。これらの接頭辞で始まるフィールドは、組み込みのルックアップキーと同様にマッチング、補完、エディタ表示に参加します。"
 }

@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline' __CSP_SOURCE__; script-src __CSP_SOURCE__ 'nonce-__NONCE__'; img-src __CSP_SOURCE__ https: data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>功能引导</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            color: var(--vscode-editor-foreground);
+            background: var(--vscode-editor-background);
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            line-height: 1.6;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 14px 24px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-editor-background);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            border: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border-radius: 4px;
+            padding: 6px 14px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.15s ease;
+        }
+
+        button:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        /* ── Search ─────────────────────────────────── */
+        .search-bar {
+            margin-bottom: 24px;
+        }
+
+        .search-bar input {
+            width: 100%;
+            border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border-radius: 6px;
+            padding: 10px 14px;
+            font: inherit;
+            font-size: 14px;
+        }
+
+        .search-bar input:focus {
+            outline: none;
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .search-bar input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+        }
+
+        /* ── Category ───────────────────────────────── */
+        .category {
+            margin-bottom: 28px;
+        }
+
+        .category-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            color: var(--vscode-editor-foreground);
+        }
+
+        /* ── Feature Cards ──────────────────────────── */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+
+        .card {
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            padding: 16px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            cursor: default;
+        }
+
+        .card:hover {
+            border-color: var(--vscode-focusBorder);
+            box-shadow: 0 2px 8px color-mix(in srgb, var(--vscode-focusBorder) 15%, transparent);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .card-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            flex-shrink: 0;
+            background: color-mix(in srgb, var(--vscode-button-background) 12%, transparent);
+            color: var(--vscode-button-background);
+        }
+        .card-icon-img {
+            width: 20px;
+            height: 20px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .card-desc {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .card-actions button {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 3px;
+        }
+
+        .card-actions .primary-action {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-color: var(--vscode-button-background);
+        }
+
+        .card.hidden {
+            display: none;
+        }
+
+        .hint {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            opacity: 0.8;
+        }
+
+        /* ── Doc Button ─────────────────────────────── */
+        .doc-toggle {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 3px;
+            color: var(--vscode-textLink-foreground);
+            background: transparent;
+            border: 1px solid var(--vscode-textLink-foreground);
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .doc-toggle:hover {
+            background: color-mix(in srgb, var(--vscode-textLink-foreground) 10%, transparent);
+        }
+
+        /* ── Keyboard Shortcut Tags ─────────────────── */
+        kbd {
+            display: inline-block;
+            padding: 1px 5px;
+            font-size: 11px;
+            font-family: var(--vscode-font-family);
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 3px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        /* ── Responsive ─────────────────────────────── */
+        @media (max-width: 640px) {
+            .cards {
+                grid-template-columns: 1fr;
+            }
+
+            main {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>功能引导</h1>
+        <div class="toolbar">
+            <button id="wikiBtn">Wiki</button>
+            <button id="reload">刷新</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="search-bar">
+            <input id="search" type="text" placeholder="搜索功能...">
+        </div>
+
+        <div id="categories">
+            <!-- ═══ 入门 ═══ -->
+            <div class="category" data-category="start">
+                <h2 class="category-title">入门</h2>
+                <div class="cards">
+                    <div class="card" data-keywords="hello world 快速上手 入门 新手 教程">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F44B;</div>
+                            <div class="card-title">Hello World</div>
+                        </div>
+                        <div class="card-desc">5 分钟快速上手 ANH：初始化项目、创建角色、体验补全与高亮、预览文档。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-doc-id="hello-world">查看快速指南</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="初始化 向导 项目 init wizard setup">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F680;</div>
+                            <div class="card-title">项目初始化向导</div>
+                        </div>
+                        <div class="card-desc">一步步完成项目配置：填写项目信息、配置 Git、创建基础文件结构和忽略规则。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="AndreaNovelHelper.projectInitWizard.graphical">打开向导</button>
+                            <button class="doc-toggle" data-doc-id="init-wizard">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="项目设置 配置 settings anhproject 项目配置">
+                        <div class="card-header">
+                            <div class="card-icon">&#x2699;</div>
+                            <div class="card-title">项目设置</div>
+                        </div>
+                        <div class="card-desc">编辑项目名称、作者、标签、封面、文件识别关键词、默认写入目标、角色索引键等配置。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="andrea.openProjectSettings">打开设置</button>
+                            <button class="doc-toggle" data-doc-id="project-settings">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="插件设置 ANH 设置 extension settings 配置 插件配置">
+                        <div class="card-header">
+                            <div class="card-icon">&#x2699;</div>
+                            <div class="card-title">插件设置</div>
+                        </div>
+                        <div class="card-desc">查看和修改 ANH 的所有配置项，包括校对、翻译、排版、字数统计、Git 等功能的详细参数。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="openAnhSettings">打开插件设置</button>
+                            <button data-cmd="andrea.openEditorSettingsEnhanced">打开编辑器设置</button>
+                            <button class="doc-toggle" data-doc-id="plugin-settings">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="快速设置 quick settings ctrl alt i 排版 字数 wcignore 角色显示 里程碑">
+                        <div class="card-header">
+                            <div class="card-icon">&#x2699;</div>
+                            <div class="card-title">快速设置</div>
+                        </div>
+                        <div class="card-desc">集中调整写作高频选项：自动换行、智能切段、段首缩进、字体、字数单位、.wcignore、角色显示、里程碑等。最快入口在底部状态栏的“版式”按钮。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="andrea.quickSettings">打开快速设置</button>
+                            <button class="doc-toggle" data-doc-id="quick-settings">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="状态栏 status bar 底部按钮 版式 写作统计 typo sync 自动滚动 分组锁 typst">
+                        <div class="card-header">
+                            <div class="card-icon">&#x25AC;</div>
+                            <div class="card-title">状态栏功能</div>
+                        </div>
+                        <div class="card-desc">说明 VS Code 底部 ANH 状态栏按钮：版式快速设置、写作统计、Typo、ANH:Sync、自动滚动、分组锁、Typst 预览等。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="status-bar">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="vscode 基础 设置 编辑器 settings editor 工作区 资源管理器 搜索 git 源代码管理">
+                        <div class="card-header">
+                            <div class="card-icon">&#x2699;</div>
+                            <div class="card-title">VS Code 基础</div>
+                        </div>
+                        <div class="card-desc">面向新用户说明资源管理器、全局搜索、Git 源代码管理、设置和常用快捷键。</div>
+                        <div class="card-actions">
+                            <button data-cmd="openVSCodeSettings">打开 VS Code 设置</button>
+                            <button class="doc-toggle" data-doc-id="vscode-settings">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="预览 preview markdown txt typst 写作预览 排版">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4D6;</div>
+                            <div class="card-title">写作预览</div>
+                        </div>
+                        <div class="card-desc">侧边预览当前文档，支持 Markdown/TXT 纯文本预览和 Typst 专业排版预览，角色名自动着色。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="myPreview.open">打开预览</button>
+                            <button data-cmd="AndreaNovelHelper.openTypstPreview">Typst 预览</button>
+                            <button class="doc-toggle" data-doc-id="writing-preview">查看文档</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ 核心概念 ═══ -->
+            <div class="category" data-category="concepts">
+                <h2 class="category-title">核心概念</h2>
+                <div class="cards">
+                    <div class="card" data-keywords="一切皆角色 角色 统一对象模型 role type 敏感词 词汇 正则 概念">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F9E0;</div>
+                            <div class="card-title">一切皆角色</div>
+                        </div>
+                        <div class="card-desc">ANH 的核心设计理念：角色、敏感词、词汇、正则都统一为"角色"对象，共享同一套编辑和引用能力。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="everything-is-role">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="包管理器 资源 文件 package manager 目录 novel-helper 概念">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4E6;</div>
+                            <div class="card-title">包管理器</div>
+                        </div>
+                        <div class="card-desc">侧栏中的资源管理器。"包"即 <code>novel-helper/</code> 下的目录，每个目录可包含角色库、敏感词库、词汇表等资源文件。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="package-manager">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="文件格式 格式指南 markdown json5 ojson5 rjson5 tjson5 csv txt 模板 角色文件 创建 md 写法">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4DD;</div>
+                            <div class="card-title">文件格式指南</div>
+                        </div>
+                        <div class="card-desc">Markdown、JSON5、OJSON5、RJSON5、TJSON5、CSV、TXT 的完整说明和模板。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="markdown-format-guide">查看文档</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ 角色与资源 ═══ -->
+            <div class="category" data-category="roles">
+                <h2 class="category-title">角色与资源</h2>
+                <div class="cards">
+                    <div class="card" data-keywords="角色 角色卡 role character gallery 角色管理 主角 配角">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F9D1;</div>
+                            <div class="card-title">角色管理</div>
+                        </div>
+                        <div class="card-desc">通过角色卡编辑器管理角色信息。支持 JSON5、CSV、Markdown 等格式。角色会在编辑器中自动高亮和补全。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="role-management">查看文档</button>
+                            <span class="hint">在包管理器中右键文件夹可新建角色库</span>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="敏感词 sensitive words 禁用词 过滤 替换">
+                        <div class="card-header">
+                            <div class="card-icon">&#x26A0;</div>
+                            <div class="card-title">敏感词检测</div>
+                        </div>
+                        <div class="card-desc">定义敏感词库，编辑器会实时标记匹配的词汇。支持自定义严重级别、别名和修复建议。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="sensitive-words">查看文档</button>
+                            <span class="hint">在包管理器中右键文件夹可新建敏感词库</span>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="词汇 vocabulary 术语表 glossary 专业词 世界观">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4DA;</div>
+                            <div class="card-title">词汇表</div>
+                        </div>
+                        <div class="card-desc">管理世界观术语和专业词汇。支持分类、别名、自动补全和高亮显示。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="vocabulary">查看文档</button>
+                            <span class="hint">在包管理器中右键文件夹可新建词汇表</span>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="正则 regex 着色 高亮 pattern 自定义颜色 匹配">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F3A8;</div>
+                            <div class="card-title">正则着色</div>
+                        </div>
+                        <div class="card-desc">用正则表达式定义自定义着色规则。可匹配对话、书名号、特殊标记等，用颜色直观区分文本类型。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="regex-coloring">查看文档</button>
+                            <span class="hint">在包管理器中右键文件夹可新建着色规则</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ 写作辅助 ═══ -->
+            <div class="category" data-category="writing">
+                <h2 class="category-title">写作辅助</h2>
+                <div class="cards">
+                    <div class="card" data-keywords="补全 completion 自动完成 输入联想 @ 拼音">
+                        <div class="card-header">
+                            <div class="card-icon">&#x2328;</div>
+                            <div class="card-title">角色补全</div>
+                        </div>
+                        <div class="card-desc">输入 @ 或角色名时自动弹出补全列表。支持拼音、别名、索引键匹配，快速插入角色名。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="role-completion">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="字数统计 word count 状态栏 字数 速度 万字">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4DD;</div>
+                            <div class="card-title">字数统计</div>
+                        </div>
+                        <div class="card-desc">状态栏实时显示当前文件字数和写作速度。支持多种统计方式（含标点/不含标点/万字显示）。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="word-count">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="写作统计 time stats 时间 时长 写作量 里程碑 仪表板">
+                        <div class="card-header">
+                            <div class="card-icon">&#x23F1;</div>
+                            <div class="card-title">写作时间统计</div>
+                        </div>
+                        <div class="card-desc">追踪写作时长和产出量，支持里程碑提醒（如达到 1 万字时通知）。可通过仪表板查看历史趋势。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="AndreaNovelHelper.openTimeStats">打开仪表板</button>
+                            <button class="doc-toggle" data-doc-id="time-stats">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="校对 typo 错别字 检查 proofreading 纠错 LLM">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F50D;</div>
+                            <div class="card-title">校对与纠错</div>
+                        </div>
+                        <div class="card-desc">基于规则或 LLM 的错别字检测。支持自动扫描、角色名误报抑制、自定义服务端点。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="typo-check">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="翻译 translate 翻译选中文本 多语言 中英日">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F310;</div>
+                            <div class="card-title">翻译</div>
+                        </div>
+                        <div class="card-desc">右键选中文本即可翻译。支持中、英、日、德、法、韩等多种目标语言，结果可替换选区或复制。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="translate">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="排版 typeset 段落缩进 空行 智能标点 引号 回车">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4D0;</div>
+                            <div class="card-title">排版辅助</div>
+                        </div>
+                        <div class="card-desc">段落首行缩进、段间空行、智能引号补全、智能回车和跳出括号。底部工具栏可快速切换选项。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="typeset">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="大纲 outline 故事大纲 情节规划 章节大纲 双重大纲">
+                        <div class="card-header">
+                            <div class="card-icon"><img src="__IMAGES_URI__/checklist_light.svg" width="28" height="28" alt="大纲" class="card-icon-img"></div>
+                            <div class="card-title">大纲</div>
+                        </div>
+                        <div class="card-desc">为每个章节和文件夹创建独立的故事大纲 Markdown 文件。同时打开目录大纲和文件大纲，方便规划情节和记录笔记。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="AndreaNovelHelper.openDoubleOutline">打开双重大纲</button>
+                            <button class="primary-action" data-cmd="AndreaNovelHelper.openOutlinePicker">选择大纲</button>
+                            <button class="doc-toggle" data-doc-id="outline">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="导出 export 复制纯文本 txt typst pdf 排版 导出文件">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4E4;</div>
+                            <div class="card-title">导出与复制</div>
+                        </div>
+                        <div class="card-desc">复制纯文本到剪贴板、导出 TXT 文件、使用 Typst 模板导出 PDF/PNG/SVG/HTML。支持从编辑器、资源管理器和字数统计视图导出。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="export">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="资源管理器 explorer 字数统计 当前文章角色 所有角色 侧栏 面板">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4C1;</div>
+                            <div class="card-title">写作资源管理器</div>
+                        </div>
+                        <div class="card-desc">在 VS Code 资源管理器中显示当前文章角色和字数统计，在 ANH 侧栏中显示所有角色。帮助你快速浏览和管理写作资源。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="writing-explorer">查看文档</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ 高级功能 ═══ -->
+            <div class="category" data-category="advanced">
+                <h2 class="category-title">高级功能</h2>
+                <div class="cards">
+                    <div class="card" data-keywords="外部资源 external folder 资源目录 扫描 挂载">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4C2;</div>
+                            <div class="card-title">外部资源目录</div>
+                        </div>
+                        <div class="card-desc">将工作区外的角色库、词汇表等目录挂载到 ANH 中统一管理，无需移动文件。</div>
+                        <div class="card-actions">
+                            <button data-cmd="AndreaNovelHelper.showExternalResourceManage">管理外部目录</button>
+                            <button class="doc-toggle" data-doc-id="external-resource">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="引用维护 热力图 角色出场 circle packing 可视化 角色引用 出场次数 趋势图">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F525;</div>
+                            <div class="card-title">引用维护与热力图</div>
+                        </div>
+                        <div class="card-desc">用圆圈打包可视化展示角色出场次数分布，附带各章节出场趋势图。支持重建引用索引和清理过期路径。</div>
+                        <div class="card-actions">
+                            <button data-cmd="AndreaNovelHelper.showReferenceMaintenance">打开引用维护</button>
+                            <button class="doc-toggle" data-doc-id="reference-heatmap">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="git 版本控制 提交 commit push pull 手动 自动">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F500;</div>
+                            <div class="card-title">Git 集成</div>
+                        </div>
+                        <div class="card-desc">推荐手动使用 Git 管理版本。ANH 提供 Git 身份配置向导、可选的自动提交功能和智能字数统计联动。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="git-integration">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="关系图 relationship 关系 角色关系 rjson5 可视化 亲属 敌对">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F91D;</div>
+                            <div class="card-title">角色关系图</div>
+                        </div>
+                        <div class="card-desc">用可视化关系图管理角色之间的关系（亲属、敌对、同盟等）。支持自定义关系类型和方向。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="relationship">查看文档</button>
+                            <span class="hint">在包管理器中右键文件夹可新建关系文件</span>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="时间线 timeline 大事记 事件 tjson5 时间顺序">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F552;</div>
+                            <div class="card-title">时间线</div>
+                        </div>
+                        <div class="card-desc">管理故事中的事件时间线。按时间顺序排列事件，关联涉及的角色和地点。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="timeline">查看文档</button>
+                            <span class="hint">在包管理器中右键文件夹可新建时间线</span>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="脚本 script 运行时 runtime MCP 服务器 自动化 扩展">
+                        <div class="card-header">
+                            <div class="card-icon">&#x26A1;</div>
+                            <div class="card-title">脚本运行时</div>
+                        </div>
+                        <div class="card-desc">在 ANH 中运行自定义 JS/TS 脚本，支持 MCP 服务器集成和丰富的运行时上下文注入。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-cmd="andrea.scripts.newScript">新建脚本</button>
+                            <button class="doc-toggle" data-doc-id="script-runtime">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="webdav 同步 sync 云盘 多端 协作">
+                        <div class="card-header">
+                            <div class="card-icon">&#x2601;</div>
+                            <div class="card-title">WebDAV 同步</div>
+                        </div>
+                        <div class="card-desc">通过 WebDAV 协议同步项目文件到云端，支持多设备协作。可配置同步策略和自动同步间隔。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="webdav">查看文档</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script nonce="__NONCE__" src="__SCRIPT_URI__"></script>
+</body>
+
+</html>

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { PROJECT_KEYWORD_CONFIG_DEFINITIONS, normalizeKeywordList } from './projectKeywordConfig';
 
 export interface ProjectConfig {
     name: string;
@@ -11,6 +12,10 @@ export interface ProjectConfig {
     cover?: string;
     summary?: string;
     tags: string[];
+    characterFileKeywords: string[];
+    sensitiveWordsFileKeywords: string[];
+    vocabularyFileKeywords: string[];
+    regexFileKeywords: string[];
     createdAt: Date;
     updatedAt: Date;
 }
@@ -76,6 +81,10 @@ export class ProjectConfigManager {
             cover: '',
             summary: '项目简介',
             tags: ['小说', '创作'],
+            characterFileKeywords: [],
+            sensitiveWordsFileKeywords: [],
+            vocabularyFileKeywords: [],
+            regexFileKeywords: [],
             createdAt: new Date(),
             updatedAt: new Date()
         };
@@ -113,7 +122,11 @@ export class ProjectConfigManager {
     private parseMarkdown(content: string): ProjectConfig {
         const lines = content.split('\n');
         const config: Partial<ProjectConfig> = {
-            tags: []
+            tags: [],
+            characterFileKeywords: [],
+            sensitiveWordsFileKeywords: [],
+            vocabularyFileKeywords: [],
+            regexFileKeywords: [],
         };
 
         let currentSection = '';
@@ -150,6 +163,10 @@ export class ProjectConfigManager {
             cover: config.cover || '',
             summary: config.summary || '',
             tags: config.tags || [],
+            characterFileKeywords: config.characterFileKeywords || [],
+            sensitiveWordsFileKeywords: config.sensitiveWordsFileKeywords || [],
+            vocabularyFileKeywords: config.vocabularyFileKeywords || [],
+            regexFileKeywords: config.regexFileKeywords || [],
             createdAt: config.createdAt || new Date(),
             updatedAt: config.updatedAt || new Date()
         };
@@ -185,7 +202,16 @@ export class ProjectConfigManager {
      * 解析单个配置段落
      */
     private parseSection(sectionName: string, content: string, config: Partial<ProjectConfig>): void {
-        switch (sectionName.toLowerCase()) {
+        const normalizedSectionName = sectionName.toLowerCase();
+        const keywordDefinition = PROJECT_KEYWORD_CONFIG_DEFINITIONS.find(definition =>
+            [definition.markdownSection, ...definition.markdownAliases].some(alias => alias.toLowerCase() === normalizedSectionName)
+        );
+        if (keywordDefinition) {
+            (config as any)[keywordDefinition.key] = normalizeKeywordList(content);
+            return;
+        }
+
+        switch (normalizedSectionName) {
             case '项目名称':
             case 'name':
                 config.name = content;
@@ -253,6 +279,9 @@ ${config.summary || ''}
 
 ## 标签
 ${config.tags.join(', ')}
+
+${PROJECT_KEYWORD_CONFIG_DEFINITIONS.map(definition => `## ${definition.markdownSection}
+${config[definition.key].join(', ')}`).join('\n\n')}
 
 ## 创建时间
 ${config.createdAt.toISOString()}

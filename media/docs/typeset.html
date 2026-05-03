@@ -1,0 +1,99 @@
+<div class="doc-section beginner">
+<h4>排版功能是什么</h4>
+<p>排版功能就是 ANH 的<strong>自动格式化工具</strong>。保存文件时，它会自动帮你调整格式，让文档看起来更整洁。</p>
+
+<h4>支持的功能</h4>
+<ul>
+    <li><b>首行缩进</b> — 自动给段落开头加两个空格（或按设置调整）</li>
+    <li><b>段间空行</b> — 自动在段落之间插入空行，避免文字挤在一起</li>
+    <li><b>去尾空格</b> — 删除每行末尾多余的空格</li>
+    <li><b>智能引号</b> — 输入引号或括号时自动配对</li>
+    <li><b>智能回车</b> — 在引号内按回车时自动处理换行</li>
+    <li><b>跳出括号</b> — 输入右括号时如果后面已有相同括号，自动跳过</li>
+</ul>
+
+<h4>如何调整</h4>
+<p>按 <kbd>Ctrl+Alt+I</kbd> 打开快速设置面板，可以直接开关各项排版功能、调整空行数。不需要翻复杂的设置页面。</p>
+
+<h4>重要提示</h4>
+<p>排版功能会<b>修改文件内容本身</b>（不只是显示效果），所以会影响 Git 的变更记录。建议先确认这些规则符合你的写作习惯再开启。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>排版功能详解</h4>
+<p>ANH 的排版辅助功能在保存文件时自动执行，也可通过底部状态栏快速开关。所有排版功能都支持独立启用/禁用：</p>
+
+<h4>1. 首行缩进</h4>
+<ul>
+    <li><code>andrea.typeset.indentFirstTwoSpaces</code> — 布尔开关，控制是否启用首行缩进</li>
+    <li>缩进量由 <code>andrea.typeset.firstLineIndentSpaces</code> 控制（未在 package.json 注册，但代码中使用），或回退到编辑器的 <code>tabSize</code> / <code>insertSpaces</code> 设置</li>
+    <li>智能避开 Markdown 结构（标题、列表、代码块等）</li>
+</ul>
+
+<h4>2. 段间空行</h4>
+<ul>
+    <li>自动在段落之间插入空行，保持阅读节奏</li>
+    <li>支持配置空行数（0-6），通过快速设置面板或 <code>andrea.typeset.blankLinesBetweenParas</code> 调整</li>
+    <li>智能合并多余空行，避免连续多个空行</li>
+    <li>可自定义句末标点 <code>addBlanks.sentenceEnders</code> 和前后括号列表</li>
+</ul>
+
+<h4>3. 去尾空格</h4>
+<ul>
+    <li>保存时自动删除行尾空格</li>
+    <li>配置项：<code>andrea.typeset.trimTrailingSpaces</code></li>
+</ul>
+
+<h4>4. 智能引号补全</h4>
+<ul>
+    <li>输入引号或括号时自动配对</li>
+    <li>支持多种引号对，通过 <code>andrea.typeset.pairs</code> 配置（数组或字符串）</li>
+    <li>默认包含：<code>()</code>、<code>[]</code>、<code>{}</code>、<code>""</code>、<code>''</code>、<code>「」</code>、<code>『』</code>、<code>《》</code></li>
+    <li>输入 <code>"</code> 会配对为 <code>""</code>，不会自动转为 <code>「」</code>。如需 <code>「」</code> 配对，需手动修改 <code>pairs</code> 配置</li>
+    <li>配置项：<code>andrea.typeset.enableAutoPairs</code></li>
+</ul>
+
+<h4>5. 智能回车</h4>
+<ul>
+    <li>在引号或括号内按回车时，自动跳出并换行</li>
+    <li>支持 MAIO 路由（Markdown / Auto-pair / Indent / Other）智能判断当前上下文</li>
+    <li>配置项：<code>andrea.typeset.enableSmartEnter</code></li>
+</ul>
+
+<h4>6. 跳出括号</h4>
+<ul>
+    <li>输入右括号时，如果光标右侧已有相同括号，则自动跳过而非重复插入</li>
+    <li>配置项：<code>andrea.typeset.enableSmartExit</code></li>
+</ul>
+
+<h4>7. 中文输入法修复</h4>
+<ul>
+    <li><code>andrea.typeset.enableChineseIMEFix</code> — 修复中文输入法与自动配对的冲突</li>
+    <li><code>andrea.typeset.chineseIMEDelay</code> — 输入法修复延迟</li>
+</ul>
+
+<h4>8. 格式化文档</h4>
+<ul>
+    <li>命令："ANH: Format Document" — 一次性执行所有排版规则</li>
+    <li>命令："ANH: Format Document (Auto add blank lines)" — 仅添加段间空行</li>
+</ul>
+
+<h4>快速设置面板</h4>
+<p>按 <kbd>Ctrl+Alt+I</kbd> 可打开快速设置面板，直接开关各项排版功能、调整空行数、切换缩进宽度等。快速设置面板还支持：</p>
+<ul>
+    <li>字数单位切换（含标点/不含标点/非空白字符）</li>
+    <li>粘贴计入统计开关</li>
+    <li>.wcignore 管理</li>
+    <li>当前文章角色 / 全部角色显示配置</li>
+    <li>编辑器字体家族管理</li>
+    <li>一键注入 Enter 按键绑定（覆盖 MAIO）</li>
+</ul>
+
+<h4>状态栏配置</h4>
+<ul>
+    <li><code>andrea.typeset.statusBar.compact</code> — 紧凑模式</li>
+    <li><code>andrea.typeset.statusBar.alwaysShow</code> — 始终显示</li>
+</ul>
+
+<div class="doc-note">排版功能修改的是文本内容本身（而非仅显示效果），因此会影响 Git diff。建议在启用 Git 自动提交前确认排版规则符合你的写作习惯。</div>
+</div>

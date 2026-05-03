@@ -1,0 +1,156 @@
+<div class="doc-section beginner">
+<h4>导出功能是什么</h4>
+<p>ANH 提供多种方式把你的写作内容导出为不同格式：纯文本复制、TXT 文件导出、Typst 专业排版导出（PDF/PNG/SVG/HTML）。你可以根据用途选择最合适的方式。</p>
+
+<h4>快速导出一览</h4>
+<table style="width:100%;font-size:13px;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;font-weight:600;">方式</td>
+        <td style="padding:4px 8px;">输出格式</td>
+        <td style="padding:4px 8px;">适用场景</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">复制纯文本</td>
+        <td style="padding:4px 8px;">纯文本（剪贴板）</td>
+        <td style="padding:4px 8px;">粘贴到其他编辑器、发给朋友</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">导出 TXT</td>
+        <td style="padding:4px 8px;">.txt 文件</td>
+        <td style="padding:4px 8px;">保存纯文本备份、投稿</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">Typst 导出</td>
+        <td style="padding:4px 8px;">PDF / PNG / SVG / HTML</td>
+        <td style="padding:4px 8px;">专业排版、印刷、分享</td>
+    </tr>
+</table>
+
+<h4>复制纯文本</h4>
+<p>把 Markdown 文档转为纯文本并复制到剪贴板。会自动去除所有 Markdown 标记（标题符号、加粗标记、列表符号等）。</p>
+<ol>
+    <li>打开你要复制的 Markdown 文件</li>
+    <li>如果有选中文本，只复制选中部分；没有选中则复制全文</li>
+    <li>按 <kbd>Ctrl+Shift+P</kbd>，输入"复制纯文本"，选择"ANH: 复制纯文本"</li>
+    <li>底部状态栏会提示"已复制纯文本"</li>
+</ol>
+<p>也可以在编辑器中右键 → 选择"复制纯文本"。</p>
+
+<h4>导出 TXT 文件</h4>
+<ol>
+    <li>打开你要导出的 Markdown 文件</li>
+    <li>按 <kbd>Ctrl+Shift+P</kbd>，输入"导出 TXT"</li>
+    <li>在弹出的保存对话框中选择保存位置</li>
+    <li>文件会以纯文本格式保存</li>
+</ol>
+
+<h4>Typst 专业排版导出</h4>
+<p>如果你需要高质量排版输出（如 PDF 印刷品），可以使用 Typst 导出。需要安装 <b>Tinymist Typst</b> 扩展。</p>
+<ol>
+    <li>打开你要导出的 Markdown 文件</li>
+    <li>按 <kbd>Ctrl+Shift+P</kbd>，输入"导出"</li>
+    <li>选择"ANH: 导出：使用Typst模板为PDF/图片"</li>
+    <li>按提示选择：模板 → 标题提取方式 → 输出格式 → 保存位置</li>
+    <li>导出完成后会自动打开 PDF 文件</li>
+</ol>
+
+<h4>在写作资源管理器中导出</h4>
+<p>在左侧资源管理器的"写作资源管理器"面板中，右键任意文件可以：</p>
+<ul>
+    <li><b>复制纯文本</b> — 直接复制到剪贴板</li>
+    <li><b>导出 TXT</b> — 保存为纯文本文件</li>
+    <li><b>Typst 导出</b> — 批量导出多个文件为 PDF</li>
+</ul>
+
+<h4>在资源管理器中导出</h4>
+<p>在 VS Code 左侧资源管理器中，右键 <code>.md</code> 或 <code>.txt</code> 文件（或文件夹），选择"导出：使用Typst模板"，可以批量导出多个文件。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>一、纯文本渲染</h4>
+<p>ANH 使用自研的 Markdown 纯文本渲染器（<code>md_plain.ts</code>），将 Markdown 转为保留段落结构的纯文本：</p>
+<ul>
+    <li>标题符号（<code>#</code>）被去除，标题文字保留</li>
+    <li>加粗/斜体/删除线标记被去除，文字保留</li>
+    <li>列表符号被去除，文字保留</li>
+    <li>引用块（<code>&gt;</code>）被去除，文字保留</li>
+    <li>代码块内容保留</li>
+    <li>图片替换为 <code>[image]</code> 占位符</li>
+    <li>链接只保留文字，URL 被去除</li>
+    <li>注释（<code>&lt;!-- --&gt;</code>、<code>%% %%</code>）被去除</li>
+</ul>
+
+<h4>二、纯文本复制</h4>
+<p>命令：<code>myPreview.copyPlainText</code></p>
+<ul>
+    <li>如果有选中文本，只复制选中部分的纯文本</li>
+    <li>没有选中时复制全文</li>
+    <li>在写作资源管理器中右键文件也可触发（<code>WordCount.copyPlainText</code>）</li>
+    <li>预览面板中也有复制按钮</li>
+</ul>
+
+<h4>三、TXT 导出</h4>
+<p>命令：<code>myPreview.exportTxt</code>（预览面板）或 <code>WordCount.exportTxt</code>（写作资源管理器）</p>
+<ul>
+    <li>渲染逻辑与纯文本复制相同</li>
+    <li>弹出系统保存对话框，默认文件名与源文件相同，扩展名改为 <code>.txt</code></li>
+    <li>写入文件使用 <code>vscode.workspace.fs.writeFile</code></li>
+</ul>
+
+<h4>四、Typst 导出</h4>
+<p>Typst 是现代化的排版系统，ANH 通过 Markdown → Typst → PDF/PNG/SVG/HTML 的管线实现专业排版。</p>
+
+<p><b>导出方式：</b></p>
+<ul>
+    <li><b>从编辑器</b>：命令 <code>andrea.typst.exportCurrent</code>，编辑器标题栏右键菜单</li>
+    <li><b>从资源管理器</b>：命令 <code>andrea.typst.exportFromExplorer</code>，右键 <code>.md</code>/<code>.txt</code> 文件或文件夹</li>
+    <li><b>从写作资源管理器</b>：命令 <code>AndreaNovelHelper.wordCount.exportTypst</code>，右键文件或文件夹</li>
+</ul>
+
+<p><b>导出流程：</b></p>
+<ol>
+    <li>选择模板（从 <code>templateRegistry</code> 列表中选择）</li>
+    <li>选择标题提取方式：
+        <ul>
+            <li>提取主标题（第一个 H1）</li>
+            <li>首个标题（任意级别）</li>
+            <li>文件名（无扩展名）</li>
+            <li>不提取主标题（不渲染标题）</li>
+        </ul>
+    </li>
+    <li>选择输出格式：PDF、PNG、SVG、HTML</li>
+    <li>选择导出位置：源目录或自定义目录</li>
+    <li>编译并输出</li>
+</ol>
+
+<p><b>配置项：</b></p>
+<ul>
+    <li><code>andrea.typst.defaultTemplate</code> — 默认模板</li>
+    <li><code>andrea.typst.output.format</code> — 默认输出格式</li>
+    <li><code>andrea.typst.output.ppi</code> — PNG/SVG 输出分辨率</li>
+    <li><code>andrea.typst.pages</code> — 导出页码范围</li>
+    <li><code>andrea.typst.font.paths</code> — 自定义字体路径</li>
+    <li><code>andrea.typst.cliPath</code> — Typst CLI 路径</li>
+    <li><code>andrea.typst.templatesDir</code> — 模板目录</li>
+    <li><code>andrea.typst.cleanupTemp</code> — 导出后清理临时文件</li>
+</ul>
+
+<p><b>Typst 导出支持的 Markdown 元数据（&amp;Def）：</b></p>
+<pre><code>&amp;Def Title = 小说标题
+&amp;Def Subtitle = 副标题
+&amp;Def Category = 玄幻
+</code></pre>
+<p>这些元数据会注入到 Typst 模板中，用于标题页、页眉等位置。</p>
+
+<h4>五、写作资源管理器的文件操作</h4>
+<p>写作资源管理器（<code>wordCountExplorer</code>）提供文件管理功能：</p>
+<ul>
+    <li><b>复制</b>（<code>AndreaNovelHelper.wordCount.copy</code>）— 复制文件到内部剪贴板</li>
+    <li><b>剪切</b>（<code>AndreaNovelHelper.wordCount.cut</code>）— 剪切文件</li>
+    <li><b>粘贴</b>（<code>AndreaNovelHelper.wordCount.paste</code>）— 粘贴到目标文件夹，自动处理重名（追加 <code>_copy1</code>、<code>_copy2</code>）</li>
+    <li>支持多选操作</li>
+    <li>粘贴时自动维护手动排序索引</li>
+</ul>
+
+<div class="doc-note">Typst 导出需要先安装 <b>Tinymist Typst</b> 扩展。如果未安装，导出时会提示安装。纯文本导出和 TXT 导出不需要任何额外依赖。</div>
+</div>

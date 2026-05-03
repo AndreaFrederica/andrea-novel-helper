@@ -39,6 +39,10 @@ import { getFileTracker } from './utils/tracker/fileTracker';
 import { showFileTrackingStats, cleanupMissingFiles, exportTrackingData, gcFileTracking, openShardForFile } from './commands/fileTrackingCommands';
 import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTestCommand, registerGitSimulateNoGitCommand } from './utils/Git/gitConfigWizard';
 import { projectInitWizardRunning, registerProjectInitWizard } from './wizard/projectInitWizard';
+import { registerGraphicalProjectInitWizard } from './wizard/projectInitWizardPage';
+import { registerGuidePage } from './guide/guidePage';
+import { registerWhatsNewPage } from './whatsnew/whatsnew-panel';
+import { checkAndShowWhatsNew } from './whatsnew/version-check';
 import { clearAllRoleMatchCache } from './context/roleAsyncShared';
 import { initializeRoleUsageStore, disposeRoleUsageStore, renameRoleUsageDirectory, deleteRoleUsageDirectory, clearRoleUsageIndex, updateRoleUsageFromDocument } from './context/roleUsageStore';
 import { collectRoleUsageRanges } from './utils/roleUsageCollector';
@@ -95,15 +99,21 @@ import { initI18n } from './utils/i18n';
 import { ProjectConfigManager } from './projectConfig/projectConfigManager';
 import { ProjectConfigLinter } from './projectConfig/projectConfigLinter';
 import { registerNameGeneratorCommands } from './commands/nameGeneratorCommands';
+import { registerLookupKeyCommands } from './commands/lookupKeyCommands';
 import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
 import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
+import { ProjectKeywordConfigJson5CompletionProvider, ProjectKeywordConfigJson5Linter } from './projectConfig/projectKeywordConfigJson5';
+import { clearProjectKeywordConfigCache, isProjectKeywordConfigFile } from './projectConfig/projectKeywordConfig';
 import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
 import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
 import { createCirclePackingDataProvider } from './data/circlePackingDataProvider';
 import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 import { registerSettingsView } from './Provider/view/settingView'
+import { registerProjectSettingsPage } from './Provider/view/projectSettingsPage'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
+import { registerQuickSettingsPage } from './Provider/view/quickSettingsView'
+import { registerDocViewerPage } from './guide/docViewerPage'
 import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
 
@@ -113,6 +123,7 @@ let gitCommandRegistered = false;
 // 全局变量存储lint系统实例
 let projectConfigLinter: ProjectConfigLinter | undefined;
 let projectConfigDecorator: ProjectConfigDecorator | undefined;
+let projectKeywordConfigJson5Linter: ProjectKeywordConfigJson5Linter | undefined;
 
 // 智能标签组锁定管理器
 let smartTabGroupLockManager: SmartTabGroupLockManager | undefined;
@@ -169,6 +180,40 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const useVsCodeManagedDisabling = cfg1.get<boolean>('useVsCodeManagedDisabling', false);
+
+    // 输出通道用于调试激活阶段错误/栈。需要在任何早退分支之前创建，
+    // 因为初始化/文档向导类命令也必须在工作区启用询问前可用。
+    const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
+    context.subscriptions.push(logChannel);
+    const log = (msg: string, err?: any) => {
+        const time = new Date().toISOString();
+        logChannel.appendLine(`[${time}] ${msg}`);
+        if (err) {
+            if (err instanceof Error) {
+                logChannel.appendLine(err.message);
+                if (err.stack) { logChannel.appendLine(err.stack); }
+            } else {
+                try { logChannel.appendLine(JSON.stringify(err)); } catch { logChannel.appendLine(String(err)); }
+            }
+        }
+    };
+
+    // 提前注册向导和文档入口：这些命令必须在“是否启用工作区”和“是否打开工作区”
+    // 之类的分支之前生效，否则命令面板/原生 walkthrough 中的入口会失效。
+    if (!gitCommandRegistered) {
+        try { registerGitConfigCommand(context); gitCommandRegistered = true; log('Git 配置命令已注册'); } catch (e) { log('注册 Git 配置命令失败', e); }
+    } else { log('Git 配置命令已存在，跳过注册'); }
+    try { registerGitDownloadTestCommand(context); log('Git 下载测试命令已注册'); } catch (e) { log('注册 Git 下载测试命令失败', e); }
+    try { registerGitSimulateNoGitCommand(context); log('Git 未安装模拟命令已注册'); } catch (e) { log('注册 Git 未安装模拟命令失败', e); }
+    try { registerSetupWizardCommands(context); log('配置向导命令已注册'); } catch (e) { log('注册 配置向导命令 失败', e); }
+    try {
+        registerProjectInitWizard(context);
+        registerGraphicalProjectInitWizard(context);
+        registerGuidePage(context);
+        registerDocViewerPage(context);
+        registerWhatsNewPage(context);
+        log('项目初始化/文档向导命令已注册');
+    } catch (e) { log('注册 项目初始化/文档向导命令 失败', e); }
 
     registerContextKeys(context);
 
@@ -262,8 +307,6 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
-    // 输出通道用于调试激活阶段错误/栈
-    const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
     setWordCounterContext(context);
     setAsyncRoleMatcherContext(context);
     initializeRoleUsageStore(context);
@@ -306,20 +349,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
     registerRoleUsageIndexCommands(context, roles)
     registerFileTrackingMaintenance(context)
+    registerLookupKeyCommands(context)
     // registerTypeInterceptor(context);
-    context.subscriptions.push(logChannel);
-    const log = (msg: string, err?: any) => {
-        const time = new Date().toISOString();
-        logChannel.appendLine(`[${time}] ${msg}`);
-        if (err) {
-            if (err instanceof Error) {
-                logChannel.appendLine(err.message);
-                if (err.stack) { logChannel.appendLine(err.stack); }
-            } else {
-                try { logChannel.appendLine(JSON.stringify(err)); } catch { logChannel.appendLine(String(err)); }
-            }
-        }
-    };
     registerCopilotDocsCommands(context, log);
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
 
@@ -358,15 +389,6 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
     }
     const wsRoot = wsFolders[0].uri.fsPath;
-    // 提前注册 Git 向导命令（即使后续激活流程出错也可用）
-    if (!gitCommandRegistered) {
-        try { registerGitConfigCommand(context); gitCommandRegistered = true; log('Git 配置命令已注册'); } catch (e) { log('注册 Git 配置命令失败', e); }
-    } else { log('Git 配置命令已存在，跳过注册'); }
-    // 注册测试下载链接命令
-    try { registerGitDownloadTestCommand(context); log('Git 下载测试命令已注册'); } catch (e) { log('注册 Git 下载测试命令失败', e); }
-    try { registerGitSimulateNoGitCommand(context); log('Git 未安装模拟命令已注册'); } catch (e) { log('注册 Git 未安装模拟命令失败', e); }
-    try { registerSetupWizardCommands(context); log('配置向导命令已注册'); } catch (e) { log('注册 配置向导命令 失败', e); }
-    try { registerProjectInitWizard(context); log('项目初始化向导命令已注册'); } catch (e) { log('注册 项目初始化向导命令 失败', e); }
     // 将后续复杂初始化包裹在 try/catch 内，避免单点异常导致整个扩展未激活（从而命令缺失）
     try {
         log('开始执行主初始化');
@@ -383,13 +405,23 @@ export async function activate(context: vscode.ExtensionContext) {
         // 初始化lint系统
         projectConfigLinter = new ProjectConfigLinter(context);
         projectConfigDecorator = new ProjectConfigDecorator(context, projectConfigLinter);
+        projectKeywordConfigJson5Linter = new ProjectKeywordConfigJson5Linter(context);
         
         // 注册补全提供器
-        const completionProvider = new ProjectConfigCompletionProvider();
+        const projectConfigCompletionProvider = new ProjectConfigCompletionProvider();
+        const keywordConfigCompletionProvider = new ProjectKeywordConfigJson5CompletionProvider();
         context.subscriptions.push(
             vscode.languages.registerCompletionItemProvider(
+                { scheme: 'file', pattern: '**/anhproject.md' },
+                projectConfigCompletionProvider,
+                '#',
+                ' '
+            ),
+            vscode.languages.registerCompletionItemProvider(
                 { scheme: 'file', pattern: '**/project-config.json5' },
-                completionProvider
+                keywordConfigCompletionProvider,
+                '"',
+                '\''
             )
         );
         // outlineFS = new OutlineFSProvider(path.join(wsRoot, outlineRel));
@@ -494,7 +526,14 @@ export async function activate(context: vscode.ExtensionContext) {
         _previewManager = previewManager; // 模块级保存
         // 注入角色列表 getter，并在角色变更时广播着色数据
         previewManager.setRoleColorGetter(() => roles);
-        context.subscriptions.push(onDidFinishRoles(() => { try { previewManager.broadcastRoleColors(roles); } catch { } }));
+        let previewRoleColorNotifyTimer: ReturnType<typeof setTimeout> | undefined;
+        context.subscriptions.push(onDidChangeRoles(() => {
+            if (previewRoleColorNotifyTimer) { clearTimeout(previewRoleColorNotifyTimer); }
+            previewRoleColorNotifyTimer = setTimeout(() => {
+                try { previewManager.broadcastRoleColors(); } catch { }
+            }, 100);
+        }));
+        context.subscriptions.push(onDidFinishRoles(() => { try { previewManager.broadcastRoleColors(); } catch { } }));
         registerTypstExport(context)
         registerExplorerTypstExport(context)
         try { templateRegistry.init(context) } catch {}
@@ -632,7 +671,9 @@ export async function activate(context: vscode.ExtensionContext) {
         registerCommentsTreeView(context);
         registerScriptRunnerView(context);
         registerSettingsView(context);
+        registerProjectSettingsPage(context);
         registerEditorSettingsPage(context);
+        registerQuickSettingsPage(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);
@@ -729,11 +770,49 @@ export async function activate(context: vscode.ExtensionContext) {
                 if (
                     e.affectsConfiguration('AndreaNovelHelper.rolesFile') ||
                     e.affectsConfiguration('AndreaNovelHelper.minChars') ||
-                    e.affectsConfiguration('AndreaNovelHelper.defaultColor')
+                    e.affectsConfiguration('AndreaNovelHelper.defaultColor') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customCharacterFileKeywords') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customSensitiveWordsFileKeywords') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customVocabularyFileKeywords') ||
+                    e.affectsConfiguration('AndreaNovelHelper.customRegexFileKeywords')
                 ) {
+                    clearProjectKeywordConfigCache();
                     loadRoles(true);
                     updateDecorations();
                 }
+            })
+        );
+
+        const refreshKeywordConfigDrivenRoles = (targetPath?: string) => {
+            clearProjectKeywordConfigCache(targetPath);
+            loadRoles(true);
+            updateDecorations();
+        };
+
+        context.subscriptions.push(
+            vscode.workspace.onDidSaveTextDocument(document => {
+                if (!isProjectKeywordConfigFile(document.uri.fsPath)) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles(document.uri.fsPath);
+            }),
+            vscode.workspace.onDidCreateFiles(event => {
+                if (!event.files.some(file => isProjectKeywordConfigFile(file.fsPath))) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles();
+            }),
+            vscode.workspace.onDidDeleteFiles(event => {
+                if (!event.files.some(file => isProjectKeywordConfigFile(file.fsPath))) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles();
+            }),
+            vscode.workspace.onDidRenameFiles(event => {
+                if (!event.files.some(file => isProjectKeywordConfigFile(file.oldUri.fsPath) || isProjectKeywordConfigFile(file.newUri.fsPath))) {
+                    return;
+                }
+                refreshKeywordConfigDrivenRoles();
             })
         );
 
@@ -1362,6 +1441,10 @@ export function deactivate() {
         projectConfigDecorator.dispose();
         projectConfigDecorator = undefined;
     }
+    if (projectKeywordConfigJson5Linter) {
+        projectKeywordConfigJson5Linter.dispose();
+        projectKeywordConfigJson5Linter = undefined;
+    }
 }
 
 let _previewManager: PreviewManager | undefined;
@@ -1750,4 +1833,9 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             vscode.window.showInformationMessage(`资源文件重扫完成：${path.basename(folder)} 命中 ${result.scannedFiles} 个资源文件${suffix}`);
         })
     );
+
+    // 延迟检查版本更新，自动弹出 What's New
+    setTimeout(() => {
+        checkAndShowWhatsNew(context).catch(() => {});
+    }, 5000);
 }

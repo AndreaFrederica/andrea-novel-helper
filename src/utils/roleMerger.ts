@@ -74,6 +74,25 @@ export const DEFAULT_PREFIX_PRIORITY: { [key: string]: number } = {
     'config_': 500,   // 配置前缀
 };
 
+function smartRoleAdderDebugEnabled(): boolean {
+    try {
+        return vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('debug.smartRoleAdder', false) === true;
+    } catch {
+        return false;
+    }
+}
+
+function smartRoleAdderLog(...args: any[]): void {
+    if (!smartRoleAdderDebugEnabled()) {
+        return;
+    }
+    try {
+        console.log('[SmartRoleAdder]', ...args);
+    } catch {
+        // ignore logging failures
+    }
+}
+
 /**
  * 智能角色添加器
  * 在添加角色时自动处理合并
@@ -328,9 +347,9 @@ export class SmartRoleAdder {
                     const existingBreakdown = this.calculateRolePriority(existingRole);
                     const newBreakdown = this.calculateRolePriority(newRole);
 
-                    console.log(`[SmartRoleAdder] 优先级对比: ${existingRole.name}(${existingBreakdown.total}) vs ${newRole.name}(${newBreakdown.total})`);
-                    console.log(`[SmartRoleAdder] ${existingRole.name} 优先级构成:`, existingBreakdown.source);
-                    console.log(`[SmartRoleAdder] ${newRole.name} 优先级构成:`, newBreakdown.source);
+                    smartRoleAdderLog(`优先级对比: ${existingRole.name}(${existingBreakdown.total}) vs ${newRole.name}(${newBreakdown.total})`);
+                    smartRoleAdderLog(`${existingRole.name} 优先级构成:`, existingBreakdown.source);
+                    smartRoleAdderLog(`${newRole.name} 优先级构成:`, newBreakdown.source);
 
                     // 如果新角色优先级更高，则调换顺序
                     if (newBreakdown.total > existingBreakdown.total) {
@@ -363,9 +382,9 @@ export class SmartRoleAdder {
                     this.roles[index] = merged;
                 }
 
-                console.log(`[SmartRoleAdder] 合并角色: ${baseRole.name} + ${mergeRole.name} = ${merged.name} (UUID: ${baseRole.uuid})`);
+                smartRoleAdderLog(`合并角色: ${baseRole.name} + ${mergeRole.name} = ${merged.name} (UUID: ${baseRole.uuid})`);
                 if ((merged as any)._priorityBreakdown) {
-                    console.log(`[SmartRoleAdder] 合并后优先级构成:`, (merged as any)._priorityBreakdown.source);
+                    smartRoleAdderLog('合并后优先级构成:', (merged as any)._priorityBreakdown.source);
                 }
                 return;
             }
@@ -383,8 +402,8 @@ export class SmartRoleAdder {
         }
         this.nameMap.set(newRole.name, newRole);
 
-        console.log(`[SmartRoleAdder] 添加角色: ${newRole.name} (UUID: ${newRole.uuid}, 优先级: ${priorityBreakdown.total})`);
-        console.log(`[SmartRoleAdder] 优先级构成:`, priorityBreakdown.source);
+        smartRoleAdderLog(`添加角色: ${newRole.name} (UUID: ${newRole.uuid}, 优先级: ${priorityBreakdown.total})`);
+        smartRoleAdderLog('优先级构成:', priorityBreakdown.source);
     }
 
     /**
@@ -425,7 +444,7 @@ export class SmartRoleAdder {
         // 重建映射表（移除已删除的角色）
         if (removed.size > 0) {
             this.rebuildMaps();
-            console.log(`[SmartRoleAdder] 移除了 ${removed.size} 个来自 ${filePath} 的角色`);
+            smartRoleAdderLog(`移除了 ${removed.size} 个来自 ${filePath} 的角色`);
         }
     }
 }

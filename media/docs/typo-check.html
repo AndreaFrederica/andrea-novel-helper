@@ -1,0 +1,184 @@
+<div class="doc-section beginner">
+<h4>拼写检查是什么</h4>
+<p>拼写检查（也叫"校对"）就像你的<strong>自动校对员</strong>。它会在你写作时自动扫描文字，发现可能的错别字、语法问题或不恰当的用词，并在问题处画波浪线提醒你。</p>
+
+<h4>两种检查方式</h4>
+<p>ANH 支持两种校对方式，你可以任选其一：</p>
+<ul>
+    <li><b>规则校对</b> — 通过外部服务进行规则匹配，速度快但需要有配套后端</li>
+    <li><b>AI 校对</b> — 直接调用大语言模型（如 GPT、Claude 等），智能程度更高，只需配置 API 密钥</li>
+</ul>
+
+<h4>如何开启</h4>
+<ol>
+    <li>打开 ANH 设置</li>
+    <li>找到"拼写检查"分类</li>
+    <li>开启总开关 <code>typo.enabled</code></li>
+    <li>选择模式（macro/llm）或开启 clientLLM</li>
+</ol>
+
+<h4>AI 校对配置（推荐小白使用）</h4>
+<ol>
+    <li>开启 <code>typo.clientLLM.enabled</code></li>
+    <li>填写 API 地址（如 <code>https://api.openai.com/v1</code>）</li>
+    <li>填写 API 密钥</li>
+    <li>填写模型名称（如 <code>gpt-4o</code>）</li>
+</ol>
+
+<h4>使用方式</h4>
+<ul>
+    <li>打开文档时自动扫描</li>
+    <li>编辑时自动更新</li>
+    <li>点击波浪线或 💡 灯泡 → 选择"替换为：xxx"</li>
+</ul>
+
+<h4>角色名不会被误改</h4>
+<p>校对前 ANH 会把文档中的角色名传给 AI，告诉它"这些名字不要改"。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>校对系统架构</h4>
+<p>ANH 的校对系统由插件内的调度层和外部检测服务共同组成。插件负责文档分段、缓存管理、结果展示；实际的检测逻辑由外部 HTTP 服务或客户端直连 LLM 完成。</p>
+
+<h4>两种检测路径</h4>
+<p>校对系统有两条独立的路径，通过不同配置项控制：</p>
+
+<p><b>1. 服务端检测（由 typo.mode 控制）</b></p>
+<ul>
+    <li><code>macro</code> 模式 — 调用外部 HTTP 服务的 <code>POST /correct</code> 接口，由服务端执行规则检测</li>
+    <li><code>llm</code> 模式 — 调用外部 HTTP 服务的 <code>POST /correct/llm</code> 接口，由服务端代理调用大语言模型</li>
+</ul>
+<p>服务端地址由 <code>AndreaNovelHelper.typo.service.baseUrl</code> 配置，默认 <code>http://127.0.0.1:8001</code>。</p>
+
+<p><b>2. 客户端直连 LLM（独立开关）</b></p>
+<ul>
+    <li>启用 <code>AndreaNovelHelper.typo.clientLLM.enabled</code> 后，插件会直接调用 LLM API，绕过服务端</li>
+    <li>支持 OpenAI 兼容格式和 Gemini 原生 API</li>
+    <li>启用后优先级高于服务端检测</li>
+</ul>
+
+<h4>检测流程</h4>
+<ol>
+    <li><b>文档分段</b> — 按空行分成段落，再按 <code>。！？!?</code> 和换行符分成句子</li>
+    <li><b>段落哈希</b> — 使用 FNV-1a 32-bit 计算段落哈希，作为缓存 key</li>
+    <li><b>缓存命中检查</b> — 已扫描且未变更的段落直接跳过</li>
+    <li><b>分批发送</b> — 缺失缓存的段落按 <code>batchSize</code>（默认 30 句）分块发送给检测器</li>
+    <li><b>并发限流</b> — 受 <code>docConcurrency</code>（默认 3）限制，避免同时发送过多请求</li>
+    <li><b>结果解析</b> — 服务端返回完整 JSON；客户端 LLM 在流式响应中实时解析，发现 corrections 数组即返回中间结果</li>
+    <li><b>生成诊断</b> — 将结果转为 vscode.Diagnostic，在编辑器中显示波浪线标记和 Quick Fix</li>
+</ol>
+
+<h4>Prompt 与请求格式</h4>
+<p>LLM 检测的系统提示词来自 <code>resources/typo_llm_prompt.txt</code>，要求模型严格输出 JSON 对象 <code>{"corrections": [...]}</code>。User prompt 包含：</p>
+<ul>
+    <li><code>texts</code> — 待检测句子数组</li>
+    <li><code>context</code> — 段落合并后的上下文（用 <code>—— 段落分隔 ——</code> 分隔）</li>
+    <li><code>known_roles</code> — 文档中的角色名列表（用于抑制误报）</li>
+    <li><code>doc_uuid</code> — 文档标识</li>
+</ul>
+
+<h4>角色名误报抑制</h4>
+<p>检测前会将文档中的角色名（排除"正则表达式"和"敏感词"类型）作为 <code>known_roles</code> 传给检测器，要求模型不要纠正这些名称。</p>
+<p>插件层面的抑制由 <code>AndreaNovelHelper.typo.suppressRolesMode</code> 控制：</p>
+<ul>
+    <li><code>roleNameExact</code> — 错字文本与角色名完全相等时抑制（默认）</li>
+    <li><code>regexContain</code> — 正则表达式角色完全包含整段时抑制</li>
+    <li><code>nonSensitiveIntersect</code> — 与任意非敏感词角色范围相交则抑制</li>
+    <li><code>none</code> — 不抑制</li>
+</ul>
+<p>注意：当 <code>typo.mode === 'llm'</code> 或 <code>clientLLM.enabled === true</code> 时，插件层面的抑制被强制禁用（设为 <code>none</code>），完全依赖 LLM 的 <code>known_roles</code> 提示。</p>
+
+<h4>缓存机制</h4>
+<ul>
+    <li><b>内存缓存</b> — 以文档 URI → 段落哈希 → 扫描结果的形式存储在 Map 中</li>
+    <li><b>LRU 淘汰</b> — 最大文档数由 <code>typo.maxDocs</code> 控制（默认 10），优先淘汰已关闭的文档</li>
+    <li><b>持久化缓存</b> — 可选保存到 <code>&lt;workspace&gt;/novel-helper/typo/data/{docUuid}.json</code>，由 <code>typo.persistence.enabled</code> 控制，默认<b>关闭</b></li>
+    <li><b>自动清理</b> — <code>typo.persistence.autoCleanup</code> 默认开启，<code>maxAgeDays</code> 默认 30 天</li>
+    <li><b>防抖保存</b> — 持久化写入有 500ms 防抖，内容未变则跳过</li>
+</ul>
+
+<h4>自动扫描触发条件</h4>
+<ul>
+    <li><b>打开文档</b> — <code>onDidOpenTextDocument</code>，需开启 <code>typo.autoIdentifyOnOpen</code></li>
+    <li><b>编辑变更</b> — <code>onDidChangeTextDocument</code>，需开启 <code>typo.autoScanOnChange</code></li>
+    <li><b>白空格过滤</b> — 仅输入空白/换行时不触发重新扫描，只刷新诊断显示位置</li>
+    <li><b>防抖</b> — 默认 400ms；启用 <code>AndreaNovelHelper.timeStats.typoDelay.enabled</code> 后使用 <code>timeStats.typoDelay.windowMs</code>（默认 5000ms）</li>
+</ul>
+
+<h4>高亮装饰</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.enableHighlight</code> — 启用标黄背景装饰，默认<b>关闭</b></li>
+    <li><code>AndreaNovelHelper.typo.highlightColor</code> — 标黄颜色，默认 <code>#fff3a3</code></li>
+    <li><code>AndreaNovelHelper.typo.applyPartialDecorationsImmediately</code> — 即时高亮部分结果，默认 <code>false</code></li>
+</ul>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.enabled</code> — 校对总开关</li>
+    <li><code>AndreaNovelHelper.typo.mode</code> — 服务端检测模式：macro / llm</li>
+    <li><code>AndreaNovelHelper.typo.service.baseUrl</code> — HTTP 校对服务基地址（默认 <code>http://127.0.0.1:8001</code>）</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.enabled</code> — 启用客户端直连 LLM</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.apiBase</code> — 客户端 API 基地址</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.apiKey</code> — API 密钥</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.model</code> — 模型名称</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.temperature</code> — 温度参数</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.enableThinking</code> — 启用思考过程</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.thinkingProvider</code> — 思考供应商（auto/glm/deepseek/qwen/custom）</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod</code> — Qwen 思考方式（parameter/suffix）</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.geminiThinkingBudget</code> — Gemini 思考预算</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.geminiApiFormat</code> — Gemini API 格式（openai/native）</li>
+    <li><code>AndreaNovelHelper.typo.llm.model</code> — 服务端 LLM 代理的模型名称</li>
+    <li><code>AndreaNovelHelper.typo.llm.apiKey</code> — 服务端 LLM 代理的 API 密钥</li>
+    <li><code>AndreaNovelHelper.typo.llm.apiBase</code> — 服务端 LLM 代理的 API 基地址</li>
+    <li><code>AndreaNovelHelper.typo.autoIdentifyOnOpen</code> — 打开文件时自动扫描</li>
+    <li><code>AndreaNovelHelper.typo.autoScanOnChange</code> — 编辑时自动扫描</li>
+    <li><code>AndreaNovelHelper.typo.batchSize</code> — 批次大小（默认 30）</li>
+    <li><code>AndreaNovelHelper.typo.docConcurrency</code> — 文档并发数（默认 3）</li>
+    <li><code>AndreaNovelHelper.typo.docGroupSize</code> — 文档分组大小（默认 3）</li>
+    <li><code>AndreaNovelHelper.typo.timeoutMs</code> — 超时时间（默认 30000）</li>
+    <li><code>AndreaNovelHelper.typo.maxDocs</code> — 内存缓存最大文档数（默认 10）</li>
+    <li><code>AndreaNovelHelper.typo.keepCacheOnClose</code> — 关闭文档后保留缓存（默认 true）</li>
+    <li><code>AndreaNovelHelper.typo.enableHighlight</code> — 启用标黄背景装饰</li>
+    <li><code>AndreaNovelHelper.typo.highlightColor</code> — 标黄颜色（默认 #fff3a3）</li>
+    <li><code>AndreaNovelHelper.typo.warningLevel</code> — 诊断级别（error/warning/information/hint）</li>
+    <li><code>AndreaNovelHelper.typo.suppressRolesMode</code> — 角色名误报抑制模式</li>
+    <li><code>AndreaNovelHelper.typo.persistence.enabled</code> — 启用持久化缓存</li>
+    <li><code>AndreaNovelHelper.typo.persistence.autoCleanup</code> — 自动清理过期数据</li>
+    <li><code>AndreaNovelHelper.typo.persistence.maxAgeDays</code> — 数据保存天数（默认 30）</li>
+    <li><code>AndreaNovelHelper.typo.debug.llmTrace</code> — LLM 请求/响应调试日志</li>
+    <li><code>AndreaNovelHelper.typo.debug.serverTrace</code> — 服务端 HTTP 调试日志</li>
+    <li><code>AndreaNovelHelper.typo.debug.compactTrace</code> — 压缩调试输出</li>
+    <li><code>AndreaNovelHelper.typo.debug.traceMaxLen</code> — 调试日志最大长度</li>
+</ul>
+
+<h4>使用方式</h4>
+<ul>
+    <li><b>命令面板</b>：
+        <ul>
+            <li><code>andrea.typo.scanDocument</code> — 扫描未扫描段落</li>
+            <li><code>andrea.typo.rescanDocument</code> / <code>rescanCurrentFile</code> — 强制全量重扫（清除缓存）</li>
+            <li><code>andrea.typo.stopAllRequests</code> — 中止所有活动请求</li>
+            <li><code>andrea.typo.quickSettings</code> — 打开快速设置面板</li>
+        </ul>
+    </li>
+    <li><b>状态栏</b> — 左下角显示 <code>Typo macro/llm</code>，点击打开快速设置面板</li>
+    <li><b>Quick Fix</b> — 点击编辑器内的波浪线标记或 💡 灯泡，选择 <code>🔧 替换为: xxx</code></li>
+</ul>
+
+<h4>日志调试</h4>
+<p>开启调试后可查看 Output 面板中的 <code>Andrea Typo LLM</code> 通道：</p>
+<ul>
+    <li><code>typo.debug.llmTrace</code> — 查看完整的 LLM 请求/响应（含流式输出）</li>
+    <li><code>typo.debug.serverTrace</code> — 查看服务端 HTTP 请求/响应概要</li>
+    <li><code>typo.debug.compactTrace</code> — 压缩为单行输出</li>
+</ul>
+
+<h4>注意事项</h4>
+<ul>
+    <li>插件<b>不包含内置规则引擎</b>，规则检测依赖外部 HTTP 服务。如需使用 macro 模式，需自行部署配套后端</li>
+    <li>客户端 LLM 和服务端 LLM 是两套独立配置，启用 <code>clientLLM.enabled</code> 后会绕过服务端</li>
+    <li>持久化缓存默认关闭，开启后会在 <code>novel-helper/typo/data/</code> 目录下生成缓存文件</li>
+    <li>错别字延迟扫描配置在 <code>timeStats.typoDelay</code> 命名空间下，不在 <code>typo.delay</code> 下</li>
+</ul>
+<div class="doc-note">规则校对（macro）的"规则"不在插件内，而在外部 HTTP 服务中。如果你无法部署后端服务，建议直接使用客户端 LLM 模式（clientLLM.enabled），只需配置好 API 密钥即可。</div>
+</div>

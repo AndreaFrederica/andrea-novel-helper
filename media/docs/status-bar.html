@@ -1,0 +1,154 @@
+<div class="doc-section beginner">
+<h4>状态栏是什么</h4>
+<p>状态栏是 VS Code 窗口最底部那一整条区域。ANH 会把写作时经常看的信息和经常点的按钮放在这里，例如快速设置、字数速度、错别字识别、同步状态、自动滚动等。</p>
+<p>不会用 VS Code 也没关系：你只需要记住，底部这些 ANH 按钮通常可以点击；鼠标停在按钮上会显示说明；不想点了按 <kbd>Esc</kbd> 可以退出弹出的菜单。</p>
+
+<h4>最重要的按钮</h4>
+<ul>
+    <li><b>版式 / 版式和快速设置</b> — 打开快速设置。它是写作时最快的设置入口，比去菜单里找设置更方便</li>
+    <li><b>写作统计</b> — 显示当前文件字数、速度和用时。点击会打开写作统计仪表板</li>
+    <li><b>Typo</b> — 错别字识别状态。点击会打开错别字识别快速设置</li>
+    <li><b>ANH:Sync</b> — Git 和 WebDAV 同步状态。点击可以查看当前同步状态</li>
+    <li><b>自动滚动</b> — 控制编辑时是否自动滚到文档后部，适合边写边追随光标或直播式写作</li>
+    <li><b>分组锁</b> — 控制 ANH 的智能标签组锁，避免预览、文档页等工具页被普通文件挤掉</li>
+</ul>
+
+<h4>按钮不见了怎么办</h4>
+<ul>
+    <li>有些按钮只在打开 Markdown、TXT 或支持的写作文档时显示</li>
+    <li>错别字识别关闭时，Typo 按钮可能隐藏</li>
+    <li>Markdown 格式工具只在选中文本时临时出现</li>
+    <li>翻译和角色加载状态只在任务进行中临时出现</li>
+    <li>如果状态栏太挤，VS Code 可能把部分按钮挤到右侧；把窗口拉宽或关闭不需要的状态栏项即可</li>
+</ul>
+
+<h4>新手推荐</h4>
+<ul>
+    <li>写作时先看底部有没有“版式”按钮，快速设置从这里进</li>
+    <li>想看今天写了多少、速度如何，点击写作统计状态栏</li>
+    <li>看到 ANH:Sync 变成警告色或错误色时，先悬停看提示，再点开查看状态</li>
+    <li>状态栏显示太长时，在快速设置里打开“状态栏显示”精简模式，或打开 ANH:Sync 简洁模式</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>状态栏总览</h4>
+<p>以下状态栏项按源码中的实际提供者整理。状态栏项的位置会受 VS Code 自身排序、窗口宽度和其他扩展影响，文档中的“左侧/右侧”表示创建时的对齐方向。</p>
+
+<h4>版式和快速设置</h4>
+<ul>
+    <li><b>来源</b>：<code>src/typeset/layoutStatusBar.ts</code></li>
+    <li><b>显示文本</b>：精简模式显示 <code>$(edit) 版式和快速设置</code>；详细模式显示缩进、首行、段距、去尾、补齐、跳出、切段等状态</li>
+    <li><b>点击命令</b>：<code>andrea.quickSettings</code></li>
+    <li><b>用途</b>：打开命令式快速设置，是 ANH 写作设置的最快入口</li>
+    <li><b>配置</b>：<code>andrea.typeset.statusBar.compact</code> 控制精简/详细；<code>andrea.typeset.statusBar.alwaysShow</code> 控制是否始终显示</li>
+    <li><b>显示条件</b>：默认始终显示；关闭始终显示后，只在支持的写作文档中显示</li>
+</ul>
+
+<h4>写作统计状态栏</h4>
+<ul>
+    <li><b>来源</b>：<code>src/timeStats.ts</code></li>
+    <li><b>状态栏 ID</b>：<code>andrea.timeStats</code></li>
+    <li><b>点击命令</b>：<code>AndreaNovelHelper.openTimeStats</code></li>
+    <li><b>用途</b>：显示当前文档写作速度、累计用时、CJK 字数、英文单词、总字数和空闲状态；点击打开写作统计仪表板</li>
+    <li><b>显示模式</b>：<code>detailed</code> 显示当前/平均/峰值速度、用时和详细字数；<code>semi</code> 显示速度和总字数；<code>compact</code> 仅显示总字数</li>
+    <li><b>速度单位</b>：<code>cpm</code> 为字/分钟，<code>cph</code> 为字/小时</li>
+    <li><b>字数口径</b>：读取 <code>AndreaNovelHelper.wordCount.primaryUnit</code>，可显示词计、含标点、不含标点</li>
+    <li><b>配置</b>：<code>AndreaNovelHelper.timeStats.statusBar.alignment</code>、<code>AndreaNovelHelper.timeStats.statusBar.priority</code>、<code>AndreaNovelHelper.wordCount.statusBar.mode</code>、<code>AndreaNovelHelper.wordCount.statusBar.speedUnit</code></li>
+    <li><b>Tooltip</b>：悬停可查看当前速度、平均速度、峰值速度、累计用时、当前会话、三种字数口径、文件路径、最后活动时间、会话数和活跃/离开状态</li>
+</ul>
+
+<h4>错别字识别状态栏</h4>
+<ul>
+    <li><b>来源</b>：<code>src/typo/typoService.ts</code></li>
+    <li><b>状态栏 ID</b>：<code>andrea.typoService</code></li>
+    <li><b>显示文本</b>：空闲时类似 <code>$(check) Typo macro</code> 或 <code>$(check) Typo llm</code>；扫描中显示 <code>$(sync~spin) Typo ...</code></li>
+    <li><b>点击命令</b>：<code>andrea.typo.quickSettings</code></li>
+    <li><b>用途</b>：显示错别字识别是否就绪、正在扫描、使用规则模式还是 LLM 模式</li>
+    <li><b>显示条件</b>：<code>AndreaNovelHelper.typo.enabled</code> 开启，并且当前活动编辑器是文件型 Markdown 或 plaintext 文档</li>
+    <li><b>Tooltip</b>：显示模式、扫描状态、客户端直连 LLM 信息、持久化状态，并提示点击打开快速设置</li>
+</ul>
+
+<h4>翻译忙碌状态</h4>
+<ul>
+    <li><b>来源</b>：<code>src/typo/typoService.ts</code> 中的 <code>showTranslationStatus</code> / <code>hideTranslationStatus</code></li>
+    <li><b>状态栏 ID</b>：<code>andrea.translationStatus</code></li>
+    <li><b>显示文本</b>：<code>$(sync~spin) ...</code></li>
+    <li><b>用途</b>：LLM 翻译任务进行中时临时显示，任务结束后自动隐藏</li>
+</ul>
+
+<h4>ANH:Sync 同步状态</h4>
+<ul>
+    <li><b>来源</b>：<code>src/sync/autoGitService.ts</code></li>
+    <li><b>状态栏 ID</b>：<code>andrea.autoGitSync</code></li>
+    <li><b>点击命令</b>：<code>andrea.autoGit.showStatus</code></li>
+    <li><b>显示文本</b>：普通模式为 <code>ANH:Sync Git:ON/OFF WebDAV:ON/OFF/SYNC</code>；简洁模式只显示 <code>ANH:Sync</code></li>
+    <li><b>用途</b>：集中显示 AutoGit 与 WebDAV 自动同步状态</li>
+    <li><b>颜色</b>：WebDAV 同步中使用突出背景；Git 和 WebDAV 都启用时使用远程背景；只启用一项时使用警告背景；都关闭时使用错误背景</li>
+    <li><b>配置</b>：<code>AndreaNovelHelper.autoGit.compactStatus</code> 控制简洁模式；AutoGit 和 WebDAV 的启用状态分别来自对应功能配置</li>
+    <li><b>Tooltip</b>：显示 AutoGit 是否启用、WebDAV 自动同步是否启用、WebDAV 当前消息和进度</li>
+</ul>
+
+<h4>自动滚动状态栏</h4>
+<ul>
+    <li><b>来源</b>：<code>src/Provider/autoScrollProvider.ts</code></li>
+    <li><b>点击命令</b>：<code>andrea.autoScroll.toggleMenu</code></li>
+    <li><b>显示文本</b>：<code>自动滚动 100%</code> 这类文本，图标区分启用和禁用</li>
+    <li><b>用途</b>：编辑时自动滚动到文档末尾或指定比例位置；菜单中可切换启用、设置比例、立即滚动到末尾</li>
+    <li><b>配置</b>：<code>AndreaNovelHelper.autoScroll.enabled</code>、<code>AndreaNovelHelper.autoScroll.ratio</code>、<code>AndreaNovelHelper.autoScroll.debounceDelay</code></li>
+    <li><b>保存位置</b>：源码中保存为全局配置，属于个人使用习惯</li>
+</ul>
+
+<h4>智能分组锁状态栏</h4>
+<ul>
+    <li><b>来源</b>：<code>src/utils/smartTabGroupLockStatusBar.ts</code></li>
+    <li><b>状态栏 ID</b>：<code>andrea.smartTabGroupLock</code></li>
+    <li><b>点击命令</b>：<code>andrea.toggleSmartTabGroupLock</code></li>
+    <li><b>显示文本</b>：禁用或等待时显示 <code>$(unlock) 分组锁</code>；有活动锁定时显示 <code>$(lock) 分组锁</code></li>
+    <li><b>用途</b>：提示智能标签组锁是否启用，以及当前是否有标签组被锁定</li>
+    <li><b>配置</b>：<code>AndreaNovelHelper.smartTabGroupLock.enabled</code></li>
+</ul>
+
+<h4>Typst 预览状态栏</h4>
+<ul>
+    <li><b>来源</b>：<code>src/Provider/typstPreviewStatusBar.ts</code></li>
+    <li><b>状态栏 ID</b>：<code>andrea.typstPreview</code></li>
+    <li><b>点击命令</b>：<code>AndreaNovelHelper.toggleTypstPreview</code></li>
+    <li><b>显示文本</b>：未开启预览时显示 <code>$(eye-closed) Typst预览</code>；已开启预览时显示 <code>$(eye) Typst预览</code></li>
+    <li><b>用途</b>：对当前 Markdown 或 plaintext 文档打开、关闭或管理 Typst 实时预览</li>
+    <li><b>显示条件</b>：当前活动文档是 Markdown 或 plaintext</li>
+    <li><b>Tooltip</b>：显示文件路径、模板和渲染状态</li>
+</ul>
+
+<h4>Markdown 选区工具栏</h4>
+<ul>
+    <li><b>来源</b>：<code>src/Provider/markdownToolbar.ts</code></li>
+    <li><b>状态栏 ID</b>：<code>andrea.markdownToolbar</code></li>
+    <li><b>点击命令</b>：<code>AndreaNovelHelper.showMarkdownFormatMenu</code></li>
+    <li><b>显示文本</b>：<code>$(tools) MD格式: "选中文本..."</code></li>
+    <li><b>用途</b>：选中文本后临时提供 Markdown 格式化入口，例如加粗、斜体等</li>
+    <li><b>配置</b>：<code>AndreaNovelHelper.markdownToolbarEnabled</code></li>
+    <li><b>显示条件</b>：Markdown 工具条启用且当前有合适的文本选择；没有选择时隐藏</li>
+</ul>
+
+<h4>角色加载状态</h4>
+<ul>
+    <li><b>来源</b>：<code>src/utils/utils.ts</code> 的角色库异步扫描流程</li>
+    <li><b>状态栏 ID</b>：<code>andrea.characterLoading</code></li>
+    <li><b>显示文本</b>：扫描中显示 <code>$(sync~spin) 角色加载中...</code>；完成后短暂显示 <code>$(check) 角色加载完成</code></li>
+    <li><b>用途</b>：提示 ANH 正在扫描 <code>novel-helper</code> 角色库和外部角色目录</li>
+    <li><b>显示条件</b>：角色库扫描耗时超过短暂延迟，或扫描完成时需要反馈；完成后约 1.5 秒自动移除</li>
+</ul>
+
+<h4>已禁用的旧状态栏</h4>
+<p><code>src/Provider/statusBarProvider.ts</code> 里还有旧的写作统计/WebDAV 状态栏提供器，但 <code>src/activate.ts</code> 中已经注释说明“状态栏提供器 - 已禁用，使用 timeStats 中的状态栏”。实际运行时应以 <code>timeStats.ts</code> 和 <code>autoGitService.ts</code> 的状态栏为准。</p>
+
+<h4>状态栏太挤时</h4>
+<ul>
+    <li>开启 <code>andrea.typeset.statusBar.compact</code>，让版式按钮显示为精简文本</li>
+    <li>开启 <code>AndreaNovelHelper.autoGit.compactStatus</code>，让同步按钮只显示 ANH:Sync</li>
+    <li>把 <code>AndreaNovelHelper.wordCount.statusBar.mode</code> 改为 <code>semi</code> 或 <code>compact</code></li>
+    <li>不常用的功能可以在对应设置里关闭，例如错别字识别、Markdown 工具条、自动滚动等</li>
+    <li>VS Code 自身支持右键状态栏隐藏部分状态项；如果误隐藏，可从 VS Code 的状态栏自定义菜单重新显示</li>
+</ul>
+</div>

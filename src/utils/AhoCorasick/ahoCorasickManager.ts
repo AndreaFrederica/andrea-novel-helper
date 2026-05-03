@@ -2,6 +2,7 @@ import AhoCorasick from 'ahocorasick';
 import { Role } from '../../extension';
 import { roles, onDidChangeRoles } from '../../activate';
 import { findCompleteWords, shouldUseSegmentFilter } from '../segmentFilter';
+import { getRoleLookupKeys } from '../roleLookupKeys';
 
 /**
  * AhoCorasick 自动机管理器
@@ -46,6 +47,14 @@ class AhoCorasickManager {
                     this.patternMap.set(f, r);
                     console.log(`[AhoCorasick] 添加 fixes 模式: "${f}" -> 角色 "${r.name}"`);
                 }
+            }
+            for (const lookupKey of getRoleLookupKeys(r)) {
+                const normalizedLookup = lookupKey.trim().normalize('NFC');
+                if (!normalizedLookup) {
+                    continue;
+                }
+                patterns.push(normalizedLookup);
+                this.patternMap.set(normalizedLookup, r);
             }
         }
 

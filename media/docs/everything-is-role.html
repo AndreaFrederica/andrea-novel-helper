@@ -1,0 +1,98 @@
+<div class="doc-section beginner">
+<h4>万物皆角色</h4>
+<p>ANH 最核心的设计理念是：<strong>所有资料都用同一种格式管理</strong>。不管是角色、敏感词、世界观词汇，还是着色规则，本质上都是"角色"，只是类型不同。</p>
+
+<h4>这对你意味着什么</h4>
+<ul>
+    <li><b>一套工具管所有</b> — 不需要学不同的工具来管理不同类型的资料</li>
+    <li><b>统一的能力</b> — 所有资料都支持自动提示、高亮、跳转、引用统计</li>
+    <li><b>统一的编辑器</b> — 用同一个可视化编辑器管理所有资料</li>
+</ul>
+
+<h4>六种内置类型</h4>
+<ul>
+    <li><b>主角</b> — 主要角色，用于角色名高亮、补全、引用统计</li>
+    <li><b>配角</b> — 次要角色，与主角享有相同能力</li>
+    <li><b>联动角色</b> — 跨作品/联动角色，用于引用其他作品的角色</li>
+    <li><b>敏感词</b> — 需要标记或替换的词汇，附带修复建议</li>
+    <li><b>词汇</b> — 世界观术语和专业名词</li>
+    <li><b>正则表达式</b> — 自定义着色规则，用正则匹配文本并着色</li>
+</ul>
+<p>除以上六种内置类型外，你还可以自定义任意类型名称。</p>
+
+<h4>共享的能力</h4>
+<p>不管哪种类型，都享有以下能力：</p>
+<ul>
+    <li>别名支持</li>
+    <li>Ctrl+Click 跳转定义</li>
+    <li>查找引用</li>
+    <li>自动提示</li>
+    <li>高亮显示</li>
+    <li>可视化编辑器</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>统一对象模型</h4>
+<p>ANH 中所有资源类型都由同一个 <code>Role</code> 接口表示，通过 <code>type</code> 字段区分。这是 ANH 最核心的设计理念：</p>
+<ul>
+    <li><code>主角</code> / <code>配角</code> / <code>联动角色</code> — 角色人物，用于写作中的角色名高亮、补全、引用</li>
+    <li><code>敏感词</code> — 需要标记或替换的词汇，附带 <code>fixes</code> 修复建议数组</li>
+    <li><code>词汇</code> — 世界观术语和专业名词</li>
+    <li><code>正则表达式</code> — 自定义着色规则，用 <code>regex</code> + <code>regexFlags</code> 定义匹配模式</li>
+</ul>
+
+<h4>Role 接口定义</h4>
+<p>核心字段（定义在 <code>src/extension.ts</code>）包括：</p>
+<ul>
+    <li><code>name</code> — 角色/资源的唯一标识名称（必填）</li>
+    <li><code>type</code> — 类型，内置或自定义字符串（必填）</li>
+    <li><code>uuid</code> — 可选唯一标识符</li>
+    <li><code>aliases</code> — 别名数组，编辑器中自动识别</li>
+    <li><code>description</code> — 描述/简介</li>
+    <li><code>color</code> — 前景色（HEX/RGB/HSL/HSV）</li>
+    <li><code>backgroundColor</code> — 背景色</li>
+    <li><code>bold</code> / <code>italic</code> / <code>strikethrough</code> / <code>underline</code> — 文本样式开关</li>
+    <li><code>priority</code> — 着色器优先级，数字越小优先级越高，默认 999</li>
+    <li><code>affiliation</code> — 从属标签（阵营/组织）</li>
+    <li><code>regex</code> / <code>regexFlags</code> — 正则表达式类型专用</li>
+    <li><code>fixes</code> — 敏感词类型专用，修复候选数组</li>
+    <li><code>wordSegmentFilter</code> — 是否启用分词过滤，避免单字误匹配</li>
+    <li><code>packagePath</code> — 角色所在的包路径（相对于 novel-helper 目录）</li>
+    <li><code>sourcePath</code> — 角色来源文件路径（完整路径）</li>
+</ul>
+
+<h4>样式字段说明</h4>
+<p>运行时中样式属性以平级字段形式存在（如 <code>role.backgroundColor</code>、<code>role.bold</code>）。角色卡编辑器在保存时会将旧版独立字段收敛到 <code>style</code> 对象中（<code>style.color</code>、<code>style.backgroundColor</code> 等），<code>style.color</code> 会覆盖顶层 <code>color</code>。</p>
+<pre><code>// 运行时读取（兼容旧格式）
+role.color, role.backgroundColor, role.bold
+
+// 编辑器保存后的新格式
+style: { color: "#E60033", backgroundColor: "#FFF0F0", bold: true }
+</code></pre>
+
+<h4>查询键系统</h4>
+<p>以下查询键由 <code>roleLookupKeyGeneration.ts</code> 自动生成，不是用户直接在 Role 接口中定义的字段：</p>
+<ul>
+    <li><code>lookupKeys_pinyin</code> — 自动生成的拼音查询键</li>
+    <li><code>lookupKeys_romanized</code> — 自动生成的罗马字查询键</li>
+    <li><code>lookupKeys_spelling</code> — 自动生成的拼写查询键</li>
+</ul>
+<p>可通过 <code>AndreaNovelHelper.lookupKeys.autoGeneratePinyin</code> / <code>autoGenerateRomanized</code> / <code>treatPinyinAsAlias</code> / <code>treatRomanizedAsAlias</code> 控制生成行为。</p>
+
+<h4>共享能力</h4>
+<p>无论哪种 type，所有"角色"都享有同一套能力：</p>
+<ul>
+    <li><b>别名</b> — 支持多个别名，编辑器中自动识别</li>
+    <li><b>跳转定义</b> — Ctrl+Click 直接跳转到角色定义文件</li>
+    <li><b>查找引用</b> — 查看角色在哪些文件中被引用</li>
+    <li><b>自动补全</b> — 输入 @ 或角色名时弹出补全，支持拼音首字母匹配</li>
+    <li><b>高亮装饰</b> — 编辑器中自动按颜色标记</li>
+    <li><b>角色卡编辑器</b> — 可视化编辑所有字段</li>
+    <li><b>Aho-Corasick 自动机</b> — 底层使用高性能多模式匹配算法，实时扫描文本</li>
+</ul>
+
+<h4>扩展字段</h4>
+<p>除了核心字段，ANH 还支持大量扩展字段（age、gender、occupation、personality、appearance、background、relationship、skill、weakness、goal、motivation、fear、secret、quote、note、tag、category、level、status、location、origin、family、education、hobby 等）。这些字段在角色卡编辑器中自动归类到"扩展"分类，也可通过自定义字段添加任意键值对。</p>
+<div class="doc-note">这意味着你不需要学习不同的工具来管理不同类型的资源。一个角色卡编辑器、一套补全系统、一种高亮机制、一组引用统计，统一管理所有写作资产。</div>
+</div>

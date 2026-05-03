@@ -7,6 +7,7 @@
     "command.refreshSensitiveWords.title": "刷新敏感詞庫",
     "command.addVocabulary.title": "從選中內容創建詞彙",
     "command.refreshVocabulary.title": "刷新詞彙庫",
+    "command.showGuideDoc.title": "打開文檔中心",
     "command.openDoubleOutline.title": "打開雙重大綱",
     "command.refreshOutlineDir.title": "刷新目錄大綱",
     "command.refreshOutlineFile.title": "刷新文件大綱",
@@ -21,7 +22,15 @@
     "config.minChars.description": "觸發補全所需的最少前綴字符數",
     "config.completion.triggerMode.description": "補全觸發模式：loose=名稱包含前綴即可觸發，startsWith=僅當前綴在名稱/別名前綴時觸發，symbolLoose=僅當前綴前有指定符號且名稱包含前綴時觸發，symbolStartsWith=僅當前綴前有指定符號且名稱/別名以該前綴開頭時觸發（相容舊值 symbolPrefix，效果同 symbolLoose）。",
     "config.completion.symbolPrefixes.description": "symbolPrefix 模式下用於觸發補全的符號列表。",
-    "config.supportedFileTypes.description": "支援的文件擴展名（不帶點）"
+    "config.supportedFileTypes.description": "支援的文件擴展名（不帶點）",
+    "config.lookupKeys.treatPinyinAsAlias.description": "是否將 lookupKeys_pinyin 以別名層級顯示在補全清單中。關閉後仍會參與匹配，只是不會把拼音鍵當作別名候選顯示。",
+    "config.lookupKeys.autoGeneratePinyin.description": "是否在擴充功能本體後端依據角色名與別名自動生成 lookupKeys_pinyin。此設定會影響所有已載入的角色格式，以及 JSON5 視覺化編輯器的顯示與保存流程。",
+    "config.lookupKeys.treatRomanizedAsAlias.description": "是否將 lookupKeys_romanized 以別名層級顯示在補全清單中。關閉後仍會參與匹配，只是不會把羅馬字鍵當作別名候選顯示。",
+    "config.lookupKeys.autoGenerateRomanized.description": "是否在擴充功能本體後端依據角色名與別名自動生成 lookupKeys_romanized。此設定會影響所有已載入的角色格式，以及 JSON5 視覺化編輯器的顯示與保存流程。",
+    "config.customCharacterFileKeywords.description": "附加的角色檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+    "config.customSensitiveWordsFileKeywords.description": "附加的敏感詞檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+    "config.customVocabularyFileKeywords.description": "附加的詞彙檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+    "config.customRegexFileKeywords.description": "附加的正則檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。"
     ,
     "command.openTimeStats.title": "打開寫作統計",
     "sidebar.webdav.title": "小說助手:雲端同步",
@@ -154,6 +163,8 @@
     "config.wordCount.displayFormat.qian": ">=1000 顯示 12.345千 (三位小數)"
 
     ,
-    "config.wordCount.debug.description": "WordCount: 啟用詳細除錯日誌 (輸出至主控台)。僅用於診斷問題，可能略微影響效能。"
+    "config.wordCount.debug.description": "WordCount: 啟用詳細除錯日誌 (輸出至主控台)。僅用於診斷問題，可能略微影響效能。",
+    "config.debug.roleFileDetection.description": "角色檔案識別: 輸出 isRoleFile 的詳細除錯日誌，用於排查 CSV/Markdown 等識別問題。",
+    "config.debug.smartRoleAdder.description": "SmartRoleAdder: 輸出角色優先級比較與合併決策的詳細除錯日誌。"
 
 }

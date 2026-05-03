@@ -6,6 +6,7 @@
     "command.refreshSensitiveWords.title": "センシティブワードを更新",
     "command.addVocabulary.title": "選択範囲から語彙を作成",
     "command.refreshVocabulary.title": "語彙ライブラリを更新",
+    "command.showGuideDoc.title": "ドキュメントセンターを開く",
     "command.openDoubleOutline.title": "二重アウトラインを開く",
     "command.refreshOutlineDir.title": "ディレクトリアウトラインを更新",
     "command.refreshOutlineFile.title": "ファイルアウトラインを更新",
@@ -20,7 +21,15 @@
     "config.minChars.description": "補完をトリガーするための最小プレフィックス文字数",
     "config.completion.triggerMode.description": "補完トリガーモード: loose=プレフィックスを含む名前、startsWith=プレフィックスで始まる名前/別名のみ、symbolLoose=設定記号の直後かつ名前にプレフィックスを含む場合、symbolStartsWith=設定記号の直後かつプレフィックスで始まる名前/別名のみ（旧値 symbolPrefix は symbolLoose と同義）。",
     "config.completion.symbolPrefixes.description": "symbolPrefix モードで補完をトリガーする記号リスト。",
-    "config.supportedFileTypes.description": "サポートされるファイル拡張子（ドットなし）"
+    "config.supportedFileTypes.description": "サポートされるファイル拡張子（ドットなし）",
+    "config.lookupKeys.treatPinyinAsAlias.description": "lookupKeys_pinyin の値を補完一覧で別名レベルの候補として表示します。無効でも照合には使われ、この設定は補完一覧で別名のように見せるかだけを制御します。",
+    "config.lookupKeys.autoGeneratePinyin.description": "拡張機能本体のバックエンドで、役名と別名から lookupKeys_pinyin を自動生成します。読み込まれたすべての役割ファイル形式と JSON5 ビジュアルエディターの表示・保存経路に反映されます。",
+    "config.lookupKeys.treatRomanizedAsAlias.description": "lookupKeys_romanized の値を補完一覧で別名レベルの候補として表示します。無効でも照合には使われ、この設定は補完一覧で別名のように見せるかだけを制御します。",
+    "config.lookupKeys.autoGenerateRomanized.description": "拡張機能本体のバックエンドで、役名と別名から lookupKeys_romanized を自動生成します。読み込まれたすべての役割ファイル形式と JSON5 ビジュアルエディターの表示・保存経路に反映されます。",
+    "config.customCharacterFileKeywords.description": "キャラクターファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+    "config.customSensitiveWordsFileKeywords.description": "センシティブワードファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+    "config.customVocabularyFileKeywords.description": "語彙ファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+    "config.customRegexFileKeywords.description": "正規表現ファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。"
     ,
     "command.openTimeStats.title": "タイム統計を開く",
     "sidebar.webdav.title": "Andrea 小説アシスタント: クラウド同期",
@@ -153,5 +162,7 @@
     "config.wordCount.displayFormat.k": ">=1000 で 12.345k (小数3桁)",
     "config.wordCount.displayFormat.qian": ">=1000 で 12.345千 (小数3桁)"
     ,
-    "config.wordCount.debug.description": "WordCount: 詳細デバッグログを有効化 (コンソール出力)。問題診断用途のみ; パフォーマンスに僅かな影響の可能性。"
+    "config.wordCount.debug.description": "WordCount: 詳細デバッグログを有効化 (コンソール出力)。問題診断用途のみ; パフォーマンスに僅かな影響の可能性。",
+    "config.debug.roleFileDetection.description": "役割ファイル判定: isRoleFile の詳細デバッグログを出力します。CSV/Markdown 判定の問題調査用。",
+    "config.debug.smartRoleAdder.description": "SmartRoleAdder: 役割の優先度比較とマージ判定の詳細デバッグログを出力します。"
 }

@@ -187,7 +187,7 @@ function normalizeRole(role: any): NormalizedRole {
     };
   }
   // 扁平结构：从已知字段组装 base
-  const knownKeys = ['name', 'type', 'affiliation', 'aliases', 'color', 'priority', 'description', 'uuid'];
+  const knownKeys = ['name', 'type', 'affiliation', 'aliases', 'lookupKeys_pinyin', 'lookupKeys_romanized', 'lookupKeys_spelling', 'color', 'priority', 'description', 'uuid'];
   const base: Record<string, any> = {};
   for (const k of knownKeys) {
     if (role[k] !== undefined) base[k] = role[k];
@@ -211,6 +211,9 @@ const roleInfo = computed(() => {
     type: norm.base?.type,
     affiliation: norm.base?.affiliation,
     aliases: norm.base?.aliases,
+    lookupKeys_pinyin: norm.base?.lookupKeys_pinyin,
+    lookupKeys_romanized: norm.base?.lookupKeys_romanized,
+    lookupKeys_spelling: norm.base?.lookupKeys_spelling,
     color: norm.base?.color,
     extended: norm.extended,
     custom: norm.custom,
@@ -230,6 +233,9 @@ function baseLabel(key: string): string {
     type: '类型',
     affiliation: '阵营',
     aliases: '别名',
+    lookupKeys_pinyin: '拼音查询键',
+    lookupKeys_romanized: '罗马字查询键',
+    lookupKeys_spelling: '拼写查询键',
     color: '颜色',
     uuid: 'UUID',
     description: '描述',

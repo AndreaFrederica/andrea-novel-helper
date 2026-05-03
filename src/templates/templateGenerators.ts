@@ -235,6 +235,52 @@ export function generateRegexPatternsTemplate(): string {
 ]`;
 }
 
+/** 正则着色配置 Markdown 模板 */
+export function generateMarkdownRegexPatternsTemplate(): string {
+    return `# 着色规则
+
+> 每个“## 规则名称”是一条正则表达式角色。正则内容建议放在代码块中，避免 #、*、[] 等字符被 Markdown 当成格式。
+
+## 中文对话
+
+### 类型
+正则表达式
+
+### 正则
+\`\`\`regex
+「[^」]*」
+\`\`\`
+
+### 正则标志
+g
+
+### 颜色
+#98FB98
+
+### 优先级
+100
+
+## 书名号
+
+### 类型
+正则表达式
+
+### 正则
+\`\`\`regex
+《[^》]+》
+\`\`\`
+
+### 正则标志
+g
+
+### 颜色
+#87CEEB
+
+### 优先级
+90
+`;
+}
+
 /** 示例角色（JSON5 / 代码中复用） */
 // 公共示例角色，供多种模板复用，避免重复硬编码
 const EXAMPLE_ROLE: Role = {
@@ -264,6 +310,16 @@ export function generateCharacterGalleryJson5(): string {
         description: "${EXAMPLE_ROLE.description}"
     }
 ]`;
+}
+
+/** 角色库 CSV 初始模板（含 1 个示例，可删除） */
+export function generateCharacterGalleryCsv(): string {
+    const r = EXAMPLE_ROLE;
+    const aliases = (r.aliases || []).join(';');
+    return [
+        'name,description,aliases,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized',
+        `示例（CSV）,${r.description},${aliases},,,`,
+    ].join('\n') + '\n';
 }
 
 /** 示例敏感词 JSON5 模板（字符串形式，直接写入文件） */

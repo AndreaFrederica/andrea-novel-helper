@@ -1,5 +1,5 @@
 <template>
-  <q-layout class="layout-no-size">
+  <q-layout>
     <!-- 右下角悬浮开关按钮 -->
     <q-btn
       round
@@ -130,10 +130,10 @@
     </q-drawer>
 
     <!-- 右侧主体：100vh 可滚动 -->
-    <q-page-container class="layout-no-size" style="height: 100vh; overflow: hidden">
+    <q-page-container class="editor-page-container" style="height: 100vh; overflow: hidden">
       <!-- <q-page > -->
-      <q-scroll-area class="fit">
-        <div class="column q-gutter-md">
+      <q-scroll-area class="fit editor-scroll-area">
+        <div class="column q-gutter-y-md q-px-md q-py-md index-page-content">
           <!-- 每个角色卡放入可折叠容器，容器 header 包含删除按钮；默认展开 -->
           <q-expansion-item
             v-for="(r, idx) in roles"
@@ -157,6 +157,7 @@
                 v-model="roles[idx]!"
                 @changed="(e) => onChanged(idx, e)"
                 @type-changed="(e) => onTypeChanged(idx, e)"
+                @request-lookup-candidates="(e) => onRequestLookupCandidates(idx, e)"
               />
             </div>
           </q-expansion-item>
@@ -184,6 +185,72 @@
           </q-expansion-item>
         </div>
       </q-scroll-area>
+
+      <q-dialog v-model="lookupCandidateDialog.open">
+        <q-card class="lookup-candidate-card">
+          <q-card-section class="lookup-candidate-card__header row items-center justify-between q-pb-sm">
+            <div class="lookup-candidate-card__title-block">
+              <div class="text-h6 lookup-candidate-card__title">{{ lookupCandidateDialog.title }}</div>
+              <div class="lookup-candidate-card__hint">候选项由扩展本体后端返回，选择一个后会追加到当前字段。</div>
+            </div>
+            <q-btn flat round dense icon="close" v-close-popup />
+          </q-card-section>
+
+          <q-card-section class="lookup-candidate-card__body">
+            <div v-if="lookupCandidateDialog.loading" class="row items-center q-gutter-sm">
+              <q-spinner color="primary" size="24px" />
+              <div>正在向后端请求候选项…</div>
+            </div>
+
+            <div v-else-if="lookupCandidateDialog.error" class="lookup-candidate-card__error text-negative">
+              {{ lookupCandidateDialog.error }}
+            </div>
+
+            <div v-else-if="lookupCandidateDialog.candidates.length === 0" class="lookup-candidate-card__empty">
+              后端没有返回可用候选项。请先确认当前角色名称或别名中存在可生成的内容。
+            </div>
+
+            <q-list v-else bordered class="rounded-borders overflow-hidden lookup-candidate-list">
+              <template v-for="group in lookupCandidateGroups" :key="group.key">
+                <q-item-label header class="text-weight-medium lookup-candidate-group">{{ group.key }}</q-item-label>
+                <q-separator />
+                <q-item
+                  v-for="candidate in group.items"
+                  :key="`${group.key}-${candidate.value}`"
+                  class="lookup-candidate-item"
+                  clickable
+                  :active="lookupCandidateDialog.selectedValue === candidate.value"
+                  active-class="lookup-candidate-item--active"
+                  @click="lookupCandidateDialog.selectedValue = candidate.value"
+                >
+                  <q-item-section avatar>
+                    <q-radio
+                      :model-value="lookupCandidateDialog.selectedValue"
+                      :val="candidate.value"
+                      @update:model-value="(value) => (lookupCandidateDialog.selectedValue = String(value || ''))"
+                    />
+                  </q-item-section>
+                  <q-item-section class="lookup-candidate-item__content">
+                    <q-item-label class="lookup-candidate-item__label">{{ candidate.label }}</q-item-label>
+                    <q-item-label caption class="lookup-candidate-item__detail">{{ candidate.detail }}</q-item-label>
+                    <q-item-label caption class="lookup-candidate-item__value">{{ candidate.value }}</q-item-label>
+                  </q-item-section>
+                </q-item>
+              </template>
+            </q-list>
+          </q-card-section>
+
+          <q-card-actions align="right">
+            <q-btn flat label="取消" v-close-popup />
+            <q-btn
+              color="primary"
+              label="应用候选"
+              :disable="lookupCandidateDialog.loading || !lookupCandidateDialog.selectedValue"
+              @click="applySelectedLookupCandidate"
+            />
+          </q-card-actions>
+        </q-card>
+      </q-dialog>
       <!-- </q-page> -->
     </q-page-container>
   </q-layout>
@@ -201,6 +268,25 @@ import RoleCard from '../components/RoleCard.vue';
 import type { RoleCardModel } from '../../types/role';
 
 type RoleWithId = RoleCardModel & { id: string };
+type LookupCandidateKind = 'pinyin' | 'romanized';
+type LookupKeyField = 'lookupKeys_pinyin' | 'lookupKeys_romanized';
+
+interface LookupCandidateItem {
+  group: string;
+  value: string;
+  label: string;
+  detail: string;
+}
+
+interface LookupCandidateGroup {
+  key: string;
+  items: LookupCandidateItem[];
+}
+
+interface LookupCandidateRequestPayload {
+  kind: LookupCandidateKind;
+  snapshot: RoleCardModel;
+}
 
 const drawerOpen = ref(true);
 
@@ -230,6 +316,34 @@ const vscodeApi = (
 
 // 避免回环：当应用来自扩展的列表时，不把它再次发送回去
 let applyingRemote = false;
+
+const lookupCandidateDialog = reactive({
+  open: false,
+  loading: false,
+  requestId: '',
+  roleIndex: -1,
+  kind: 'pinyin' as LookupCandidateKind,
+  field: 'lookupKeys_pinyin' as LookupKeyField,
+  title: '',
+  candidates: [] as LookupCandidateItem[],
+  selectedValue: '',
+  error: '',
+});
+
+const lookupCandidateGroups = computed<LookupCandidateGroup[]>(() => {
+  const groups = new Map<string, LookupCandidateItem[]>();
+  for (const candidate of lookupCandidateDialog.candidates) {
+    const key = candidate.group || '其它候选';
+    const existing = groups.get(key);
+    if (existing) {
+      existing.push(candidate);
+    } else {
+      groups.set(key, [candidate]);
+    }
+  }
+
+  return Array.from(groups.entries()).map(([key, items]) => ({ key, items }));
+});
 
 // ===== 稳定签名与静音窗口：只在“确有变更且不属于回声”时才更新 =====
 
@@ -395,7 +509,122 @@ window.addEventListener('message', (event: MessageEvent) => {
     }
     return;
   }
+
+  if (msg.type === 'lookupKeyCandidates' && typeof msg.requestId === 'string') {
+    if (msg.requestId !== lookupCandidateDialog.requestId) {
+      return;
+    }
+
+    lookupCandidateDialog.loading = false;
+    lookupCandidateDialog.error = typeof msg.error === 'string' ? msg.error : '';
+    lookupCandidateDialog.candidates = Array.isArray(msg.candidates)
+      ? (msg.candidates as unknown[]).filter((candidate: unknown): candidate is LookupCandidateItem => {
+          return Boolean(
+            candidate &&
+              typeof (candidate as LookupCandidateItem).group === 'string' &&
+              typeof (candidate as LookupCandidateItem).value === 'string' &&
+              typeof (candidate as LookupCandidateItem).label === 'string' &&
+              typeof (candidate as LookupCandidateItem).detail === 'string',
+          );
+        })
+      : [];
+    lookupCandidateDialog.selectedValue = lookupCandidateDialog.candidates[0]?.value ?? '';
+
+    if (lookupCandidateDialog.error) {
+      $q.notify({
+        message: lookupCandidateDialog.error,
+        type: 'negative',
+        position: 'top',
+      });
+    }
+    return;
+  }
 });
+
+function buildLookupRequestId(): string {
+  return `lookup-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getLookupKeyField(kind: LookupCandidateKind): LookupKeyField {
+  return kind === 'pinyin' ? 'lookupKeys_pinyin' : 'lookupKeys_romanized';
+}
+
+function getLookupDialogTitle(kind: LookupCandidateKind): string {
+  return kind === 'pinyin' ? '选择拼音查询键候选' : '选择罗马字查询键候选';
+}
+
+function onRequestLookupCandidates(index: number, payload: LookupCandidateRequestPayload) {
+  const snapshot = payload?.snapshot;
+  const sources = [snapshot?.base?.name, ...(snapshot?.base?.aliases ?? [])]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean);
+
+  if (sources.length === 0) {
+    $q.notify({
+      message: '请先填写角色名称或别名，再请求候选项。',
+      type: 'warning',
+      position: 'top',
+    });
+    return;
+  }
+
+  if (!vscodeApi?.postMessage) {
+    $q.notify({
+      message: '当前环境无法连接扩展后端。',
+      type: 'negative',
+      position: 'top',
+    });
+    return;
+  }
+
+  lookupCandidateDialog.open = true;
+  lookupCandidateDialog.loading = true;
+  lookupCandidateDialog.requestId = buildLookupRequestId();
+  lookupCandidateDialog.roleIndex = index;
+  lookupCandidateDialog.kind = payload.kind;
+  lookupCandidateDialog.field = getLookupKeyField(payload.kind);
+  lookupCandidateDialog.title = getLookupDialogTitle(payload.kind);
+  lookupCandidateDialog.candidates = [];
+  lookupCandidateDialog.selectedValue = '';
+  lookupCandidateDialog.error = '';
+
+  vscodeApi.postMessage({
+    type: 'requestLookupKeyCandidates',
+    requestId: lookupCandidateDialog.requestId,
+    kind: payload.kind,
+    role: JSON.parse(JSON.stringify(snapshot)),
+  });
+}
+
+function applySelectedLookupCandidate() {
+  const selectedValue = lookupCandidateDialog.selectedValue.trim();
+  const role = roles.value[lookupCandidateDialog.roleIndex];
+
+  if (!selectedValue || !role) {
+    lookupCandidateDialog.open = false;
+    return;
+  }
+
+  const field = lookupCandidateDialog.field;
+  const existing = Array.isArray(role.base[field]) ? [...role.base[field]!] : [];
+  if (existing.includes(selectedValue)) {
+    $q.notify({
+      message: '该候选项已经存在，无需重复添加。',
+      type: 'info',
+      position: 'top',
+    });
+    lookupCandidateDialog.open = false;
+    return;
+  }
+
+  role.base[field] = [...existing, selectedValue];
+  lookupCandidateDialog.open = false;
+  $q.notify({
+    message: '已将候选项追加到当前字段。',
+    type: 'positive',
+    position: 'top',
+  });
+}
 
 function notifySave() {
   if (applyingRemote) return;
@@ -638,6 +867,127 @@ onUnmounted(() => {
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 }
+
+.lookup-candidate-card {
+  min-width: 560px;
+  max-width: 92vw;
+  background: var(--vscode-editorWidget-background, var(--q-dark-page, #1f1f1f));
+  color: var(--vscode-editor-foreground, inherit);
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+}
+
+.lookup-candidate-card__header,
+.lookup-candidate-card__body,
+.lookup-candidate-group,
+.lookup-candidate-item__label,
+.lookup-candidate-item__detail,
+.lookup-candidate-item__value {
+  font-family:
+    var(--vscode-font-family),
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Noto Sans CJK SC',
+    'Noto Sans JP',
+    sans-serif;
+}
+
+.lookup-candidate-card__title {
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.lookup-candidate-card__hint,
+.lookup-candidate-card__empty,
+.lookup-candidate-item__detail {
+  color: var(--vscode-descriptionForeground, rgba(255, 255, 255, 0.78));
+}
+
+.lookup-candidate-card__hint,
+.lookup-candidate-card__empty,
+.lookup-candidate-card__error {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.lookup-candidate-list {
+  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+}
+
+.lookup-candidate-group {
+  background: var(--vscode-sideBarSectionHeader-background, rgba(127, 127, 127, 0.12));
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-editor-foreground, inherit));
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.lookup-candidate-item {
+  align-items: flex-start;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.lookup-candidate-item--active {
+  background: rgba(55, 148, 255, 0.12);
+  border-left: 3px solid var(--vscode-focusBorder, var(--q-primary));
+}
+
+.lookup-candidate-item__content {
+  min-width: 0;
+}
+
+.lookup-candidate-item__label,
+.lookup-candidate-item__detail {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.lookup-candidate-item__label {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--vscode-editor-foreground, inherit);
+}
+
+.lookup-candidate-item__detail {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.lookup-candidate-item__value {
+  display: inline-block;
+  margin-top: 6px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--vscode-textLink-foreground, var(--q-primary));
+  background: rgba(55, 148, 255, 0.1);
+  font-family:
+    var(--vscode-editor-font-family),
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    'Cascadia Code',
+    'Microsoft YaHei UI',
+    'Noto Sans CJK SC',
+    'Noto Sans JP',
+    monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.q-dark .lookup-candidate-card {
+  border-color: rgba(255, 255, 255, 0.08);
+}
 .value-preview {
   max-width: 55%;
   min-width: 0; /* allow flex children to shrink correctly */
@@ -654,6 +1004,10 @@ onUnmounted(() => {
 
 /* 让主视图中的角色面板以卡片形式堆叠，更易区分 */
 .role-panel {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border-radius: 10px;
   overflow: visible; /* 允许内部阴影/溢出效果 */
   background: var(--q-card-bg, rgba(255, 255, 255, 0.02));
@@ -667,15 +1021,21 @@ onUnmounted(() => {
 }
 
 /* 为内容区添加内边距，使卡片之间视觉上更分离 */
-.role-panel .q-expansion__content {
+.role-panel :deep(.q-expansion__content) {
   padding: 12px 16px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* 标题栏略微分离，固定圆角 */
-.role-panel .q-expansion__header {
+.role-panel :deep(.q-expansion__header) {
   border-top-left-radius: 10px;
   border-top-right-radius: 10px;
   padding: 12px 16px;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Dark mode tweaks */
@@ -710,7 +1070,36 @@ onUnmounted(() => {
       0 0 0 0 rgba(25, 118, 210, 0);
   }
 }
-</style>
+.editor-page-container {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
 
-/* 不占用布局体积的布局容器（display: contents 会让容器自身不生成 box） */ .layout-no-size {
-display: contents; }
+.editor-scroll-area,
+.index-page-content {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+:deep(.editor-scroll-area .q-scrollarea__container),
+:deep(.editor-scroll-area .q-scrollarea__content) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.role-panel :deep(.q-expansion-item__container),
+.role-panel :deep(.q-item),
+.role-panel :deep(.q-item__section),
+.role-panel :deep(.q-card),
+.role-panel :deep(.q-card__section) {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+</style>

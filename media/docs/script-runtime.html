@@ -1,0 +1,116 @@
+<div class="doc-section beginner">
+<h4>脚本运行时是什么</h4>
+<p>脚本运行时是 ANH 的<strong>自动化工具</strong>。你可以写一些小脚本来完成重复性工作，比如批量统计字数、自动整理文件等。</p>
+
+<h4>脚本放在哪里</h4>
+<p>默认放在 <code>novel-helper/scripts/</code> 文件夹里。支持 <code>.js</code> 文件。</p>
+
+<h4>脚本长什么样</h4>
+<p>最简单的一个脚本：</p>
+<pre><code>export async function run(ctx) {
+    const text = ctx.activeDoc.processed;
+    const count = text.length;
+    ctx.output.appendLine(`当前文档字数: ${count}`);
+    return "完成";
+}
+</code></pre>
+
+<h4>如何运行</h4>
+<ul>
+    <li>右键脚本文件 → "运行脚本"</li>
+    <li>命令面板 → "ANH: 运行脚本"</li>
+    <li>左侧"脚本运行时"面板点击脚本名</li>
+</ul>
+
+<h4>能做什么</h4>
+<p>脚本可以访问当前文档的内容、读写文件、调用外部工具等。比如：</p>
+<ul>
+    <li>统计字数</li>
+    <li>批量重命名</li>
+    <li>导出数据</li>
+    <li>调用 AI 工具（通过 MCP）</li>
+</ul>
+
+<h4>安全提示</h4>
+<p>脚本拥有完整的系统权限，请只运行你自己写的或信任来源的脚本。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>脚本目录</h4>
+<p>脚本默认位于 <code>novel-helper/scripts/</code> 目录下。ANH 支持 <code>.js</code> 和 <code>.ts</code> 两种扩展名，但脚本<strong>没有内置 transpiler</strong>——<code>.ts</code> 文件直接通过 <code>import()</code> 加载，能否运行取决于当前 Node.js 版本是否支持原生 TypeScript（Node.js 22+ 实验性支持）。建议优先使用 <code>.js</code> 文件以确保兼容性。</p>
+
+<h4>脚本结构</h4>
+<p>脚本必须导出一个 <code>run</code> 函数或默认导出：</p>
+<pre><code>// 方式一：命名导出 run
+export async function run(ctx, args) {
+    ctx.output.appendLine(`Hello, ${ctx.activeDoc.name}`);
+    return "完成";
+}
+
+// 方式二：默认导出
+export default async function(ctx, args) {
+    ctx.output.appendLine("执行成功");
+}
+</code></pre>
+
+<h4>运行方式</h4>
+<ul>
+    <li><b>右键运行</b> — 在包管理器或文件资源管理器中右键脚本文件 → "运行脚本"</li>
+    <li><b>命令面板</b> — "ANH: 运行脚本"</li>
+    <li><b>脚本树视图</b> — 左侧"脚本运行时"面板列出所有可用脚本，点击即可运行</li>
+</ul>
+
+<h4>运行时上下文（ctx）</h4>
+<p>脚本执行时会注入 <code>ctx</code> 上下文对象：</p>
+<ul>
+    <li><code>ctx.activeDoc</code> — 当前编辑器文档对象：
+        <ul>
+            <li><code>raw</code> — 原始文本内容</li>
+            <li><code>processed</code> — 处理后的纯文本（Markdown 会去除标记语法）</li>
+            <li><code>name</code> / <code>title</code> — 文件名/标题</li>
+            <li><code>filePath</code> / <code>path</code> / <code>fullPath</code> / <code>uri</code> — 文件路径</li>
+        </ul>
+    </li>
+    <li><code>ctx.mcp</code> — MCP 客户端实例，可调用已配置的 MCP 工具</li>
+    <li><code>ctx.os</code> — Node.js <code>os</code> 模块</li>
+    <li><code>ctx.fs</code> — Node.js <code>fs</code> 模块（原始同步/异步 API）</li>
+    <li><code>ctx.path</code> — Node.js <code>path</code> 模块</li>
+    <li><code>ctx.env</code> — 环境变量对象</li>
+    <li><code>ctx.output</code> — ANH 输出通道，结构为 <code>{ clear, append, appendLine, show }</code>：<br><code>console.log</code> 自动重定向到此通道</li>
+</ul>
+
+<h4>MCP 服务器集成</h4>
+<p>MCP（Model Context Protocol）允许脚本调用外部工具：</p>
+<ul>
+    <li><b>配置方式</b> — 在 VS Code 设置中配置 <code>AndreaNovelHelper.mcp.servers</code>，或在项目根目录创建 <code>mcp.json</code> 配置文件</li>
+    <li><b>调用方式</b> — <code>await ctx.mcp.callTool('serverName', 'toolName', params)</code></li>
+    <li><b>多服务器</b> — 如果配置了多个启用的 MCP 服务器，脚本会<strong>同时对每个服务器运行</strong>，每个服务器一个独立实例</li>
+    <li><b>无 MCP 模式</b> — 如果没有启用的 MCP 服务器，脚本以"无MCP"模式运行，ctx.mcp 为 null 或空对象</li>
+    <li><b>可用工具</b> — Chrome 浏览器控制、数据库访问、文件系统操作、网络请求等（取决于配置的 MCP 服务器）</li>
+</ul>
+
+<h4>简单示例</h4>
+<pre><code>// 统计当前文档的字数
+export async function run(ctx) {
+    const text = ctx.activeDoc.processed;
+    const count = text.replace(/\s/g, '').length;
+    ctx.output.appendLine(`当前文档字数: ${count}`);
+    return { wordCount: count };
+}
+</code></pre>
+
+<pre><code>// 使用 MCP 工具
+export async function run(ctx) {
+    if (!ctx.mcp) {
+        ctx.output.appendLine("没有可用的 MCP 服务器");
+        return;
+    }
+    const result = await ctx.mcp.callTool('browser', 'navigate', {
+        url: 'https://example.com'
+    });
+    ctx.output.appendLine(`页面标题: ${result.title}`);
+}
+</code></pre>
+
+<div class="doc-note">脚本运行时拥有完整的 Node.js 权限，请确保只运行可信来源的脚本。MCP 配置优先读取 <code>mcp.json</code> 文件，其次才是 VS Code 设置。</div>
+</div>

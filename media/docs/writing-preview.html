@@ -1,0 +1,160 @@
+<div class="doc-section beginner">
+<h4>预览功能是什么</h4>
+<p>预览功能让你在发布前<strong>看到小说在网站上的最终效果</strong>。很多小说网站不支持 Markdown 排版（加粗、标题、引用等），预览可以帮你确认发布后的纯文本效果。</p>
+<p>注意：编辑器本身已经提供了角色名上色功能。预览中的上色和 Markdown 格式渲染可以独立开关——因为大多数小说网站不支持这些排版。</p>
+
+<h4>核心用途</h4>
+<ul>
+    <li><b>确认发布效果</b> — 关闭 Markdown 渲染后，预览显示的就是纯文本，接近网站上的实际效果</li>
+    <li><b>检查角色名</b> — 可以开启或关闭角色名上色，确认角色名在正文中的分布</li>
+    <li><b>阅读体验</b> — 翻页模式、调整字体和排版，以读者视角审视你的作品</li>
+    <li><b>语音朗读</b> — 听一遍自己的文字，发现眼睛看不到的问题</li>
+    <li><b>导出</b> — 复制纯文本或导出 TXT 文件</li>
+</ul>
+
+<h4>如何打开预览</h4>
+<ol>
+    <li>按 <kbd>Ctrl+Shift+P</kbd> 打开命令面板</li>
+    <li>输入"打开预览"</li>
+    <li>选择"ANH: 打开 Markdown/TXT 预览"</li>
+</ol>
+<p>预览面板会出现在编辑器右侧。切换编辑其他文件时，预览会自动跟随显示新文件。</p>
+
+<h4>关闭 Markdown 渲染</h4>
+<p>点击预览右下角齿轮按钮，可以逐项关闭 Markdown 渲染（标题、加粗、斜体、引用块、列表、代码块等）。全部关闭后，预览显示的就是纯文本效果——和大多数小说网站上的显示一致。</p>
+
+<h4>关闭角色名上色</h4>
+<p>齿轮设置中也可以关闭角色名着色。编辑器本身已经提供了角色名上色，预览中的着色是额外的视觉辅助，按需开关即可。</p>
+
+<h4>Typst 排版预览（进阶）</h4>
+<p>如果你需要印刷级别的排版效果（如实体书排版），可以使用 Typst 预览。需要安装 <b>Tinymist Typst</b> 扩展。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>一、预览架构</h4>
+<p>ANH 使用<b>完全自研的 Markdown 解析器</b>（不依赖 markdown-it、marked 等第三方库），配合增量更新引擎，即使十万字长文也能流畅预览。</p>
+<ul>
+    <li><b>解析器</b>：将 Markdown 源码转为纯文本文块（paragraph、heading、list、blockquote、code），同时记录行内样式范围</li>
+    <li><b>渲染器</b>：将文块转为 HTML，注入到 webview 中显示</li>
+    <li><b>增量更新</b>：仅重渲染变化的段落，80ms 防抖。变更超过 60% 或 2000 行时回退到全量渲染</li>
+    <li><b>滚动同步</b>：基于滚动比例 + 行号的双向同步，带死区过滤和回声抑制</li>
+</ul>
+
+<h4>二、支持的 Markdown 语法</h4>
+<p>预览支持以下 Markdown 语法，但这些渲染<b>都可以独立关闭</b>（齿轮设置中）：</p>
+
+<p><b>块级元素：</b></p>
+<ul>
+    <li>ATX 标题（<code>#</code> ~ <code>######</code>）— 可关闭，关闭后只显示纯文字</li>
+    <li>引用块（<code>&gt;</code>）— 可关闭</li>
+    <li>无序/有序/任务列表 — 可关闭，关闭后列表标记消失</li>
+    <li>围栏代码块（<code>```</code>）— 可关闭</li>
+    <li>表格（管道符分隔）</li>
+    <li>水平线（<code>---</code>、<code>***</code>、<code>___</code>）</li>
+    <li>图片（<code>![alt](src)</code>）— 相对路径自动解析</li>
+</ul>
+
+<p><b>行内元素：</b></p>
+<ul>
+    <li><code>**加粗**</code> — 可关闭，关闭后标记符号消失，只留纯文字</li>
+    <li><code>*斜体*</code> — 可关闭</li>
+    <li><code>***加粗斜体***</code> — 可关闭</li>
+    <li><code>~~删除线~~</code> — 可关闭</li>
+    <li><code>`行内代码`</code></li>
+    <li><code>[文字](url)</code> — 链接被剥离，只显示文字</li>
+</ul>
+
+<p><b>注释（渲染时剥离）：</b></p>
+<ul>
+    <li><code>&lt;!-- HTML 注释 --&gt;</code></li>
+    <li><code>%% Obsidian 注释 %%</code></li>
+</ul>
+
+<p><b>不支持的语法：</b>嵌套列表、脚注、定义列表、LaTeX 数学、Mermaid 图表。</p>
+
+<h4>三、角色名着色</h4>
+<p>编辑器本身已经提供角色名上色（基于 Aho-Corasick 算法实时匹配）。预览中的着色是独立的额外功能，可以在设置中开关。</p>
+
+<p><b>默认类型颜色：</b></p>
+<ul>
+    <li>主角 — 金色 <code>#FFD700</code></li>
+    <li>配角 — 浅蓝 <code>#ADD8E6</code></li>
+    <li>联动角色 — 浅绿 <code>#90EE90</code></li>
+    <li>正则表达式 — 橙色 <code>#FFA500</code></li>
+    <li>未指定类型 — 蓝色 <code>#7AA2F7</code>（可配置）</li>
+</ul>
+
+<p><b>控制选项：</b></p>
+<ul>
+    <li>预览设置面板中可开关角色名着色</li>
+    <li>可按类型过滤（只显示主角、只显示配角等）</li>
+    <li>角色库中定义的 <code>style</code> 对象会覆盖默认颜色</li>
+</ul>
+
+<h4>四、阅读模式设置</h4>
+<p>点击预览右下角齿轮按钮打开设置面板：</p>
+
+<p><b>排版设置：</b></p>
+<ul>
+    <li><b>显示模式</b>：滚动（连续）或翻页（PgUp/PgDn）</li>
+    <li><b>文字对齐</b>：左对齐或两端对齐</li>
+    <li><b>栏数</b>：1 栏或 2 栏</li>
+    <li><b>字体</b>：字号（12-30px）、字体家族、行高、段间距、内边距</li>
+</ul>
+
+<p><b>主题：</b></p>
+<ul>
+    <li>跟随 VS Code（auto）</li>
+    <li>纯白 / 纯黑 / 自定义颜色</li>
+</ul>
+
+<p><b>Markdown 渲染开关（推荐小说作者全部关闭）：</b></p>
+<ul>
+    <li>标题 — 关闭后 <code>#</code> 标题只显示纯文字</li>
+    <li>列表 — 关闭后列表标记消失</li>
+    <li>加粗、斜体、加粗斜体、删除线 — 各自独立开关</li>
+    <li>引用块、代码块</li>
+</ul>
+<p>全部关闭后，预览效果接近纯文本小说网站上的显示。</p>
+
+<p><b>预设系统：</b></p>
+<ul>
+    <li>保存/加载/删除命名预设</li>
+    <li>例如可以创建一个"网站预览"预设（全部 Markdown 关闭）和一个"编辑预览"预设（全部开启）</li>
+</ul>
+
+<h4>五、TTS 语音朗读</h4>
+<ul>
+    <li>底部控件：播放、暂停、停止</li>
+    <li>语音选择下拉菜单</li>
+    <li>当前朗读位置以金色背景高亮</li>
+    <li>可朗读全文或选中文本</li>
+    <li>翻页模式下朗读会跨页继续</li>
+</ul>
+
+<h4>六、导出功能</h4>
+<ul>
+    <li>右键预览 → "复制纯文本" — 复制到剪贴板</li>
+    <li>右键预览 → "朗读选中文本" — TTS 朗读选区</li>
+    <li>导出为 TXT 文件</li>
+</ul>
+
+<h4>七、Typst 排版预览</h4>
+<p>将 Markdown 转换为 Typst 格式进行专业排版预览（适用于实体书排版）：</p>
+<ul>
+    <li>需要安装 <b>Tinymist Typst</b> 扩展</li>
+    <li>支持模板选择，内置多种排版模板</li>
+    <li>支持内存模式和文件模式</li>
+    <li>命令：<code>AndreaNovelHelper.openTypstPreview</code></li>
+</ul>
+
+<h4>八、打开方式</h4>
+<ul>
+    <li>命令面板 <kbd>Ctrl+Shift+P</kbd>：输入"打开预览"→ "ANH: 打开 Markdown/TXT 预览"</li>
+    <li>命令 ID：<code>myPreview.open</code>（Markdown/TXT）</li>
+    <li>命令 ID：<code>AndreaNovelHelper.openTypstPreview</code>（Typst）</li>
+    <li>状态栏点击预览按钮（如果已启用）</li>
+</ul>
+
+<div class="doc-note">预览面板使用 <code>retainContextWhenHidden</code> 策略，隐藏时不会销毁。面板状态（文档 URI、滚动位置）会在 VS Code 重启后自动恢复。建议创建两个预设：一个全开（编辑时参考），一个全关（模拟网站发布效果）。</div>
+</div>

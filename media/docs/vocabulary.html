@@ -1,0 +1,209 @@
+<div class="doc-section beginner">
+<h4>词汇表是什么</h4>
+<p>词汇表是用来管理你小说里的<strong>专有名词</strong>的：地名、组织名、魔法术语、科技名词、种族名等。</p>
+<p>你可以把它理解为小说的"术语词典"。跟角色库类似，但专门用来存放非人物的名词。</p>
+
+<h4>词汇和角色有什么区别</h4>
+<p>本质上没有区别，ANH 用同一套系统管理它们。唯一的不同是"类型"字段：角色是"主角/配角"，词汇是"词汇"。</p>
+<p>这意味着词汇享有和角色完全一样的能力：自动提示、高亮显示、Ctrl+Click 跳转、查找引用等。</p>
+
+<h4>创建词汇表</h4>
+<ol>
+    <li>在包管理器中右键目录节点</li>
+    <li>选择"创建词汇库 (MD/JSON5/TXT)"</li>
+    <li>选择 Markdown 格式（推荐）</li>
+</ol>
+
+<h4>词汇格式示例（Markdown）</h4>
+<pre><code># 世界观词汇
+
+## 幻想乡
+
+### 类型
+词汇
+
+### 描述
+与外界隔离的结界内地域，人类、妖怪、神明等共同活动的主要舞台。
+
+### 别名
+Gensokyo
+
+### 颜色
+#98FB98
+
+## 博丽大结界
+
+### 类型
+词汇
+
+### 描述
+隔开幻想乡与外界的巨大结界，是幻想乡成立和维持的重要基础。
+
+### 别名
+大结界
+
+### 颜色
+#7AA2F7
+
+## 红魔馆
+
+### 类型
+词汇
+
+### 描述
+位于雾之湖附近的洋馆，红魔馆相关角色的主要据点。
+
+### 别名
+Scarlet Devil Mansion
+SDM
+
+### 颜色
+#E06C75
+</code></pre>
+
+<h4>推荐用法</h4>
+<ul>
+    <li>把所有世界观核心词汇统一放在一个包里</li>
+    <li>给重要词汇设置颜色，在正文中一眼识别</li>
+    <li>利用别名功能管理外文译名</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>用途</h4>
+<p>词汇表用于管理世界观中的专有名词：地名、组织名、魔法术语、科技名词、种族名等。在 ANH 的统一对象模型中，词汇的 <code>type</code> 为 <code>词汇</code>，与角色共享同一套底层机制。</p>
+
+<h4>文件格式规范</h4>
+<p>词汇表支持 Markdown、JSON5、CSV 三种格式（不支持纯 TXT），命名规则包括 <code>vocabulary.md</code>、<code>*_vocabulary.md</code>、<code>*_vocab.md</code>、<code>*_term.md</code>、<code>*_词汇.md</code>、<code>*_术语.md</code>。</p>
+
+<p><b>Markdown 格式示例</b>：</p>
+<pre><code># 世界观词汇
+
+## 幻想乡
+
+### 类型
+词汇
+
+### 描述
+与外界隔离的结界内地域，人类、妖怪、神明等共同活动的主要舞台。
+
+### 别名
+Gensokyo
+
+### 颜色
+#98FB98
+
+### 分类
+地域
+
+### 优先级
+10
+
+## 博丽大结界
+
+### 类型
+词汇
+
+### 描述
+隔开幻想乡与外界的巨大结界，是幻想乡成立和维持的重要基础。
+
+### 别名
+大结界
+
+### 颜色
+#7AA2F7
+
+### 分类
+结界
+
+### 优先级
+8
+
+## 妖怪之山
+
+### 类型
+词汇
+
+### 描述
+天狗、河童等势力活动的山地，是幻想乡中的重要地理区域。
+
+### 别名
+Youkai Mountain
+
+### 颜色
+#C678DD
+
+### 分类
+地域
+</code></pre>
+
+<p><b>JSON5 格式示例</b>：</p>
+<pre><code>[
+  {
+    name: "幻想乡",
+    type: "词汇",
+    description: "与外界隔离的结界内地域，人类、妖怪、神明等共同活动的主要舞台。",
+    aliases: ["Gensokyo"],
+    color: "#98FB98",
+    category: "地域",
+    priority: 10,
+    wordSegmentFilter: true
+  },
+  {
+    name: "博丽大结界",
+    type: "词汇",
+    description: "隔开幻想乡与外界的巨大结界，是幻想乡成立和维持的重要基础。",
+    aliases: ["大结界"],
+    color: "#7AA2F7",
+    category: "结界",
+    priority: 8
+  },
+  {
+    name: "红魔馆",
+    type: "词汇",
+    description: "位于雾之湖附近的洋馆，红魔馆相关角色的主要据点。",
+    aliases: ["Scarlet Devil Mansion", "SDM"],
+    color: "#E06C75",
+    category: "地点"
+  },
+  {
+    name: "妖怪之山",
+    type: "词汇",
+    description: "天狗、河童等势力活动的山地，是幻想乡中的重要地理区域。",
+    aliases: ["Youkai Mountain"],
+    color: "#C678DD",
+    category: "地域"
+  }
+]
+</code></pre>
+
+<h4>使用方式</h4>
+<ul>
+    <li><b>自动补全</b> — 在编辑器中输入词汇名或别名时，会自动弹出补全列表。支持拼音首字母匹配</li>
+    <li><b>高亮显示</b> — 词汇名在编辑器中按定义的 <code>color</code> 高亮，支持前景色和背景色样式</li>
+    <li><b>跳转定义</b> — Ctrl+Click 词汇名可直接跳转到定义文件</li>
+    <li><b>查找引用</b> — 查看词汇在哪些文件中被引用，配合引用维护功能使用</li>
+    <li><b>角色卡编辑器</b> — 与角色完全相同的可视化编辑器，支持所有字段编辑</li>
+</ul>
+
+<h4>查询键</h4>
+<p>词汇也支持查询键字段，用于补全匹配：</p>
+<ul>
+    <li><code>lookupKeys_pinyin</code> — 拼音查询键</li>
+    <li><code>lookupKeys_romanized</code> — 罗马字查询键</li>
+    <li><code>lookupKeys_spelling</code> — 拼写查询键</li>
+</ul>
+<p>可通过 <code>AndreaNovelHelper.lookupKeys.autoGeneratePinyin</code> / <code>autoGenerateRomanized</code> 配置自动生成。</p>
+
+<h4>与角色的异同</h4>
+<p>词汇和角色共享同一套能力（补全、高亮、跳转、引用、角色卡编辑器），区别仅在于 <code>type</code> 字段的值。在"所有角色"树视图中，词汇会按类型分组显示，不会与角色混淆。</p>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.vocabularyFile</code> — 默认词汇文件路径（默认 <code>novel-helper/vocabulary.json5</code>）</li>
+</ul>
+
+<h4>创建词汇表</h4>
+<p>在包管理器中右键目录节点 → "创建词汇库 (MD/JSON5/TXT)"，选择格式（推荐 Markdown），输入文件名即可创建。</p>
+<div class="doc-note">建议将世界观核心词汇统一放在一个包中（如 <code>novel-helper/worldbuilding/vocabulary.md</code>），方便管理和复用。</div>
+</div>

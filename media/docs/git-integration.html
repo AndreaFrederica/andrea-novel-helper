@@ -1,0 +1,139 @@
+<div class="doc-section beginner">
+<h4>Git 版本控制是什么</h4>
+<p>Git 是一种<strong>版本控制工具</strong>，可以帮你记录文件的每次修改。就像给你的小说写"修改日志"——每次重要改动都可以保存一个快照，以后想找回旧版本随时可以。</p>
+
+<h4>为什么推荐手动使用 Git</h4>
+<p>虽然 ANH 提供了自动 Git 功能，但我们<b>强烈推荐你学习手动使用 Git</b>。原因：</p>
+<ul>
+    <li><b>有意义的提交信息</b>：手动提交时你会写下"完成了第三章初稿"、"修改了主角背景设定"这样的描述，而不是"Auto commit: 2024-01-01"。半年后回看历史，你能一眼看出每次改动做了什么</li>
+    <li><b>干净的版本历史</b>：自动提交会生成大量无意义的快照（每 30 秒一个），淹没掉真正重要的改动。手动提交让你精确控制什么时候保存快照</li>
+    <li><b>更好的协作体验</b>：如果以后要和别人合作写作，有意义的提交信息是协作的基础</li>
+    <li><b>学习一项实用技能</b>：Git 是软件开发中最常用的工具，学会了对你的职业生涯也有帮助</li>
+</ul>
+
+<h4>手动使用 Git 的基本流程</h4>
+<ol>
+    <li><b>安装 Git</b> — 从 <a href="https://git-scm.com/">git-scm.com</a> 下载安装</li>
+    <li><b>初始化仓库</b> — 在项目文件夹中右键 → "Git Bash Here" → 输入 <code>git init</code></li>
+    <li><b>配置身份</b> — 输入 <code>git config user.name "你的名字"</code> 和 <code>git config user.email "你的邮箱"</code></li>
+    <li><b>提交改动</b> — 写完一段后，在终端输入：
+        <pre><code>git add .                    # 暂存所有改动
+git commit -m "完成第三章初稿"  # 提交并写描述
+</code></pre>
+    </li>
+    <li><b>查看历史</b> — 输入 <code>git log</code> 查看所有提交记录</li>
+    <li><b>找回旧版本</b> — 输入 <code>git log --oneline</code> 查看版本号，然后 <code>git checkout &lt;版本号&gt; -- 文件名</code> 恢复</li>
+</ol>
+
+<h4>ANH 提供的 Git 辅助</h4>
+<ul>
+    <li><b>Git 身份配置向导</b> — 在命令面板输入"设置 Git 身份"，一步步引导你配置</li>
+    <li><b>自动 Git（可选）</b> — 如果你觉得手动太麻烦，ANH 也提供自动提交功能，但不推荐作为主要使用方式</li>
+    <li><b>Git 状态显示</b> — 底部状态栏显示 Git 同步状态</li>
+</ul>
+
+<h4>推荐的工作习惯</h4>
+<ul>
+    <li>每完成一个场景或章节就提交一次</li>
+    <li>提交信息写清楚做了什么（如"完成第三章初稿"、"修改了反派角色设定"）</li>
+    <li>重要里程碑打标签：<code>git tag v1.0-初稿完成</code></li>
+    <li>定期推送到远程仓库（如 GitHub）做备份</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>一、手动 Git（推荐）</h4>
+<p>手动使用 Git 能给你最干净、最有意义的版本历史。以下是进阶技巧：</p>
+
+<p><b>分支管理：</b></p>
+<pre><code>git branch 修订版        # 创建修订分支
+git checkout 修订版      # 切换到修订分支
+git checkout master      # 切回主线
+git merge 修订版         # 合并修订到主线
+</code></pre>
+
+<p><b>标签：</b></p>
+<pre><code>git tag v1.0-初稿
+git tag v2.0-终稿
+git tag -a v3.0 -m "出版版"
+</code></pre>
+
+<p><b>查看差异：</b></p>
+<pre><code>git diff                 # 查看未暂存的改动
+git diff --cached        # 查看已暂存的改动
+git log --oneline        # 简洁版提交历史
+git log --graph          # 图形化分支历史
+</code></pre>
+
+<p><b>撤销操作：</b></p>
+<pre><code>git checkout -- 文件名    # 撤销工作区改动
+git reset HEAD 文件名     # 取消暂存
+git revert HEAD           # 撤销最近一次提交（创建新提交）
+</code></pre>
+
+<h4>二、自动 Git（可选）</h4>
+<p>ANH 的自动 Git 功能（<code>AutoGitService</code>）可以自动提交你的改动。虽然不推荐作为主要方式，但在某些场景下可以作为辅助：</p>
+<ul>
+    <li>你完全不想学习 Git 命令</li>
+    <li>你只需要基本的版本备份，不需要有意义的提交历史</li>
+</ul>
+
+<p><b>自动提交行为：</b></p>
+<ul>
+    <li>保存文件时自动创建 Git 提交</li>
+    <li>内置 30 秒冷却 + 3 秒防抖，避免频繁提交</li>
+    <li>提交信息格式：<code>"Auto commit: {timestamp}"</code></li>
+    <li>可选自动推送到远程仓库</li>
+    <li>可选自动拉取远程更新</li>
+</ul>
+
+<p><b>配置项：</b></p>
+<ul>
+    <li><code>AndreaNovelHelper.autoGit.enabled</code> — 总开关</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPush</code> — 自动推送</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPull</code> — 自动拉取</li>
+    <li><code>AndreaNovelHelper.autoGit.checkIntervalSeconds</code> — HEAD 检查间隔（默认 30 秒）</li>
+    <li><code>AndreaNovelHelper.autoGit.commitMessageTemplate</code> — 提交信息模板</li>
+    <li><code>AndreaNovelHelper.autoGit.includeUntracked</code> — 包含未跟踪文件</li>
+    <li><code>AndreaNovelHelper.autoGit.excludePatterns</code> — 排除文件模式</li>
+    <li><code>AndreaNovelHelper.autoGit.compactStatus</code> — 状态栏紧凑模式</li>
+</ul>
+
+<p><b>提交信息模板变量：</b></p>
+<ul>
+    <li><code>{timestamp}</code> — 当前时间</li>
+    <li><code>{files}</code> — 变更文件列表</li>
+    <li><code>{branch}</code> — 当前分支名</li>
+</ul>
+
+<h4>三、GitGuard — 智能字数统计</h4>
+<p>ANH 的字数统计可以与 Git 联动，只统计<b>自上次提交以来真正新增的字数</b>，而不是每次保存都重新计算。</p>
+<ul>
+    <li>通过 VS Code Git 扩展 API 读取 Git 状态（不依赖 CLI）</li>
+    <li>三种基线模式：HEAD（对比最新提交）、INDEX（对比暂存区）、WORKTREE（对比工作区）</li>
+    <li>内容哈希去重，避免重复统计相同内容</li>
+</ul>
+
+<h4>四、Git 身份配置向导</h4>
+<p>命令：<code>AndreaNovelHelper.setupGitIdentity</code></p>
+<ul>
+    <li>检查 Git 是否已安装</li>
+    <li>检测已有的全局/本地 user.name 和 user.email</li>
+    <li>交互式向导配置 Git 身份</li>
+    <li>支持全局配置和本地（仅当前仓库）配置</li>
+    <li>本地配置时自动初始化 Git 仓库</li>
+</ul>
+
+<h4>五、状态栏</h4>
+<p>Git 状态与 WebDAV 同步状态整合显示在底部状态栏：<code>ANH:Sync Git:ON/OFF WebDAV:ON/OFF</code>。点击可快速切换开关。</p>
+
+<h4>六、.gitignore 建议</h4>
+<p>以下目录建议加入 <code>.gitignore</code>：</p>
+<pre><code>novel-helper/.anh-fsdb/
+novel-helper/typo/data/
+node_modules/
+*.vsix
+</code></pre>
+
+<div class="doc-note">我们推荐手动使用 Git，因为有意义的提交信息和干净的版本历史对长期写作项目至关重要。自动 Git 可以作为安全网，但不应该替代你的主动版本管理。如果你是 Git 新手，建议花 30 分钟学习基本命令，这会让你的写作流程受益终身。</div>
+</div>

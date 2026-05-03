@@ -17,6 +17,7 @@
     "markdown",
     "plaintext",
     "json5",
+    "csv",
     "ojson",
     "ojson5",
     "rjson",

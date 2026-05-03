@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.65",
+  "version": "0.5.0",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -50,6 +50,10 @@
     "onLanguage:rjson5",
     "onLanguage:tjson5",
     "onFileSystem:andrea-outline",
+    "onWebviewPanel:andrea.guide",
+    "onWebviewPanel:andrea.guideDoc",
+    "onCommand:andrea.openWhatsNew",
+    "onWebviewPanel:whatsNew",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -239,8 +243,32 @@
         "title": "%command.andrea.quickSettings.title%"
       },
       {
+        "command": "andrea.openGraphicalQuickSettings",
+        "title": "打开图形化快速设置",
+        "category": "Andrea Novel Helper",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "andrea.openProjectSettings",
+        "title": "打开项目设置",
+        "category": "Andrea Novel Helper",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "andrea.configureMilestones",
         "title": "%command.andrea.configureMilestones.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.openTimeStats",
+        "title": "打开写作统计仪表板",
+        "category": "Andrea Novel Helper",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "AndreaNovelHelper.exportTimeStatsCSV",
+        "title": "导出写作时间统计 CSV",
+        "category": "Andrea Novel Helper",
+        "icon": "$(file-code)"
       },
       {
         "command": "andrea.toggleIndentFirst",
@@ -514,6 +542,10 @@
         "title": "%command.openFile.title%"
       },
       {
+        "command": "AndreaNovelHelper.openProjectConfigFile",
+        "title": "打开项目设置文件"
+      },
+      {
         "command": "AndreaNovelHelper.deleteNode",
         "title": "%command.deleteNode.title%"
       },
@@ -750,6 +782,30 @@
         "title": "%command.projectInitWizard.title%"
       },
       {
+        "command": "AndreaNovelHelper.projectInitWizard.graphical",
+        "title": "打开图形化项目初始化向导",
+        "category": "Andrea Novel Helper",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "AndreaNovelHelper.showGuide",
+        "title": "打开功能引导",
+        "category": "Andrea Novel Helper",
+        "icon": "$(book)"
+      },
+      {
+        "command": "AndreaNovelHelper.showGuideDoc",
+        "title": "%command.showGuideDoc.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(book)"
+      },
+      {
+        "command": "AndreaNovelHelper.generateLookupKeysForCurrentFile",
+        "title": "为当前角色文件生成查询键",
+        "category": "Andrea Novel Helper",
+        "icon": "$(symbol-key)"
+      },
+      {
         "command": "AndreaNovelHelper.disableWorkspace",
         "title": "%command.disableWorkspace.title%"
       },
@@ -974,6 +1030,18 @@
         "command": "andrea.autoScroll.scrollToEnd",
         "title": "滚动到文档末尾",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.openWhatsNew",
+        "title": "打开 What's New",
+        "category": "Andrea Novel Helper",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "andrea.copilot.exportMcpStdioScript",
+        "title": "释放 MCP stdio 代理桥脚本",
+        "category": "Andrea Novel Helper",
+        "icon": "$(terminal)"
       }
     ],
     "walkthroughs": [
@@ -1047,6 +1115,36 @@
             "completionEvents": [
               "onCommand:AndreaNovelHelper.wizard.checkGitUser"
             ]
+          },
+          {
+            "id": "anh.step.vscodeSidebar",
+            "title": "%walkthrough.anh.step.vscodeSidebar.title%",
+            "description": "%walkthrough.anh.step.vscodeSidebar.description%",
+            "media": {
+              "markdown": "media/walkthrough/step6_vscodeSidebar.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.view.explorer"
+            ]
+          },
+          {
+            "id": "anh.step.anhFeatures",
+            "title": "%walkthrough.anh.step.anhFeatures.title%",
+            "description": "%walkthrough.anh.step.anhFeatures.description%",
+            "media": {
+              "markdown": "media/walkthrough/step7_anhFeatures.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.showGuideDoc"
+            ]
+          },
+          {
+            "id": "anh.step.finish",
+            "title": "%walkthrough.anh.step.finish.title%",
+            "description": "%walkthrough.anh.step.finish.description%",
+            "media": {
+              "markdown": "media/walkthrough/step8_finish.md"
+            }
           }
         ]
       }
@@ -1862,6 +1960,7 @@
             "markdown",
             "plaintext",
             "json5",
+            "csv",
             "ojson",
             "ojson5",
             "rjson",
@@ -1869,6 +1968,42 @@
             "tjson5"
           ],
           "description": "%config.supportedFileTypes.description%"
+        },
+        "AndreaNovelHelper.customCharacterFileKeywords": {
+          "anhName": "自定义角色文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customCharacterFileKeywords.description%"
+        },
+        "AndreaNovelHelper.customSensitiveWordsFileKeywords": {
+          "anhName": "自定义敏感词文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customSensitiveWordsFileKeywords.description%"
+        },
+        "AndreaNovelHelper.customVocabularyFileKeywords": {
+          "anhName": "自定义词汇文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customVocabularyFileKeywords.description%"
+        },
+        "AndreaNovelHelper.customRegexFileKeywords": {
+          "anhName": "自定义正则文件关键词",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.customRegexFileKeywords.description%"
         },
         "AndreaNovelHelper.workspaceDisabled": {
           "anhName": "禁用工作区",
@@ -2291,6 +2426,18 @@
           "default": false,
           "description": "%config.debug.completionLog.description%"
         },
+        "AndreaNovelHelper.debug.roleFileDetection": {
+          "anhName": "角色文件识别调试",
+          "type": "boolean",
+          "default": false,
+          "description": "%config.debug.roleFileDetection.description%"
+        },
+        "AndreaNovelHelper.debug.smartRoleAdder": {
+          "anhName": "角色合并调试",
+          "type": "boolean",
+          "default": false,
+          "description": "%config.debug.smartRoleAdder.description%"
+        },
         "AndreaNovelHelper.completion.triggerMode": {
           "anhName": "补全触发模式",
           "type": "string",
@@ -2319,6 +2466,48 @@
             "type": "string"
           },
           "markdownDescription": "%config.completion.symbolPrefixes.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.treatPinyinAsAlias": {
+          "anhName": "拼音查询键按别名展示",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.treatPinyinAsAlias.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.autoGeneratePinyin": {
+          "anhName": "自动生成拼音查询键",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.autoGeneratePinyin.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias": {
+          "anhName": "罗马字查询键按别名展示",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.treatRomanizedAsAlias.description%"
+        },
+        "AndreaNovelHelper.lookupKeys.autoGenerateRomanized": {
+          "anhName": "自动生成罗马字查询键",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.autoGenerateRomanized.description%"
+        },
+        "AndreaNovelHelper.defaultRoleLookupKeys": {
+          "anhName": "默认角色索引键",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.defaultRoleLookupKeys.description%"
+        },
+        "AndreaNovelHelper.extendedLookupKeyPrefixes": {
+          "anhName": "扩展索引键前缀",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "markdownDescription": "%config.extendedLookupKeyPrefixes.description%"
         },
         "AndreaNovelHelper.completion.segmenterType": {
           "anhName": "分词器类型",
@@ -3190,6 +3379,12 @@
           "minimum": 0,
           "maximum": 2000,
           "markdownDescription": "自动滚动的防抖延迟时间（毫秒）。避免频繁滚动导致的抖动。 如果0 则立即触发"
+        },
+        "AndreaNovelHelper.whatsNew.autoShow": {
+          "anhName": "自动显示 What's New",
+          "type": "boolean",
+          "default": true,
+          "description": "更新到新版后自动显示 What's New 页面"
         }
       }
     },
@@ -3261,13 +3456,19 @@
           "when": "view == andrea.scriptsView",
           "group": "navigation@6",
           "icon": "$(refresh)"
+        },
+        {
+          "command": "andrea.openProjectSettings",
+          "when": "view == andrea.settingsView",
+          "group": "navigation@1",
+          "icon": "$(settings-gear)"
         }
       ],
       "view/item/context": [
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createCharacterGallery",
-          "group": "0_create@1"
+          "group": "0_create@2"
         },
         {
           "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
@@ -3294,33 +3495,53 @@
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createSensitiveWords",
-          "group": "0_create@2"
+          "command": "andrea.openProjectSettings",
+          "group": "0_create@0"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createVocabulary",
+          "command": "AndreaNovelHelper.projectInitWizard.graphical",
+          "group": "0_create@1"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.createSensitiveWords",
           "group": "0_create@3"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createRoleFile",
+          "command": "AndreaNovelHelper.createVocabulary",
           "group": "0_create@4"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createRelationshipFile",
+          "command": "AndreaNovelHelper.createRoleFile",
           "group": "0_create@5"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createTimelineFile",
+          "command": "AndreaNovelHelper.createRelationshipFile",
           "group": "0_create@6"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
-          "command": "AndreaNovelHelper.createRegexPatterns",
+          "command": "AndreaNovelHelper.createTimelineFile",
           "group": "0_create@7"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.createRegexPatterns",
+          "group": "0_create@8"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.showGuide",
+          "group": "0_create@9"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.showGuideDoc",
+          "group": "0_create@10"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
@@ -3338,12 +3559,17 @@
           "group": "3_open"
         },
         {
+          "when": "view == packageManagerView && (viewItem == projectConfigFile || viewItem == missingProjectConfigFile)",
+          "command": "AndreaNovelHelper.openProjectConfigFile",
+          "group": "3_open"
+        },
+        {
           "when": "view == packageManagerView && (viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
           "command": "AndreaNovelHelper.openWith",
           "group": "3_open"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == projectConfigFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.revealInExplorer",
           "group": "3_open"
         },
@@ -3873,9 +4099,14 @@
     "jschardet": "^3.1.4",
     "json5": "^2.2.3",
     "jsonc-parser": "^3.3.1",
+    "kuroshiro": "^1.2.0",
+    "kuroshiro-analyzer-kuromoji": "^1.1.0",
     "liquidjs": "^10.24.0",
     "memfs": "^4.17.2",
+    "pinyin-pro": "^3.28.1",
+    "transliteration": "^2.6.1",
     "uuid": "^11.1.0",
+    "wanakana": "^5.3.1",
     "webdav": "^5.7.0",
     "zod": "^4.3.6"
   }

@@ -1,0 +1,61 @@
+<div class="doc-section beginner">
+<h4>外部资源是什么</h4>
+<p>外部资源就是把你电脑上的其他文件夹"挂载"到当前项目里。这些文件夹里的角色和词汇也能在当前项目中使用，就像它们是项目的一部分一样。</p>
+
+<h4>什么时候会用到</h4>
+<ul>
+    <li>多个小说项目共享同一套世界观设定</li>
+    <li>把以前作品的角色借用到新作品中</li>
+    <li>管理跨作品的"联动角色"</li>
+</ul>
+
+<h4>如何添加外部资源</h4>
+<ol>
+    <li>按 <kbd>Ctrl+Shift+P</kbd></li>
+    <li>输入"外部资源管理"</li>
+    <li>在面板中输入或选择工作区外的目录路径</li>
+    <li>ANH 会自动扫描该目录中的角色文件</li>
+</ol>
+
+<h4>注意事项</h4>
+<ul>
+    <li>外部目录列表不会保存到设置中，每次启动时自动重新扫描</li>
+    <li>如果外部资源和项目内有同名角色，项目内的优先</li>
+    <li>修改外部资源文件后，所有挂载了该目录的项目都会自动生效</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>使用场景</h4>
+<p>当你有多个项目共享同一套角色库或词汇表时，可以将公共资源目录挂载为外部资源，避免重复复制。外部资源中的角色与项目内角色享有完全相同的补全、高亮和引用能力。</p>
+
+<h4>配置方式</h4>
+<p>外部资源目录通过以下方式管理：</p>
+<ul>
+    <li><b>命令</b> — <code>AndreaNovelHelper.showExternalResourceManage</code> 打开外部资源管理面板</li>
+    <li><b>添加路径</b> — 在面板中输入或选择工作区外的目录路径</li>
+    <li><b>自动扫描</b> — 添加后 ANH 会自动扫描该目录中的所有角色文件（支持 .ojson5/.rjson5/.ojson/.rjson/.tjson5 扩展名）</li>
+    <li><b>自动发现</b> — 每次启动时自动扫描，结果保存在内存变量中，不持久化到 VS Code 全局状态</li>
+</ul>
+
+<h4>文件识别</h4>
+<p>外部资源目录支持以下识别方式：</p>
+<ul>
+    <li><b>扩展名识别</b> — <code>.ojson5</code>、<code>.rjson5</code>、<code>.ojson</code>、<code>.rjson</code>、<code>.tjson5</code> 文件会被自动识别</li>
+    <li><b>关键词匹配</b> — 文件名包含项目配置中的识别关键词时会被识别</li>
+    <li><b>Markdown 库标记</b> — 受 <code>enableMdLibraryNameMarkers</code> 设置控制，识别 <code>character-gallery.md</code> 等特定文件名</li>
+    <li><b>__init__.ojson5</b> — 兼容初始化标记文件</li>
+</ul>
+
+<h4>忽略规则</h4>
+<ul>
+    <li>扫描时会跳过 <code>novel-helper/</code> 目录以及 <code>.git</code>、<code>.vscode</code>、<code>node_modules</code> 等默认忽略目录</li>
+    <li>可通过在工作区放置 <code>.anh-ignore</code> 文件排除特定目录</li>
+    <li>配置项 <code>AndreaNovelHelper.externalFolder.ignoredDirectories</code> / <code>markerKeywords</code> / <code>enableMdLibraryNameMarkers</code></li>
+</ul>
+
+<h4>优先级</h4>
+<p>外部资源目录中的角色在合并时会获得优先级加成。当同名角色发生冲突时，项目内角色的优先级高于外部角色。</p>
+
+<div class="doc-note">外部资源非常适合管理跨作品的"联动角色"或共享的世界观设定。修改外部资源文件后，所有挂载了该目录的项目都会自动生效。注意：外部目录列表不会持久化到设置中，每次启动时自动重新扫描。</div>
+</div>

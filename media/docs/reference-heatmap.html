@@ -1,0 +1,73 @@
+<div class="doc-section beginner">
+<h4>引用维护与角色出场分析是什么</h4>
+<p>这是 ANH 的<strong>角色出场分析工具</strong>。它通过圆圈打包（Circle Packing）可视化展示每个角色在小说中的出场次数，并提供出场趋势图。同时提供引用索引的维护功能。</p>
+
+<h4>什么时候会用到</h4>
+<ul>
+    <li>长篇小说角色众多时，直观看出哪些角色戏份多、哪些戏份少</li>
+    <li>检查各角色在不同章节的出场分布是否符合预期</li>
+    <li>维护角色引用索引（重建索引、清理过期路径）</li>
+</ul>
+
+<h4>如何打开</h4>
+<ol>
+    <li>按 <kbd>Ctrl+Shift+P</kbd></li>
+    <li>输入"引用维护"或"角色热力图"</li>
+    <li>选择相应命令</li>
+</ol>
+
+<h4>怎么看</h4>
+<ul>
+    <li><b>圆圈越大</b>，表示该角色在整个项目中出场总次数越多</li>
+    <li>圆圈按角色类型（主角、配角、反派等）分组嵌套</li>
+    <li>下方的折线图展示每个角色在各文件/章节中的出场次数变化趋势</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>功能概述</h4>
+<p>引用维护与角色出场分析包含两部分：角色出场的可视化分析，以及角色引用索引的维护。</p>
+
+<h4>角色出场可视化</h4>
+<p>使用 D3.js Circle Packing 布局（非传统热力图）展示角色出场数据：</p>
+<ul>
+    <li><b>圆圈大小</b> — 表示角色在整个项目中的出场总次数（所有文件累加），不是单章节数据</li>
+    <li><b>圆圈分组</b> — 按 <code>role.type</code>（如主角、配角、反派）分组嵌套显示</li>
+    <li><b>颜色</b> — 由角色类型名称的哈希值决定，不表示出场频率</li>
+    <li><b>出场趋势图</b> — 可视化下方的折线图（TimeSeriesChart）展示每个角色在各文件中的出场次数变化</li>
+</ul>
+
+<h4>筛选与设置</h4>
+<ul>
+    <li>过滤敏感词角色（默认隐藏）</li>
+    <li>最小出场次数阈值（低于阈值的角色不显示）</li>
+    <li>显示/隐藏出场趋势折线图</li>
+    <li>图表高度、气泡间距、最小标签半径等可视化参数</li>
+</ul>
+
+<h4>引用索引系统</h4>
+<p>ANH 维护一个角色出场索引（<code>RoleUsageStore</code>），记录每个角色在每个文件中的出场位置（行列范围）和次数：</p>
+<ul>
+    <li><b>索引构建</b> — <code>RoleUsageIndexer</code> 扫描工作区文件，使用 Aho-Corasick 算法匹配角色名、别名、修复词、查询键和正则模式</li>
+    <li><b>持久化</b> — 索引存储在 VS Code workspace state 中，包含反向索引（角色→文件映射）</li>
+    <li><b>编辑器集成</b> — 实现 VS Code <code>ReferenceProvider</code> 接口，右键角色名可查找所有引用位置</li>
+</ul>
+
+<h4>引用维护面板</h4>
+<p><code>AndreaNovelHelper.showReferenceMaintenance</code> 打开 QuickPick 菜单，提供三项维护操作：</p>
+<ul>
+    <li><b>清理数据库中的绝对路径</b> — 清除文件追踪中的过期绝对路径</li>
+    <li><b>重建角色引用索引</b> — 从头扫描所有文件重建出场索引</li>
+    <li><b>打开角色出场可视化</b> — 打开 Circle Packing 可视化面板</li>
+</ul>
+
+<h4>数据命令</h4>
+<ul>
+    <li><code>AndreaNovelHelper.circlePacking.getCompleteDataset</code> — 获取完整数据集</li>
+    <li><code>AndreaNovelHelper.circlePacking.getRoleReferenceData</code> — 获取角色引用数据</li>
+    <li><code>AndreaNovelHelper.circlePacking.getFileTimelineData</code> — 获取文件时间线数据</li>
+    <li><code>AndreaNovelHelper.circlePacking.exportToJson</code> — 导出为 JSON</li>
+</ul>
+
+<div class="doc-note">Circle Packing 可视化使用 Webview 渲染，数据由 <code>circlePackingDataProvider</code> 分批处理（每批 50 个文件）。出场总次数为 0 的角色会被排除在可视化之外。系统不提供"断裂引用检测"（未定义角色名匹配）或"孤立角色检测"（未出场角色查找）功能。</div>
+</div>

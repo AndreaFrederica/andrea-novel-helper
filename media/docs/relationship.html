@@ -1,0 +1,130 @@
+<div class="doc-section beginner">
+<h4>关系图是什么</h4>
+<p>关系图是用来绘制<strong>角色之间关系</strong>的工具。就像画一张人物关系网：谁是谁的朋友、恋人、敌人，一目了然。</p>
+
+<h4>什么时候会用到</h4>
+<ul>
+    <li>人物众多时理清关系</li>
+    <li>设计复杂的人际网络</li>
+    <li>追踪关系变化（如从朋友变敌人）</li>
+</ul>
+
+<h4>如何创建</h4>
+<ol>
+    <li>在包管理器中右键目录节点</li>
+    <li>选择"创建关系文件 (.rjson5)"</li>
+    <li>输入文件名，ANH 会自动生成模板</li>
+</ol>
+
+<h4>可视化编辑器</h4>
+<p>双击 <code>.rjson5</code> 文件会打开可视化编辑器：</p>
+<ul>
+    <li>拖拽节点调整位置</li>
+    <li>拖拽节点边缘的连接点创建关系线</li>
+    <li>内置关系类型下拉选择：朋友、恋人、夫妻、师徒、敌对等</li>
+    <li>支持单向或双向关系</li>
+    <li>节点和连线都可以自定义颜色</li>
+</ul>
+
+<h4>基本结构</h4>
+<p>关系文件包含两部分：</p>
+<ul>
+    <li><b>节点</b> — 角色（或组织、地点）</li>
+    <li><b>连线</b> — 关系，标明谁和谁有什么关系</li>
+</ul>
+
+<h4>小提示</h4>
+<p>关系线用 <code>source</code> 和 <code>target</code> 表示方向。关系类型放在 <code>data.type</code> 里。如果你把某个节点的 <code>roleUuid</code> 设成角色库里的角色 UUID，就能和角色库联动。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>关系文件格式（.rjson5）</h4>
+<p>角色关系图使用 <code>.rjson5</code> 扩展名，采用 JSON5 格式定义角色之间的关系。支持注释、尾随逗号等 JSON5 特性。</p>
+
+<p><b>根结构</b>：</p>
+<pre><code>{
+  nodes: [],    // 节点数组
+  lines: [],    // 关系线数组
+  rootId: ""    // 可选，根节点 id
+}
+</code></pre>
+
+<p><b>节点（node）字段</b>：</p>
+<ul>
+    <li><code>id</code> — 节点唯一标识（必填）</li>
+    <li><code>text</code> — 显示名称（必填）</li>
+    <li><code>roleUuid</code> — 关联角色的 UUID（可选，用于与角色库联动）</li>
+    <li><code>color</code> — 节点背景色</li>
+    <li><code>borderColor</code> — 边框颜色</li>
+    <li><code>fontColor</code> — 文字颜色</li>
+    <li><code>nodeShape</code> — 节点形状（如 rectangle、circle、ellipse）</li>
+    <li><code>width</code> / <code>height</code> — 节点尺寸</li>
+    <li><code>x</code> / <code>y</code> — 布局坐标（可视化编辑器自动管理）</li>
+    <li><code>data.sexType</code> — 性别标记（可选）</li>
+    <li><code>data.isGoodMan</code> — 人物善恶标记（可选）</li>
+</ul>
+
+<p><b>关系线（line）字段</b>：</p>
+<ul>
+    <li><code>source</code> — 起始节点 id（必填）</li>
+    <li><code>target</code> — 目标节点 id（必填）</li>
+    <li><code>data.type</code> — 关系类型，如朋友、恋人、夫妻、师徒、敌对 等（必填）</li>
+    <li><code>startArrow</code> / <code>endArrow</code> — 箭头开关（控制方向）</li>
+    <li><code>text</code> — 连线描述文本</li>
+    <li><code>color</code> — 连线颜色</li>
+    <li><code>lineWidth</code> — 线宽</li>
+    <li><code>lineShape</code> — 线形（如 straight、curved）</li>
+    <li><code>isDashed</code> — 是否虚线</li>
+</ul>
+
+<p><b>完整示例</b>：</p>
+<pre><code>{
+  nodes: [
+    { id: "reimu", text: "博丽灵梦", color: "#E60033", width: 120, height: 40 },
+    { id: "marisa", text: "雾雨魔理沙", color: "#FFD700", width: 120, height: 40 }
+  ],
+  lines: [
+    {
+      source: "reimu",
+      target: "marisa",
+      data: { type: "朋友" },
+      startArrow: false,
+      endArrow: false,
+      text: "解决异变的搭档"
+    }
+  ]
+}
+</code></pre>
+
+<h4>预定义关系类型</h4>
+<p>ANH 内置了常见关系类型，在可视化编辑器中可直接选择：</p>
+<ul>
+    <li>朋友、恋人、夫妻、父子、母子、兄弟、姐妹</li>
+    <li>师徒、上司/下属、同事、同学</li>
+    <li>敌对、竞争、中立、同盟</li>
+</ul>
+<p>你也可以输入自定义关系类型，不受内置列表限制。</p>
+
+<h4>关系强度与状态</h4>
+<ul>
+    <li><b>关系强度</b> — 1 到 10 级，可在编辑器中设置。数值越高表示关系越紧密</li>
+    <li><b>关系状态</b> — 活跃、不活跃、已结束。用于标记关系是否仍然有效</li>
+</ul>
+
+<h4>GUI 编辑器</h4>
+<p>ANH 为关系文件提供了可视化编辑器（<code>RelationshipJson5EditorProvider</code>）：</p>
+<ul>
+    <li><b>节点拖拽</b> — 可在画布上自由拖动节点调整位置</li>
+    <li><b>连线创建</b> — 拖拽节点边缘的连接点创建关系线</li>
+    <li><b>关系类型选择</b> — 内置类型下拉选择，也支持自定义输入</li>
+    <li><b>方向控制</b> — 通过 startArrow / endArrow 设置单向或双向关系</li>
+    <li><b>颜色自定义</b> — 节点、边框、文字、连线均可自定义颜色</li>
+    <li><b>形状切换</b> — 节点可在矩形、圆形、椭圆之间切换</li>
+    <li><b>自动保存</b> — 布局变更自动写回 <code>.rjson5</code> 文件</li>
+</ul>
+<p>打开方式：双击 <code>.rjson5</code> 文件即可打开可视化关系图编辑器。</p>
+
+<h4>创建关系文件</h4>
+<p>在包管理器中右键目录节点 → "创建关系文件 (.rjson5)"，输入文件名即可生成带模板的 <code>.rjson5</code> 文件。</p>
+<div class="doc-note">关系线使用 <code>source</code> 和 <code>target</code> 表示方向，而不是 from/to。关系类型放在 <code>data.type</code> 中，而不是顶层字段。</div>
+</div>

@@ -11,6 +11,7 @@ interface RoleMini {
     name: string;
     aliases?: string[];
     fixes?: string[];
+    lookupKeys?: string[];
     wordSegmentFilter?: any;
 }
 interface SegConfig {
@@ -96,6 +97,16 @@ parentPort?.on("message", (msg: any) => {
                         const f = fix.trim().normalize("NFC");
                         patterns.push(f);
                         roleMap.set(f, r);
+                    }
+                }
+                if (r.lookupKeys) {
+                    for (const lookupKey of r.lookupKeys) {
+                        const normalizedLookup = lookupKey.trim().normalize("NFC");
+                        if (!normalizedLookup) {
+                            continue;
+                        }
+                        patterns.push(normalizedLookup);
+                        roleMap.set(normalizedLookup, r);
                     }
                 }
             }

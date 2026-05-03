@@ -4,10 +4,15 @@ import * as path from 'path';
 import { createCharacterGalleryFile, createSensitiveWordsFile, createVocabularyFile, createRegexPatternsFile, ensureDir } from './packageFileCreators';
 import { generateMarkdownRoleTemplate } from '../templates/templateGenerators';
 import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
+import { generateProjectKeywordConfigTemplate, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../projectConfig/projectKeywordConfig';
 import { exec } from 'child_process';
 
 // 标记：项目初始化向导是否正在运行（用于抑制其它 Git 配置弹窗等）
 export let projectInitWizardRunning = false;
+
+export function setProjectInitWizardRunning(value: boolean): void {
+  projectInitWizardRunning = value;
+}
 
 function runGit(args: string[], cwd: string): Promise<{ code: number; stdout: string; stderr: string; cmd: string }> {
   const quoted = args.map(a => /^[A-Za-z0-9._:\/@=-]+$/.test(a) ? a : '"' + a.replace(/"/g, '\"') + '"');
@@ -36,9 +41,9 @@ async function getGitUserConfigState(cwd: string): Promise<{ hasAny: boolean; gl
 export function registerProjectInitWizard(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('AndreaNovelHelper.projectInitWizard', async () => {
-      projectInitWizardRunning = true;
       const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!ws) { vscode.window.showErrorMessage('未打开工作区'); return; }
+      projectInitWizardRunning = true;
       try {
       // -------- 新向导：先收集所有决策，再一次执行 --------
       let aborted = false;
@@ -199,6 +204,7 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
 
       if (aborted) {
   const retry = await vscode.window.showInformationMessage('项目初始化向导未完成，是否重新运行？', { modal: true }, '重新运行','关闭');
+        projectInitWizardRunning = false;
         if (retry === '重新运行') { vscode.commands.executeCommand('AndreaNovelHelper.projectInitWizard'); }
         return;
       }
@@ -224,7 +230,11 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
   if (wcIgnoreOutOfInsights) { summary.push('.wcignore 忽略 .out-of-code-insights'); }
       if (wantInitialCommit) { summary.push('初始提交'); }
   const confirm = await vscode.window.showInformationMessage(`确认执行: ${summary.join('，')} ?`, { modal: true }, '执行','取消');
-  if (confirm !== '执行') { vscode.window.showInformationMessage('已取消执行', { modal: true }, '关闭'); return; }
+  if (confirm !== '执行') {
+    vscode.window.showInformationMessage('已取消执行', { modal: true }, '关闭');
+    projectInitWizardRunning = false;
+    return;
+  }
 
       // -------- 执行阶段 --------
       try {
@@ -250,6 +260,7 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
         // 创建项目配置文件（无论是否创建示例结构都要创建）
         try {
           const configManager = new ProjectConfigManager(ws);
+          let createdKeywordConfigTemplate = false;
           if (!configManager.exists()) {
             // 使用用户输入的信息创建配置
             const customConfig = {
@@ -263,6 +274,14 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
             // 立即更新为用户输入的完整信息
             await configManager.updateConfig(customConfig);
             vscode.window.showInformationMessage('已创建项目配置文件 anhproject.md');
+          }
+          const keywordConfigPath = path.join(ws, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME);
+          if (!fs.existsSync(keywordConfigPath)) {
+            fs.writeFileSync(keywordConfigPath, `${generateProjectKeywordConfigTemplate()}\n`, 'utf8');
+            createdKeywordConfigTemplate = true;
+          }
+          if (createdKeywordConfigTemplate) {
+            vscode.window.showInformationMessage('已创建项目关键词配置模板 project-config.json5');
           }
         } catch (e) {
           vscode.window.showWarningMessage('创建项目配置文件失败: ' + (e as any)?.message);

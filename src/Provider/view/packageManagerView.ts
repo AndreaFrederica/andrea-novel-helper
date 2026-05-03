@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
-import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
+import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
 import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot, isRoleFile } from '../../utils/utils';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
@@ -14,8 +14,9 @@ import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEve
 import { generateCustomFileName, generateDefaultFileName } from '../../utils/Parser/markdownParser';
 import { globalRelationshipManager } from '../../utils/globalRelationshipManager';
 import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
+import { PROJECT_CONFIG_MARKDOWN_FILE_NAME, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../../projectConfig/constants';
 
-type PackageManagerNode = PackageNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | BookRootNode | AnyNode;
+type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | ProjectInitWizardNode | ProjectSettingsNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
 
 function normalizeFsPathForCompare(p: string): string {
     const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
@@ -26,14 +27,20 @@ function isRoleHierarchyNode(node: PackageManagerNode): node is AnyNode {
     return !!node && typeof node === 'object' && 'kind' in node;
 }
 
-function isFileSystemTreeNode(node: PackageManagerNode | undefined): node is PackageNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | BookRootNode {
-    return !!node && node instanceof vscode.TreeItem && 'resourceUri' in node;
+function isFileSystemTreeNode(node: PackageManagerNode | undefined): node is PackageNode | BookRootNode {
+    return !!node && (node instanceof PackageNode || node instanceof BookRootNode);
+}
+
+function relativeToWorkspace(workspaceRoot: string, targetPath: string): string {
+    const rel = path.relative(workspaceRoot, targetPath);
+    return rel && !rel.startsWith('..') ? rel : targetPath;
 }
 
 const ROLE_CARRIER_EXTENSIONS = new Set([
     '.md',
     '.markdown',
     '.txt',
+    '.csv',
     '.json',
     '.json5',
     '.ojson',
@@ -78,6 +85,92 @@ function resolveFileConflict(dir: string, baseName: string, ext: string): { path
         const candidate = path.join(dir, `${baseName}_${ts}_${idx}${ext}`);
         if (!fs.existsSync(candidate)) return { path: candidate, conflicted: true };
         idx++;
+    }
+}
+
+class CommonFeaturesRootNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+    public readonly id: string;
+
+    constructor(public readonly workspaceRoot: string, isExpanded: boolean = true) {
+        super('常用功能', isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.id = `${workspaceRoot}::commonFeatures`;
+        this.contextValue = 'commonFeaturesRoot';
+        this.iconPath = new vscode.ThemeIcon('list-selection');
+        this.description = '向导、设置、文档、维护';
+        this.tooltip = 'ANH 常用功能快捷入口';
+    }
+}
+
+// 项目初始化向导节点
+class ProjectInitWizardNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 项目初始化向导', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'projectInitWizard';
+        this.iconPath = new vscode.ThemeIcon('rocket');
+        this.description = '图形化创建项目配置和基础结构';
+        this.command = {
+            command: 'AndreaNovelHelper.projectInitWizard.graphical',
+            title: '打开项目初始化向导',
+            arguments: []
+        };
+    }
+}
+
+// 项目设置节点
+class ProjectSettingsNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 项目设置', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'projectSettings';
+        this.iconPath = new vscode.ThemeIcon('settings-gear');
+        this.description = '编辑 anhproject.md 和 project-config.json5';
+        this.command = {
+            command: 'andrea.openProjectSettings',
+            title: '打开项目设置',
+            arguments: []
+        };
+    }
+}
+
+class ProjectSettingsFilesRootNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+    public readonly id: string;
+
+    constructor(public readonly workspaceRoot: string, isExpanded: boolean = true) {
+        super('项目设置文件', isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.id = `${workspaceRoot}::projectSettingsFiles`;
+        this.contextValue = 'projectSettingsFilesRoot';
+        this.iconPath = new vscode.ThemeIcon('settings-gear');
+        this.description = '工作区根目录';
+        this.tooltip = `项目设置文件位于: ${workspaceRoot}`;
+    }
+}
+
+class ProjectConfigFileNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string, public readonly filePath: string) {
+        const exists = fs.existsSync(filePath);
+        super(path.basename(filePath), vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(filePath);
+        this.id = filePath;
+        this.contextValue = exists ? 'projectConfigFile' : 'missingProjectConfigFile';
+        this.iconPath = exists ? new vscode.ThemeIcon('file-code') : new vscode.ThemeIcon('warning');
+        this.description = exists ? relativeToWorkspace(workspaceRoot, filePath) : `未创建 · ${relativeToWorkspace(workspaceRoot, filePath)}`;
+        this.tooltip = exists ? filePath : `${filePath}\n文件尚未创建，点击打开项目设置页创建/保存。`;
+        this.command = {
+            command: 'AndreaNovelHelper.openProjectConfigFile',
+            title: '打开项目设置文件',
+            arguments: [this]
+        };
     }
 }
 
@@ -130,6 +223,96 @@ class CopilotDocsManageNode extends vscode.TreeItem {
         this.command = {
             command: 'andrea.copilot.exportPromptsToWorkspace',
             title: '导出内置 Copilot 提示到当前项目',
+            arguments: []
+        };
+    }
+}
+
+// MCP stdio 代理桥释放节点
+class McpStdioScriptNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ MCP stdio 代理桥', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'mcpStdioScript';
+        this.iconPath = new vscode.ThemeIcon('terminal');
+        this.description = '释放 andrea-mcp-stdio.js 到 .vscode/';
+        this.command = {
+            command: 'andrea.copilot.exportMcpStdioScript',
+            title: '导出 MCP stdio 代理桥脚本',
+            arguments: []
+        };
+    }
+}
+
+// 查询键生成节点
+class GenerateLookupKeysNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 生成查询键', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'generateLookupKeys';
+        this.iconPath = new vscode.ThemeIcon('symbol-key');
+        this.description = '为当前角色文件生成拼音和罗马字查询键';
+        this.command = {
+            command: 'AndreaNovelHelper.generateLookupKeysForCurrentFile',
+            title: '为当前角色文件生成查询键',
+            arguments: []
+        };
+    }
+}
+
+// 功能引导节点
+class GuideNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 功能引导', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'guide';
+        this.iconPath = new vscode.ThemeIcon('book');
+        this.description = '查看 ANH 常用功能介绍和快速入口';
+        this.command = {
+            command: 'AndreaNovelHelper.showGuide',
+            title: '打开功能引导',
+            arguments: []
+        };
+    }
+}
+
+// 文档中心节点
+class DocCenterNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 文档中心', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'docCenter';
+        this.iconPath = new vscode.ThemeIcon('book');
+        this.description = '查看 ANH 各模块的详细文档';
+        this.command = {
+            command: 'AndreaNovelHelper.showGuideDoc',
+            title: '打开文档中心',
+            arguments: []
+        };
+    }
+}
+
+// 图形化快速设置节点
+class GraphicalQuickSettingsNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 图形化快速设置', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'graphicalQuickSettings';
+        this.iconPath = new vscode.ThemeIcon('settings-gear');
+        this.description = '可视化调整写作环境，带实时预览';
+        this.command = {
+            command: 'andrea.openGraphicalQuickSettings',
+            title: '打开图形化快速设置',
             arguments: []
         };
     }
@@ -376,12 +559,13 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
             // 1）算出 novel-helper 根目录
             const base = path.join(this.workspaceRoot, 'novel-helper');
 
-            // 2）创建功能按钮节点
-            const refMaintenanceNode = new ReferenceMaintenanceNode(this.workspaceRoot);
-            const externalManageNode = new ExternalResourceManageNode(this.workspaceRoot);
-            const copilotDocsManageNode = new CopilotDocsManageNode(this.workspaceRoot);
-
-            const result: PackageManagerNode[] = [refMaintenanceNode, externalManageNode, copilotDocsManageNode];
+            // 2）常用功能与项目配置文件节点
+            const commonFeaturesId = `${this.workspaceRoot}::commonFeatures`;
+            const projectSettingsFilesId = `${this.workspaceRoot}::projectSettingsFiles`;
+            const result: PackageManagerNode[] = [
+                new CommonFeaturesRootNode(this.workspaceRoot, this.expandedNodes.has(commonFeaturesId)),
+                new ProjectSettingsFilesRootNode(this.workspaceRoot, this.expandedNodes.has(projectSettingsFilesId))
+            ];
 
             // 3) 外部资源目录（由 fast-glob 扫描器提供）
             if (this.externalRoleFolders.length === 0 || this.externalRoleFolders.some(folder => !fs.existsSync(folder))) {
@@ -413,6 +597,32 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
             }
 
             return result;
+        }
+
+        if (node instanceof CommonFeaturesRootNode) {
+            return [
+                new ProjectInitWizardNode(this.workspaceRoot),
+                new ProjectSettingsNode(this.workspaceRoot),
+                new ReferenceMaintenanceNode(this.workspaceRoot),
+                new ExternalResourceManageNode(this.workspaceRoot),
+                new CopilotDocsManageNode(this.workspaceRoot),
+                new McpStdioScriptNode(this.workspaceRoot),
+                new GenerateLookupKeysNode(this.workspaceRoot),
+                new GuideNode(this.workspaceRoot),
+                new DocCenterNode(this.workspaceRoot),
+                new GraphicalQuickSettingsNode(this.workspaceRoot)
+            ];
+        }
+
+        if (node instanceof ProjectSettingsFilesRootNode) {
+            return [
+                new ProjectConfigFileNode(this.workspaceRoot, path.join(this.workspaceRoot, PROJECT_CONFIG_MARKDOWN_FILE_NAME)),
+                new ProjectConfigFileNode(this.workspaceRoot, path.join(this.workspaceRoot, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME))
+            ];
+        }
+
+        if (node instanceof ProjectConfigFileNode) {
+            return [];
         }
 
         if (isRoleHierarchyNode(node)) {
@@ -453,7 +663,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
 
                 if (isRoleFile || isRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
-                    const allowed = ['.json5', '.txt', '.md', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
+                    const allowed = ['.json5', '.txt', '.md', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
                     const fileNode = this.createFileNode(full, 'resourceFile');
 
                     // 根据配置决定是否使用自定义图标
@@ -611,6 +821,30 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             } catch (error) {
                 vscode.window.showErrorMessage(`无法打开文件: ${error}`);
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.openProjectConfigFile', async (target?: ProjectConfigFileNode | vscode.Uri | string) => {
+            const filePath = target instanceof vscode.Uri
+                ? target.fsPath
+                : typeof target === 'string'
+                    ? target
+                    : target?.resourceUri?.fsPath;
+
+            if (!filePath) {
+                await vscode.commands.executeCommand('andrea.openProjectSettings');
+                return;
+            }
+
+            if (!fs.existsSync(filePath)) {
+                await vscode.commands.executeCommand('andrea.openProjectSettings');
+                vscode.window.showWarningMessage(`项目设置文件尚未创建，请在项目设置页保存: ${path.basename(filePath)}`);
+                return;
+            }
+
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+            await vscode.window.showTextDocument(doc, { preview: false });
         })
     );
 
@@ -929,7 +1163,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
             // 文件可能已被删除，仍需要刷新
         }
 
-        return isExternalResourceMarkerFile(path.basename(filePath));
+        const baseName = path.basename(filePath);
+        return isExternalResourceMarkerFile(baseName) || isRoleFile(baseName, filePath);
     };
 
     // 角色数据更新：标识文件变化均触发增量角色刷新
@@ -951,7 +1186,10 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         let hasManagedChange = touchedPaths.some(isManagedPath);
 
         // 外部目录新增标识文件时，先重扫目录列表再判断
-        if (!hasManagedChange && touchedPaths.some(p => isExternalResourceMarkerFile(path.basename(p)))) {
+        if (!hasManagedChange && touchedPaths.some(p => {
+            const baseName = path.basename(p);
+            return isExternalResourceMarkerFile(baseName) || isRoleFile(baseName, p);
+        })) {
             provider.rescanExternalRoleFolders(false);
             hasManagedChange = touchedPaths.some(isManagedPath);
         }
@@ -1038,7 +1276,8 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         const filePath = document.uri.fsPath;
 
         if (!isManagedPath(filePath)) {
-            if (isExternalResourceMarkerFile(path.basename(filePath))) {
+            const baseName = path.basename(filePath);
+            if (isExternalResourceMarkerFile(baseName) || isRoleFile(baseName, filePath)) {
                 provider.rescanExternalRoleFolders(false);
             }
         }
@@ -1147,7 +1386,7 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
     const baseInput = await vscode.window.showInputBox({ prompt: '输入基础文件名（不含扩展名，留空使用默认）', value: opts.defaultBase });
     if (baseInput === undefined) return; // 取消
     const baseNameRaw = (baseInput.trim() || opts.defaultBase).replace(/\s+/g,'-');
-    const extPick = await vscode.window.showQuickPick(['json5','txt','md'], { placeHolder: '选择文件格式 (json5 / txt / md)' });
+    const extPick = await vscode.window.showQuickPick(['json5','txt','md','csv'], { placeHolder: '选择文件格式 (json5 / txt / md / csv)' });
     if (!extPick) return;
     const fileInfo = resolveFileConflict(dir, baseNameRaw, '.'+extPick);
     let initialContent = '';
@@ -1165,6 +1404,8 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
         else if (opts.kind === 'sensitive') initialContent = generateMarkdownSensitiveTemplate();
         else if (opts.kind === 'vocabulary') initialContent = generateMarkdownVocabularyTemplate();
         else initialContent = '# 新文件\n';
+    } else if (extPick === 'csv') {
+        initialContent = generateDelimitedCsvTemplate(opts.kind);
     }
     fs.writeFileSync(fileInfo.path, initialContent + (initialContent.endsWith('\n')? '':'\n'), 'utf8');
     // 自动打开新文件
@@ -1178,7 +1419,31 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
     return fileInfo.path;
 }
 
+function generateDelimitedCsvTemplate(kind: ExtensionCustomOptions['kind']): string {
+    if (kind === 'sensitive') {
+        return [
+            'name,description,fixes,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized,lookupKeys_spelling',
+            '示例敏感词,这是一个示例敏感词,"替换词1;替换词2","示例检索词;示例反查词",shi li min gan ci,shi li min gan ci,shiliminganci'
+        ].join('\n');
+    }
+
+    if (kind === 'vocabulary') {
+        return [
+            'name,description,aliases,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized,lookupKeys_spelling',
+            '示例词汇,这是一个示例词汇,"别名1;别名2","示例检索词;示例反查词",shi li ci hui,shi li ci hui,shilicihui'
+        ].join('\n');
+    }
+
+    return [
+        'name,description,aliases,lookupKeys,lookupKeys_pinyin,lookupKeys_romanized,lookupKeys_spelling',
+        '示例角色,这是一个示例角色,"别名1;别名2","示例检索词;示例反查词",shi li jue se,shi li jue se,shilijuese'
+    ].join('\n');
+}
+
 async function createRegexPatternsFile(dir: string): Promise<string | undefined> {
+    const format = await vscode.window.showQuickPick(['md', 'json5'], { placeHolder: '选择正则表达式配置格式 (推荐 Markdown)' });
+    if (!format) return;
+
     // 询问自定义文件名
     const customName = await vscode.window.showInputBox({
         prompt: '输入正则表达式文件的自定义名称（留空使用默认名称）',
@@ -1192,10 +1457,9 @@ async function createRegexPatternsFile(dir: string): Promise<string | undefined>
     } else {
         fileNameBase = 'regex-patterns';
     }
-    const fileInfo = resolveFileConflict(dir, fileNameBase, '.json5');
+    const fileInfo = resolveFileConflict(dir, fileNameBase, '.' + format);
     
-    // 生成模板内容（从模板生成器导入）
-    const template = generateRegexPatternsTemplate();
+    const template = format === 'md' ? generateMarkdownRegexPatternsTemplate() : generateRegexPatternsTemplate();
     fs.writeFileSync(fileInfo.path, template, 'utf8');
     const document = await vscode.workspace.openTextDocument(fileInfo.path);
     await vscode.window.showTextDocument(document);
@@ -1266,8 +1530,8 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
         fs.renameSync(oldPath, newPath);
         return newPath;
     } 
-    // 对于 .json5 和 .txt 文件，使用简化的重命名流程
-    else if (ext === '.json5' || ext === '.txt') {
+    // 对于 .json5 / .txt / .csv 文件，使用简化的重命名流程
+    else if (ext === '.json5' || ext === '.txt' || ext === '.csv') {
         // 选择文件类型
         const roleType = await vscode.window.showQuickPick(
             ['角色', '敏感词', '词汇'], 

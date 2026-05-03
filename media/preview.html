@@ -81,6 +81,11 @@
             color: #ddd;
         }
 
+        body.reader-theme-custom {
+            background: var(--reader-custom-background, var(--vscode-editor-background, #fafafa));
+            color: var(--reader-custom-foreground, var(--vscode-editor-foreground, #222));
+        }
+
         .reader-root {
             margin: 0 auto;
             padding: var(--reader-page-padding);
@@ -98,6 +103,120 @@
 
         .reader-content [data-line]:last-child pre {
             margin-bottom: 0;
+        }
+
+        .reader-content .md-list-line {
+            display: block;
+        }
+
+        .reader-content .md-list-marker {
+            display: none;
+        }
+
+        body.reader-md-headings .reader-content [data-md-kind="heading"] pre {
+            font-weight: 700;
+            line-height: 1.25;
+            margin-top: calc(var(--reader-para-spacing) * 1.5);
+            margin-bottom: calc(var(--reader-para-spacing) * 1.2);
+        }
+
+        body.reader-md-headings.reader-md-heading-center .reader-content [data-md-kind="heading"] pre {
+            text-align: center;
+        }
+
+        body.reader-md-headings.reader-md-heading-left .reader-content [data-md-kind="heading"] pre {
+            text-align: left;
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="1"] pre {
+            font-size: calc(var(--reader-font-size) * 1.65);
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="2"] pre {
+            font-size: calc(var(--reader-font-size) * 1.45);
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="3"] pre {
+            font-size: calc(var(--reader-font-size) * 1.25);
+        }
+
+        body.reader-md-headings .reader-content [data-md-level="4"] pre,
+        body.reader-md-headings .reader-content [data-md-level="5"] pre,
+        body.reader-md-headings .reader-content [data-md-level="6"] pre {
+            font-size: calc(var(--reader-font-size) * 1.1);
+        }
+
+        body.reader-md-lists.reader-md-list-indent .reader-content [data-md-kind="list"] pre {
+            padding-left: 1.4em;
+        }
+
+        body.reader-md-lists .reader-content .md-list-line {
+            position: relative;
+        }
+
+        body.reader-md-lists .reader-content .md-list-marker {
+            display: inline-block;
+            width: 1.4em;
+            margin-left: -1.4em;
+            opacity: .75;
+        }
+
+        body.reader-md-lists.reader-md-list-plain .reader-content .md-list-marker {
+            display: none;
+        }
+
+        body.reader-md-lists.reader-md-list-plain .reader-content [data-md-kind="list"] pre {
+            padding-left: 0;
+        }
+
+        body.reader-md-blockquotes .reader-content [data-md-kind="blockquote"] pre {
+            border-left: 3px solid color-mix(in srgb, currentColor 35%, transparent);
+            padding-left: 1em;
+            opacity: .82;
+        }
+
+        body.reader-md-code .reader-content [data-md-kind="code"] pre {
+            font-family: var(--reader-font-family, Consolas, 'Courier New', monospace);
+            background: color-mix(in srgb, currentColor 8%, transparent);
+            border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+            border-radius: 6px;
+            padding: .75em .9em;
+            white-space: pre-wrap;
+        }
+
+        .md-inline-bold,
+        .md-inline-italic,
+        .md-inline-bold-italic,
+        .md-inline-strike,
+        .md-inline-code {
+            font-weight: inherit;
+            font-style: inherit;
+            text-decoration: inherit;
+        }
+
+        body.reader-md-bold .md-inline-bold {
+            font-weight: 700;
+        }
+
+        body.reader-md-italic .md-inline-italic {
+            font-style: italic;
+        }
+
+        body.reader-md-bold-italic .md-inline-bold-italic {
+            font-weight: 700;
+            font-style: italic;
+        }
+
+        body.reader-md-strike .md-inline-strike {
+            text-decoration: line-through;
+        }
+
+        body.reader-md-code .md-inline-code {
+            font-family: var(--reader-font-family, Consolas, 'Courier New', monospace);
+            background: color-mix(in srgb, currentColor 9%, transparent);
+            border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+            border-radius: 4px;
+            padding: .05em .28em;
         }
 
         body.reader-paged {
@@ -274,6 +393,43 @@
             gap: 12px;
         }
 
+        .rs-type-list {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .rs-type-section {
+            flex-basis: 100%;
+            min-width: 0;
+        }
+
+        .rs-type-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 2px 0 6px;
+        }
+
+        .rs-type-section-title {
+            font-size: 11px;
+            opacity: .7;
+        }
+
+        .rs-type-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .rs-type-master {
+            padding: 2px 8px;
+            font-size: 11px;
+        }
+
         .rs-toggle {
             padding: 4px 10px;
             border: 1px solid #5557;
@@ -290,7 +446,8 @@
         }
 
         select.rs-select,
-        input.rs-number {
+        input.rs-number,
+        input.rs-color-input {
             background: #2d2d2d;
             color: #ddd;
             border: 1px solid #5557;
@@ -298,6 +455,12 @@
             padding: 4px 6px;
             font-size: 12px;
             width: 70px;
+        }
+
+        input.rs-color-input {
+            padding: 2px;
+            height: 28px;
+            cursor: pointer;
         }
 
         .rs-help {
@@ -474,6 +637,30 @@
             <div class="rs-mode-group" id="rs-aligns"><button data-align="left" class="rs-toggle">左对齐</button><button
                     data-align="justify" class="rs-toggle">两端</button></div>
         </div>
+        <div class="rs-row"><label>Markdown</label>
+            <div class="rs-mode-group" id="rs-markdownStyles">
+                <button data-mdstyle="headings" class="rs-toggle">标题</button>
+                <button data-mdstyle="lists" class="rs-toggle">列表</button>
+                <button data-mdstyle="bold" class="rs-toggle">粗体</button>
+                <button data-mdstyle="italic" class="rs-toggle">斜体</button>
+                <button data-mdstyle="boldItalic" class="rs-toggle">粗斜</button>
+                <button data-mdstyle="strike" class="rs-toggle">删除线</button>
+                <button data-mdstyle="blockquote" class="rs-toggle">引用</button>
+                <button data-mdstyle="code" class="rs-toggle">代码</button>
+            </div>
+        </div>
+        <div class="rs-row"><label>标题样式</label>
+            <div class="rs-mode-group" id="rs-headingStyle">
+                <button data-heading-style="left" class="rs-toggle">左对齐</button>
+                <button data-heading-style="center" class="rs-toggle">居中</button>
+            </div>
+        </div>
+        <div class="rs-row"><label>列表样式</label>
+            <div class="rs-mode-group" id="rs-listStyle">
+                <button data-list-style="indent" class="rs-toggle">标记缩进</button>
+                <button data-list-style="plain" class="rs-toggle">纯文本</button>
+            </div>
+        </div>
         <div class="rs-row"><label>列数*</label>
             <div class="rs-mode-group" id="rs-cols"><button data-cols="1" class="rs-toggle">1 列</button><button
                     data-cols="2" class="rs-toggle">2 列</button></div>
@@ -486,6 +673,9 @@
             <div class="rs-mode-group" id="rs-colorizeRoles"><button data-croles="on" class="rs-toggle">开启</button><button
                     data-croles="off" class="rs-toggle">关闭</button></div>
         </div>
+        <div class="rs-row"><label>着色类型</label>
+            <div class="rs-type-list" id="rs-roleTypes"></div>
+        </div>
         <div class="rs-row"><label>预设</label>
             <div style="flex:1;display:flex;gap:6px;align-items:center;">
                 <select id="rs-preset" class="rs-select" style="flex:1;min-width:120px;" aria-label="预设选择"></select>
@@ -497,7 +687,13 @@
         <div class="rs-row"><label>主题模式</label>
             <div class="rs-theme-group" id="rs-themes"><button data-theme="light" class="rs-toggle">浅色</button><button
                     data-theme="dark" class="rs-toggle">深色</button><button data-theme="auto"
-                    class="rs-toggle">跟随</button></div>
+                    class="rs-toggle">跟随</button><button data-theme="custom" class="rs-toggle">自定义</button></div>
+        </div>
+        <div class="rs-row"><label>背景色</label>
+            <input id="rs-customBg" type="color" value="#fafafa" class="rs-color-input">
+        </div>
+        <div class="rs-row"><label>文本色</label>
+            <input id="rs-customFg" type="color" value="#222222" class="rs-color-input">
         </div>
         <div class="rs-help">* 高度模式=自动 时忽略高度输入按窗口高度(减去余量)分页；手动时用输入值（高度=0 也视为自动）。分页翻页：PgUp/PgDn/空格/方向键；TTS
             自动跨页。列数仅在滚动模式生效。</div>

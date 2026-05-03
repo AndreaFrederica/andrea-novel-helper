@@ -8,10 +8,17 @@ import { roles } from '../activate';
 import { FIELD_ALIASES, getExtensionFields } from '../utils/Parser/markdownParser';
 import { containsPrefix, getSegmenterType, segmentText } from '../utils/segmenter';
 import { findBestCompletionPrefix, getCompletionPrefixCandidates } from '../utils/completionPrefix';
+import { getRoleDisplayNames, getRoleMatchKeys, type LookupKeyKind } from '../utils/roleLookupKeys';
 
 const DEFAULT_SYMBOL_PREFIXES = ['@'];
 type TriggerMode = 'loose' | 'startsWith' | 'symbolLoose' | 'symbolStartsWith';
 type TriggerModeRaw = TriggerMode | 'symbolPrefix'; // symbolPrefix 兼容旧值，内部等同于 symbolLoose
+
+type MatchedRoleEntry = {
+    role: Role;
+    matchedPrefixes: Map<string, string>;
+    bestRolePrefix: string;
+};
 
 /**
  * 检查内容是否包含 Markdown 格式
@@ -52,39 +59,38 @@ function formatContentForDisplay(content: string): string {
  */
 function handlePlainTextContent(content: string): string {
     const lines = content.split('\n');
-    
+
     // 如果只有一行或两行，直接用硬换行
     if (lines.length <= 2) {
         return content.replace(/\n/g, '  \n');
     }
-    
+
     // 对于多行内容，检查是否是段落格式
     const processedLines = lines.map((line, index) => {
         const trimmedLine = line.trim();
-        
+
         // 空行保持空行
         if (trimmedLine === '') {
             return '';
         }
-        
+
         // 检查当前行是否可能是段落的开始（较长的行）
         const isLongLine = trimmedLine.length > 20;
         const nextLine = index < lines.length - 1 ? lines[index + 1].trim() : '';
-        const prevLine = index > 0 ? lines[index - 1].trim() : '';
-        
+
         // 如果当前行很长，且下一行也很长（可能是连续的段落），则不添加硬换行
         if (isLongLine && nextLine.length > 20 && nextLine !== '') {
             return line;
         }
-        
+
         // 如果当前行较短，或者是最后一行，或者下一行是空行，则添加硬换行
         if (!isLongLine || index === lines.length - 1 || nextLine === '') {
             return line + '  ';
         }
-        
+
         return line;
     });
-    
+
     return processedLines.join('\n');
 }
 
@@ -98,42 +104,24 @@ function convertToMarkdownList(content: string): string {
         // 将中文编号转换为 Markdown 格式
         .replace(/^([\s]*)([一二三四五六七八九十]+[、．]|\d+[、．])\s*/gm, '$1- ')
         .replace(/^([\s]*)[（(](\d+|[一二三四五六七八九十]+)[）)]\s*/gm, '$1- ');
-    
+
     // 智能处理换行：只在非列表行之间添加硬换行
     const lines = result.split('\n');
     const processedLines = lines.map((line, index) => {
         const isCurrentLineList = /^[\s]*[-*+]\s/.test(line);
         const isNextLineList = index < lines.length - 1 && /^[\s]*[-*+]\s/.test(lines[index + 1]);
         const isPreviousLineList = index > 0 && /^[\s]*[-*+]\s/.test(lines[index - 1]);
-        
+
         // 如果当前行是列表项，或者下一行是列表项，或者这是个空行在列表之间，则不添加硬换行
         if (isCurrentLineList || isNextLineList || (line.trim() === '' && (isPreviousLineList || isNextLineList))) {
             return line;
         }
-        
+
         // 其他情况添加硬换行标记
         return line + '  ';
     });
-    
+
     return processedLines.join('\n');
-}
-
-/**
- * 在 startsWith 模式下的匹配：优先整串开头匹配，其次允许分词/符号拆分后的子词开头匹配
- */
-function matchesStartsWith(name: string, prefix: string): boolean {
-    if (name.startsWith(prefix)) return true;
-    const tokens = name.split(/[\s·•\-\._（）()\[\]【】<>、，,;；{}]+/).filter(Boolean);
-    return tokens.some(tok => tok.startsWith(prefix));
-}
-
-function findBestStartsWithPrefix(name: string, candidates: readonly string[]): string | undefined {
-    for (const candidate of candidates) {
-        if (matchesStartsWith(name, candidate)) {
-            return candidate;
-        }
-    }
-    return undefined;
 }
 
 function getBestNamePrefix(
@@ -142,19 +130,14 @@ function getBestNamePrefix(
     useStartsWith: boolean,
     segmenterType: ReturnType<typeof getSegmenterType>,
 ): string | undefined {
-    if (!prefixCandidates.length) {
-        return undefined;
-    }
-    return useStartsWith
-        ? findBestStartsWithPrefix(name, prefixCandidates)
-        : findBestCompletionPrefix(name, prefixCandidates, (target, candidate) => containsPrefix(target, candidate, segmenterType));
+    return findBestCompletionPrefix(
+        name,
+        prefixCandidates,
+        (target, candidate) => useStartsWith
+            ? target.startsWith(candidate)
+            : containsPrefix(target, candidate, segmenterType),
+    );
 }
-
-type MatchedRoleEntry = {
-    role: Role;
-    matchedPrefixes: Map<string, string>;
-    bestRolePrefix: string;
-};
 
 function buildSymbolMatch(uptoCursor: string, symbols: string[]): { matchedSymbol: string; prefix: string } | undefined {
     if (!symbols.length) return undefined;
@@ -189,6 +172,13 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                 const debug = cfg.get<boolean>('debug.completionLog', false);
                 const defaultColor = cfg.get<string>('defaultColor')!;
                 const segmenterType = getSegmenterType();
+                const aliasLikeLookupKinds: LookupKeyKind[] = [];
+                if (cfg.get<boolean>('lookupKeys.treatPinyinAsAlias', false)) {
+                    aliasLikeLookupKinds.push('pinyin');
+                }
+                if (cfg.get<boolean>('lookupKeys.treatRomanizedAsAlias', false)) {
+                    aliasLikeLookupKinds.push('romanized');
+                }
 
                 // 解析符号与实际前缀
                 let matchedSymbol: string | undefined;
@@ -238,14 +228,15 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                 }
                 const matchedRoles: MatchedRoleEntry[] = roles.flatMap(role => {
                     if (role.type === '敏感词') { skippedSensitive.push(role.name); return []; }
-                    const names = [role.name, ...(role.aliases || [])];
+                    const displayNames = getRoleDisplayNames(role, aliasLikeLookupKinds);
+                    const matchNames = getRoleMatchKeys(role);
                     // 若全部名称都在敏感集合（理论上不该出现，因为已被上面剔除），仍返回 false
-                    if (names.every(n => sensitiveNameSet.has(n))) return [];
+                    if (displayNames.every(n => sensitiveNameSet.has(n))) return [];
 
                     const matchedPrefixes = new Map<string, string>();
                     let bestRolePrefix = '';
 
-                    for (const name of names) {
+                    for (const name of matchNames) {
                         const matchedPrefix = getBestNamePrefix(name, prefixCandidates, useStartsWith, segmenterType);
                         if (!matchedPrefix) {
                             continue;
@@ -271,7 +262,7 @@ export function createRoleCompletionProvider(): vscode.CompletionItemProvider {
                 const items: vscode.CompletionItem[] = [];
                 let roleIdx = 0;
                 for (const { role, matchedPrefixes, bestRolePrefix } of matchedRoles) {
-                    const allNames = [role.name, ...(role.aliases || [])];
+                    const allNames = getRoleDisplayNames(role, aliasLikeLookupKinds);
                     // 内部排序：开头匹配→包含匹配
                     allNames.sort((a, b) => {
                         const ap = matchedPrefixes.get(a);

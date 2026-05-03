@@ -87,6 +87,20 @@ export function findDefinitionInFile(role: Role, filePath: string): vscode.Locat
                     new vscode.Position(contentIdx, col)
                 );
             }
+        } else if (fileExt === '.csv') {
+            const rowIdx = lines.findIndex((line, index) => {
+                if (index === 0 && /(^|[\t,;])\s*(name|名称|角色|人物)\s*($|[\t,;])/i.test(line)) {
+                    return false;
+                }
+                return new RegExp(`(^|[\t,;])\\s*"?${escapeRegExp(role.name)}"?\\s*($|[\t,;])`).test(line);
+            });
+            if (rowIdx >= 0) {
+                const col = lines[rowIdx].indexOf(role.name);
+                return new vscode.Location(
+                    vscode.Uri.file(filePath),
+                    new vscode.Position(rowIdx, Math.max(col, 0))
+                );
+            }
         }
 
         return null;

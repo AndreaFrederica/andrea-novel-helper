@@ -1,14 +1,34 @@
 // md_plain.ts
 // 零依赖 Markdown → 纯文本；返回整体文本与“块首行”映射用于滚动对齐
-export function mdToPlainText(src: string): { text: string; blocks: { srcLine: number; text: string }[] } {
+export type MarkdownPlainBlock = {
+    srcLine: number;
+    text: string;
+    kind?: 'heading' | 'list' | 'blockquote' | 'code';
+    level?: number;
+    listMarkers?: string[];
+    inlineStyles?: MarkdownInlineStyleRange[];
+};
+
+export type MarkdownInlineStyleRange = {
+    start: number;
+    end: number;
+    kind: 'bold' | 'italic' | 'boldItalic' | 'strike' | 'code';
+};
+
+export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlainBlock[] } {
     const rawLines = src.split(/\r?\n/);
     const lines = stripCommentsFromLines(rawLines);
-    const blocks: { srcLine: number; text: string }[] = [];
+    const blocks: MarkdownPlainBlock[] = [];
     let i = 0;
     const refDefs = collectRefDefinitions(lines);
 
-    const pushBlock = (start: number, text: string) =>
-        blocks.push({ srcLine: start, text: text.replace(/\s+$/, '') });
+    const pushBlock = (start: number, text: string, meta?: Omit<MarkdownPlainBlock, 'srcLine' | 'text'>) =>
+        blocks.push({ srcLine: start, text: text.replace(/\s+$/, ''), ...meta });
+
+    const pushRichBlock = (start: number, raw: string, meta?: Omit<MarkdownPlainBlock, 'srcLine' | 'text' | 'inlineStyles'>) => {
+        const rich = stripInlineRich(raw, refDefs);
+        pushBlock(start, rich.text, { ...meta, inlineStyles: rich.styles });
+    };
 
     while (i < lines.length) {
         const line = lines[i];
@@ -32,21 +52,21 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
                 i++;
             }
             if (i < lines.length) { i++; } // skip closing
-            pushBlock(start, buf.join('\n'));
+            pushBlock(start, buf.join('\n'), { kind: 'code' });
             continue;
         }
 
         // 2) ATX Heading
         const atx = line.match(/^(#{1,6})\s*(.+?)\s*#*\s*$/);
         if (atx) {
-            pushBlock(i, stripInline(atx[2], refDefs));
+            pushRichBlock(i, atx[2], { kind: 'heading', level: atx[1].length });
             i++;
             continue;
         }
 
         // 3) Setext Heading
         if (i + 1 < lines.length && /^\s*[-=]{3,}\s*$/.test(lines[i + 1])) {
-            pushBlock(i, stripInline(line, refDefs));
+            pushRichBlock(i, line, { kind: 'heading', level: /^\s*=/.test(lines[i + 1]) ? 1 : 2 });
             i += 2;
             continue;
         }
@@ -59,7 +79,7 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
                 buf.push(lines[i].replace(/^\s*>+\s?/, ''));
                 i++;
             }
-            pushBlock(start, stripInline(buf.join('\n'), refDefs));
+            pushRichBlock(start, buf.join('\n'), { kind: 'blockquote' });
             continue;
         }
 
@@ -67,18 +87,33 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
         if (/^\s*([*+\-]|\d+\.)\s+/.test(line)) {
             const start = i;
             const buf: string[] = [];
+            const markers: string[] = [];
             while (i < lines.length && /^\s*([*+\-]|\d+\.)\s+/.test(lines[i])) {
+                const markerMatch = lines[i].match(/^\s*(\d+\.|[*+\-])\s+/);
+                markers.push(markerMatch && /\d+\./.test(markerMatch[1]) ? markerMatch[1] : '•');
                 const li = lines[i]
                     .replace(/^\s*(?:\d+\.|[*+\-])\s+/, '')
                     .replace(/^\[([ xX])\]\s+/, (_m, g1) => (g1 === 'x' || g1 === 'X') ? '[x] ' : '[ ] ');
                 buf.push(li);
                 i++;
             }
-            pushBlock(start, stripInline(buf.join('\n'), refDefs));
+            pushRichBlock(start, buf.join('\n'), { kind: 'list', listMarkers: markers });
             continue;
         }
 
-        // 6) Table（简化处理）
+        // 6) Indented code block
+        if (/^(?: {4}|\t)/.test(line)) {
+            const start = i;
+            const buf: string[] = [];
+            while (i < lines.length && (lines[i].trim() === '' || /^(?: {4}|\t)/.test(lines[i]))) {
+                buf.push(lines[i].replace(/^(?: {4}|\t)/, ''));
+                i++;
+            }
+            pushBlock(start, buf.join('\n'), { kind: 'code' });
+            continue;
+        }
+
+        // 7) Table（简化处理）
         if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?\s*[-:| ]+\|[-:| ]+\s*\|?\s*$/.test(lines[i + 1])) {
             const start = i;
             const buf: string[] = [];
@@ -92,24 +127,24 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
             continue;
         }
 
-        // 7) Horizontal rule
+        // 8) Horizontal rule
         if (/^\s*([-*_]\s*){3,}\s*$/.test(line)) {
             pushBlock(i, ''); // 不输出分隔符文本
             i++;
             continue;
         }
 
-        // 8) Paragraph / 连续非空行 或 空行：保留空行为独立空块
+        // 9) Paragraph / 连续非空行 或 空行：保留空行为独立空块
         const start = i;
         const buf: string[] = [];
         while (i < lines.length && lines[i].trim() !== '') {
-            if (/^(```+|~~~+)\s*\w*\s*$/.test(lines[i]) || /^\s*>/.test(lines[i]) || /^\s*([*+\-]|\d+\.)\s+/.test(lines[i])) { break; }
+            if (/^(```+|~~~+)\s*\w*\s*$/.test(lines[i]) || /^\s*>/.test(lines[i]) || /^\s*([*+\-]|\d+\.)\s+/.test(lines[i]) || /^(?: {4}|\t)/.test(lines[i])) { break; }
             buf.push(lines[i]);
             i++;
         }
         if (buf.length) {
             // 推入段落块
-            pushBlock(start, stripInline(buf.join('\n'), refDefs));
+            pushRichBlock(start, buf.join('\n'));
             // 保留段落后面的空行，每个空行都作为单独空块
             while (i < lines.length && lines[i].trim() === '') {
                 pushBlock(i, '');
@@ -132,15 +167,17 @@ export function mdToPlainText(src: string): { text: string; blocks: { srcLine: n
 
 /* —— 行内清理：去掉强调/链接/图片/行内代码/标签/实体 —— */
 export function stripInline(s: string, refDefs?: Set<string>): string {
+    return stripInlineRich(s, refDefs).text;
+}
+
+export function stripInlineRich(s: string, refDefs?: Set<string>): { text: string; styles: MarkdownInlineStyleRange[] } {
     let t = s;
+    const styles: MarkdownInlineStyleRange[] = [];
 
     const formatImageText = (alt?: string) => {
         const text = (alt || '').trim();
         return text ? `[image: ${text}]` : '[image]';
     };
-
-    // 行内代码
-    t = t.replace(/`([^`]+)`/g, '$1');
 
     // 图片必须先于链接处理，否则链接正则会先吃掉 [alt](url) 部分，留下多余的 !
     // 图片 ![alt](src) → [image: alt]
@@ -162,10 +199,6 @@ export function stripInline(s: string, refDefs?: Set<string>): string {
     // Autolink <https://...> or <mailto:...>
     t = t.replace(/<((?:https?:\/\/|mailto:)[^>]+)>/gi, '$1');
 
-    // 强调/斜体
-    t = t.replace(/(\*\*|__)(.*?)\1/g, '$2');
-    t = t.replace(/(\*|_)(.*?)\1/g, '$2');
-
     // 删除 HTML 标签（保留内容）
     t = t.replace(/<\/?[^>]+>/g, '');
 
@@ -177,8 +210,42 @@ export function stripInline(s: string, refDefs?: Set<string>): string {
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, '\'');
 
+    // 常见行内样式：在去掉 Markdown 标记的同时记录纯文本范围。
+    // 这里按单层常见写法处理，避免多次 replace 后 offset 漂移。
+    const inlineStyle = /(`+)([\s\S]*?)\1|~~([\s\S]*?)~~|(\*{3,}|_{3,})([\s\S]*?)\4|(\*\*|__)([\s\S]*?)\6|(\*|_)([\s\S]*?)\8/g;
+    let out = '';
+    let last = 0;
+    let match: RegExpExecArray | null;
+    while ((match = inlineStyle.exec(t)) !== null) {
+        out += t.slice(last, match.index);
+        const content = match[2] ?? match[3] ?? match[5] ?? match[7] ?? match[9] ?? '';
+        const start = out.length;
+        out += content;
+        let kind: MarkdownInlineStyleRange['kind'] = 'italic';
+        if (match[1]) { kind = 'code'; }
+        else if (match[3] !== undefined) { kind = 'strike'; }
+        else if (match[4]) { kind = 'boldItalic'; }
+        else if (match[6]) { kind = 'bold'; }
+        styles.push({
+            start,
+            end: start + content.length,
+            kind,
+        });
+        last = match.index + match[0].length;
+    }
+    out += t.slice(last);
+    t = out;
+
     // 行尾空白
-    return t.replace(/[ \t]+$/gm, '');
+    const trimmed = t.replace(/[ \t]+$/gm, '');
+    const max = trimmed.length;
+    return {
+        text: trimmed,
+        styles: styles
+            .map(style => ({ ...style, start: Math.max(0, Math.min(style.start, max)), end: Math.max(0, Math.min(style.end, max)) }))
+            .filter(style => style.end > style.start)
+            .sort((a, b) => a.start - b.start || b.end - a.end)
+    };
 }
 
 export function stripTableRow(line: string, refDefs?: Set<string>): string {

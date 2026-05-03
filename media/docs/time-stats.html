@@ -1,0 +1,102 @@
+<div class="doc-section beginner">
+<h4>写作时间统计是什么</h4>
+<p>写作时间统计会记录你在文件中实际输入的时间、字数变化和速度。它不需要手动开始计时：打开支持的文件并开始输入后，ANH 会自动进入写作会话。</p>
+
+<h4>从哪里打开</h4>
+<ul>
+    <li><b>状态栏</b> — 点击底部的写作统计/字数统计项，打开<strong>写作统计仪表板</strong></li>
+    <li><b>功能引导</b> — 打开 ANH 功能引导，找到“写作时间统计”卡片</li>
+    <li><b>里程碑通知</b> — 达成字数里程碑后，通知按钮可以打开统计面板</li>
+</ul>
+
+<h4>状态栏怎么看</h4>
+<p>状态栏会显示当前速度、平均速度、峰值速度、累计用时和当前文件字数。显示模式可以切换为详细、半精简或精简。</p>
+<ul>
+    <li><b>CPM</b> — 每分钟写了多少字</li>
+    <li><b>CPH</b> — 每小时写了多少字</li>
+    <li><b>笔形标记</b> — 当前正在写</li>
+    <li><b>睡眠标记</b> — 超过闲置阈值后暂停计时</li>
+</ul>
+
+<h4>仪表板有什么</h4>
+<ul>
+    <li><b>全文件累计用时</b> — 项目里所有有统计数据的文件累计写作时间</li>
+    <li><b>今日已码用时</b> — 今天实际写作的时间</li>
+    <li><b>今日平均/峰值速度</b> — 今日速度统计</li>
+    <li><b>当前文件速度曲线</b> — 当前活动文件的 CPM 曲线</li>
+    <li><b>今日按小时</b> — 今天每小时写了多少字</li>
+    <li><b>今日热力图</b> — 24 小时 × 4 刻钟的细粒度分布</li>
+    <li><b>7 天窗口、月度统计、年度热力图</b> — 查看长期写作节奏</li>
+</ul>
+
+<h4>粘贴内容怎么算</h4>
+<p>默认情况下，大段粘贴不会计入写作速度，但会计入新增字数。这样可以避免复制资料时把速度冲得很高。你可以在设置里改变这个行为。</p>
+
+<h4>数据保存在哪里</h4>
+<p>统计数据保存在 <code>novel-helper/.anh-fsdb/</code>。项目初始化向导会询问这个目录是否纳入 Git 版本控制；一般个人本地统计可以忽略，跨设备同步时再考虑纳入。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>会话判定</h4>
+<p>TimeStats 监听文本变更、活动编辑器、窗口焦点、文档关闭/保存/重命名等事件。只有文件系统中的工作区文件会进入统计，未命名文件、输出面板、非工作区路径会跳过。</p>
+<ul>
+    <li><b>支持语言</b>：默认 <code>markdown</code> 和 <code>plaintext</code>，由 <code>AndreaNovelHelper.timeStats.enabledLanguages</code> 控制</li>
+    <li><b>闲置阈值</b>：<code>idleThresholdMs</code> 默认 30000ms，超过后停止当前会话</li>
+    <li><b>退出闲置</b>：<code>exitIdleOn</code> 可设为 <code>text-change</code>、<code>window-focus</code>、<code>editor-change</code></li>
+    <li><b>输入法防抖</b>：<code>imeDebounceMs</code> 默认 350ms，避免中文输入法预编辑状态误计</li>
+    <li><b>预览/批注面板</b>：预览和批注面板获得焦点时不会直接打断写作统计</li>
+</ul>
+
+<h4>状态栏模式</h4>
+<p>状态栏由 TimeStats 创建，但显示选项放在 <code>AndreaNovelHelper.wordCount</code> 下：</p>
+<ul>
+    <li><code>AndreaNovelHelper.wordCount.statusBar.mode</code> — <code>detailed</code> 显示当前/平均/峰值速度、用时和详细字数；<code>semi</code> 显示速度和总字数；<code>compact</code> 只显示总字数</li>
+    <li><code>AndreaNovelHelper.wordCount.statusBar.speedUnit</code> — <code>cpm</code> 或 <code>cph</code></li>
+    <li><code>AndreaNovelHelper.wordCount.primaryUnit</code> — 词计、含标点、不含标点</li>
+    <li><code>AndreaNovelHelper.timeStats.statusBar.alignment</code> / <code>priority</code> — 状态栏位置和优先级</li>
+</ul>
+
+<h4>仪表板数据来源</h4>
+<p>仪表板会优先读取项目级写作统计摘要；如果摘要不可用，会退回到文件追踪概览；再不行则只显示当前文件。标题旁会显示“跨文件汇总”“跨文件粗略汇总”或“仅当前文件”。</p>
+<ul>
+    <li><b>当前文件速度曲线</b>：来自当前文件的时间桶数据</li>
+    <li><b>今日统计</b>：聚合今天的会话、时间桶和新增字数</li>
+    <li><b>热力图</b>：按日期或 15 分钟粒度聚合新增字数</li>
+    <li><b>面板设置</b>：可调整图表色系、按钮色系、显示组件和组件顺序</li>
+</ul>
+
+<h4>粘贴判定</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.pasteThresholdChars</code> — 一次变更新增字符数达到阈值，或包含换行时，视为粘贴</li>
+    <li><code>includePasteInSpeed</code> — 粘贴是否计入速度，默认 <code>false</code></li>
+    <li><code>includePasteInAddedCounters</code> — 粘贴是否计入新增字数，默认 <code>true</code></li>
+    <li><code>includePaste</code> — 旧的统一开关；设置后会覆盖上面两个拆分配置</li>
+</ul>
+
+<h4>里程碑</h4>
+<p>里程碑按文件记录，只有从未达成过的目标会触发通知；达成记录会持久化，避免每次打开都重复提醒。</p>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.milestone.enabled</code> — 开关，默认开启</li>
+    <li><code>AndreaNovelHelper.timeStats.milestone.targets</code> — 目标字数数组，默认包含 1000、2000、5000、10000、20000、50000、100000</li>
+    <li><code>AndreaNovelHelper.timeStats.milestone.notificationType</code> — <code>information</code> 或 <code>modal</code></li>
+    <li><b>快速配置</b>：打开 ANH 快速设置，选择“配置：字数里程碑提醒”</li>
+</ul>
+
+<h4>大文件与忽略规则</h4>
+<ul>
+    <li><b>大文件近似</b>：超过 <code>timeStats.largeFile.thresholdBytes</code> 且开启 <code>largeFile.approximate</code> 时，先用近似值，之后按变更次数或时间间隔做精确校准</li>
+    <li><b>超大文件提示</b>：超过 <code>AndreaNovelHelper.hugeFile.thresholdBytes</code> 会提示已启用近似统计</li>
+    <li><b>.wcignore</b>：<code>timeStats.respectWcignore</code> 默认关闭；开启后被 <code>.wcignore</code> 忽略的文件不进入全局写作统计</li>
+    <li><b>只读会话</b>：<code>persistReadOnlySessions</code> 控制只读场景是否持久化</li>
+</ul>
+
+<h4>导出与调试</h4>
+<ul>
+    <li><code>AndreaNovelHelper.exportTimeStatsCSV</code> — 导出当前文件的时间统计 CSV 到 <code>novel-helper/</code></li>
+    <li><code>AndreaNovelHelper.timeStats.debug</code> — 输出 TimeStats 调试日志</li>
+    <li><code>AndreaNovelHelper.timeStats.bucketSizeMs</code> — 速度和热力图时间桶大小，默认 60000ms</li>
+    <li><code>AndreaNovelHelper.timeStats.typoDelay.enabled</code> / <code>windowMs</code> — 连续编辑时延迟错别字扫描请求</li>
+</ul>
+
+<div class="doc-note">TimeStats 统计的是“活动输入造成的变化”。如果你用外部工具批量改文件，字数统计会更新文件总字数，但写作时间统计不会把外部批量改动当成一次写作会话。</div>
+</div>

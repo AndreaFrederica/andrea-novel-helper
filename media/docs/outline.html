@@ -1,0 +1,73 @@
+<div class="doc-section beginner">
+<h4>大纲是什么</h4>
+<p>大纲是 ANH 提供的<strong>故事大纲编辑工具</strong>。你可以为每个章节文件或文件夹创建一份独立的大纲 Markdown 文件，用来写情节梗概、角色规划、章节笔记等内容。系统会同时打开两个大纲：</p>
+<ul>
+    <li><b>上面：目录大纲</b> — 针对当前文件夹的大纲，适合写整个篇章/卷的总体规划</li>
+    <li><b>下面：文件大纲</b> — 针对当前文件的大纲，适合写这一章的情节梗概、角色出场安排等</li>
+</ul>
+
+<h4>什么时候会用到</h4>
+<ul>
+    <li>写长篇小说时，提前规划每章的情节走向</li>
+    <li>为每个文件夹（卷/篇）写整体构思和角色发展线索</li>
+    <li>边写边记录灵感、待修改事项、伏笔埋设等</li>
+</ul>
+
+<h4>如何打开</h4>
+<p>有两种打开方式，可以在功能引导页的大纲卡片上找到对应按钮：</p>
+<ul>
+    <li><b>打开双重大纲</b> — 在右侧分栏同时打开当前文件的目录大纲和文件大纲，上下排列。适合日常写作时同时查看章节规划和整体脉络</li>
+    <li><b>选择大纲</b> — 弹出选择菜单，可以单独打开当前文件大纲、当前目录大纲，或浏览目录树选择任意文件/目录的大纲。适合只需要看某一个大纲的场景</li>
+</ul>
+<p>也可以通过命令面板 <kbd>Ctrl+Shift+P</kbd> 输入"打开双重大纲"或"打开大纲"来触发。</p>
+
+<h4>大纲存在哪里</h4>
+<p>大纲文件是普通的 Markdown 文件，存储在项目的 <code>novel-helper/outline/</code> 目录下。目录大纲命名为 <code>文件夹名_dir_outline.md</code>，文件大纲命名为 <code>文件名_outline.md</code>。首次打开时自动创建，内容只有标题模板，其余由你自己填写。</p>
+
+<h4>懒加载</h4>
+<p>大纲默认开启懒加载：只有当你打开大纲面板时才会加载内容，平时不占用资源。如果大纲内容没更新，可以用"刷新目录大纲"或"刷新文件大纲"命令手动刷新。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>大纲系统概述</h4>
+<p>ANH 的大纲系统为小说创作提供配套的故事大纲编辑环境。它不是自动生成的文件树或标题导航——大纲文件是<strong>用户手动编写</strong>的 Markdown 文档，用于记录情节规划、章节梗概、角色线索等创作内容。</p>
+<p>系统为当前打开的文件自动生成一对空的大纲模板文件（目录大纲 + 文件大纲），并通过虚拟文件系统和分栏视图提供便捷的编辑体验。</p>
+
+<h4>打开方式</h4>
+<ul>
+    <li><b>双重大纲</b>：<code>AndreaNovelHelper.openDoubleOutline</code> — 在第二编辑组纵向拆分，同时打开当前文件的目录大纲和文件大纲</li>
+    <li><b>大纲选择器</b>：<code>AndreaNovelHelper.openOutlinePicker</code> — 弹出 QuickPick 菜单，可选择打开当前文件大纲、当前目录大纲，或交互式浏览目录树选择任意文件/目录的大纲</li>
+    <li><b>重定向大纲</b>：<code>AndreaNovelHelper.redirectOutlineHere</code> — 仅在 <code>andrea-outline://</code> 文档激活时可用（右键菜单），将当前大纲标签切换到其他目标文件/目录的大纲</li>
+</ul>
+
+<h4>大纲文件创建与内容</h4>
+<p>大纲文件首次打开时由 <code>ensureOutlineFileExists()</code> 自动创建，内容仅为两行标题模板：</p>
+<ul>
+    <li>目录大纲：<code># 📁目录大纲</code> + <code>> 目录：{文件夹名}</code></li>
+    <li>文件大纲：<code># 📄文件大纲</code> + <code>> 文件：{文件名}</code></li>
+</ul>
+<p>之后所有内容由用户手动编写。系统不会自动填充文件列表或标题层级——大纲文件就是普通的可编辑 Markdown。</p>
+
+<h4>自动跟随切换</h4>
+<p>当你在不同的小说文件之间切换时，大纲面板会自动更新为当前文件对应的大纲（不会覆盖已有内容）。触发时机：</p>
+<ul>
+    <li>切换活动编辑器（<code>onDidChangeActiveTextEditor</code>）</li>
+    <li>保存文件（<code>onDidSaveTextDocument</code>）</li>
+    <li>1 秒轮询兜底检测活动文件变化</li>
+    <li>当前活动文件本身是大纲文件时跳过（避免循环）</li>
+</ul>
+
+<h4>懒加载模式</h4>
+<p>默认开启（<code>AndreaNovelHelper.outline.lazyMode</code>）。大纲文件仅在编辑器可见时才加载，面板隐藏时暂停，重新可见时自动刷新。可手动调用 <code>AndreaNovelHelper.refreshOutlineDir</code> / <code>AndreaNovelHelper.refreshOutlineFile</code> 强制刷新。</p>
+
+<h4>存储与虚拟文件系统</h4>
+<p>大纲 <code>.md</code> 文件存储在 <code>novel-helper/outline/</code> 目录下（可通过 <code>AndreaNovelHelper.outlinePath</code> 配置）。系统使用 <code>MemoryOutlineFSProvider</code>（基于 memfs 内存文件系统）提供 <code>andrea-outline://</code> 虚拟文件方案，写入操作同时更新内存和磁盘。虚拟路径 <code>/目录大纲.md</code> 和 <code>/文件大纲.md</code> 映射到当前文件对应的大纲；<code>/direct/</code> 路径支持访问任意大纲文件。</p>
+
+<h4>文件命名规则</h4>
+<ul>
+    <li><b>目录大纲</b>：<code>&lt;文件夹名&gt;_dir_outline.md</code>（如 <code>chapter1_dir_outline.md</code>），根目录为 <code>root_dir_outline.md</code></li>
+    <li><b>文件大纲</b>：<code>&lt;文件名&gt;_outline.md</code>（如 <code>chapter1.md</code> 对应 <code>chapter1_outline.md</code>）</li>
+</ul>
+
+<div class="doc-note">大纲文件是用户编写的创作内容，不是自动生成的结构索引。系统仅提供空模板、虚拟文件系统编辑环境和自动跟随切换机制。<code>outline/</code> 目录被排除在角色扫描和其他文件系统遍历之外。</div>
+</div>

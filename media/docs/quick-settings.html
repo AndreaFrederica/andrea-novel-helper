@@ -1,0 +1,238 @@
+<div class="doc-section beginner">
+<h4>快速设置是什么</h4>
+<p>快速设置是 ANH 给写作者准备的常用开关菜单。你可以把它理解成“写作时最常改的几个按钮”，比如自动换行、字号、段首缩进、字数统计方式、错别字识别等。</p>
+<p>它不是完整设置页。完整设置页适合慢慢研究所有参数；快速设置适合正在写作时马上调整，不需要知道 VS Code 的设置文件在哪里。</p>
+
+<h4>如何打开</h4>
+<ul>
+    <li><b>最快方式</b>：看 VS Code 窗口最底下一条状态栏，点击 ANH 的“版式”或“版式和快速设置”按钮。它就是写作时最顺手的快速设置入口</li>
+    <li><b>键盘方式</b>：按 <kbd>Ctrl+Alt+I</kbd>。屏幕上方会弹出一个列表，这就是命令式快速设置</li>
+    <li><b>从命令面板打开</b>：按 <kbd>Ctrl+Shift+P</kbd>，输入“快速设置”，然后选择 ANH 的快速设置命令</li>
+    <li><b>从功能引导打开</b>：打开 ANH 功能引导，点击“快速设置”卡片</li>
+    <li><b>图形化方式</b>：打开 ANH 设置页面，左侧选择“快速设置”。那里是表单式界面，适合慢慢看说明、下拉选择、切换开关</li>
+</ul>
+
+<h4>状态栏入口在哪里</h4>
+<p>状态栏是 VS Code 窗口最底部那一整条区域。ANH 会在这里放一些写作按钮。快速设置对应的按钮通常显示为“版式”或“版式和快速设置”，旁边可能还会显示缩进、段距、去尾空格、括号补齐等状态。</p>
+<p>如果你看不到这个按钮，先打开一个 Markdown 或 TXT 文档；如果还是看不到，可以用 <kbd>Ctrl+Alt+I</kbd> 打开快速设置，再检查“状态栏显示”和“始终显示版式工具条”相关设置。</p>
+
+<h4>第一次打开时怎么看</h4>
+<ul>
+    <li>列表里带 <code>$(check)</code> 或勾选样式的项目，表示当前通常是开启状态</li>
+    <li>带 <code>$(circle-slash)</code> 或禁用样式的项目，表示当前通常是关闭状态</li>
+    <li>名字里写着“切换”的项目，点一次就会在开启和关闭之间切换</li>
+    <li>名字里写着“设置”或“配置”的项目，点进去后还会出现第二个列表，需要再选一个具体值</li>
+    <li>不确定时可以按 <kbd>Esc</kbd> 退出，不会修改任何东西</li>
+</ul>
+
+<h4>新手推荐先这样调</h4>
+<ul>
+    <li><b>自动换行</b>：开启。小说段落通常很长，开启后不用横向滚动</li>
+    <li><b>自动换行模式</b>：选 <code>on</code>。它会按当前编辑器宽度换行，最直观</li>
+    <li><b>折行缩进</b>：先选 <code>none</code>。写小说时折行不额外缩进更符合常见写作软件的习惯，如果你希望区分折行和新段落，再改成 <code>indent</code></li>
+    <li><b>段首缩进</b>：如果你写中文小说，建议开启</li>
+    <li><b>段间空行数</b>：常见选择是 <code>1</code>。喜欢紧凑可以选 <code>0</code>，喜欢段落更分明可以选 <code>2</code></li>
+    <li><b>去尾空格</b>：建议开启。它会清理每行末尾看不见的多余空格</li>
+    <li><b>字体大小</b>：按屏幕和眼睛习惯调，常见是 16、18、20</li>
+    <li><b>Minimap 小地图</b>：如果你觉得右侧那条小预览占地方，可以关闭</li>
+</ul>
+
+<h4>最常用的项目说明</h4>
+<ul>
+    <li><b>自动换行</b> — 只影响屏幕显示。你的原文还是同一段，不会被 ANH 插入换行符。适合所有长段落写作</li>
+    <li><b>自动换行模式</b> — 如果你不知道选哪个，就选 <code>on</code>。其他模式主要给需要固定列宽的人使用</li>
+    <li><b>折行缩进</b> — 只影响“因为屏幕太窄而折出来的显示行”。它不会改文件内容，也不会影响导出。<code>none</code> 最符合常见写作软件习惯，<code>indent</code> 更容易看出折行关系</li>
+    <li><b>智慧补齐括号</b> — 输入左括号或左引号时，自动补右边那一半。写对话、注释、角色信息时比较省事</li>
+    <li><b>智慧跳出括号/引号</b> — 光标在括号或引号里面时，输入右括号/右引号可以跳到外面，减少手动移动光标</li>
+    <li><b>智慧切段（Enter）</b> — 控制 ANH 对回车键的增强处理。如果你发现回车行为和习惯不一致，可以先关闭试试</li>
+    <li><b>段首缩进</b> — 控制排版时是否处理中文小说常见的段首两个空格。它属于正文格式，不是屏幕显示效果</li>
+    <li><b>段间空行数</b> — 控制排版后段落之间留几行空白。它会影响文件内容，所以改之前先确认你想要的排版风格</li>
+    <li><b>去尾空格</b> — 清理每行末尾看不见的空格。通常建议开启，能减少格式混乱</li>
+    <li><b>缩进宽度</b> — 控制按 Tab 时插入几个空格或 Tab。写小说正文一般不常改；写大纲、设定表、列表时更有用</li>
+    <li><b>编辑器字体大小</b> — 改写作区文字大小。这个是全局习惯项，通常会影响你在 VS Code 里打开的其他项目</li>
+    <li><b>编辑器字体家族</b> — 改写作区字体。图形化字体管理器可以从系统字体里选，也可以排序和删除</li>
+    <li><b>字数单位</b> — 决定状态栏和字数统计主要显示哪种口径。中文小说通常先用“词计”；需要检查字符量时再切到“含标点”或“不含标点”</li>
+    <li><b>统计计入粘贴</b> — 控制粘贴进来的文字是否算进速度和新增字数。严肃记录写作速度时建议关闭；整理旧稿时可按需要开启</li>
+    <li><b>.wcignore</b> — 管理哪些文件或文件夹不进入写作资源和字数统计。例如素材、备份、导出文件、临时文件</li>
+    <li><b>里程碑提醒</b> — 设置达到多少字时提醒你，例如 1000、5000、10000 字。适合用来做每日目标或章节目标</li>
+    <li><b>错别字识别快速设置</b> — 进入错别字识别的单独菜单，可以开关自动识别、手动扫描当前文档、调整识别模式</li>
+</ul>
+
+<h4>命令式和图形化有什么区别</h4>
+<ul>
+    <li><b>命令式快速设置</b>：按 <kbd>Ctrl+Alt+I</kbd> 打开，像菜单一样一项一项点，适合写作中快速改</li>
+    <li><b>图形化快速设置</b>：在 ANH 设置页面里打开，像表单一样显示开关、输入框和下拉框，适合新手慢慢看说明</li>
+    <li>两种入口改的是同一批设置。比如你在命令式快速设置里改了“折行缩进”，图形化快速设置里看到的值也会跟着变</li>
+</ul>
+
+<h4>保存到哪里</h4>
+<p>VS Code 有“当前项目”和“所有项目”两种常见设置位置。ANH 为了避免影响你别的项目，大多数快速设置会写入当前工作区，也就是只影响现在打开的小说项目。</p>
+<ul>
+    <li><b>工作区设置</b>：只影响当前小说项目。自动换行、折行缩进、段首缩进、段间空行数、字数单位等多数项目都属于这里</li>
+    <li><b>全局用户设置</b>：影响你在 VS Code 里打开的所有项目。编辑器字体大小属于这里，因为它通常是个人阅读习惯</li>
+    <li><b>按键绑定</b>：例如“一键注入 Enter → Andrea”会修改 VS Code 的按键绑定文件。只有智能回车失效时才需要用</li>
+</ul>
+
+<h4>改错了怎么办</h4>
+<ul>
+    <li>刚弹出的列表还没选值时，按 <kbd>Esc</kbd> 退出即可</li>
+    <li>开关类项目点错了，通常再点一次就能切回去</li>
+    <li>下拉选择类项目点错了，再打开同一个设置重新选择即可</li>
+    <li>图形化快速设置里每个设置项旁边有重置按钮，可以恢复默认值</li>
+    <li>如果不确定某项是什么意思，优先看图形化快速设置里的说明，再回到命令式快速设置快速操作</li>
+</ul>
+
+<div class="doc-note">新手最重要的是先把“自动换行”和“折行缩进”调舒服。它们只改变编辑器显示，不会破坏正文内容，适合放心试。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>主菜单完整清单</h4>
+<p>以下项目来自 <code>src/typeset/quickSettings.ts</code> 的快速设置主面板。</p>
+
+<h4>编辑器换行</h4>
+<ul>
+    <li><b>切换：自动换行</b> — 切换 <code>editor.wordWrap</code>，在 <code>off</code> 和 <code>on</code> 之间切换。写长段落时建议开启</li>
+    <li><b>设置：自动换行模式</b> — 直接选择 <code>editor.wordWrap</code> 的模式：
+        <ul>
+            <li><code>off</code> — 不自动换行</li>
+            <li><code>on</code> — 按编辑器窗口宽度换行</li>
+            <li><code>wordWrapColumn</code> — 按 <code>editor.wordWrapColumn</code> 换行</li>
+            <li><code>bounded</code> — 在窗口宽度和列宽之间取较小值换行</li>
+        </ul>
+    </li>
+    <li><b>设置：折行缩进</b> — 写入 <code>editor.wrappingIndent</code>。它控制“同一物理行因为窗口太窄而显示成多行”时，第二屏行及后续屏行的视觉缩进：
+        <ul>
+            <li><code>none</code> — 不额外缩进。写小说时最符合常见写作软件的习惯，也适合想最大化每行可显示字数、屏幕很窄或移动端远程写作的情况</li>
+            <li><code>same</code> — 折行与原行保持同列。VS Code 默认值，段落看起来最紧凑，适合需要精确对齐的场景</li>
+            <li><code>indent</code> — 折行增加一层缩进。适合长句较多、希望一眼区分“这是上一行折下来的内容”而不是新段落的情况</li>
+            <li><code>deepIndent</code> — 折行增加两层缩进。适合大纲、列表、对话层级或注释较多的文件，但正文区会更占横向空间</li>
+        </ul>
+    </li>
+</ul>
+<p><code>editor.wrappingIndent</code> 只影响编辑器里的显示，不会向 Markdown、TXT 或角色文件写入空格，也不会改变导出结果。命令式快速设置会写入工作区设置，并同步 Markdown/plaintext 的语言级工作区配置；图形化快速设置中也可直接修改同一个键。</p>
+
+<h4>智能编辑</h4>
+<ul>
+    <li><b>切换：智慧补齐括号</b> — 写入 <code>andrea.typeset.enableAutoPairs</code>。控制 ANH 的括号/引号自动补齐</li>
+    <li><b>切换：智慧跳出括号/引号</b> — 写入 <code>andrea.typeset.enableSmartExit</code>。光标在成对符号内时，输入对应符号可跳到外侧</li>
+    <li><b>切换：智慧切段（Enter）</b> — 写入 <code>andrea.typeset.enableSmartEnter</code>。控制 ANH 的智能回车/切段逻辑</li>
+    <li><b>一键注入：Enter → Andrea（覆盖 MAIO）</b> — 修改用户 <code>keybindings.json</code>，移除 Markdown All in One 的 Enter 绑定，并把 Enter 交给 <code>andrea.smartEnter</code>。只在智能回车失效时使用一次</li>
+</ul>
+
+<h4>中文排版</h4>
+<ul>
+    <li><b>切换：段首缩进</b> — 写入 <code>andrea.typeset.indentFirstTwoSpaces</code>。开启后排版时处理段首两个空格</li>
+    <li><b>设置：段间空行数</b> — 写入 <code>andrea.typeset.blankLinesBetweenParas</code>，可选 0-6。控制段落之间保留几行空白</li>
+    <li><b>切换：去尾空格</b> — 写入 <code>andrea.typeset.trimTrailingSpaces</code>。排版时移除行尾多余空格</li>
+    <li><b>立即排版全文</b> — 执行 <code>andrea.formatDocument</code>，按当前排版配置格式化当前文档</li>
+    <li><b>立即排版（自动补段间空行）</b> — 执行 <code>andrea.formatDocument.addBlanks</code>，额外补齐段间空行</li>
+</ul>
+
+<h4>缩进和字体</h4>
+<ul>
+    <li><b>设置：缩进宽度</b> — 写入 <code>editor.detectIndentation=false</code>、<code>editor.insertSpaces</code>、<code>editor.tabSize</code>。可选 2/4/8 空格或 Tab，并会同步 Markdown 和 plaintext 的语言级工作区配置</li>
+    <li><b>管理：编辑器字体家族（图形化）</b> — 打开字体家族管理器，编辑 <code>editor.fontFamily</code>。支持从系统字体多选添加、手动输入、编辑、删除、排序、保存和还原默认；保存到工作区设置</li>
+    <li><b>设置：编辑器字体大小</b> — 写入 <code>editor.fontSize</code>。可选 10、12、14、16、18、20、22、24、26、28、32 或自定义；保存到全局用户设置，并同步 Markdown/plaintext 语言级全局配置</li>
+</ul>
+
+<h4>字数与时间统计</h4>
+<ul>
+    <li><b>切换：字数单位</b> — 循环切换 <code>AndreaNovelHelper.wordCount.primaryUnit</code>：
+        <ul>
+            <li><code>excludePunct</code> — 词计：CJK 字符 + 英文单词</li>
+            <li><code>includePunct</code> — 含标点：非空白字符</li>
+            <li><code>nonWSNoPunct</code> — 不含标点：非空白且排除标点</li>
+        </ul>
+    </li>
+    <li><b>切换：统计计入粘贴</b> — 写入旧统一开关 <code>AndreaNovelHelper.timeStats.includePaste</code>。开启后粘贴统一计入速度与新增/净增；关闭后按拆分配置处理</li>
+    <li><b>切换：速度单位</b> — 切换 <code>AndreaNovelHelper.wordCount.statusBar.speedUnit</code>，在 <code>cpm</code>（字/分钟）和 <code>cph</code>（字/小时）之间切换</li>
+    <li><b>切换：字数状态栏显示模式</b> — 循环切换 <code>AndreaNovelHelper.wordCount.statusBar.mode</code>：
+        <ul>
+            <li><code>detailed</code> — 当前/平均/峰值速度、用时、CJK、英文、总字数</li>
+            <li><code>semi</code> — 速度 + 总字数</li>
+            <li><code>compact</code> — 仅总字数</li>
+        </ul>
+    </li>
+    <li><b>配置：字数里程碑提醒</b> — 打开里程碑子菜单，见下文</li>
+</ul>
+
+<h4>写作资源忽略</h4>
+<ul>
+    <li><b>管理：写作资源忽略 (.wcignore)</b> — 打开多选面板，管理哪些文件/目录不显示在写作资源管理器或不进入字数统计。常用规则在首屏，低频规则在“更多”页</li>
+    <li><b>打开 .wcignore</b> — 如果文件不存在则创建默认模板，然后直接打开工作区根目录的 <code>.wcignore</code></li>
+</ul>
+<p><code>.wcignore</code> 的内置规则包括 <code>novel-helper/</code>、<code>.vscode/</code>、<code>node_modules/</code>、<code>.git/</code>、<code>*.tmp</code>、<code>*.log</code>、<code>.DS_Store</code>、<code>Thumbs.db</code>、<code>.out-of-code-insights/</code> 等。自定义规则使用与 <code>.gitignore</code> 类似的语法。</p>
+
+<h4>角色显示</h4>
+<ul>
+    <li><b>配置：当前文章角色显示</b> — 配置资源管理器里的“当前文章角色”视图。可设置分组、展开详情、颜色显示、SVG 图标和自定义分组</li>
+    <li><b>配置：全部角色显示</b> — 配置 ANH 侧栏里的“角色”视图。默认同步当前文章角色显示；关闭同步后使用 <code>AndreaNovelHelper.allRoles.*</code> 独立配置</li>
+</ul>
+
+<h4>当前文章角色显示子菜单</h4>
+<ul>
+    <li><b>分组依据</b> — 写入 <code>AndreaNovelHelper.docRoles.groupBy</code>，可选按归属、按类型、不分组</li>
+    <li><b>遵循归属</b> — 写入 <code>AndreaNovelHelper.docRoles.respectAffiliation</code>。关闭后忽略角色 <code>affiliation</code> 字段</li>
+    <li><b>遵循类型</b> — 写入 <code>AndreaNovelHelper.docRoles.respectType</code>。关闭后忽略角色 <code>type</code> 字段</li>
+    <li><b>第一级别分组</b> — 写入 <code>AndreaNovelHelper.docRoles.primaryGroup</code>，可选归属优先或类型优先</li>
+    <li><b>自定义分组</b> — 写入 <code>AndreaNovelHelper.docRoles.useCustomGroups</code>，启用后按自定义规则分组</li>
+    <li><b>详情折行列数</b> — 写入 <code>AndreaNovelHelper.roles.details.wrapColumn</code>，范围 5-200</li>
+    <li><b>允许角色展开详情</b> — 写入 <code>AndreaNovelHelper.roles.details.enableRoleExpansion</code></li>
+    <li><b>使用角色自带 svg 作为图标</b> — 写入 <code>AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent</code></li>
+    <li><b>用角色颜色标记名称</b> — 写入 <code>AndreaNovelHelper.docRoles.display.colorizeRoleName</code></li>
+    <li><b>管理自定义分组规则</b> — 添加、编辑、删除或重置 <code>docRoles.customGroups</code></li>
+</ul>
+
+<h4>全部角色显示子菜单</h4>
+<ul>
+    <li><b>同步“当前文章角色”的显示设置</b> — 写入 <code>AndreaNovelHelper.allRoles.syncWithDocRoles</code>。开启时全部角色读取 <code>docRoles.*</code>，关闭时读取 <code>allRoles.*</code></li>
+    <li><b>分组依据</b> — 写入 <code>AndreaNovelHelper.allRoles.groupBy</code>，可选按归属、按类型、不分组</li>
+    <li><b>遵循归属</b> — 写入 <code>AndreaNovelHelper.allRoles.respectAffiliation</code></li>
+    <li><b>遵循类型</b> — 写入 <code>AndreaNovelHelper.allRoles.respectType</code></li>
+    <li><b>第一级别分组</b> — 写入 <code>AndreaNovelHelper.allRoles.primaryGroup</code></li>
+    <li><b>自定义分组</b> — 写入 <code>AndreaNovelHelper.allRoles.useCustomGroups</code></li>
+    <li><b>详情折行列数</b> / <b>允许角色展开详情</b> — 与当前文章角色共用 <code>roles.details.*</code></li>
+    <li><b>用角色颜色标记名称</b> — 写入 <code>AndreaNovelHelper.allRoles.display.colorizeRoleName</code></li>
+    <li><b>管理自定义分组规则</b> — 编辑 <code>allRoles.customGroups</code>。实现上会临时复用 <code>docRoles.customGroups</code> 编辑器，然后写回 <code>allRoles.customGroups</code></li>
+</ul>
+
+<h4>自定义分组规则</h4>
+<p>自定义分组规则由三个字段组成：</p>
+<ul>
+    <li><b>名称</b> — 树视图里显示的组名</li>
+    <li><b>匹配类型</b> — <code>affiliation</code> 或 <code>type</code></li>
+    <li><b>匹配模式</b> — 逗号分隔的关键词列表</li>
+</ul>
+<p>管理器支持添加新分组、修改名称、修改匹配类型、修改匹配模式、删除分组、重置默认规则。默认规则包括“词汇敏感词”“主要角色”“配角”。</p>
+
+<h4>错别字识别快速设置</h4>
+<p>这一项会转到 <code>andrea.typo.quickSettings</code>，其子菜单来自 <code>src/typo/typoQuickSettings.ts</code>：</p>
+<ul>
+    <li><b>启用错别字识别</b> — <code>AndreaNovelHelper.typo.enabled</code></li>
+    <li><b>打开文档自动识别</b> — <code>AndreaNovelHelper.typo.autoIdentifyOnOpen</code></li>
+    <li><b>变更自动识别</b> — <code>AndreaNovelHelper.typo.autoScanOnChange</code>。关闭后进入手动模式</li>
+    <li><b>启用变更时间窗口（请求延迟）</b> — <code>AndreaNovelHelper.timeStats.typoDelay.enabled</code></li>
+    <li><b>配置请求延迟窗口时长</b> — <code>AndreaNovelHelper.timeStats.typoDelay.windowMs</code>，预设 400/700/1000/1500/2000/3000ms 或自定义 100-10000ms</li>
+    <li><b>识别模式</b> — 在规则模式 <code>macro</code> 和大模型模式 <code>llm</code> 之间切换</li>
+    <li><b>客户端直连大模型</b> — 配置 <code>AndreaNovelHelper.typo.clientLLM.*</code></li>
+    <li><b>数据持久化</b> — 配置错别字识别缓存保存策略</li>
+    <li><b>调试设置</b> — 配置 LLM 请求/服务端请求等调试输出</li>
+    <li><b>手动扫描当前文档</b> — 执行 <code>andrea.typo.scanDocument</code></li>
+    <li><b>手动重新扫描（清理缓存）</b> — 执行 <code>andrea.typo.rescanDocument</code></li>
+</ul>
+
+<h4>VS Code 外观和辅助操作</h4>
+<ul>
+    <li><b>切换：Minimap（小地图）</b> — 写入 <code>editor.minimap.enabled</code></li>
+    <li><b>切换：Ctrl+滚轮快速缩放字体</b> — 写入 <code>editor.mouseWheelZoom</code></li>
+    <li><b>切换：智能分组锁</b> — 写入 <code>AndreaNovelHelper.smartTabGroupLock.enabled</code>，控制 ANH 的标签组锁定辅助</li>
+    <li><b>切换：状态栏显示</b> — 写入 <code>andrea.typeset.statusBar.compact</code>，控制 ANH 排版状态栏是详细还是简略</li>
+    <li><b>切换：ANH:Sync 简洁模式</b> — 执行 <code>andrea.toggleAutoGitCompact</code>，切换 AutoGit/同步状态栏的简洁显示</li>
+</ul>
+
+<h4>快速设置与完整设置页的区别</h4>
+<p>快速设置只覆盖高频项。ANH 里有两种入口：<b>命令式快速设置</b>是 <kbd>Ctrl+Alt+I</kbd> 打开的 VS Code QuickPick 菜单；<b>图形化快速设置</b>在设置 Webview 的“快速设置”分组里。两者都会操作同一批高频键，例如 <code>editor.wordWrap</code>、<code>editor.wrappingIndent</code>、<code>editor.fontSize</code> 和 ANH 自己的写作设置。</p>
+<p>完整配置仍在“插件设置”“编辑器设置增强版”和 VS Code 设置里。对于不在快速设置里的低频参数，例如补全触发细节、WebDAV 同步策略、数据库后端、脚本运行时等，应使用完整设置页。</p>
+
+<div class="doc-note">快速设置中的大多数项写入工作区设置；折行缩进会额外同步 Markdown/plaintext 的语言级工作区设置；字体大小写入全局用户设置；Enter 注入会修改用户 keybindings.json。涉及全局或按键绑定的项目，文档中已单独标出。</div>
+</div>

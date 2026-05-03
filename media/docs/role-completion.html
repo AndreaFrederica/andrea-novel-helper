@@ -1,0 +1,182 @@
+<div class="doc-section beginner">
+<h4>自动补全是什么</h4>
+<p>ANH 提供多种自动补全功能，让你在写作时更高效：</p>
+<ul>
+    <li><b>角色名补全</b> — 打字时自动弹出匹配的角色名，选中后直接插入</li>
+    <li><b>敏感词修复建议</b> — 输入敏感词时，自动弹出推荐的替换词</li>
+    <li><b>&Def 元数据补全</b> — 输入 <code>&amp;Def</code> 快速插入标题、副标题、分类等元数据</li>
+    <li><b>项目配置补全</b> — 编辑项目配置文件时，自动补全配置项</li>
+</ul>
+
+<h4>角色名补全</h4>
+<p>最常见的用法。打字时自动弹出匹配的角色列表：</p>
+<ul>
+    <li><b>直接打字</b> — 输入角色名的前几个字，自动弹出匹配的角色（默认模式）</li>
+    <li><b>输入 @</b> — 打 <code>@</code> 后自动列出所有角色</li>
+    <li><b>拼音首字母</b> — 如果角色有 <code>lookupKeys_pinyin</code>，输入 <code>zsf</code> 可匹配"张三丰"；自动生成拼音查询键默认关闭，需要在设置中开启或手动填写字段</li>
+    <li><b>别名匹配</b> — 角色定义中的别名（昵称、外号）也能匹配</li>
+</ul>
+
+<h4>提示列表里能看到什么</h4>
+<ul>
+    <li><b>颜色标记</b> — 每个角色名前有小色块，一眼认出是谁</li>
+    <li><b>类型和从属</b> — 显示角色是主角/配角，属于哪个阵营</li>
+    <li><b>描述预览</b> — 鼠标停在角色上显示完整简介</li>
+</ul>
+
+<h4>一键生成拼音/罗马字查询键</h4>
+<p>如果想用 <code>zsf</code> 这类拼音首字母匹配，但又不想长期打开自动生成，可以对当前角色文件手动生成一次：</p>
+<ol>
+    <li>打开角色库文件（Markdown、JSON5 或 OJSON5）</li>
+    <li>按 <kbd>Ctrl+Shift+P</kbd></li>
+    <li>运行 <b>Andrea Novel Helper: 为当前角色文件生成查询键</b></li>
+</ol>
+<p>命令会把生成结果写入 <code>lookupKeys_pinyin</code> / <code>lookupKeys_romanized</code>，以后补全就能用这些查询键匹配。</p>
+
+<h4>敏感词修复</h4>
+<p>输入敏感词时，补全列表会弹出推荐的替换词。选择后自动替换，帮你避免发布时的审查问题。</p>
+
+<h4>&Def 元数据补全</h4>
+<p>在 Markdown 文件中输入 <code>&amp;Def</code>，会弹出元数据模板：</p>
+<ul>
+    <li><code>&amp;Def Title = 标题</code> — 定义主标题</li>
+    <li><code>&amp;Def Subtitle = 副标题</code> — 定义副标题</li>
+    <li><code>&amp;Def Category = 分类</code> — 定义分类</li>
+</ul>
+<p>这些元数据会被 Typst 排版导出时使用。</p>
+
+<h4>如果提示没更新</h4>
+<p>有时候新建了角色但提示列表里没有，可以用命令"刷新角色库"强制重新加载。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>一、角色名补全系统</h4>
+<p>核心文件：<code>src/Provider/completionProvider.ts</code>，通过 <code>createRoleCompletionProvider()</code> 工厂函数创建 <code>CompletionItemProvider</code>。</p>
+
+<h4>触发方式</h4>
+<p>补全在以下情况下触发：</p>
+<ul>
+    <li><b>输入任意字母、数字或下划线</b> — 所有 word 字符都是触发字符</li>
+    <li><b>输入符号前缀</b> — 默认 <code>@</code>（可通过配置添加 <code>#</code> 等其他符号）</li>
+</ul>
+<p>触发模式由 <code>AndreaNovelHelper.completion.triggerMode</code> 控制：</p>
+<ul>
+    <li><code>loose</code> — 无符号，包含匹配（默认）。输入"三"可匹配"张三丰"</li>
+    <li><code>startsWith</code> — 无符号，前缀匹配。必须从角色名开头匹配</li>
+    <li><code>symbolLoose</code> — 需要符号前缀（如 <code>@</code>），包含匹配</li>
+    <li><code>symbolStartsWith</code> — 需要符号前缀，前缀匹配</li>
+</ul>
+
+<h4>匹配机制</h4>
+<p>补全系统通过 <code>getRoleMatchKeys()</code> 获取每个角色的全部匹配键：</p>
+<ul>
+    <li><code>name</code> — 角色主名称</li>
+    <li><code>aliases</code> — 别名数组</li>
+    <li><code>lookupKeys_pinyin</code> — 拼音查询键（全拼 + 首字母缩写）</li>
+    <li><code>lookupKeys_romanized</code> — 罗马字查询键（日文假名→罗马字）</li>
+    <li><code>lookupKeys_spelling</code> — 拼写查询键（英文名变体）</li>
+    <li>其他自定义索引键前缀（通过 <code>AndreaNovelHelper.extendedLookupKeyPrefixes</code> 配置）</li>
+</ul>
+<p><b>重要：</b>查询键一旦存在就会参与匹配。例如角色含有 <code>lookupKeys_pinyin: ["zhangsanfeng", "zsf"]</code> 时，输入 <code>zsf</code> 可匹配到"张三丰"。但查询键不会默认自动生成；<code>lookupKeys.autoGeneratePinyin</code> 和 <code>lookupKeys.autoGenerateRomanized</code> 默认关闭，需要开启后才会为角色名/别名补齐对应字段，或手动在角色文件中填写。</p>
+<p><code>treatPinyinAsAlias</code> 和 <code>treatRomanizedAsAlias</code> 只控制已有查询键是否在补全列表中<b>显示为独立条目</b>（默认关闭），不控制匹配本身。默认情况下，<code>zsf</code> 可以作为匹配键，但列表里仍显示"张三丰"或其别名，而不是单独显示"zsf"。</p>
+
+<h4>手动一键生成查询键</h4>
+<p>如果不想长期开启自动生成，可以只对当前打开的角色文件手动生成一次：</p>
+<ol>
+    <li>打开一个 Markdown、JSON5 或 OJSON5 角色文件</li>
+    <li>按 <kbd>Ctrl+Shift+P</kbd> 打开命令面板</li>
+    <li>运行 <b>Andrea Novel Helper: 为当前角色文件生成查询键</b></li>
+</ol>
+<p>命令会根据角色的 <code>name</code> 和 <code>aliases</code> 生成 <code>lookupKeys_pinyin</code> 与 <code>lookupKeys_romanized</code>，并与已有字段去重合并。Markdown 文件会插入或更新 <code>### 拼音查询键</code> / <code>### 罗马字查询键</code> 字段；JSON5/OJSON5 文件会写回数组字段。</p>
+<div class="doc-note">JSON5/OJSON5 执行后会被重新格式化。Markdown 会尽量保留原有结构，只更新查询键字段。</div>
+<p>前缀提取使用分词器（<code>AndreaNovelHelper.completion.segmenterType</code>：auto/intl/jieba）将光标前的文本分词，生成由长到短的候选前缀（最长 48 字符 / 8 个分词段），选择最佳匹配。分词器会自动将角色名/别名加入自定义词典，确保它们作为原子分词单元。</p>
+
+<h4>补全项内容</h4>
+<p>每个匹配的角色会为每个显示名称（主名称 + 别名 + 可选的拼音/罗马字）生成一个 <code>CompletionItem</code>：</p>
+<ul>
+    <li><b>插入文本</b> — 选择后插入角色名，替换已输入的前缀（含符号前缀）</li>
+    <li><b>详细信息</b> — 显示角色类型和从属</li>
+    <li><b>文档弹窗</b> — 悬停时显示完整的 Markdown 文档，包含：
+        <ul>
+            <li>颜色标记（内联 SVG 色块 + 色值）</li>
+            <li>类型和从属</li>
+            <li>描述（支持 Markdown 格式，自动识别列表/标题/加粗等）</li>
+            <li>包路径和源文件名</li>
+            <li>自定义扩展字段（通过 Markdown 解析器提取）</li>
+        </ul>
+    </li>
+</ul>
+
+<h4>排序与过滤</h4>
+<ul>
+    <li><b>排序规则</b> — 前缀开头匹配排在包含匹配之前；同一匹配级别内按字母顺序排列（中文按 locale 排序）</li>
+    <li><b>敏感词过滤</b> — 类型为"敏感词"的角色会被自动排除在补全列表之外</li>
+    <li><b>敏感词修复建议</b> — 敏感词角色的 <code>fixes</code>（或兼容旧字段 <code>fixs</code>）数组中的替换词会作为独立的补全项出现，标记为"修复: 来自敏感词「xxx」"，排序在普通角色之后。选择后会将敏感词替换为建议的修复词</li>
+    <li><b>最终安全过滤</b> — 生成所有补全项后，再次检查并移除任何意外匹配到敏感词名称的项目，防止异步角色加载导致的竞争条件</li>
+</ul>
+
+<h4>二、&Def 元数据补全</h4>
+<p>核心文件：<code>src/language/defCompletion.ts</code></p>
+<p>在 Markdown/纯文本文件中，输入 <code>&amp;</code>、<code>D</code>、<code>主</code>、<code>副</code>、<code>分</code> 时触发，提供 6 个代码片段：</p>
+<ul>
+    <li><code>&amp;Def Title = ${1}</code> — 定义主标题</li>
+    <li><code>&amp;Def Subtitle = ${1}</code> — 定义副标题</li>
+    <li><code>&amp;Def Category = ${1}</code> — 定义分类</li>
+    <li>以上三项的中文版本：<code>&amp;Def 主标题</code>、<code>&amp;Def 副标题</code>、<code>&amp;Def 分类</code></li>
+</ul>
+<p>使用 <code>vscode.SnippetString</code> 实现 tab-stop 插入，选择后光标自动定位到值的位置。</p>
+
+<h4>三、项目配置补全</h4>
+
+<h4>anhproject.md 配置补全</h4>
+<p>核心文件：<code>src/projectConfig/projectConfigCompletionProvider.ts</code></p>
+<p>在 <code>anhproject.md</code> 文件中，输入 <code>#</code> 或空格时触发，提供 Markdown 章节标题补全：</p>
+<ul>
+    <li><code>## 项目名称</code>、<code>## 项目描述</code>、<code>## 作者</code>、<code>## 项目UUID</code>、<code>## 封面</code> 等</li>
+    <li>空行时提供"所有配置项"大全片段，一次性插入所有配置章节</li>
+</ul>
+
+<h4>project-config.json5 配置补全</h4>
+<p>核心文件：<code>src/projectConfig/projectKeywordConfigJson5.ts</code> + <code>projectJson5Config.ts</code></p>
+<p>在 <code>project-config.json5</code> 文件中，输入引号时触发，提供 JSON5 键补全：</p>
+<ul>
+    <li>关键词配置项：<code>key: ['$1'],</code></li>
+    <li>扩展字段：<code>rolesFile</code>、<code>sensitiveWordsFile</code>、<code>defaultRoleLookupKeys</code> 等</li>
+</ul>
+
+<h4>四、分词器与中文支持</h4>
+<p>核心文件：<code>src/utils/segmenter.ts</code> + <code>src/utils/completionPrefix.ts</code></p>
+<ul>
+    <li>使用 <code>@node-rs/jieba</code> 进行中文分词，不可用时回退到 <code>Intl.Segmenter</code></li>
+    <li>自定义词典自动从角色名、别名、修复词构建</li>
+    <li><code>containsPrefix()</code> 使用分词器感知的匹配，短前缀也能准确匹配</li>
+    <li>前缀候选生成：从光标前文本分词，逐步组合生成由长到短的候选（最多 8 段 / 48 字符）</li>
+</ul>
+
+<h4>五、配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.completion.triggerMode</code> — 触发模式（loose/startsWith/symbolLoose/symbolStartsWith）</li>
+    <li><code>AndreaNovelHelper.completion.symbolPrefixes</code> — 符号触发前缀数组（默认 <code>["@"]</code>）</li>
+    <li><code>AndreaNovelHelper.completion.segmenterType</code> — 分词器类型（auto/intl/jieba，默认 auto）</li>
+    <li><code>AndreaNovelHelper.completion.minChars</code> — 最小触发字符数（默认 1）</li>
+    <li><code>AndreaNovelHelper.lookupKeys.treatPinyinAsAlias</code> — 将拼音查询键作为补全项显示（默认关闭，不影响匹配）</li>
+    <li><code>AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias</code> — 将罗马字查询键作为补全项显示（默认关闭，不影响匹配）</li>
+    <li><code>AndreaNovelHelper.lookupKeys.autoGeneratePinyin</code> — 自动生成拼音查询键（默认关闭）</li>
+    <li><code>AndreaNovelHelper.lookupKeys.autoGenerateRomanized</code> — 自动生成罗马字查询键（默认关闭）</li>
+    <li><code>AndreaNovelHelper.generateLookupKeysForCurrentFile</code> — 对当前打开的角色文件手动生成查询键</li>
+    <li><code>AndreaNovelHelper.defaultRoleLookupKeys</code> — 默认查询键配置</li>
+    <li><code>AndreaNovelHelper.extendedLookupKeyPrefixes</code> — 扩展索引键前缀</li>
+    <li><code>AndreaNovelHelper.debug.completionLog</code> — 启用补全系统的控制台调试日志</li>
+</ul>
+
+<h4>六、注册与语言支持</h4>
+<p>补全提供者在 <code>activate.ts</code> 中通过 <code>registerLanguageFeatures()</code> 注册，支持以下文件类型：</p>
+<ul>
+    <li>Markdown、纯文本、JSON5、CSV</li>
+    <li>OJSON5、RJSON5、TJSON5（ANH 自定义格式）</li>
+    <li>每种类型同时支持 <code>file</code> 和 <code>untitled</code> 方案</li>
+</ul>
+<p>当 <code>supportedFileTypes</code>、<code>completion.triggerMode</code> 或 <code>completion.symbolPrefixes</code> 配置变更时，提供者会自动重新注册。</p>
+
+<div class="doc-note">补全系统使用异步角色匹配缓存（roleAsyncShared），首次加载后响应极快。如果补全列表未更新，可使用命令"刷新角色库"强制重新加载。敏感词角色的 <code>fixes</code> 字段是一个字符串数组，定义了建议的替换词；选择修复补全项会将敏感词替换为对应的修复词。</div>
+</div>

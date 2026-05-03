@@ -6,6 +6,7 @@ import { roles, onDidChangeRoles } from '../activate';
 import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
 import { Role } from '../extension';
 import { FIELD_ALIASES, getExtensionFields } from '../utils/Parser/markdownParser';
+import { roleMatchesKey } from '../utils/roleLookupKeys';
 
 // // Hover 专用输出通道
 // const _anh_hover_channel = vscode.window.createOutputChannel('Andrea Novel Helper:Hover');
@@ -214,7 +215,7 @@ async function refreshAll() {
             const matches = await getRoleMatches(doc);
             if (doc.version !== versionAtReq) { continue; }
             let infos = matches.flatMap(m => m.pats.map(p => {
-                const role = roles.find(r => r.name === p || r.aliases?.includes(p) || r.fixes?.includes(p));
+                const role = roles.find(r => roleMatchesKey(r, p));
                 if (!role) return undefined;
                 const end = m.end + 1; const start = end - p.length;
                 return { range: new vscode.Range(doc.positionAt(start), doc.positionAt(end)), role };

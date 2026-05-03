@@ -117,6 +117,37 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
         vscode.window.showInformationMessage(`自动换行已设置为：${pick.value}`);
     }
 
+    // 选择：自动换行后的缩进方式（none / same / indent / deepIndent）
+    async function changeWrappingIndent() {
+        const cfg = vscode.workspace.getConfiguration('editor');
+        const cur = cfg.get<string>('wrappingIndent', 'same');
+
+        const items = [
+            { label: `${cur === 'none' ? '$(check) ' : ''}none —— 折行不额外缩进`, value: 'none' },
+            { label: `${cur === 'same' ? '$(check) ' : ''}same —— 折行与原行同列`, value: 'same' },
+            { label: `${cur === 'indent' ? '$(check) ' : ''}indent —— 折行增加一层缩进`, value: 'indent' },
+            { label: `${cur === 'deepIndent' ? '$(check) ' : ''}deepIndent —— 折行增加两层缩进`, value: 'deepIndent' },
+            { label: '$(arrow-left) 返回主设置', value: 'back' },
+        ];
+
+        const pick = await vscode.window.showQuickPick(items, { placeHolder: '选择折行缩进方式 (editor.wrappingIndent)' });
+        if (!pick) { return; }
+
+        if (pick.value === 'back') {
+            await quickSettings();
+            return;
+        }
+
+        await cfg.update('wrappingIndent', pick.value, vscode.ConfigurationTarget.Workspace);
+        for (const lang of ['markdown', 'plaintext']) {
+            const langCfg = vscode.workspace.getConfiguration('editor', { languageId: lang });
+            await langCfg.update('wrappingIndent', pick.value, vscode.ConfigurationTarget.Workspace, true);
+        }
+
+        onRefreshStatus();
+        vscode.window.showInformationMessage(`折行缩进已设置为：${pick.value}（editor.wrappingIndent）`);
+    }
+
     async function toggleWordCountUnit() {
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.wordCount');
         const cur = cfg.get<string>('primaryUnit', 'excludePunct') ?? 'excludePunct';
@@ -1021,6 +1052,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
         const editorCfg = vscode.workspace.getConfiguration('editor');
         const wrap = editorCfg.get<string>('wordWrap', 'off'); // off | on | wordWrapColumn | bounded
+        const wrappingIndent = editorCfg.get<string>('wrappingIndent', 'same');
         const minimap = editorCfg.get<boolean>('minimap.enabled', true);
         const wheelZoom = editorCfg.get<boolean>('mouseWheelZoom', false);
         
@@ -1039,6 +1071,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             [
                 { label: `${wrap !== 'off' ? '$(check)' : '$(circle-slash)'} 切换：自动换行（当前 ${wrap}）`, cmd: 'andrea.toggleWordWrap' },
                 { label: '$(settings) 设置：自动换行模式', cmd: 'andrea.changeWordWrap' },
+                { label: `$(indent) 设置：折行缩进（当前 ${wrappingIndent}）`, cmd: 'andrea.changeWrappingIndent' },
 
                 { label: `${ap ? '$(check)' : '$(circle-slash)'} 切换：智慧补齐括号`, cmd: 'andrea.toggleAutoPairs' },
                 { label: `${sx ? '$(check)' : '$(circle-slash)'} 切换：智慧跳出括号/引号`, cmd: 'andrea.toggleSmartExit' },
@@ -1200,6 +1233,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
 
         vscode.commands.registerCommand('andrea.toggleWordWrap', toggleWordWrap),
         vscode.commands.registerCommand('andrea.changeWordWrap', changeWordWrap),
+        vscode.commands.registerCommand('andrea.changeWrappingIndent', changeWrappingIndent),
 
         vscode.commands.registerCommand('andrea.toggleIndentFirst', () => toggle('andrea.typeset.indentFirstTwoSpaces')),
         vscode.commands.registerCommand('andrea.toggleTrimTrailing', () => toggle('andrea.typeset.trimTrailingSpaces')),
