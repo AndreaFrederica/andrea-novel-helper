@@ -94,6 +94,38 @@ export function readBundledCopilotDoc(extensionPath: string, id: string): Bundle
   };
 }
 
+export const MCP_STDIO_SCRIPT_NAME = 'andrea-mcp-stdio.js';
+
+export interface ExportMcpStdioResult {
+  success: boolean;
+  sourcePath: string;
+  targetPath: string;
+  existed: boolean;
+}
+
+export function exportMcpStdioScript(
+  extensionPath: string,
+  workspaceRoot: string,
+  overwrite = false,
+): ExportMcpStdioResult {
+  const sourcePath = path.join(extensionPath, 'bin', MCP_STDIO_SCRIPT_NAME);
+  const targetDir = path.join(workspaceRoot, '.vscode');
+  const targetPath = path.join(targetDir, MCP_STDIO_SCRIPT_NAME);
+
+  const existed = fs.existsSync(targetPath);
+  if (!overwrite && existed) {
+    return { success: false, sourcePath, targetPath, existed };
+  }
+
+  if (!fs.existsSync(sourcePath)) {
+    return { success: false, sourcePath, targetPath, existed };
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.copyFileSync(sourcePath, targetPath);
+  return { success: true, sourcePath, targetPath, existed };
+}
+
 export function exportBundledCopilotDocsToWorkspace(
   extensionPath: string,
   workspaceRoot: string,

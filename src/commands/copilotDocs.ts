@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { exportBundledCopilotDocsToWorkspace, listBundledCopilotDocs } from '../copilot/assets';
+import { exportBundledCopilotDocsToWorkspace, exportMcpStdioScript, listBundledCopilotDocs, MCP_STDIO_SCRIPT_NAME } from '../copilot/assets';
 
 async function pickWorkspaceFolder(): Promise<vscode.WorkspaceFolder | undefined> {
   const folders = vscode.workspace.workspaceFolders;
@@ -78,6 +78,52 @@ export function registerCopilotDocsCommands(
           const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
           await vscode.window.showTextDocument(doc, { preview: false });
         }
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('andrea.copilot.exportMcpStdioScript', async () => {
+      const folder = await pickWorkspaceFolder();
+      if (!folder) {
+        vscode.window.showErrorMessage('没有可用的工作区，无法释放 MCP stdio 代理桥脚本。');
+        return;
+      }
+
+      const workspaceRoot = folder.uri.fsPath;
+      const targetPath = path.join(workspaceRoot, '.vscode', MCP_STDIO_SCRIPT_NAME);
+
+      let overwrite = false;
+      if (fs.existsSync(targetPath)) {
+        const choice = await vscode.window.showWarningMessage(
+          `当前项目的 .vscode/ 目录中已存在 ${MCP_STDIO_SCRIPT_NAME}，是否覆盖？`,
+          '覆盖现有文件',
+          '取消',
+        );
+        if (choice !== '覆盖现有文件') {
+          return;
+        }
+        overwrite = true;
+      }
+
+      const result = exportMcpStdioScript(context.extensionPath, workspaceRoot, overwrite);
+      if (result.success) {
+        const action = await vscode.window.showInformationMessage(
+          `已将 ${MCP_STDIO_SCRIPT_NAME} 释放到 ${result.targetPath}。\n在 Claude Desktop 等工具中配置此脚本路径即可连接 ANH MCP 服务器。`,
+          '打开文件',
+          '复制路径',
+        );
+        if (action === '打开文件') {
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(result.targetPath));
+          await vscode.window.showTextDocument(doc, { preview: false });
+        } else if (action === '复制路径') {
+          await vscode.env.clipboard.writeText(result.targetPath);
+          vscode.window.showInformationMessage('脚本路径已复制到剪贴板。');
+        }
+      } else {
+        vscode.window.showErrorMessage(
+          `释放失败。源文件: ${result.sourcePath}，目标: ${result.targetPath}`
+        );
       }
     }),
   );

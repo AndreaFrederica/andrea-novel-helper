@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.4.65",
+  "version": "0.5.0",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -52,6 +52,8 @@
     "onFileSystem:andrea-outline",
     "onWebviewPanel:andrea.guide",
     "onWebviewPanel:andrea.guideDoc",
+    "onCommand:andrea.openWhatsNew",
+    "onWebviewPanel:whatsNew",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -1028,6 +1030,18 @@
         "command": "andrea.autoScroll.scrollToEnd",
         "title": "滚动到文档末尾",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.openWhatsNew",
+        "title": "打开 What's New",
+        "category": "Andrea Novel Helper",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "andrea.copilot.exportMcpStdioScript",
+        "title": "释放 MCP stdio 代理桥脚本",
+        "category": "Andrea Novel Helper",
+        "icon": "$(terminal)"
       }
     ],
     "walkthroughs": [
@@ -1101,6 +1115,36 @@
             "completionEvents": [
               "onCommand:AndreaNovelHelper.wizard.checkGitUser"
             ]
+          },
+          {
+            "id": "anh.step.vscodeSidebar",
+            "title": "%walkthrough.anh.step.vscodeSidebar.title%",
+            "description": "%walkthrough.anh.step.vscodeSidebar.description%",
+            "media": {
+              "markdown": "media/walkthrough/step6_vscodeSidebar.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.view.explorer"
+            ]
+          },
+          {
+            "id": "anh.step.anhFeatures",
+            "title": "%walkthrough.anh.step.anhFeatures.title%",
+            "description": "%walkthrough.anh.step.anhFeatures.description%",
+            "media": {
+              "markdown": "media/walkthrough/step7_anhFeatures.md"
+            },
+            "completionEvents": [
+              "onCommand:AndreaNovelHelper.showGuideDoc"
+            ]
+          },
+          {
+            "id": "anh.step.finish",
+            "title": "%walkthrough.anh.step.finish.title%",
+            "description": "%walkthrough.anh.step.finish.description%",
+            "media": {
+              "markdown": "media/walkthrough/step8_finish.md"
+            }
           }
         ]
       }
@@ -3335,6 +3379,12 @@
           "minimum": 0,
           "maximum": 2000,
           "markdownDescription": "自动滚动的防抖延迟时间（毫秒）。避免频繁滚动导致的抖动。 如果0 则立即触发"
+        },
+        "AndreaNovelHelper.whatsNew.autoShow": {
+          "anhName": "自动显示 What's New",
+          "type": "boolean",
+          "default": true,
+          "description": "更新到新版后自动显示 What's New 页面"
         }
       }
     },

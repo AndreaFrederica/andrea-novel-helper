@@ -41,6 +41,8 @@ import { checkGitConfigAndGuide, registerGitConfigCommand, registerGitDownloadTe
 import { projectInitWizardRunning, registerProjectInitWizard } from './wizard/projectInitWizard';
 import { registerGraphicalProjectInitWizard } from './wizard/projectInitWizardPage';
 import { registerGuidePage } from './guide/guidePage';
+import { registerWhatsNewPage } from './whatsnew/whatsnew-panel';
+import { checkAndShowWhatsNew } from './whatsnew/version-check';
 import { clearAllRoleMatchCache } from './context/roleAsyncShared';
 import { initializeRoleUsageStore, disposeRoleUsageStore, renameRoleUsageDirectory, deleteRoleUsageDirectory, clearRoleUsageIndex, updateRoleUsageFromDocument } from './context/roleUsageStore';
 import { collectRoleUsageRanges } from './utils/roleUsageCollector';
@@ -209,6 +211,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerGraphicalProjectInitWizard(context);
         registerGuidePage(context);
         registerDocViewerPage(context);
+        registerWhatsNewPage(context);
         log('项目初始化/文档向导命令已注册');
     } catch (e) { log('注册 项目初始化/文档向导命令 失败', e); }
 
@@ -1830,4 +1833,9 @@ function registerWordCountContextCommands(context: vscode.ExtensionContext, prov
             vscode.window.showInformationMessage(`资源文件重扫完成：${path.basename(folder)} 命中 ${result.scannedFiles} 个资源文件${suffix}`);
         })
     );
+
+    // 延迟检查版本更新，自动弹出 What's New
+    setTimeout(() => {
+        checkAndShowWhatsNew(context).catch(() => {});
+    }, 5000);
 }

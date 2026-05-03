@@ -53,6 +53,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/quickSettings/QuickSettingsPage.vue'),
   },
 
+  {
+    path: '/whats-new',
+    component: () => import('pages/whatsNew/WhatsNewPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

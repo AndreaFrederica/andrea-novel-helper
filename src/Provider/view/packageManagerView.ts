@@ -16,7 +16,7 @@ import { globalRelationshipManager } from '../../utils/globalRelationshipManager
 import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
 import { PROJECT_CONFIG_MARKDOWN_FILE_NAME, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../../projectConfig/constants';
 
-type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | ProjectInitWizardNode | ProjectSettingsNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
+type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | ProjectInitWizardNode | ProjectSettingsNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
 
 function normalizeFsPathForCompare(p: string): string {
     const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
@@ -223,6 +223,42 @@ class CopilotDocsManageNode extends vscode.TreeItem {
         this.command = {
             command: 'andrea.copilot.exportPromptsToWorkspace',
             title: '导出内置 Copilot 提示到当前项目',
+            arguments: []
+        };
+    }
+}
+
+// MCP stdio 代理桥释放节点
+class McpStdioScriptNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ MCP stdio 代理桥', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'mcpStdioScript';
+        this.iconPath = new vscode.ThemeIcon('terminal');
+        this.description = '释放 andrea-mcp-stdio.js 到 .vscode/';
+        this.command = {
+            command: 'andrea.copilot.exportMcpStdioScript',
+            title: '导出 MCP stdio 代理桥脚本',
+            arguments: []
+        };
+    }
+}
+
+// 查询键生成节点
+class GenerateLookupKeysNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 生成查询键', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'generateLookupKeys';
+        this.iconPath = new vscode.ThemeIcon('symbol-key');
+        this.description = '为当前角色文件生成拼音和罗马字查询键';
+        this.command = {
+            command: 'AndreaNovelHelper.generateLookupKeysForCurrentFile',
+            title: '为当前角色文件生成查询键',
             arguments: []
         };
     }
@@ -570,6 +606,8 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 new ReferenceMaintenanceNode(this.workspaceRoot),
                 new ExternalResourceManageNode(this.workspaceRoot),
                 new CopilotDocsManageNode(this.workspaceRoot),
+                new McpStdioScriptNode(this.workspaceRoot),
+                new GenerateLookupKeysNode(this.workspaceRoot),
                 new GuideNode(this.workspaceRoot),
                 new DocCenterNode(this.workspaceRoot),
                 new GraphicalQuickSettingsNode(this.workspaceRoot)
