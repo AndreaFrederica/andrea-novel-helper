@@ -970,9 +970,9 @@ export function isRoleFile(fileName: string, fileFullPath?: string): boolean {
 		return false;
 	}
 	
-	// 正则表达式文件只支持JSON5格式
+	// 正则表达式文件支持 JSON5 和 Markdown；TXT 简单列表无法表达 regex 字段。
 	if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.regexFileKeywords)) {
-		const ok = lowerName.endsWith('.json5');
+		const ok = lowerName.endsWith('.json5') || lowerName.endsWith('.md');
 		roleFileDetectionLog(`${debugPrefix} keyword=regex -> ${ok}`);
 		return ok;
 	}
@@ -1099,7 +1099,7 @@ function getFileType(fileName: string, fileFullPath?: string): string {
 		return '敏感词';
 	} else if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.vocabularyFileKeywords)) {
 		return '词汇';
-	} else if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.regexFileKeywords) && lowerName.endsWith('.json5')) {
+	} else if (fileNameContainsKeyword(fileName, lowerName, keywordConfig.regexFileKeywords) && (lowerName.endsWith('.json5') || lowerName.endsWith('.md'))) {
 		return '正则表达式';
 	} else {
 		return '角色';

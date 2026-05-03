@@ -1,0 +1,195 @@
+<div class="doc-section beginner">
+<h4>什么是包管理器</h4>
+<p>包管理器就是 ANH 的<strong>资料文件夹浏览器</strong>。你可以把它想象成一个"档案柜"，每个"抽屉"（包）里放着不同类型的资料：角色卡、敏感词表、世界观词汇等。</p>
+
+<h4>"包"是什么</h4>
+<p>"包"就是 <code>novel-helper/</code> 文件夹下的一个子文件夹。每个文件夹可以包含任意数量的资料文件，还可以继续嵌套子文件夹。</p>
+
+<h4>支持哪些文件格式</h4>
+<ul>
+    <li><b>Markdown</b> — 最推荐的格式，就像写普通文档一样，最直观</li>
+    <li><b>JSON5</b> — 一种带注释的数据格式，字段最完整</li>
+    <li><b>OJSON5 / RJSON5 / TJSON5</b> — 角色卡、关系图、时间线的专用 JSON5 扩展名</li>
+    <li><b>CSV</b> — 表格格式，适合从 Excel 批量导入</li>
+    <li><b>TXT</b> — 最简单，一行一个名字</li>
+</ul>
+<div class="doc-note">完整格式说明见文档中心的"文件格式指南"：包含 Markdown、JSON5、OJSON5、RJSON5、TJSON5、CSV、TXT 的详细结构和示例。</div>
+
+<h4>ANH 如何识别资源文件</h4>
+<p>文件名关键词主要是<b>触发包管理器把文件当作资源文件扫描和展示</b>，不是角色类型。角色真正的类型来自文件内容里的 <code>type</code> / <code>类型</code> 字段。</p>
+<ul>
+    <li>文件名包含 "character" 或 "role" → 作为角色资源文件显示和扫描</li>
+    <li>文件名包含 "sensitive" → 作为敏感词资源文件显示和扫描</li>
+    <li>文件名包含 "vocabulary" 或 "词汇" → 作为词汇资源文件显示和扫描</li>
+    <li>文件名包含 "regex" → 作为正则着色规则显示和扫描</li>
+    <li>扩展名 <code>.rjson5</code> → 使用关系图编辑器和关系文件逻辑</li>
+    <li>扩展名 <code>.tjson5</code> → 使用时间线编辑器和时间线文件逻辑</li>
+</ul>
+<div class="doc-note">例如 <code>vocabulary.md</code> 里也可以有 <code>type: 主角</code> 的条目；文件名只影响资源入口和默认用途，不会覆盖条目自己的类型。</div>
+
+<h4>推荐怎么整理文件夹</h4>
+<pre><code>novel-helper/
+  main/
+    character-gallery.md      ← 主要角色
+    vocabulary.md             ← 世界观词汇
+  faction-a/
+    character-gallery.md      ← 阵营 A 角色
+    sensitive-words.md        ← 阵营 A 敏感词
+  worldbuilding/
+    vocabulary.md             ← 专有名词
+    regex-patterns.json5      ← 着色规则
+</code></pre>
+
+<h4>常用操作</h4>
+<ul>
+    <li><b>展开"常用功能"</b> — 打开向导、项目设置、引用维护、文档中心等快捷入口</li>
+    <li><b>展开"项目设置文件"</b> — 直接打开工作区根目录下的 <code>anhproject.md</code> 和 <code>project-config.json5</code></li>
+    <li><b>右键目录/外部文件夹</b> — 弹出创建菜单，可新建各类资源文件</li>
+    <li><b>拖放</b> — 把文件从一个包拖到另一个包</li>
+    <li><b>复制/剪切/粘贴</b> — 跟文件管理器一样的操作</li>
+    <li><b>展开文件</b> — 点击文件前面的箭头，可以看到里面有哪些角色</li>
+</ul>
+
+<h4>常用功能节点</h4>
+<p>包管理器顶部有一个可展开的<b>常用功能</b>节点，里面是一组快捷入口，<b>直接点击即可触发</b>：</p>
+<ul>
+    <li><b>+ 项目初始化向导</b> — 打开图形化项目配置向导</li>
+    <li><b>+ 项目设置</b> — 编辑项目配置文件</li>
+    <li><b>+ 引用维护和热力图</b> — 打开角色出场分析和引用索引维护</li>
+    <li><b>+ 外部资源目录管理</b> — 管理挂载的外部目录</li>
+    <li><b>+ 功能引导</b> — 打开功能引导页</li>
+    <li><b>+ 文档中心</b> — 打开文档中心</li>
+</ul>
+
+<h4>项目设置文件节点</h4>
+<p><b>项目设置文件</b>节点按真实路径显示当前工作区根目录下的两个配置文件：</p>
+<ul>
+    <li><code>anhproject.md</code> — 项目基础信息、书籍目录、库文件路径等</li>
+    <li><code>project-config.json5</code> — 资源文件名关键词、角色库/词汇库/敏感词库/正则库的识别配置</li>
+</ul>
+<p>如果文件还没有创建，节点会显示"未创建"，点击会打开项目设置页，保存后生成对应文件。</p>
+
+<h4>右键目录创建资源</h4>
+<p>在包管理器中<b>右键目录节点</b>（包文件夹或外部资源文件夹），弹出的上下文菜单中包含以下创建选项：</p>
+<ul>
+    <li><b>项目设置</b> — 打开项目配置</li>
+    <li><b>项目初始化向导</b> — 打开项目配置向导</li>
+    <li><b>创建角色库 (MD/JSON5/TXT)</b> — 创建角色库文件，可选格式</li>
+    <li><b>创建敏感词库 (MD/JSON5/TXT)</b> — 创建敏感词文件</li>
+    <li><b>创建词汇库 (MD/JSON5/TXT)</b> — 创建词汇表文件</li>
+    <li><b>创建角色文件 (.ojson5)</b> — 创建单角色定义文件</li>
+    <li><b>创建关系文件 (.rjson5)</b> — 创建角色关系文件</li>
+    <li><b>创建时间线文件 (.tjson5)</b> — 创建时间线文件</li>
+    <li><b>创建正则表达式配置</b> — 创建着色规则文件</li>
+    <li><b>功能引导</b> — 打开功能引导</li>
+    <li><b>文档中心</b> — 打开文档中心</li>
+    <li><b>新建子包</b> — 创建子目录</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>什么是"包"</h4>
+<p>包管理器中的"包"就是 <code>novel-helper/</code> 下的一个<b>目录</b>。每个目录可以包含任意数量的资源文件，支持子包嵌套。ANH 启动时会自动扫描 <code>novel-helper/</code> 目录下的所有包，并解析其中的资源文件。</p>
+
+<h4>支持的文件格式</h4>
+<p>角色/词汇/敏感词资源文件通常使用以下格式；关系图和时间线另有专用扩展名：</p>
+<ul>
+    <li><b>Markdown</b> — 用二级标题 <code>## 角色名</code> 分隔角色，三级标题定义字段。最适合习惯用 Markdown 写作的作者，可读性最好</li>
+    <li><b>JSON5</b> — 字段最完整，支持注释、尾随逗号、单引号、无引号键。扩展名可以是 <code>.json5</code> 或 <code>.ojson5</code>（外部角色标记）。适合需要程序化生成或使用角色卡管理器的场景</li>
+    <li><b>OJSON5</b> — 角色 JSON5 编辑器优先打开；数据结构仍是 JSON5 角色数组</li>
+    <li><b>RJSON5 / TJSON5</b> — 关系图和时间线专用格式，不作为普通角色库加载</li>
+    <li><b>CSV</b> — 标准逗号分隔值，支持表头别名映射。适合从 Excel 批量导入</li>
+    <li><b>TXT</b> — 一行一个名称，支持 <code>#</code> 和 <code>//</code> 注释。适合最简单的列表场景</li>
+</ul>
+<p>更详细的字段、示例和格式选择建议请看"文件格式指南"。</p>
+
+<h4>文件识别规则</h4>
+<p>ANH 通过文件名关键词触发资源文件扫描、树视图归类和默认模板用途；它们<b>不决定角色条目的真实类型</b>。角色、词汇、敏感词、自定义类型等仍以文件内容中的 <code>type</code> / <code>类型</code> 字段为准。</p>
+<ul>
+    <li><b>角色资源触发词</b> — <code>character-gallery</code>、<code>character</code>、<code>role</code>、<code>roles</code> 等</li>
+    <li><b>敏感词资源触发词</b> — <code>sensitive-words</code>、<code>sensitive</code> 等</li>
+    <li><b>词汇资源触发词</b> — <code>vocabulary</code>、<code>vocab</code>、<code>term</code>、<code>词汇</code>、<code>术语</code> 等</li>
+    <li><b>正则规则触发词</b> — <code>regex-patterns</code> 等</li>
+    <li><b>关系文件</b> — 扩展名 <code>.rjson5</code>、<code>.rjson</code></li>
+    <li><b>时间线文件</b> — 扩展名 <code>.tjson5</code></li>
+    <li><b>外部角色</b> — 扩展名 <code>.ojson5</code>、<code>.ojson</code></li>
+</ul>
+<p>你可以在 <code>project-config.json5</code> 中自定义这些识别关键词。</p>
+<div class="doc-note">包管理器展开资源文件时显示的角色类型来自条目字段。例如同一个 <code>character-gallery.md</code> 中可以同时包含 <code>主角</code>、<code>配角</code>、<code>词汇</code> 或自定义类型。</div>
+
+<h4>推荐目录结构</h4>
+<pre><code>novel-helper/
+  main/
+    character-gallery.md      ← 主要角色库
+    vocabulary.md             ← 世界观词汇
+  faction-a/
+    character-gallery.md      ← 阵营 A 角色
+    sensitive-words.md        ← 阵营 A 敏感词
+  worldbuilding/
+    vocabulary.md             ← 专有名词
+    regex-patterns.json5      ← 着色规则
+</code></pre>
+
+<h4>操作方式</h4>
+<ul>
+    <li><b>展开"常用功能"</b> — 树视图顶部的快捷入口集中在这里，点击子节点即触发对应命令</li>
+    <li><b>展开"项目设置文件"</b> — 直接打开工作区根目录下的 <code>anhproject.md</code> 和 <code>project-config.json5</code>；缺失时会引导到项目设置页</li>
+    <li><b>右键目录节点</b> — 右键包目录或外部资源文件夹，弹出上下文菜单（包含创建、删除、重命名、复制等操作）</li>
+    <li><b>拖放</b> — 在包之间移动或复制文件，支持跨包拖放</li>
+    <li><b>复制/剪切/粘贴</b> — 支持完整的剪贴板操作（<code>AndreaNovelHelper.package.copy/cut/paste</code>）</li>
+    <li><b>展开文件</b> — 点击文件节点可展开查看其中包含的角色列表，每个角色旁显示类型名称</li>
+    <li><b>外部资源</b> — 可挂载工作区外的目录，外部资源中的角色与项目内角色享有相同能力</li>
+</ul>
+
+<h4>常用功能节点（可直接点击）</h4>
+<p>这些快捷入口集中在<b>常用功能</b>树节点下，<b>直接点击即可打开</b>，不需要右键：</p>
+<ul>
+    <li><b>+ 项目初始化向导</b> — 打开图形化向导创建项目配置和基础结构</li>
+    <li><b>+ 项目设置</b> — 打开 <code>anhproject.md</code> 和 <code>project-config.json5</code></li>
+    <li><b>+ 引用维护和热力图</b> — 管理角色引用索引、查看出场可视化</li>
+    <li><b>+ 外部资源目录管理</b> — 扫描、添加、移除外部资源目录</li>
+    <li><b>+ 功能引导</b> — 打开功能引导页</li>
+    <li><b>+ 文档中心</b> — 打开文档中心</li>
+</ul>
+
+<h4>项目设置文件</h4>
+<p><b>项目设置文件</b>节点会按真实路径列出：</p>
+<ul>
+    <li><code>anhproject.md</code> — Markdown 项目配置</li>
+    <li><code>project-config.json5</code> — JSON5 关键词/资源识别配置</li>
+</ul>
+<p>这两个文件位于工作区根目录，不放在 <code>novel-helper/</code> 包目录里；包管理器只是提供直接入口。</p>
+
+<h4>右键上下文菜单（目录/外部文件夹）</h4>
+<p>在包管理器中<b>右键目录节点</b>（<code>package</code> 或 <code>externalRoleFolder</code> 类型），弹出的上下文菜单按分组包含：</p>
+<ul>
+    <li><b>创建分组</b>：
+        <ul>
+            <li><b>项目设置</b> — 打开项目配置</li>
+            <li><b>项目初始化向导</b> — 打开项目配置向导</li>
+            <li><b>创建角色库 (MD/JSON5/TXT)</b> — 创建角色库文件，可选格式</li>
+            <li><b>创建敏感词库 (MD/JSON5/TXT)</b> — 创建敏感词文件</li>
+            <li><b>创建词汇库 (MD/JSON5/TXT)</b> — 创建词汇表文件</li>
+            <li><b>创建角色文件 (.ojson5)</b> — 创建单角色定义文件，含 UUID 模板</li>
+            <li><b>创建关系文件 (.rjson5)</b> — 创建角色关系定义文件</li>
+            <li><b>创建时间线文件 (.tjson5)</b> — 创建时间线配置文件</li>
+            <li><b>创建正则表达式配置</b> — 创建着色规则文件</li>
+            <li><b>功能引导</b> / <b>文档中心</b> — 打开引导或文档</li>
+        </ul>
+    </li>
+    <li><b>包管理分组</b>：新建子包、重命名</li>
+    <li><b>删除分组</b>：删除节点</li>
+    <li><b>打开分组</b>：打开文件、Open With、在资源管理器中显示</li>
+    <li><b>剪贴板分组</b>：复制、剪切、粘贴</li>
+</ul>
+<p>右键<b>资源文件节点</b>（<code>resourceFile</code> 类型）时，上下文菜单包含：打开、Open With（可选择角色卡编辑器）、在资源管理器中显示、重命名、复制/剪切，以及切换角色管理器打开模式。</p>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.package.dragDefaultAction</code> — 拖放默认操作：move / copy / ask</li>
+    <li><code>AndreaNovelHelper.package.iconStyle</code> — 文件图标样式：auto / theme / custom</li>
+    <li><code>AndreaNovelHelper.package.mdLibraryNameRecognition</code> — Markdown 库名识别开关</li>
+</ul>
+
+<div class="doc-note">包管理器支持 JSON5、Markdown、TXT、CSV 四种文件格式。Markdown 可读性最好，JSON5 字段最完整且支持角色卡管理器，CSV 适合批量导入，TXT 适合快速列表。</div>
+</div>

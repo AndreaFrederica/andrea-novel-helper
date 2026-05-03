@@ -68,7 +68,16 @@ export const FIELD_ALIASES: { [key: string]: string } = {
     'fixs': '修复',
     'fix': '修复',
     'replacements': '修复',
-    'replacement': '修复'
+    'replacement': '修复',
+    // 正则着色规则
+    'regex': '正则',
+    'pattern': '正则',
+    'regexFlags': '正则标志',
+    'flags': '正则标志',
+    'flag': '正则标志',
+    // 常用控制字段
+    'priority': '优先级',
+    'wordSegmentFilter': '分词过滤'
 };
 
 /**
@@ -77,9 +86,11 @@ export const FIELD_ALIASES: { [key: string]: string } = {
 function getStandardFieldName(fieldName: string): string {
     const normalizedField = fieldName.toLowerCase().trim();
     
-    // 如果是英文原名，直接返回
-    if (Object.keys(FIELD_ALIASES).includes(normalizedField)) {
-        return normalizedField;
+    // 如果是英文原名，直接返回标准大小写（例如 regexFlags / wordSegmentFilter）
+    for (const key of Object.keys(FIELD_ALIASES)) {
+        if (key.toLowerCase() === normalizedField) {
+            return key;
+        }
     }
     
     // 查找中文别名对应的英文原名
@@ -107,6 +118,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
     let roleHeaderLevel = 0; // 记录角色标题的级别
     let isInRole = false; // 标记是否在角色定义中
     let roleDirectContent: string[] = []; // 角色下面的直接内容（不属于任何字段）
+    let fencedBlockMarker: '```' | '~~~' | null = null;
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -118,6 +130,31 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                 currentContent.push('');
             } else if (isInRole && roleDirectContent.length > 0) {
                 roleDirectContent.push('');
+            }
+            continue;
+        }
+
+        const fenceMatch = trimmedLine.match(/^(```|~~~)/);
+        if (fenceMatch) {
+            if (isInRole && currentRole) {
+                if (currentField) {
+                    currentContent.push(line);
+                } else {
+                    roleDirectContent.push(line);
+                }
+            }
+            const marker = fenceMatch[1] as '```' | '~~~';
+            fencedBlockMarker = fencedBlockMarker === marker ? null : marker;
+            continue;
+        }
+
+        if (fencedBlockMarker) {
+            if (isInRole && currentRole) {
+                if (currentField) {
+                    currentContent.push(line);
+                } else {
+                    roleDirectContent.push(line);
+                }
             }
             continue;
         }
@@ -336,6 +373,38 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
             }
             break;
         }
+        case 'regex': {
+            const regexText = extractFencedContent(processedContent).trim();
+            if (regexText) {
+                (role as any).regex = regexText;
+            }
+            break;
+        }
+        case 'regexFlags':
+        case 'flags':
+        case 'flag': {
+            const flagsText = stripMarkdown(processedContent).replace(/[^dgimsuvy]/gi, '');
+            if (flagsText) {
+                (role as any).regexFlags = Array.from(new Set(flagsText.split(''))).join('');
+            }
+            break;
+        }
+        case 'priority': {
+            const priority = Number(stripMarkdown(processedContent).trim());
+            if (!Number.isNaN(priority)) {
+                (role as any).priority = priority;
+            }
+            break;
+        }
+        case 'wordSegmentFilter': {
+            const text = stripMarkdown(processedContent).toLowerCase().trim();
+            const isTrue = text === 'true' || text === 'yes' || text === '是' || text === '真' || text === '1' || text === '✓' || text === '✅';
+            const isFalse = text === 'false' || text === 'no' || text === '否' || text === '假' || text === '0' || text === '✗' || text === '❌';
+            if (isTrue || isFalse) {
+                (role as any).wordSegmentFilter = isTrue;
+            }
+            break;
+        }
         case 'fixes':
         case 'fixs': // 兼容旧字段
         case 'fix':
@@ -372,6 +441,15 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
             (role as any)[fieldName] = processedContent;
             break;
     }
+}
+
+function extractFencedContent(content: string): string {
+    const trimmed = content.trim();
+    const match = trimmed.match(/^(```|~~~)[^\r\n]*\r?\n([\s\S]*?)\r?\n\1\s*$/);
+    if (match) {
+        return match[2];
+    }
+    return stripMarkdown(trimmed);
 }
 
 /**

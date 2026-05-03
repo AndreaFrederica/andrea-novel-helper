@@ -1,0 +1,233 @@
+<div class="doc-section beginner">
+<h4>如何创建和管理角色</h4>
+<p>ANH 最推荐的创建角色方式是写 <strong>Markdown</strong>。就像写普通文档一样，用标题和段落来组织角色信息。</p>
+
+<h4>Markdown 角色格式</h4>
+<p>结构很简单：</p>
+<ul>
+    <li>每个角色用一个二级标题 <code>## 角色名</code></li>
+    <li>角色的属性用三级标题 <code>### 属性名</code></li>
+    <li>属性内容写在三级标题下面的段落里</li>
+</ul>
+
+<h4>必填字段</h4>
+<p>每个角色至少需要两个字段：</p>
+<ul>
+    <li><b>名称</b>（name）— 角色的名字，必填</li>
+    <li><b>类型</b>（type）— 决定角色的用途，必填（不填默认为"词汇"）</li>
+</ul>
+
+<h4>角色类型说明</h4>
+<p>ANH 有六种内置类型，也可以自定义类型：</p>
+<ul>
+    <li><b>主角</b> — 主要角色，享有高亮、补全、引用等全部能力</li>
+    <li><b>配角</b> — 次要角色，与主角能力相同</li>
+    <li><b>联动角色</b> — 跨作品角色，用于引用其他作品的角色</li>
+    <li><b>敏感词</b> — 需要替换的词汇，配合"修复"字段提供替换建议</li>
+    <li><b>词汇</b> — 世界观术语、专有名词</li>
+    <li><b>正则表达式</b> — 自定义着色规则，需配合"正则"字段使用</li>
+</ul>
+
+<h4>可选的常用属性</h4>
+<ul>
+    <li><b>颜色</b> — 给角色名上色，比如 <code>#FF6B6B</code> 是珊瑚红</li>
+    <li><b>别名</b> — 角色的昵称、外号等</li>
+    <li><b>描述</b> — 角色简介</li>
+    <li><b>外貌</b> — 长相、穿着等</li>
+    <li><b>技能</b> — 能力、特长</li>
+</ul>
+
+<h4>一个完整的例子</h4>
+<pre><code># 主角人物
+
+## 博丽灵梦
+
+### 类型
+主角
+
+### 颜色
+rgb(255, 30, 64)
+
+### 别名
+灵梦
+Reimu
+
+### 描述
+乐园的巫女，负责解决异变。
+
+### 外貌
+- 发色：黑色
+- 服装：红白巫女服
+
+### 技能
+1. 飞行程度的能力
+2. 灵力操纵
+</code></pre>
+
+<h4>其他格式</h4>
+<ul>
+    <li><b>JSON5</b> — 一种带注释的表格格式，字段最完整，适合用编辑器管理</li>
+    <li><b>OJSON5</b> — JSON5 角色库的专用扩展名，优先用角色卡编辑器打开</li>
+    <li><b>CSV</b> — 表格格式，适合从 Excel 批量导入</li>
+</ul>
+<div class="doc-note">各种文件格式的完整结构、字段和示例见文档中心的"文件格式指南"。</div>
+
+<h4>可视化角色卡编辑器</h4>
+<p>如果你不想手写，可以用可视化编辑器：</p>
+<ol>
+    <li>右键 <code>.json5</code> 角色文件</li>
+    <li>选择 "Open With" → "角色 JSON5 编辑器"</li>
+    <li>在表单里填写角色信息，保存即可</li>
+</ol>
+
+<h4>文件命名建议</h4>
+<p>推荐用这些名字，ANH 会自动识别：</p>
+<ul>
+    <li><code>character-gallery.md</code> / <code>character-gallery.json5</code></li>
+    <li><code>my-character.md</code> / <code>my-character.json5</code></li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>推荐格式：Markdown</h4>
+<p>ANH 的<b>推荐角色格式是 Markdown</b>。它使用自然的 Markdown 结构来组织角色数据，既可直接阅读，又能被插件完整解析。</p>
+<p><b>结构规范</b>：</p>
+<ul>
+    <li>文件顶层可选 <code># 角色库</code> 作为标题</li>
+    <li>每个角色是一个<b>二级标题</b> <code>## 角色名</code></li>
+    <li>角色的字段使用<b>三级标题</b> <code>### 字段名</code> 表示</li>
+    <li>字段标题支持中文别名，如 <code>### 颜色</code> 等价于 <code>### color</code></li>
+    <li>字段内容写在三级标题下方的正文段落中</li>
+</ul>
+<p><b>完整字段别名映射</b>（不区分大小写）：</p>
+<ul>
+    <li>基础：名称/name、描述/description、类型/type、UUID/uuid、颜色/color、从属/affiliation、别名/aliases/alias、样式/style</li>
+    <li>样式子字段：背景色/backgroundColor、粗体/bold、斜体/italic、删除线/strikethrough、下划线/underline</li>
+    <li>扩展：年龄/age、性别/gender、职业/occupation、性格/personality、外貌/appearance、背景/background、关系/relationship/relationships、技能/skill/skills、弱点/weakness/weaknesses、目标/goal/goals、动机/motivation、恐惧/fear/fears、秘密/secret/secrets、台词/quote/quotes、备注/note/notes、标签/tag/tags、分类/category、等级/level、状态/status、位置/location、出身/origin、家庭/family、教育/education、爱好/hobby/hobbies</li>
+    <li>修复：修复/fixes/fixs/fix、替换/replacements/replacement</li>
+    <li>查询键：拼音查询键/拼音检索键、罗马字查询键/罗马字检索键、拼写查询键/拼写检索键</li>
+    <li>正则：正则/regex/pattern、正则标志/regexFlags/flags/匹配标志</li>
+    <li>其他：优先级/priority、分词过滤/wordSegmentFilter/分词筛选</li>
+</ul>
+
+<p><b>示例</b>：</p>
+<pre><code># 主角人物
+
+## 博丽灵梦
+
+### 类型
+主角
+
+### 颜色
+rgb(255, 30, 64)
+
+### 别名
+灵梦
+Reimu
+
+### 描述
+乐园的巫女，负责解决异变。
+
+### 外貌
+- 发色：黑色
+- 服装：红白巫女服
+
+### 技能
+1. 飞行程度的能力
+2. 灵力操纵
+</code></pre>
+
+<h4>JSON5 格式</h4>
+<p>JSON5 格式字段最完整，适合需要程序化生成或与外部工具集成的场景：</p>
+<ul>
+    <li>文件内容必须是一个<b>JSON5 数组</b>，每个元素是一个角色对象</li>
+    <li>也兼容对象格式（键为角色名）和含 <code>roles</code> / <code>characters</code> 键的对象</li>
+    <li>支持中文键名：名称、类型、描述、颜色、别名、修复、优先级、分词过滤、正则、正则标志、样式、拼音查询键、罗马字查询键、拼写查询键 等</li>
+    <li>扩展名 <code>.json5</code> 或 <code>.ojson5</code>（后者会被优先识别为外部角色标记）</li>
+</ul>
+<pre><code>[
+  {
+    name: "博丽灵梦",
+    type: "主角",
+    aliases: ["灵梦", "Reimu"],
+    color: "#E60033",
+    description: "乐园的巫女",
+    priority: 10,
+    wordSegmentFilter: true
+  }
+]
+</code></pre>
+
+<h4>CSV 格式</h4>
+<p>CSV 适合从 Excel 批量导入。支持分隔符自动检测（逗号/分号/制表符），表头支持中文别名：</p>
+<pre><code>name,description,aliases,type,color
+博丽灵梦,乐园的巫女,"灵梦,Reimu",主角,#E60033
+雾雨魔理沙,普通的魔法使,"魔理沙,Marisa",主角,#FFD700
+</code></pre>
+<p>布尔字段支持 true/1/yes/on/是（真），false/0/no/off/否（假）。列表字段（aliases、fixes）可用分号、逗号、斜杠分隔。</p>
+
+<h4>角色卡编辑器（GUI）</h4>
+<p>ANH 提供了可视化角色卡编辑器，支持三种模式切换：</p>
+<ul>
+    <li><b>角色卡模式</b> — 可视化表单，所有字段分"基础/扩展/自定义"三栏编辑</li>
+    <li><b>代码编辑器模式</b> — 内置 Monaco Editor，直接编辑 JSON5 源码</li>
+    <li><b>Markdown 模式</b> — 内置 Vditor，直接编辑 Markdown 源码</li>
+</ul>
+<p><b>打开方式</b>：</p>
+<ul>
+    <li>右键 <code>.json5</code> 角色文件 → "Open With" → "角色 JSON5 编辑器"</li>
+    <li>在左侧"所有角色"面板中点击某个角色（需开启设置 <code>andrea.roleJson5.openWithRoleManager</code>）</li>
+</ul>
+<p><b>编辑器支持的字段</b>：</p>
+<ul>
+    <li><b>基础字段</b> — 名称、类型（下拉选择或自定义）、UUID（只读）、前景色/背景色（输入框+颜色选择器）、文本样式开关（粗/斜/删/下划）、优先级、描述、从属、别名/拼音/罗马字/拼写查询键（逐行输入，回车添加）、正则表达式专属字段、修复词、分词过滤开关</li>
+    <li><b>扩展字段</b> — age、gender、occupation、personality、appearance、background、relationship、skill、weakness、goal、motivation、fear、secret、quote、note、tag、category、level、status、location、origin、family、education、hobby</li>
+    <li><b>自定义字段</b> — 任意键值对，支持 string/number/boolean/string[] 四种类型</li>
+</ul>
+<p>编辑器按 VS Code 的 <code>files.autoSave</code> 策略执行。当 autoSave 开启时修改自动写回磁盘；当 autoSave=off 时，修改会形成 dirty 状态，需要手动按 Ctrl+S 保存。</p>
+
+<h4>文件命名</h4>
+<p>角色库文件推荐使用以下命名：</p>
+<ul>
+    <li><code>character-gallery.md</code> / <code>character-gallery.json5</code></li>
+    <li><code>*_character.md</code> / <code>*_character.json5</code></li>
+</ul>
+<p>可通过设置 <code>AndreaNovelHelper.rolesFile</code> 自定义默认角色文件路径（默认 <code>novel-helper/character-gallery.json5</code>）。</p>
+
+<h4>角色类型与必填字段</h4>
+<p>每个角色必须包含 <code>name</code> 和 <code>type</code> 两个字段。六种内置类型及其特殊行为：</p>
+<ul>
+    <li><b>主角</b> / <b>配角</b> / <b>联动角色</b> — 角色人物类型，用于角色名高亮、自动补全、引用查找。创建时从这三个类型中选择</li>
+    <li><b>敏感词</b> — 标记需要替换的词汇。专属字段：<code>fixes</code>（修复建议数组），匹配到时触发诊断标记和 Quick Fix</li>
+    <li><b>词汇</b> — 世界观术语和专业名词，与角色共享补全/高亮/跳转能力</li>
+    <li><b>正则表达式</b> — 自定义着色规则。专属字段：<code>regex</code>（正则模式）+ <code>regexFlags</code>（标志，如 <code>g</code>）</li>
+</ul>
+<p>除内置类型外，<code>type</code> 字段接受任意自定义字符串（如 <code>"炼金顾问"</code>），自定义类型的角色在树视图中按自定义类型名分组。</p>
+
+<h4>按类型查找角色</h4>
+<p>在"所有角色"树视图中，角色默认按从属分组。你可以切换为按类型分组：</p>
+<ul>
+    <li>在树视图标题栏点击分组图标，切换为"按类型分组"后，所有角色按类型（主角、配角、联动角色、自定义类型等）归类显示</li>
+    <li>敏感词、词汇、正则表达式三种特殊类型会单独归入"词汇 / 敏感词 / 正则表达式"分组</li>
+</ul>
+<p>在包管理器中，展开角色文件节点可以看到其中定义的角色列表，每个角色旁显示其类型名称。</p>
+
+<h4>创建角色</h4>
+<p>在包管理器中<b>右键目录节点</b>，上下文菜单中可选择：</p>
+<ul>
+    <li><b>+ 新建角色库</b> — 创建 Markdown/JSON5/CSV/TXT 格式的角色库文件，内含模板</li>
+    <li><b>+ 新建角色文件</b> — 创建 <code>.ojson5</code> 格式的单个角色定义文件，包含 UUID 和示例字段</li>
+</ul>
+<p>也可以通过命令面板执行 <code>AndreaNovelHelper.createCharacterGallery</code> 或 <code>AndreaNovelHelper.createRoleFile</code>。</p>
+
+<h4>样式字段说明</h4>
+<p>角色外观有两种写法，新版推荐 <code>style</code> 对象，旧版独立字段保持兼容：</p>
+<pre><code>// 新版推荐
+style: { color: "#E60033", backgroundColor: "#FFF0F0", bold: true }
+
+// 旧版兼容（保存时自动收敛到 style）
+color: "#E60033", backgroundColor: "#FFF0F0", bold: true
+</code></pre>
+
+<div class="doc-note">Markdown 是 ANH 推荐的角色格式。它兼具可读性和完整性，用任何 Markdown 编辑器都能直接查看和修改，不需要专门的工具。</div>
+</div>

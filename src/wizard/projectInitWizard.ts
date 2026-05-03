@@ -41,9 +41,9 @@ async function getGitUserConfigState(cwd: string): Promise<{ hasAny: boolean; gl
 export function registerProjectInitWizard(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('AndreaNovelHelper.projectInitWizard', async () => {
-      projectInitWizardRunning = true;
       const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!ws) { vscode.window.showErrorMessage('未打开工作区'); return; }
+      projectInitWizardRunning = true;
       try {
       // -------- 新向导：先收集所有决策，再一次执行 --------
       let aborted = false;
@@ -204,6 +204,7 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
 
       if (aborted) {
   const retry = await vscode.window.showInformationMessage('项目初始化向导未完成，是否重新运行？', { modal: true }, '重新运行','关闭');
+        projectInitWizardRunning = false;
         if (retry === '重新运行') { vscode.commands.executeCommand('AndreaNovelHelper.projectInitWizard'); }
         return;
       }
@@ -229,7 +230,11 @@ export function registerProjectInitWizard(context: vscode.ExtensionContext) {
   if (wcIgnoreOutOfInsights) { summary.push('.wcignore 忽略 .out-of-code-insights'); }
       if (wantInitialCommit) { summary.push('初始提交'); }
   const confirm = await vscode.window.showInformationMessage(`确认执行: ${summary.join('，')} ?`, { modal: true }, '执行','取消');
-  if (confirm !== '执行') { vscode.window.showInformationMessage('已取消执行', { modal: true }, '关闭'); return; }
+  if (confirm !== '执行') {
+    vscode.window.showInformationMessage('已取消执行', { modal: true }, '关闭');
+    projectInitWizardRunning = false;
+    return;
+  }
 
       // -------- 执行阶段 --------
       try {

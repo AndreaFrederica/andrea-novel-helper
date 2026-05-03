@@ -8,6 +8,10 @@
 
     // ── Command Buttons ──────────────────────────────
 
+    document.getElementById('wikiBtn').addEventListener('click', () => {
+        vscode.postMessage({ command: 'openExternal', url: 'https://wiki.sirrus.cc/AndreaNovelHelper/' });
+    });
+
     categories.addEventListener('click', event => {
         const btn = event.target.closest('[data-cmd]');
         if (btn) {
@@ -22,17 +26,15 @@
         }
     });
 
-    // ── Doc Toggle ───────────────────────────────────
+    // ── Doc Buttons ──────────────────────────────────
 
     categories.addEventListener('click', event => {
-        const btn = event.target.closest('.doc-toggle');
+        const btn = event.target.closest('[data-doc-id]');
         if (!btn) return;
-        const card = btn.closest('.card');
-        if (!card) return;
-        const doc = card.querySelector('.card-doc');
-        if (!doc) return;
-        const isOpen = doc.classList.toggle('open');
-        btn.textContent = isOpen ? '收起文档' : '查看文档';
+        const docId = btn.getAttribute('data-doc-id');
+        if (docId) {
+            vscode.postMessage({ command: 'showGuideDoc', docId });
+        }
     });
 
     // ── Search / Filter ──────────────────────────────

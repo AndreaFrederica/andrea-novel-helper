@@ -6,6 +6,7 @@
   "command.refreshSensitiveWords.title": "センシティブワードを更新",
   "command.addVocabulary.title": "選択範囲から語彙を作成",
   "command.refreshVocabulary.title": "語彙ライブラリを更新",
+  "command.showGuideDoc.title": "ドキュメントセンターを開く",
   "command.openDoubleOutline.title": "二重アウトラインを開く",
   "command.refreshOutlineDir.title": "ディレクトリアウトラインを更新",
   "command.refreshOutlineFile.title": "ファイルアウトラインを更新",

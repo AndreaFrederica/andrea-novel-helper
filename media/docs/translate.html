@@ -1,0 +1,85 @@
+<div class="doc-section beginner">
+<h4>翻译功能是什么</h4>
+<p>ANH 的翻译功能可以帮你把选中的文字翻译成其他语言。就像选中一段文字，右键选择"翻译"，然后选择目标语言。</p>
+
+<h4>使用方式</h4>
+<ol>
+    <li>在编辑器中选中一段文字</li>
+    <li>右键 → "翻译选中文本"</li>
+    <li>选择目标语言（如 English / 日本語 / 한국어）</li>
+    <li>选择处理方式：
+        <ul>
+            <li><b>替换选区</b> — 直接覆盖原文</li>
+            <li><b>在新标签页显示</b> — 保留原文，译文新开一个页面</li>
+            <li><b>复制到剪贴板</b> — 译文复制到剪贴板</li>
+        </ul>
+    </li>
+</ol>
+
+<h4>需要什么前提</h4>
+<p>翻译使用 AI 大语言模型完成，所以你需要先配置好 AI 接口：</p>
+<ol>
+    <li>打开 ANH 设置</li>
+    <li>找到"拼写检查"分类下的 clientLLM 设置</li>
+    <li>开启 <code>typo.clientLLM.enabled</code></li>
+    <li>填写 API 地址、密钥和模型名称</li>
+</ol>
+<p>配置好后，翻译功能就能直接使用了，不需要额外设置。</p>
+
+<h4>姓名会智能处理</h4>
+<p>中译英时，ANH 会自动保留角色的姓名特征。比如"博丽灵梦"会译为"Hakurei Reimu"而不是字面意思。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>使用方式</h4>
+<p>ANH 的翻译功能集成在编辑器右键菜单中：</p>
+<ul>
+    <li>选中文本 → 右键 → "翻译选中文本"（命令 <code>andrea.typo.translateSelection</code>）</li>
+    <li>翻译结果的处理方式：
+        <ul>
+            <li><b>替换选区</b> — 直接用译文覆盖选中的原文</li>
+            <li><b>在新标签页显示</b> — 打开新编辑器标签页展示译文，保留原文不变</li>
+            <li><b>复制到剪贴板</b> — 译文进入剪贴板，原文不变</li>
+        </ul>
+    </li>
+</ul>
+
+<h4>语言与模型</h4>
+<p>翻译通过 LLM 实现，使用与<strong>校对系统相同的客户端 LLM 配置</strong>（<code>AndreaNovelHelper.typo.clientLLM.*</code>）。这意味着你不需要单独配置翻译服务的 API 密钥——只要配置好了 typo 的 clientLLM，翻译就能直接使用。</p>
+<p>支持的目标语言由配置中的 <code>targets</code> 数组决定，常见如中、英、日、韩、德、法等。</p>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.translate.targets</code> — 目标语言列表（字符串数组），如 <code>["en", "ja", "ko"]</code></li>
+    <li><code>AndreaNovelHelper.translate.defaultTarget</code> — 默认目标语言，如 <code>"en"</code></li>
+    <li><code>AndreaNovelHelper.translate.alwaysUseDefaultTarget</code> — 是否始终使用默认目标语言，跳过语言选择步骤</li>
+    <li><code>AndreaNovelHelper.translate.defaultAction</code> — 默认处理方式：
+        <ul>
+            <li><code>replaceSelection</code> — 替换选区</li>
+            <li><code>openInNewTab</code> — 在新标签页显示</li>
+            <li><code>copyToClipboard</code> — 复制到剪贴板</li>
+        </ul>
+    </li>
+    <li><code>AndreaNovelHelper.translate.alwaysUseDefaultAction</code> — 是否始终使用默认处理方式，跳过处理方式选择</li>
+</ul>
+
+<h4>姓名翻译与罗马字</h4>
+<p>ANH 内置了 LLM 姓名翻译和罗马字转写功能：</p>
+<ul>
+    <li>中译英时，会自动保留角色的姓名特征（如"博丽灵梦" → "Hakurei Reimu"）</li>
+    <li>支持日文名的罗马字转写</li>
+    <li>支持文化映射，确保翻译结果符合目标语言的文化习惯</li>
+</ul>
+
+<h4>使用示例</h4>
+<p>假设你配置好了 clientLLM，然后：</p>
+<ol>
+    <li>在编辑器中选中一段中文：<code>「今天天气真好，我们去神社吧。」</code></li>
+    <li>右键 → "翻译选中文本"</li>
+    <li>如果配置了多个目标语言，弹出选择列表（如 English / 日本語 / 한국어）</li>
+    <li>如果配置了多个处理方式，弹出选择列表（替换 / 新标签页 / 复制）</li>
+    <li>选择后等待 LLM 返回译文</li>
+</ol>
+
+<div class="doc-note">翻译功能依赖 clientLLM 配置。如果翻译不可用，请检查 <code>AndreaNovelHelper.typo.clientLLM.enabled</code> 是否为 true，以及 apiBase/apiKey/model 是否配置正确。</div>
+</div>

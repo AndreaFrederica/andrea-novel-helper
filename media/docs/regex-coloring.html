@@ -1,0 +1,136 @@
+<div class="doc-section beginner">
+<h4>正则着色是什么</h4>
+<p>正则着色就是 ANH 的<strong>自动上色功能</strong>。你可以设定规则，让特定格式的文字自动变色。比如让所有的对话内容变成绿色，所有的书名变成蓝色。</p>
+<p>"正则"是一种高级查找规则，但你可以把它理解为"告诉 ANH 什么样的文字需要变色"。</p>
+
+<h4>什么时候会用到</h4>
+<ul>
+    <li>让中文对话（「...」）自动变绿</li>
+    <li>让书名（《...》）自动变蓝</li>
+    <li>让章节标题自动变粗变红</li>
+    <li>标记旁白、心理活动等特殊内容</li>
+</ul>
+
+<h4>创建着色规则</h4>
+<ol>
+    <li>在包管理器中右键目录节点</li>
+    <li>选择"创建正则表达式配置"</li>
+    <li>选择 Markdown 格式（推荐）</li>
+</ol>
+
+<h4>Markdown 格式示例</h4>
+<pre><code># 着色规则
+
+## 中文对话
+
+### 类型
+正则表达式
+
+### 正则
+```regex
+「[^」]*」
+```
+
+### 正则标志
+g
+
+### 颜色
+#98FB98
+
+### 优先级
+100
+</code></pre>
+
+<h4>关键字段说明</h4>
+<ul>
+    <li><b>正则</b> — 匹配规则，告诉 ANH 什么样的文字要变色</li>
+    <li><b>颜色</b> — 变色后的颜色，比如 <code>#98FB98</code> 是浅绿色</li>
+    <li><b>优先级</b> — 数字越小越优先。如果两条规则都匹配了同一处文字，优先级高的生效</li>
+</ul>
+
+<h4>常见用法</h4>
+<ul>
+    <li>对话引号：<code>「[^」]+」</code></li>
+    <li>书名号：<code>《[^》]+》</code></li>
+    <li>章节标题：<code>^第[一二三四五六七八九十\d]+章</code></li>
+</ul>
+
+<h4>小提示</h4>
+<p>如果你经常写复杂规则，推荐用 Markdown 格式，不需要处理转义问题。JSON5 格式里反斜杠需要写成两个（<code>\</code> → <code>\\</code>）。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>工作原理</h4>
+<p>正则着色规则是 <code>type: '正则表达式'</code> 的角色。ANH 在编辑器中使用 VS Code 的 Decoration API 对匹配文本进行颜色标记。底层通过 Aho-Corasick 自动机进行高性能多模式匹配，正则类型角色则使用 RegExp 进行逐行匹配。</p>
+<p>着色规则的优先级机制：<code>priority</code> 字段数值越小优先级越高（默认 999）。当多个规则匹配同一文本时，优先级高的规则优先生效。这允许你定义通用规则和特殊规则的组合。</p>
+
+<h4>文件格式规范</h4>
+<p>正则规则支持 JSON5 和 Markdown 格式，文件名通常为 <code>regex-patterns.md</code> 或 <code>regex-patterns.json5</code>。</p>
+
+<p><b>JSON5 格式示例</b>：</p>
+<pre><code>[
+  {
+    name: "中文对话",
+    type: "正则表达式",
+    regex: "「[^」]*」",
+    regexFlags: "g",
+    color: "#98FB98",
+    priority: 100,
+    description: "匹配中文引号内的对话内容"
+  },
+  {
+    name: "书名号",
+    type: "正则表达式",
+    regex: "《[^》]+》",
+    regexFlags: "g",
+    color: "#87CEEB",
+    priority: 90
+  }
+]
+</code></pre>
+
+<p><b>Markdown 格式示例</b>：</p>
+<pre><code># 着色规则
+
+## 中文对话
+
+### 类型
+正则表达式
+
+### 正则
+```regex
+「[^」]*」
+```
+
+### 正则标志
+g
+
+### 颜色
+#98FB98
+
+### 优先级
+100
+</code></pre>
+
+<h4>关键字段</h4>
+<ul>
+    <li><code>name</code> — 规则名称，必填</li>
+    <li><code>regex</code> — 正则表达式模式字符串，必填</li>
+    <li><code>regexFlags</code> — 正则标志字符串，如 <code>g</code>（全局）、<code>i</code>（忽略大小写）、<code>m</code>（多行）。中文对话匹配通常需要 <code>g</code> 标志</li>
+    <li><code>color</code> — 匹配文本的前景色，支持 HEX、RGB、HSL、HSV 格式</li>
+    <li><code>priority</code> — 优先级，数字越小越优先。模板中对话规则为 100，书名号 90，中文思考 95</li>
+    <li><code>style</code> — 可选，可指定 backgroundColor、bold、italic 等样式。<code>style.color</code> 会覆盖顶层 <code>color</code></li>
+</ul>
+
+<h4>典型用例</h4>
+<ul>
+    <li>匹配对话引号：<code>「[^」]+」</code>（中文弯引号）</li>
+    <li>匹配书名号：<code>《[^》]+》</code></li>
+    <li>匹配特殊标记：如旁白【...】、心理活动（...）等</li>
+    <li>匹配章节标题：如 <code>^第[一二三四五六七八九十\d]+章</code></li>
+</ul>
+
+<h4>创建与编辑</h4>
+<p>在包管理器中右键目录节点 → "创建正则表达式配置"，即可新建规则文件。建议将常用的着色规则集中放在一个文件中，便于维护。</p>
+<div class="doc-note">正则表达式字符串在 JSON5 中反斜杠需要转义（如 <code>\d</code> 写为 <code>\\d</code>）。Markdown 格式中建议把正则写进围栏代码块，既无需额外转义，也能避免 <code>#</code>、<code>*</code>、<code>[]</code> 等字符被当作 Markdown 语法。</div>
+</div>

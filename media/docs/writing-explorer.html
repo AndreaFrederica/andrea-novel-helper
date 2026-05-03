@@ -1,0 +1,111 @@
+<div class="doc-section beginner">
+<h4>写作资源管理器是什么</h4>
+<p>ANH 在 VS Code 的侧边栏和资源管理器中添加了几个专用面板，帮你更方便地管理写作资源：</p>
+<ul>
+    <li><b>当前文章角色</b> — 在资源管理器侧栏显示当前文档中出现的角色信息</li>
+    <li><b>写作资源管理器</b> — 在资源管理器侧栏显示项目文件的字数统计、文件管理和导出功能</li>
+    <li><b>所有角色</b> — 在 ANH 侧栏显示项目中所有已定义的角色</li>
+</ul>
+
+<h4>当前文章角色</h4>
+<p>在 VS Code 左侧资源管理器面板中，你会看到一个"当前文章角色"区域。它显示<b>当前打开的 Markdown 文件中出现的所有角色</b>：</p>
+<ul>
+    <li>按<b>所属</b>（组织/阵营）分组</li>
+    <li>每个所属下按<b>角色类型</b>（主角、配角等）分组</li>
+    <li>点击角色可以跳转到角色的定义文件</li>
+    <li>展开角色可以看到详细信息（描述、别名、颜色等）</li>
+</ul>
+
+<h4>写作资源管理器</h4>
+<p>在资源管理器侧栏中，"写作资源管理器"面板显示项目中所有文件夹和文件的字数统计和文件管理功能：</p>
+<ul>
+    <li>文件夹显示总字数，文件显示各自字数</li>
+    <li>支持手动排序和自动排序</li>
+    <li>右键文件可以复制纯文本、导出 TXT、Typst 导出</li>
+    <li>右键文件夹可以新建章节</li>
+</ul>
+
+<h4>所有角色</h4>
+<p>在 ANH 侧栏（点击活动栏的 ANH 图标）中，"所有角色"面板显示项目中所有已定义的角色：</p>
+<ul>
+    <li>按类型分组：主角、配角、联动角色、词汇、敏感词、正则表达式</li>
+    <li>点击角色跳转到定义文件</li>
+    <li>展开角色查看详细信息</li>
+</ul>
+
+<h4>如何找到这些面板</h4>
+<ol>
+    <li><b>当前文章角色</b>和<b>写作资源管理器</b>：点击 VS Code 左侧资源管理器图标（文件图标），在侧栏底部找到</li>
+    <li><b>所有角色</b>：点击 ANH 图标（活动栏中的 ANH 图标），在侧栏中找到</li>
+</ol>
+</div>
+
+<div class="doc-section pro">
+<h4>一、当前文章角色视图</h4>
+<p>视图 ID：<code>docRolesExplorerView</code>，注册在 VS Code 资源管理器面板中。</p>
+
+<p><b>节点层级：</b></p>
+<ul>
+    <li><b>所属节点</b>（顶层）— 按角色的 affiliation/package 分组</li>
+    <li><b>类型节点</b>（二级）— 按角色类型分组（主角、配角等）</li>
+    <li><b>角色节点</b>（三级）— 单个角色</li>
+    <li><b>详情节点</b>（四级）— 角色的每个属性（key/value 对）</li>
+    <li><b>详情行节点</b>（五级）— 长文本内容的换行显示</li>
+</ul>
+<p>特殊分组："词汇 / 敏感词 / 正则表达式"会聚合所有相关类型的跨所属角色。</p>
+
+<p><b>功能：</b></p>
+<ul>
+    <li>点击角色 → 运行 <code>AndreaNovelHelper.openDocRoleDefinition</code>，跳转到角色定义文件</li>
+    <li>支持自定义 SVG 图标（配置 <code>docRoles.display.useRoleSvgIfPresent</code>）</li>
+    <li>支持角色名颜色化图标（配置 <code>docRoles.display.colorizeRoleName</code>）</li>
+    <li>颜色字段显示色块图标（配置 <code>docRoles.details.showColorOnValue</code>）</li>
+    <li>每个文档独立保存展开状态（配置 <code>docRoles.inheritExpandedFromPrevious</code> 控制切换文档时是否继承）</li>
+</ul>
+
+<p><b>配置项：</b></p>
+<ul>
+    <li><code>docRoles.useCustomGroups</code> — 自定义分组模式</li>
+    <li><code>docRoles.display.useRoleSvgIfPresent</code> — 使用角色 SVG 图标</li>
+    <li><code>docRoles.display.colorizeRoleName</code> — 角色名颜色化</li>
+    <li><code>docRoles.inheritExpandedFromPrevious</code> — 切换文档时继承展开状态</li>
+    <li><code>roles.details.enableRoleExpansion</code> — 允许展开角色详情</li>
+    <li><code>roles.details.alwaysExpandable</code> — 始终显示展开按钮</li>
+    <li><code>roles.details.wrapColumn</code> — 详情文本换行宽度</li>
+</ul>
+
+<h4>二、写作资源管理器视图</h4>
+<p>视图 ID：<code>wordCountExplorer</code>，显示名称"写作资源管理器（小说助手）"，注册在 VS Code 资源管理器面板中。</p>
+
+<p><b>功能：</b></p>
+<ul>
+    <li>树形显示项目文件夹和文件的字数</li>
+    <li>支持手动排序（拖拽调整顺序）</li>
+    <li>支持复制/剪切/粘贴文件（内部剪贴板，非系统剪贴板）</li>
+    <li>右键菜单：复制纯文本、导出 TXT、Typst 导出、新建章节等</li>
+    <li>点击文件跳转到编辑器</li>
+</ul>
+
+<p><b>文件操作命令：</b></p>
+<ul>
+    <li><code>AndreaNovelHelper.wordCount.copy</code> — 复制文件</li>
+    <li><code>AndreaNovelHelper.wordCount.cut</code> — 剪切文件</li>
+    <li><code>AndreaNovelHelper.wordCount.paste</code> — 粘贴文件（自动处理重名）</li>
+    <li><code>WordCount.copyPlainText</code> — 复制文件纯文本到剪贴板</li>
+    <li><code>WordCount.exportTxt</code> — 导出为 TXT 文件</li>
+    <li><code>AndreaNovelHelper.wordCount.exportTypst</code> — Typst 批量导出</li>
+</ul>
+
+<h4>三、所有角色视图</h4>
+<p>视图 ID：<code>docRolesView</code>，注册在 ANH 自定义侧栏面板中（活动栏 ANH 图标）。</p>
+<p>与"当前文章角色"功能基本相同，但显示的是项目中<b>所有已定义的角色</b>（不限于当前文档）。按类型分组显示。</p>
+
+<h4>四、与 VS Code 原生功能的关系</h4>
+<ul>
+    <li><b>资源管理器</b>：ANH 的"当前文章角色"和"写作资源管理器"面板嵌入在 VS Code 原生资源管理器侧栏中</li>
+    <li><b>搜索</b>：ANH 的引用维护功能可以替代部分搜索需求（查找角色在哪些文件中被引用）</li>
+    <li><b>源代码管理</b>：ANH 的 Git 集成会与 VS Code 原生的源代码管理面板协同工作</li>
+</ul>
+
+<div class="doc-note">如果你看不到"当前文章角色"或"写作资源管理器"面板，可能是因为资源管理器侧栏被折叠了。点击资源管理器图标展开侧栏，向下滚动即可看到。</div>
+</div>

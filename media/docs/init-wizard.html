@@ -1,0 +1,59 @@
+<div class="doc-section beginner">
+<h4>什么是项目初始化向导</h4>
+<p>项目初始化向导就像一个<strong>新建小说项目的问卷</strong>。你只需要回答几个问题，ANH 就会自动帮你创建好所有需要的文件和文件夹。不用手动一个个去创建。</p>
+
+<h4>什么时候会自动弹出</h4>
+<p>当你打开一个新的工作区（文件夹）并启用 ANH 后，如果 ANH 检测不到任何角色库、词汇表、敏感词库等描述文件，会自动弹窗询问：<b>"未检测到角色/词汇/敏感词等描述文件，是否运行项目初始化向导？"</b></p>
+<p>你也可以随时通过命令面板手动打开：按 <kbd>Ctrl+Shift+P</kbd> → 输入"项目初始化向导"。</p>
+
+<h4>向导会帮你做什么</h4>
+<p>向导一共 8 步，每一步都很简单，有默认值，看不懂的直接跳过即可：</p>
+<ol>
+    <li><b>欢迎</b> — 告诉你这个向导能做什么</li>
+    <li><b>项目信息</b> — 填写小说名字、作者名字、简介</li>
+    <li><b>项目配置</b> — 默认即可，是关于文件识别的设置</li>
+    <li><b>Git 账户</b> — 如果你用 Git 备份，填写用户名和邮箱（可选）</li>
+    <li><b>Git 仓库</b> — 设置远程仓库地址（可选）</li>
+    <li><b>项目文件</b> — 自动创建文件夹和示例文件</li>
+    <li><b>确认</b> — 检查一遍，没问题就点完成</li>
+    <li><b>完成</b> — 可以直接打开功能引导页面开始探索</li>
+</ol>
+
+<h4>向导会创建什么</h4>
+<ul>
+    <li><code>anhproject.md</code> — 小说项目的"身份证"，里面有名字、作者等信息</li>
+    <li><code>project-config.json5</code> — 项目的功能配置表</li>
+    <li><code>novel-helper/</code> — 放所有角色、词汇、敏感词的文件夹</li>
+    <li><code>.gitignore</code> — 告诉 Git 哪些文件不用备份</li>
+    <li><code>.wcignore</code> — 告诉字数统计哪些文件不用统计</li>
+</ul>
+
+<h4>什么时候需要重新运行向导</h4>
+<p>通常只需要运行一次。如果你之前跳过了某些步骤（比如没设 Git），之后可以手动修改相关文件，不需要重新运行向导。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>向导流程</h4>
+<p>初始化向导共 8 步，引导你完成从零到可写的项目搭建。每一步都有清晰的说明和默认值，你可以随时修改：</p>
+<ul>
+    <li><b>欢迎</b> — 介绍向导功能和后续流程</li>
+    <li><b>项目信息</b> — 填写项目名称、作者、描述。这些信息会写入 <code>anhproject.md</code></li>
+    <li><b>项目配置</b> — 设置默认写入目标（角色文件保存位置）、角色索引键、文件识别关键词。均有默认值，可直接跳过。此步骤还可配置「写作统计数据库是否纳入版本控制」</li>
+    <li><b>Git 账户</b> — 配置 Git 用户名和邮箱，用于自动提交的签名</li>
+    <li><b>Git 仓库</b> — 初始化本地仓库、设置远程地址（可选）</li>
+    <li><b>项目文件</b> — 创建 <code>novel-helper/</code> 目录结构、示例角色文件、<code>.gitignore</code>、<code>.wcignore</code></li>
+    <li><b>确认</b> — 检查所有配置项，确认无误后执行</li>
+    <li><b>完成</b> — 可直接打开功能引导页面，开始探索 ANH</li>
+</ul>
+
+<h4>生成的文件</h4>
+<ul>
+    <li><code>anhproject.md</code> — 项目元数据，包含名称、作者、描述、UUID、封面、摘要、标签</li>
+    <li><code>project-config.json5</code> — 项目级配置，包含资源路径、索引键、文件关键词</li>
+    <li><code>novel-helper/</code> — 资源根目录，内含示例角色库和包结构</li>
+    <li><code>.gitignore</code> — 自动排除写作过程中的临时文件和缓存</li>
+    <li><code>.wcignore</code> — 排除 <code>.vscode/</code> 和 <code>.out-of-code-insights/</code> 等目录，避免字数统计误计入</li>
+</ul>
+
+<div class="doc-note">向导执行的所有操作均可手动撤销或修改。如果你已有项目，也可以直接创建 <code>anhproject.md</code> 和 <code>project-config.json5</code> 来激活 ANH。</div>
+</div>

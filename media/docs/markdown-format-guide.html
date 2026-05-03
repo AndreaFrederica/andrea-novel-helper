@@ -1,0 +1,563 @@
+<div class="doc-section beginner">
+<h4>本指南涵盖什么</h4>
+<p>本指南介绍两件事：<b>用 Markdown 写小说正文</b>和<b>用各种格式编写角色/词汇等资源文件</b>。ANH 同时支持 Markdown、JSON5、CSV、TXT 等多种文件格式，你可以在"包管理器"中右键目录节点选择要创建的格式。</p>
+<p>如果你想确认某个文件该用什么扩展名、会打开哪个编辑器、能不能被当作角色库扫描，直接看本页的"角色/资源文件格式"和"自定义 XJSON5 扩展名总结"。</p>
+
+<h4>一、用 Markdown 写小说正文</h4>
+<p>你的小说章节文件（<code>.md</code>）就是标准的 Markdown 文本。ANH 的预览器会渲染 Markdown 格式，同时自动给角色名上色。以下是 ANH 预览器支持的 Markdown 语法：</p>
+
+<h4>标题</h4>
+<pre><code># 第一章 雨夜
+
+## 第二章 重逢
+
+### 第三节 小巷
+</code></pre>
+<p>标题在预览中会按层级显示不同大小。章节文件通常用 <code>#</code> 作为大标题，<code>##</code> 作为节标题。</p>
+
+<h4>加粗、斜体、删除线</h4>
+<pre><code>**加粗文字**
+*斜体文字*
+***加粗斜体***
+~~删除线~~
+</code></pre>
+
+<h4>引用（对话/旁白/内心独白）</h4>
+<pre><code>> 她站在雨中，看着远处的灯火。
+> > "你还是来了。" 他轻声说。
+</code></pre>
+
+<h4>列表</h4>
+<pre><code>- 第一项
+- 第二项
+- 第三项
+
+1. 第一步
+2. 第二步
+3. 第三步
+
+- [ ] 待办事项
+- [x] 已完成
+</code></pre>
+
+<h4>分隔线（场景分隔）</h4>
+<pre><code>---
+
+***
+___
+</code></pre>
+<p>在小说写作中，<code>---</code> 是最常用的场景分隔符。在预览中会显示为一条横线。</p>
+
+<h4>代码块</h4>
+<pre><code>```
+代码块中的文字
+不会被渲染为 Markdown
+```
+</code></pre>
+
+<h4>图片</h4>
+<pre><code>![图片描述](图片路径)
+</code></pre>
+<p>图片使用相对于当前文件的路径。预览中会正常显示。</p>
+
+<h4>链接和表格</h4>
+<pre><code>[链接文字](https://example.com)
+
+| 角色 | 年龄 | 职业 |
+|------|------|------|
+| 林小满 | 22 | 学生 |
+</code></pre>
+
+<h4>注释（写作笔记，预览中不显示）</h4>
+<pre><code>&lt;!-- 这是 HTML 注释，预览中不显示 --&gt;
+
+%% 这是 Obsidian 风格注释，预览中也不显示 %%
+</code></pre>
+<p>可以用来记录写作灵感、待修改标记等，不会出现在预览和导出中。</p>
+
+<h4>ANH 专有语法</h4>
+<pre><code>&amp;Def Title = 我的小说标题
+&amp;Def Subtitle = 副标题
+&amp;Def Category = 玄幻
+</code></pre>
+<p><code>&amp;Def</code> 是元数据标注，用于 Typst 导出。预览中不会显示。</p>
+
+<h4>对话语法（Typst 导出专用）</h4>
+<pre><code>@林小满: 今天天气真好。
+@陈宇[下午三点]: 是啊。
+&gt; @林小满: 引用的对话
+</code></pre>
+
+<h4>二、角色/资源文件格式</h4>
+<p>ANH 支持多种格式编写角色库、词汇表、敏感词库等资源文件：</p>
+<table style="width:100%;font-size:13px;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;font-weight:600;">格式</td>
+        <td style="padding:4px 8px;">扩展名</td>
+        <td style="padding:4px 8px;">特点</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">Markdown</td>
+        <td style="padding:4px 8px;"><code>.md</code></td>
+        <td style="padding:4px 8px;">最推荐，直观易读，用标题层级组织</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">JSON5</td>
+        <td style="padding:4px 8px;"><code>.json5</code></td>
+        <td style="padding:4px 8px;">支持注释，适合程序生成</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">OJSON5（角色卡）</td>
+        <td style="padding:4px 8px;"><code>.ojson5</code></td>
+        <td style="padding:4px 8px;">JSON5 的变体，双击打开可视化角色卡编辑器</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">RJSON5（关系图）</td>
+        <td style="padding:4px 8px;"><code>.rjson5</code></td>
+        <td style="padding:4px 8px;">角色关系图专用格式，双击打开关系图编辑器</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">TJSON5（时间线）</td>
+        <td style="padding:4px 8px;"><code>.tjson5</code></td>
+        <td style="padding:4px 8px;">事件时间线专用格式，双击打开时间线编辑器</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">CSV</td>
+        <td style="padding:4px 8px;"><code>.csv</code></td>
+        <td style="padding:4px 8px;">表格格式，适合大量简单条目</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">TXT</td>
+        <td style="padding:4px 8px;"><code>.txt</code></td>
+        <td style="padding:4px 8px;">最简单，每行一个名称</td>
+    </tr>
+</table>
+
+<h4>Markdown 角色文件格式</h4>
+<p>用标题层级组织角色信息：<code>##</code> 是角色名，<code>###</code> 是字段名，字段名后面换行写内容。</p>
+<pre><code># 角色库
+
+## 林小满
+
+### 类型
+主角
+
+### 颜色
+#FF6B6B
+
+### 别名
+小满
+小林
+
+### 描述
+一个喜欢雨天咖啡店的女孩。
+
+## 陈宇
+
+### 类型
+配角
+
+### 颜色
+#4ECDC4
+
+### 别名
+宇哥
+</code></pre>
+<p>必填字段只有一个：<b>类型</b>（<code>### 类型</code>）。不写类型会被默认当作"词汇"。</p>
+
+<h4>所有支持的字段</h4>
+<ul>
+    <li><b>基础字段</b>：类型、颜色、别名、描述、所属、优先级</li>
+    <li><b>角色专属</b>：性别、年龄、职业、性格、外貌、背景、技能、弱点、目标、动机、恐惧、秘密、台词、备注、标签</li>
+    <li><b>敏感词专属</b>：修复（每行一个修复建议）、严重级别</li>
+    <li><b>正则专属</b>：正则、正则标志</li>
+    <li><b>样式</b>：粗体、斜体、删除线、下划线、背景色</li>
+</ul>
+
+<h4>常见错误</h4>
+<ul>
+    <li><b>标题层级写错</b>：<code>#</code> 是文件标题，<code>##</code> 是角色名，<code>###</code> 是字段</li>
+    <li><b>"类型"写错</b>：必须精确匹配"主角""配角"等，不能有空格</li>
+    <li><b>别名用逗号分隔</b>：应该每个别名单独一行，或者用逗号分隔（两种都支持）</li>
+    <li><b>颜色格式</b>：<code>#FF6B6B</code>、<code>rgb(255,0,0)</code>、<code>hsl(0,100%,50%)</code> 都可以</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>一、JSON5 格式详解</h4>
+<p>JSON5 是 JSON 的超集，支持注释和尾随逗号。文件扩展名 <code>.json5</code>。</p>
+
+<p><b>支持三种写法：</b></p>
+
+<p><b>写法 1：数组（最常用）</b></p>
+<pre><code>[
+  {
+    name: "林小满",
+    type: "主角",
+    color: "#FF6B6B",
+    aliases: ["小满", "小林"],
+    description: "一个喜欢雨天咖啡店的女孩",
+    affiliation: "星光文学社",
+    priority: 5,
+    style: {
+      color: "#FF6B6B",
+      bold: true
+    }
+  },
+  {
+    name: "陈宇",
+    type: "配角",
+    color: "#4ECDC4"
+  }
+]
+</code></pre>
+
+<p><b>写法 2：对象包装</b></p>
+<pre><code>{
+  "roles": [
+    { "name": "林小满", "type": "主角" }
+  ]
+}
+</code></pre>
+
+<p><b>写法 3：字典映射</b></p>
+<pre><code>{
+  "林小满": { "type": "主角", "color": "#FF6B6B" },
+  "陈宇": { "type": "配角", "color": "#4ECDC4" }
+}
+</code></pre>
+
+<h4>JSON5 完整字段列表</h4>
+<ul>
+    <li><code>name</code> / <code>名称</code> / <code>名字</code> — 条目名称（必填）</li>
+    <li><code>type</code> / <code>类型</code> — 类型：主角、配角、联动角色、敏感词、词汇、正则表达式，或自定义字符串</li>
+    <li><code>color</code> / <code>颜色</code> — 颜色值</li>
+    <li><code>aliases</code> / <code>别名</code> — 别名数组</li>
+    <li><code>description</code> / <code>描述</code> — 描述文本</li>
+    <li><code>affiliation</code> / <code>从属</code> — 所属组织</li>
+    <li><code>priority</code> / <code>优先级</code> — 补全优先级（数字越小越优先）</li>
+    <li><code>fixes</code> / <code>修复</code> — 敏感词修复建议数组</li>
+    <li><code>regex</code> / <code>正则</code> — 正则表达式（类型为"正则表达式"时使用）</li>
+    <li><code>regexFlags</code> / <code>正则标志</code> — 正则标志，如 <code>"gi"</code></li>
+    <li><code>wordSegmentFilter</code> / <code>分词过滤</code> — 是否启用分词过滤</li>
+    <li><code>style</code> / <code>样式</code> — 样式对象：<code>{ color, backgroundColor, bold, italic, strikethrough, underline }</code></li>
+    <li>扩展字段：<code>age</code>/<code>年龄</code>、<code>gender</code>/<code>性别</code>、<code>occupation</code>/<code>职业</code>、<code>personality</code>/<code>性格</code>、<code>appearance</code>/<code>外貌</code>、<code>background</code>/<code>背景</code>、<code>skill</code>/<code>技能</code>、<code>weakness</code>/<code>弱点</code>、<code>goal</code>/<code>目标</code>、<code>motivation</code>/<code>动机</code>、<code>fear</code>/<code>恐惧</code>、<code>secret</code>/<code>秘密</code>、<code>quote</code>/<code>台词</code>、<code>note</code>/<code>备注</code>、<code>tag</code>/<code>标签</code></li>
+</ul>
+
+<h4>正则表达式 JSON5 示例</h4>
+<pre><code>[
+  {
+    name: "中文对话",
+    type: "正则表达式",
+    regex: "「[^」]*」",
+    regexFlags: "g",
+    color: "#98FB98",
+    priority: 100
+  },
+  {
+    name: "书名号",
+    type: "正则表达式",
+    regex: "《[^》]+》",
+    regexFlags: "g",
+    color: "#87CEEB",
+    priority: 90
+  }
+]
+</code></pre>
+
+<h4>正则表达式 Markdown 示例</h4>
+<pre><code># 着色规则
+
+## 中文对话
+
+### 类型
+正则表达式
+
+### 正则
+```regex
+「[^」]*」
+```
+
+### 正则标志
+g
+
+### 颜色
+#98FB98
+
+### 优先级
+100
+</code></pre>
+<p>Markdown 中建议把正则表达式放进围栏代码块，避免 <code>#</code>、<code>*</code>、<code>[]</code> 等字符被 Markdown 标题或格式语法影响。</p>
+
+<h4>二、OJSON5 格式详解（角色卡）</h4>
+<p>OJSON5 扩展名 <code>.ojson5</code>，内容仍然是 JSON5 角色数组；区别是 VS Code 会优先用<b>角色 JSON5 编辑器</b>打开它。它适合"一个文件就是一个结构化角色库"的场景。</p>
+<pre><code>[
+  {
+    name: "林小满",
+    type: "主角",
+    aliases: ["小满", "小林"],
+    lookupKeys_pinyin: ["linxiaoman", "lxm"],
+    color: "#FF6B6B",
+    description: "一个喜欢雨天咖啡店的女孩。",
+    age: "22",
+    occupation: "学生",
+    customField: "任意自定义字段也会保留"
+  }
+]
+</code></pre>
+<p>角色卡编辑器界面会把字段分为三个层级，但保存到文件时仍是上面这种普通 JSON5 对象：</p>
+<ul>
+    <li><b>基础字段（base）</b>：name、type、color、aliases、description、affiliation、priority、fixes、style</li>
+    <li><b>扩展字段（extended）</b>：age、gender、occupation、personality、appearance、background、skill、weakness、goal、motivation、fear、secret、quote、note、tag</li>
+    <li><b>自定义字段（custom）</b>：任意用户定义的字段</li>
+</ul>
+<div class="doc-note"><code>.json5</code> 和 <code>.ojson5</code> 的数据结构相同；区别主要是打开方式和识别优先级。<code>.ojson</code> 是旧式标记扩展名，仍可作为外部资源标识识别，但新文件推荐用 <code>.ojson5</code>。</div>
+
+<h4>三、CSV 格式详解</h4>
+<p>表格格式，扩展名 <code>.csv</code>。实际解析器支持逗号、Tab、分号三种分隔符，并会自动检测。适合从 Excel、表格软件或 AI 批量导入简单条目。</p>
+
+<p><b>带表头的 CSV：</b></p>
+<pre><code>名称,类型,颜色,别名,描述,从属
+林小满,主角,#FF6B6B,"小满;小林","一个喜欢雨天的女孩",星光文学社
+陈宇,配角,#4ECDC4,宇哥,"学长",星光文学社
+</code></pre>
+
+<p><b>不带表头的 CSV</b>（自动识别）：第一列是名称，第二列是描述，其余列作为查询键。</p>
+<pre><code>林小满,一个喜欢雨天的女孩,lxm; linxiaoman
+陈宇,学长,cy; chenyu
+</code></pre>
+<p><b>TSV / 分号分隔</b>也可读取：</p>
+<pre><code>name	type	aliases	lookupKeys_pinyin
+林小满	主角	小满; 小林	linxiaoman; lxm
+</code></pre>
+
+<h4>CSV 支持的列名（中英文均可）</h4>
+<ul>
+    <li><code>name</code> / <code>名称</code> / <code>角色</code> / <code>人物</code> / <code>词条</code></li>
+    <li><code>description</code> / <code>描述</code> / <code>简介</code></li>
+    <li><code>type</code> / <code>类型</code></li>
+    <li><code>aliases</code> / <code>别名</code> / <code>别称</code></li>
+    <li><code>color</code> / <code>颜色</code></li>
+    <li><code>affiliation</code> / <code>从属</code> / <code>阵营</code></li>
+    <li><code>priority</code> / <code>优先级</code></li>
+    <li><code>fixes</code> / <code>修复</code> / <code>替换</code></li>
+    <li><code>regex</code> / <code>正则</code></li>
+    <li><code>regexFlags</code> / <code>正则标志</code></li>
+    <li><code>wordSegmentFilter</code> / <code>分词过滤</code></li>
+    <li><code>lookupKeys</code>、<code>lookupKeys_pinyin</code>、<code>lookupKeys_romanized</code>、<code>lookupKeys_spelling</code>，以及项目中定义的其他查询键字段</li>
+    <li><code>gender</code> / <code>性别</code></li>
+    <li><code>origin</code> / <code>来源</code></li>
+</ul>
+<p>未识别的列不会丢弃：ANH 会把它作为自定义字段保存；如果列名单独用于查询键，也会生成对应的 <code>lookupKeys_列名</code> 字段。数组类字段（别名、修复、查询键）可用分号、逗号、顿号、换行等分隔。</p>
+
+<h4>四、TXT 格式详解</h4>
+<p>最简单的格式。扩展名 <code>.txt</code>。每行一个名称，没有其他字段。</p>
+<pre><code>林小满
+陈宇
+张伟
+# 这是注释，不会被读取
+// 这也是注释
+</code></pre>
+<ul>
+    <li>空行跳过</li>
+    <li><code>#</code> 或 <code>//</code> 开头的行是注释</li>
+    <li>行内也可以写注释：<code>林小满 # 主角</code> → 只读取"林小满"</li>
+    <li>TXT 文件不支持颜色、别名、描述等任何额外字段</li>
+    <li>TXT 不能表达正则规则；正则着色请使用 Markdown 或 JSON5</li>
+</ul>
+
+<h4>五、RJSON5 关系图格式</h4>
+<p>扩展名 <code>.rjson5</code>，内容是 JSON5，双击打开可视化关系图编辑器。它不作为角色库加载，而是用于描述角色之间的关系网络。</p>
+<pre><code>{
+  nodes: [
+    { id: "reimu", text: "博丽灵梦", color: "#E60033" },
+    { id: "marisa", text: "雾雨魔理沙", color: "#FFD700" }
+  ],
+  lines: [
+    {
+      source: "reimu",
+      target: "marisa",
+      data: { type: "朋友" },
+      text: "解决异变的搭档"
+    }
+  ]
+}
+</code></pre>
+<p>常用字段：</p>
+<ul>
+    <li><code>nodes</code> — 节点数组，通常对应角色、组织、地点等实体</li>
+    <li><code>lines</code> — 关系线数组，<code>source</code> / <code>target</code> 指向节点 id</li>
+    <li><code>data.type</code> 或 <code>relationshipType</code> — 关系类型</li>
+    <li><code>text</code> — 关系说明文字</li>
+</ul>
+<p>内置关系类型：朋友、恋人、夫妻、父子、母子、父女、母女、兄弟、姐妹、师父、同事、上司、下属、敌人、仇人、竞争对手、合作伙伴、盟友。<code>.rjson</code> 是旧式关系标记扩展名，新文件推荐 <code>.rjson5</code>。</p>
+
+<h4>六、TJSON5 时间线格式</h4>
+<p>扩展名 <code>.tjson5</code>，内容是 JSON5，双击打开可视化时间线编辑器。它不作为角色库加载，而是用于组织事件、时间顺序和事件之间的连接。</p>
+<pre><code>{
+  events: [
+    {
+      id: "event1",
+      title: "幻想乡建立",
+      date: "1885年",
+      description: "博丽大结界建立",
+      type: "main",
+      bindings: [
+        { uuid: "reimu", type: "character", label: "博丽灵梦" }
+      ]
+    },
+    {
+      id: "event2",
+      title: "第一次异变",
+      date: "春",
+      type: "side"
+    }
+  ],
+  connections: [
+    { source: "event1", target: "event2", connectionType: "normal" }
+  ]
+}
+</code></pre>
+<p>常用字段：</p>
+<ul>
+    <li><code>events</code> — 事件数组，核心字段是 <code>id</code>、<code>title</code>、<code>date</code>、<code>description</code>、<code>type</code></li>
+    <li><code>bindings</code> — 事件关联对象，可绑定角色、地点、物品、文章等</li>
+    <li><code>connections</code> — 事件之间的连接，使用 <code>source</code> / <code>target</code> 指向事件 id</li>
+</ul>
+<p>连接类型：normal、time-travel、reincarnation、parallel、dream、flashback、other。时间格式完全自由（"第一章"、"2024年春"、"第三纪元"都可以）。</p>
+
+<h4>七、自定义 XJSON5 扩展名总结</h4>
+<p>ANH 的自定义 JSON5 扩展名本质上仍是 JSON5，只是用扩展名告诉 VS Code 应该启用哪个专用编辑器或识别逻辑：</p>
+<table style="width:100%;font-size:13px;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;font-weight:600;">扩展名</td>
+        <td style="padding:4px 8px;">用途</td>
+        <td style="padding:4px 8px;">是否角色库</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;"><code>.json5</code></td>
+        <td style="padding:4px 8px;">通用角色/词汇/敏感词/正则库，靠文件名关键词识别类型</td>
+        <td style="padding:4px 8px;">是</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;"><code>.ojson5</code></td>
+        <td style="padding:4px 8px;">角色 JSON5 编辑器优先打开</td>
+        <td style="padding:4px 8px;">是</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;"><code>.rjson5</code></td>
+        <td style="padding:4px 8px;">关系图编辑器</td>
+        <td style="padding:4px 8px;">否</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;"><code>.tjson5</code></td>
+        <td style="padding:4px 8px;">时间线编辑器</td>
+        <td style="padding:4px 8px;">否</td>
+    </tr>
+</table>
+<div class="doc-note">外部资源目录识别仍兼容 <code>.ojson</code> / <code>.rjson</code> 这类旧标记扩展名；新建文件建议统一使用 <code>.ojson5</code>、<code>.rjson5</code>、<code>.tjson5</code>。</div>
+
+<h4>八、格式选择指南</h4>
+<table style="width:100%;font-size:13px;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;font-weight:600;">场景</td>
+        <td style="padding:4px 8px;">推荐格式</td>
+        <td style="padding:4px 8px;">原因</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">手动编写角色</td>
+        <td style="padding:4px 8px;">Markdown</td>
+        <td style="padding:4px 8px;">最直观，可读性好</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">需要可视化编辑器</td>
+        <td style="padding:4px 8px;">OJSON5</td>
+        <td style="padding:4px 8px;">双击打开角色卡编辑器</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">程序/AI 生成</td>
+        <td style="padding:4px 8px;">JSON5</td>
+        <td style="padding:4px 8px;">结构化，易于生成</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">大量简单条目</td>
+        <td style="padding:4px 8px;">CSV 或 TXT</td>
+        <td style="padding:4px 8px;">批量编辑方便</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">正则着色规则</td>
+        <td style="padding:4px 8px;">Markdown 或 JSON5</td>
+        <td style="padding:4px 8px;">Markdown 不需要转义反斜杠</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">角色关系图</td>
+        <td style="padding:4px 8px;">RJSON5</td>
+        <td style="padding:4px 8px;">专用格式，有可视化编辑器</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">事件时间线</td>
+        <td style="padding:4px 8px;">TJSON5</td>
+        <td style="padding:4px 8px;">专用格式，有可视化编辑器</td>
+    </tr>
+</table>
+
+<h4>九、ANH 预览器支持的 Markdown 语法</h4>
+<p>ANH 使用自研 Markdown 解析器（非第三方库），支持以下语法：</p>
+
+<p><b>块级元素：</b></p>
+<ul>
+    <li>ATX 标题（<code>#</code> ~ <code>######</code>）— 预览中按层级显示不同大小</li>
+    <li>Setext 标题（<code>===</code> / <code>---</code> 下划线）— 1 级和 2 级</li>
+    <li>段落 — 两个换行之间为一个段落</li>
+    <li>引用块（<code>&gt;</code>）— 预览中有左边框和缩进</li>
+    <li>无序列表（<code>-</code>、<code>*</code>、<code>+</code>）</li>
+    <li>有序列表（<code>1.</code>、<code>2.</code>）</li>
+    <li>任务列表（<code>- [ ]</code>、<code>- [x]</code>）</li>
+    <li>围栏代码块（<code>```</code>、<code>~~~</code>）</li>
+    <li>缩进代码块（4 空格或 Tab）</li>
+    <li>表格（管道符分隔）</li>
+    <li>水平线（<code>---</code>、<code>***</code>、<code>___</code>）</li>
+    <li>图片（<code>![alt](src)</code>）— 相对路径自动解析</li>
+</ul>
+
+<p><b>行内元素：</b></p>
+<ul>
+    <li><code>**加粗**</code> — 预览中显示为粗体</li>
+    <li><code>*斜体*</code> — 预览中显示为斜体</li>
+    <li><code>***加粗斜体***</code></li>
+    <li><code>~~删除线~~</code> — 预览中显示为删除线</li>
+    <li><code>`行内代码`</code> — 预览中有背景色</li>
+    <li><code>[链接文字](url)</code> — 预览中只显示文字，链接被剥离</li>
+</ul>
+
+<p><b>注释（被剥离）：</b></p>
+<ul>
+    <li><code>&lt;!-- HTML 注释 --&gt;</code></li>
+    <li><code>%% Obsidian 注释 %%</code></li>
+</ul>
+
+<p><b>不支持的语法：</b>嵌套列表、脚注、LaTeX 数学公式、Mermaid 图表。</p>
+
+<h4>十、预览器设置</h4>
+<p>预览器右下角有齿轮按钮，可以调整：</p>
+<ul>
+    <li><b>显示模式</b>：滚动模式（连续）或翻页模式（PgUp/PgDn）</li>
+    <li><b>排版</b>：左对齐或两端对齐、1 栏或 2 栏</li>
+    <li><b>字体</b>：字号、字体、行高、段间距</li>
+    <li><b>主题</b>：跟随 VS Code、纯白、纯黑、自定义颜色</li>
+    <li><b>Markdown 渲染</b>：可独立开关标题、列表、加粗、斜体、引用、代码块等</li>
+    <li><b>角色名着色</b>：可开关、可按类型过滤</li>
+    <li><b>预设</b>：保存/加载/删除自定义配置</li>
+</ul>
+
+<h4>十一、TTS 语音朗读</h4>
+<p>预览器底部有语音朗读控件，支持播放、暂停、停止。当前朗读位置会以金色背景高亮。可选择朗读全文或选中文本。翻页模式下朗读会跨页继续。</p>
+
+<h4>十二、导出</h4>
+<p>预览器右键菜单支持：</p>
+<ul>
+    <li>复制纯文本到剪贴板</li>
+    <li>导出为 TXT 文件</li>
+</ul>
+<div class="doc-note">ANH 的正文写作 Markdown 是标准 Markdown，没有特殊的 ANH 标注语法（<code>&amp;Def</code> 仅用于 Typst 导出元数据）。角色名的自动上色完全基于你在角色库中定义的名称和别名，不需要在正文中做任何特殊标记。</div>
+</div>

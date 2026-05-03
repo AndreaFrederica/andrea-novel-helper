@@ -143,6 +143,10 @@
             background: color-mix(in srgb, var(--vscode-button-background) 12%, transparent);
             color: var(--vscode-button-background);
         }
+        .card-icon-img {
+            width: 20px;
+            height: 20px;
+        }
 
         .card-title {
             font-size: 14px;
@@ -184,7 +188,7 @@
             opacity: 0.8;
         }
 
-        /* ── Doc Panel ──────────────────────────────── */
+        /* ── Doc Button ─────────────────────────────── */
         .doc-toggle {
             font-size: 11px;
             padding: 3px 8px;
@@ -198,75 +202,6 @@
 
         .doc-toggle:hover {
             background: color-mix(in srgb, var(--vscode-textLink-foreground) 10%, transparent);
-        }
-
-        .card-doc {
-            display: none;
-            margin-top: 10px;
-            padding: 12px;
-            border-radius: 6px;
-            background: color-mix(in srgb, var(--vscode-editor-background) 80%, var(--vscode-panel-border));
-            border: 1px solid var(--vscode-panel-border);
-            font-size: 12px;
-            line-height: 1.7;
-            color: var(--vscode-editor-foreground);
-            animation: docSlideIn 0.2s ease;
-        }
-
-        .card-doc.open {
-            display: block;
-        }
-
-        @keyframes docSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-4px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .card-doc h4 {
-            font-size: 12px;
-            font-weight: 600;
-            margin: 10px 0 4px;
-            color: var(--vscode-editor-foreground);
-        }
-
-        .card-doc h4:first-child {
-            margin-top: 0;
-        }
-
-        .card-doc p {
-            margin: 4px 0;
-        }
-
-        .card-doc ul {
-            margin: 4px 0 4px 18px;
-            padding: 0;
-        }
-
-        .card-doc li {
-            margin: 2px 0;
-        }
-
-        .card-doc code {
-            font-family: var(--vscode-editor-font-family);
-            background: var(--vscode-textBlockQuote-background);
-            padding: 1px 4px;
-            border-radius: 3px;
-            font-size: 11px;
-        }
-
-        .card-doc .doc-note {
-            margin-top: 8px;
-            padding: 6px 10px;
-            border-radius: 4px;
-            background: color-mix(in srgb, var(--vscode-textLink-foreground) 8%, transparent);
-            border-left: 3px solid var(--vscode-textLink-foreground);
-            font-size: 11px;
         }
 
         /* ── Keyboard Shortcut Tags ─────────────────── */
@@ -298,6 +233,7 @@
     <header>
         <h1>功能引导</h1>
         <div class="toolbar">
+            <button id="wikiBtn">Wiki</button>
             <button id="reload">刷新</button>
         </div>
     </header>
@@ -312,6 +248,17 @@
             <div class="category" data-category="start">
                 <h2 class="category-title">入门</h2>
                 <div class="cards">
+                    <div class="card" data-keywords="hello world 快速上手 入门 新手 教程">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F44B;</div>
+                            <div class="card-title">Hello World</div>
+                        </div>
+                        <div class="card-desc">5 分钟快速上手 ANH：初始化项目、创建角色、体验补全与高亮、预览文档。</div>
+                        <div class="card-actions">
+                            <button class="primary-action" data-doc-id="hello-world">查看快速指南</button>
+                        </div>
+                    </div>
+
                     <div class="card" data-keywords="初始化 向导 项目 init wizard setup">
                         <div class="card-header">
                             <div class="card-icon">&#x1F680;</div>
@@ -320,22 +267,7 @@
                         <div class="card-desc">一步步完成项目配置：填写项目信息、配置 Git、创建基础文件结构和忽略规则。</div>
                         <div class="card-actions">
                             <button class="primary-action" data-cmd="AndreaNovelHelper.projectInitWizard.graphical">打开向导</button>
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>向导流程</h4>
-                            <p>初始化向导共 8 步，引导你完成从零到可写的项目搭建：</p>
-                            <ul>
-                                <li><b>欢迎</b> — 介绍向导功能</li>
-                                <li><b>项目信息</b> — 填写项目名称、作者、描述</li>
-                                <li><b>项目配置</b> — 设置默认写入目标、角色索引键、文件识别关键词（可选，有默认值）</li>
-                                <li><b>Git 账户</b> — 配置 Git 用户名和邮箱</li>
-                                <li><b>Git 仓库</b> — 初始化本地仓库、设置远程地址</li>
-                                <li><b>项目文件</b> — 创建 <code>novel-helper/</code> 目录结构、示例角色文件、<code>.gitignore</code></li>
-                                <li><b>确认</b> — 检查所有配置</li>
-                                <li><b>完成</b> — 可直接打开功能引导</li>
-                            </ul>
-                            <div class="doc-note">向导会同时生成 <code>anhproject.md</code>（项目元数据）和 <code>project-config.json5</code>（项目配置），二者共同构成 ANH 的项目配置体系。</div>
+                            <button class="doc-toggle" data-doc-id="init-wizard">查看文档</button>
                         </div>
                     </div>
 
@@ -347,17 +279,7 @@
                         <div class="card-desc">编辑项目名称、作者、标签、封面、文件识别关键词、默认写入目标、角色索引键等配置。</div>
                         <div class="card-actions">
                             <button class="primary-action" data-cmd="andrea.openProjectSettings">打开设置</button>
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>配置文件</h4>
-                            <p>项目设置管理两个文件：</p>
-                            <ul>
-                                <li><code>anhproject.md</code> — 项目元数据（名称、作者、描述、UUID、封面、摘要、标签）</li>
-                                <li><code>project-config.json5</code> — 项目级配置（资源路径、索引键、文件关键词）</li>
-                            </ul>
-                            <h4>优先级</h4>
-                            <p>配置优先级：<b>项目配置 > VSCode 设置 > 插件默认值</b>。项目配置会覆盖同名的 VSCode 设置。</p>
+                            <button class="doc-toggle" data-doc-id="project-settings">查看文档</button>
                         </div>
                     </div>
 
@@ -369,17 +291,43 @@
                         <div class="card-desc">查看和修改 ANH 的所有配置项，包括校对、翻译、排版、字数统计、Git 等功能的详细参数。</div>
                         <div class="card-actions">
                             <button class="primary-action" data-cmd="openAnhSettings">打开插件设置</button>
+                            <button data-cmd="andrea.openEditorSettingsEnhanced">打开编辑器设置</button>
+                            <button class="doc-toggle" data-doc-id="plugin-settings">查看文档</button>
                         </div>
                     </div>
 
-                    <div class="card" data-keywords="vscode 设置 编辑器 settings editor 工作区">
+                    <div class="card" data-keywords="快速设置 quick settings ctrl alt i 排版 字数 wcignore 角色显示 里程碑">
                         <div class="card-header">
                             <div class="card-icon">&#x2699;</div>
-                            <div class="card-title">VSCode 设置</div>
+                            <div class="card-title">快速设置</div>
                         </div>
-                        <div class="card-desc">打开 VSCode 通用设置页面，管理编辑器外观、快捷键、主题、字体等全局配置。</div>
+                        <div class="card-desc">集中调整写作高频选项：自动换行、智能切段、段首缩进、字体、字数单位、.wcignore、角色显示、里程碑等。最快入口在底部状态栏的“版式”按钮。</div>
                         <div class="card-actions">
-                            <button data-cmd="openVSCodeSettings">打开 VSCode 设置</button>
+                            <button class="primary-action" data-cmd="andrea.quickSettings">打开快速设置</button>
+                            <button class="doc-toggle" data-doc-id="quick-settings">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="状态栏 status bar 底部按钮 版式 写作统计 typo sync 自动滚动 分组锁 typst">
+                        <div class="card-header">
+                            <div class="card-icon">&#x25AC;</div>
+                            <div class="card-title">状态栏功能</div>
+                        </div>
+                        <div class="card-desc">说明 VS Code 底部 ANH 状态栏按钮：版式快速设置、写作统计、Typo、ANH:Sync、自动滚动、分组锁、Typst 预览等。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="status-bar">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="vscode 基础 设置 编辑器 settings editor 工作区 资源管理器 搜索 git 源代码管理">
+                        <div class="card-header">
+                            <div class="card-icon">&#x2699;</div>
+                            <div class="card-title">VS Code 基础</div>
+                        </div>
+                        <div class="card-desc">面向新用户说明资源管理器、全局搜索、Git 源代码管理、设置和常用快捷键。</div>
+                        <div class="card-actions">
+                            <button data-cmd="openVSCodeSettings">打开 VS Code 设置</button>
+                            <button class="doc-toggle" data-doc-id="vscode-settings">查看文档</button>
                         </div>
                     </div>
 
@@ -392,20 +340,7 @@
                         <div class="card-actions">
                             <button class="primary-action" data-cmd="myPreview.open">打开预览</button>
                             <button data-cmd="AndreaNovelHelper.openTypstPreview">Typst 预览</button>
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>Markdown/TXT 预览</h4>
-                            <p>侧边栏实时渲染当前文档，支持：</p>
-                            <ul>
-                                <li><b>增量更新</b> — 仅重渲染变化的段落，性能优秀</li>
-                                <li><b>双向滚动同步</b> — 编辑器和预览联动滚动</li>
-                                <li><b>角色名着色</b> — 预览中角色名自动按定义颜色高亮</li>
-                                <li><b>TTS 朗读</b> — 支持文本转语音播放</li>
-                                <li><b>导出</b> — 可复制纯文本或导出为 TXT 文件</li>
-                            </ul>
-                            <h4>Typst 排版预览</h4>
-                            <p>将 Markdown 转换为 Typst 格式进行专业排版。需要安装 Tinymist Typst 扩展。支持模板选择、内存/文件两种存储模式。</p>
+                            <button class="doc-toggle" data-doc-id="writing-preview">查看文档</button>
                         </div>
                     </div>
                 </div>
@@ -422,28 +357,7 @@
                         </div>
                         <div class="card-desc">ANH 的核心设计理念：角色、敏感词、词汇、正则都统一为"角色"对象，共享同一套编辑和引用能力。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>统一对象模型</h4>
-                            <p>ANH 中所有资源类型都由同一个 <code>Role</code> 接口表示，通过 <code>type</code> 字段区分：</p>
-                            <ul>
-                                <li><code>主角</code> / <code>配角</code> / <code>联动角色</code> — 角色人物</li>
-                                <li><code>敏感词</code> — 需要标记或替换的词汇，附带 <code>fixes</code> 修复建议</li>
-                                <li><code>词汇</code> — 世界观术语和专业名词</li>
-                                <li><code>正则表达式</code> — 自定义着色规则，用 <code>regex</code> + <code>regexFlags</code> 定义匹配模式</li>
-                            </ul>
-                            <h4>共享能力</h4>
-                            <p>无论哪种类型，所有"角色"都享有：</p>
-                            <ul>
-                                <li><b>别名</b> — 支持多个别名，编辑器中自动识别</li>
-                                <li><b>跳转定义</b> — Ctrl+Click 直接跳转到角色定义文件</li>
-                                <li><b>查找引用</b> — 查看角色在哪些文件中被引用</li>
-                                <li><b>自动补全</b> — 输入 @ 或角色名时弹出补全，支持拼音匹配</li>
-                                <li><b>高亮装饰</b> — 编辑器中自动按颜色标记</li>
-                                <li><b>角色卡编辑器</b> — 可视化编辑所有字段</li>
-                            </ul>
-                            <div class="doc-note">这意味着你不需要学习不同的工具来管理不同类型的资源。一个角色卡编辑器、一套补全系统、一种高亮机制，统一管理所有写作资产。</div>
+                            <button class="doc-toggle" data-doc-id="everything-is-role">查看文档</button>
                         </div>
                     </div>
 
@@ -454,34 +368,18 @@
                         </div>
                         <div class="card-desc">侧栏中的资源管理器。"包"即 <code>novel-helper/</code> 下的目录，每个目录可包含角色库、敏感词库、词汇表等资源文件。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="doc-toggle" data-doc-id="package-manager">查看文档</button>
                         </div>
-                        <div class="card-doc">
-                            <h4>什么是"包"</h4>
-                            <p>包管理器中的"包"就是 <code>novel-helper/</code> 下的一个<b>目录</b>。每个目录可以包含：</p>
-                            <ul>
-                                <li>角色库文件（<code>character-gallery.json5</code>、<code>*_roles.md</code> 等）</li>
-                                <li>敏感词库（<code>sensitive-words.json5</code>）</li>
-                                <li>词汇表（<code>vocabulary.json5</code>）</li>
-                                <li>正则着色规则（<code>regex-patterns.json5</code>）</li>
-                                <li>关系文件（<code>*.rjson5</code>）和时间线（<code>*.tjson5</code>）</li>
-                                <li>子包（子目录）</li>
-                            </ul>
-                            <h4>推荐结构</h4>
-                            <p>典型的小说项目目录结构：</p>
-                            <ul>
-                                <li><code>novel-helper/main/</code> — 主要角色和资源</li>
-                                <li><code>novel-helper/faction-a/</code> — 按阵营/势力分包</li>
-                                <li><code>novel-helper/worldbuilding/</code> — 世界观词汇和术语</li>
-                            </ul>
-                            <h4>操作方式</h4>
-                            <ul>
-                                <li><b>右键文件夹</b> — 创建新的资源文件（角色库、敏感词库等）</li>
-                                <li><b>拖放</b> — 在包之间移动或复制文件</li>
-                                <li><b>展开文件</b> — 查看文件内包含的角色列表</li>
-                                <li><b>外部资源</b> — 可挂载工作区外的目录</li>
-                            </ul>
-                            <div class="doc-note">包管理器支持 JSON5、Markdown、TXT、CSV 四种文件格式。推荐使用 JSON5 格式，字段最完整。</div>
+                    </div>
+
+                    <div class="card" data-keywords="文件格式 格式指南 markdown json5 ojson5 rjson5 tjson5 csv txt 模板 角色文件 创建 md 写法">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4DD;</div>
+                            <div class="card-title">文件格式指南</div>
+                        </div>
+                        <div class="card-desc">Markdown、JSON5、OJSON5、RJSON5、TJSON5、CSV、TXT 的完整说明和模板。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="markdown-format-guide">查看文档</button>
                         </div>
                     </div>
                 </div>
@@ -498,26 +396,8 @@
                         </div>
                         <div class="card-desc">通过角色卡编辑器管理角色信息。支持 JSON5、CSV、Markdown 等格式。角色会在编辑器中自动高亮和补全。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="doc-toggle" data-doc-id="role-management">查看文档</button>
                             <span class="hint">在包管理器中右键文件夹可新建角色库</span>
-                        </div>
-                        <div class="card-doc">
-                            <h4>角色类型</h4>
-                            <p>通过 <code>type</code> 字段区分角色类型：</p>
-                            <ul>
-                                <li><code>主角</code> — 核心角色，通常有详细描述和颜色标记</li>
-                                <li><code>配角</code> — 次要角色</li>
-                                <li><code>联动角色</code> — 跨作品联动的角色</li>
-                            </ul>
-                            <h4>文件格式</h4>
-                            <ul>
-                                <li><b>JSON5</b>（推荐）— 字段最完整，支持注释和尾逗号</li>
-                                <li><b>CSV</b> — 适合批量导入，表头行定义字段</li>
-                                <li><b>Markdown</b> — 用二级标题分隔角色，YAML frontmatter 定义元数据</li>
-                            </ul>
-                            <h4>角色卡编辑器</h4>
-                            <p>在包管理器中点击角色文件或角色节点，会打开可视化角色卡编辑器，支持编辑所有字段（名称、类型、别名、描述、颜色等）。</p>
-                            <div class="doc-note">角色的 <code>name</code> 是唯一标识。别名 <code>aliases</code> 和索引键 <code>lookupKeys</code> 用于补全和搜索匹配，支持拼音。</div>
                         </div>
                     </div>
 
@@ -528,20 +408,8 @@
                         </div>
                         <div class="card-desc">定义敏感词库，编辑器会实时标记匹配的词汇。支持自定义严重级别、别名和修复建议。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="doc-toggle" data-doc-id="sensitive-words">查看文档</button>
                             <span class="hint">在包管理器中右键文件夹可新建敏感词库</span>
-                        </div>
-                        <div class="card-doc">
-                            <h4>工作原理</h4>
-                            <p>敏感词本质上是 <code>type: '敏感词'</code> 的角色。编辑器会实时扫描文本，用波浪线标记匹配的敏感词。</p>
-                            <h4>关键字段</h4>
-                            <ul>
-                                <li><code>name</code> — 敏感词本身</li>
-                                <li><code>aliases</code> — 敏感词的别名变体</li>
-                                <li><code>fixes</code> — 修复建议列表（右键可快速替换）</li>
-                                <li><code>priority</code> — 严重级别，影响标记颜色</li>
-                            </ul>
-                            <div class="doc-note">敏感词也支持角色名误报抑制 — 如果某个"敏感词"实际上是你作品中的角色名，ANH 会自动跳过。</div>
                         </div>
                     </div>
 
@@ -552,19 +420,8 @@
                         </div>
                         <div class="card-desc">管理世界观术语和专业词汇。支持分类、别名、自动补全和高亮显示。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="doc-toggle" data-doc-id="vocabulary">查看文档</button>
                             <span class="hint">在包管理器中右键文件夹可新建词汇表</span>
-                        </div>
-                        <div class="card-doc">
-                            <h4>用途</h4>
-                            <p>词汇表用于管理世界观中的专有名词：地名、组织名、魔法术语、科技名词等。<code>type</code> 为 <code>词汇</code>。</p>
-                            <h4>使用方式</h4>
-                            <ul>
-                                <li>在编辑器中输入词汇名或别名时自动弹出补全</li>
-                                <li>词汇名在编辑器中按定义颜色高亮</li>
-                                <li>支持 Ctrl+Click 跳转到定义、查找所有引用</li>
-                            </ul>
-                            <div class="doc-note">词汇和角色共享同一套能力（补全、高亮、跳转、引用），区别仅在于 <code>type</code> 字段。</div>
                         </div>
                     </div>
 
@@ -575,25 +432,8 @@
                         </div>
                         <div class="card-desc">用正则表达式定义自定义着色规则。可匹配对话、书名号、特殊标记等，用颜色直观区分文本类型。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="doc-toggle" data-doc-id="regex-coloring">查看文档</button>
                             <span class="hint">在包管理器中右键文件夹可新建着色规则</span>
-                        </div>
-                        <div class="card-doc">
-                            <h4>工作原理</h4>
-                            <p>正则着色规则是 <code>type: '正则表达式'</code> 的角色。通过 <code>regex</code> 字段定义匹配模式，<code>regexFlags</code> 定义标志位。</p>
-                            <h4>典型用例</h4>
-                            <ul>
-                                <li>匹配对话引号（<code>「[^」]+」</code>）</li>
-                                <li>匹配书名号（<code>《[^》]+》</code>）</li>
-                                <li>匹配特殊标记（如旁白、心理活动等）</li>
-                            </ul>
-                            <h4>关键字段</h4>
-                            <ul>
-                                <li><code>regex</code> — 正则表达式模式</li>
-                                <li><code>regexFlags</code> — 标志位（如 <code>g</code>、<code>i</code>）</li>
-                                <li><code>color</code> — 匹配文本的高亮颜色</li>
-                                <li><code>priority</code> — 优先级，高优先级规则优先生效</li>
-                            </ul>
                         </div>
                     </div>
                 </div>
@@ -610,17 +450,7 @@
                         </div>
                         <div class="card-desc">输入 @ 或角色名时自动弹出补全列表。支持拼音、别名、索引键匹配，快速插入角色名。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>触发方式</h4>
-                            <ul>
-                                <li>输入 <code>@</code> 触发全量角色列表</li>
-                                <li>直接输入角色名或别名的前几个字符</li>
-                                <li>支持拼音首字母匹配（如输入 <code>zsf</code> 匹配 "张三丰"）</li>
-                            </ul>
-                            <h4>匹配规则</h4>
-                            <p>补全系统会匹配角色的 <code>name</code>、<code>aliases</code>、<code>lookupKeys</code> 字段。索引键可自定义，支持拼音和罗马字转写。</p>
+                            <button class="doc-toggle" data-doc-id="role-completion">查看文档</button>
                         </div>
                     </div>
 
@@ -631,16 +461,7 @@
                         </div>
                         <div class="card-desc">状态栏实时显示当前文件字数和写作速度。支持多种统计方式（含标点/不含标点/万字显示）。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>统计模式</h4>
-                            <ul>
-                                <li>含标点 / 不含标点</li>
-                                <li>万字显示（如 12.3 万字）</li>
-                                <li>实时写作速度（字/分钟）</li>
-                            </ul>
-                            <p>可通过底部工具栏或 <code>.wcignore</code> 文件排除不需要统计的区域。</p>
+                            <button class="doc-toggle" data-doc-id="word-count">查看文档</button>
                         </div>
                     </div>
 
@@ -651,15 +472,8 @@
                         </div>
                         <div class="card-desc">追踪写作时长和产出量，支持里程碑提醒（如达到 1 万字时通知）。可通过仪表板查看历史趋势。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>功能</h4>
-                            <ul>
-                                <li>自动追踪每次写作会话的时长和产出字数</li>
-                                <li>里程碑提醒 — 达到设定字数时弹出通知</li>
-                                <li>仪表板 — 查看每日/每周/每月的写作趋势图表</li>
-                            </ul>
+                            <button class="primary-action" data-cmd="AndreaNovelHelper.openTimeStats">打开仪表板</button>
+                            <button class="doc-toggle" data-doc-id="time-stats">查看文档</button>
                         </div>
                     </div>
 
@@ -670,20 +484,7 @@
                         </div>
                         <div class="card-desc">基于规则或 LLM 的错别字检测。支持自动扫描、角色名误报抑制、自定义服务端点。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>校对模式</h4>
-                            <ul>
-                                <li><b>规则校对</b> — 基于内置规则检测常见错别字和标点错误</li>
-                                <li><b>LLM 校对</b> — 接入大语言模型进行更智能的纠错，支持自定义 API 端点</li>
-                            </ul>
-                            <h4>特性</h4>
-                            <ul>
-                                <li>角色名误报抑制 — 已定义的角色名不会被标记为错别字</li>
-                                <li>自动扫描 — 打开文件时自动检测</li>
-                                <li>快速修复 — 点击标记即可应用修复建议</li>
-                            </ul>
+                            <button class="doc-toggle" data-doc-id="typo-check">查看文档</button>
                         </div>
                     </div>
 
@@ -694,17 +495,7 @@
                         </div>
                         <div class="card-desc">右键选中文本即可翻译。支持中、英、日、德、法、韩等多种目标语言，结果可替换选区或复制。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>使用方式</h4>
-                            <p>选中文本 → 右键 → 翻译。翻译结果可以：</p>
-                            <ul>
-                                <li>替换选中的原文</li>
-                                <li>复制到剪贴板</li>
-                                <li>插入到文档末尾</li>
-                            </ul>
-                            <p>支持配置翻译服务端点和 API 密钥。</p>
+                            <button class="doc-toggle" data-doc-id="translate">查看文档</button>
                         </div>
                     </div>
 
@@ -715,42 +506,42 @@
                         </div>
                         <div class="card-desc">段落首行缩进、段间空行、智能引号补全、智能回车和跳出括号。底部工具栏可快速切换选项。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>排版功能</h4>
-                            <ul>
-                                <li><b>首行缩进</b> — 自动在段落开头添加全角空格</li>
-                                <li><b>段间空行</b> — 自动在段落之间插入空行</li>
-                                <li><b>智能引号</b> — 输入引号时自动配对（如 <code>"</code> → <code>「」</code>）</li>
-                                <li><b>智能回车</b> — 在引号内回车时自动跳出</li>
-                                <li><b>跳出括号</b> — 输入右括号时自动跳过而非重复插入</li>
-                            </ul>
-                            <p>底部工具栏可快速开关各项排版选项。也可通过 <kbd>Ctrl+Alt+I</kbd> 打开快速设置面板。</p>
+                            <button class="doc-toggle" data-doc-id="typeset">查看文档</button>
                         </div>
                     </div>
 
-                    <div class="card" data-keywords="大纲 outline 目录 文件 双重大纲 章节结构">
+                    <div class="card" data-keywords="大纲 outline 故事大纲 情节规划 章节大纲 双重大纲">
                         <div class="card-header">
-                            <div class="card-icon">&#x1F4D1;</div>
+                            <div class="card-icon"><img src="__IMAGES_URI__/checklist_light.svg" width="28" height="28" alt="大纲" class="card-icon-img"></div>
                             <div class="card-title">大纲</div>
                         </div>
-                        <div class="card-desc">双重大纲视图：目录大纲展示项目文件结构，文件大纲展示当前文档的标题层级。支持懒加载。</div>
+                        <div class="card-desc">为每个章节和文件夹创建独立的故事大纲 Markdown 文件。同时打开目录大纲和文件大纲，方便规划情节和记录笔记。</div>
                         <div class="card-actions">
-                            <button class="primary-action" data-cmd="AndreaNovelHelper.openDoubleOutline">打开大纲</button>
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="primary-action" data-cmd="AndreaNovelHelper.openDoubleOutline">打开双重大纲</button>
+                            <button class="primary-action" data-cmd="AndreaNovelHelper.openOutlinePicker">选择大纲</button>
+                            <button class="doc-toggle" data-doc-id="outline">查看文档</button>
                         </div>
-                        <div class="card-doc">
-                            <h4>双重大纲</h4>
-                            <p>同时打开两个大纲视图：</p>
-                            <ul>
-                                <li><b>目录大纲</b>（上）— 显示当前目录下的文件和子目录结构</li>
-                                <li><b>文件大纲</b>（下）— 显示当前文档的标题层级（类似 Markdown 目录）</li>
-                            </ul>
-                            <h4>懒加载模式</h4>
-                            <p>默认开启。大纲文件仅在可见时才生成/刷新，避免不必要的磁盘写入。可通过 <code>AndreaNovelHelper.outline.lazyMode</code> 配置。</p>
-                            <h4>大纲存储</h4>
-                            <p>大纲文件存储在 <code>novel-helper/outline/</code> 目录下，使用自定义文件系统方案 <code>andrea-outline://</code> 提供。</p>
+                    </div>
+
+                    <div class="card" data-keywords="导出 export 复制纯文本 txt typst pdf 排版 导出文件">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4E4;</div>
+                            <div class="card-title">导出与复制</div>
+                        </div>
+                        <div class="card-desc">复制纯文本到剪贴板、导出 TXT 文件、使用 Typst 模板导出 PDF/PNG/SVG/HTML。支持从编辑器、资源管理器和字数统计视图导出。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="export">查看文档</button>
+                        </div>
+                    </div>
+
+                    <div class="card" data-keywords="资源管理器 explorer 字数统计 当前文章角色 所有角色 侧栏 面板">
+                        <div class="card-header">
+                            <div class="card-icon">&#x1F4C1;</div>
+                            <div class="card-title">写作资源管理器</div>
+                        </div>
+                        <div class="card-desc">在 VS Code 资源管理器中显示当前文章角色和字数统计，在 ANH 侧栏中显示所有角色。帮助你快速浏览和管理写作资源。</div>
+                        <div class="card-actions">
+                            <button class="doc-toggle" data-doc-id="writing-explorer">查看文档</button>
                         </div>
                     </div>
                 </div>
@@ -768,58 +559,30 @@
                         <div class="card-desc">将工作区外的角色库、词汇表等目录挂载到 ANH 中统一管理，无需移动文件。</div>
                         <div class="card-actions">
                             <button data-cmd="AndreaNovelHelper.showExternalResourceManage">管理外部目录</button>
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>使用场景</h4>
-                            <p>当你有多个项目共享同一套角色库或词汇表时，可以将公共资源目录挂载为外部资源，避免重复复制。</p>
-                            <h4>操作</h4>
-                            <ul>
-                                <li>点击"管理外部目录"按钮添加或移除外部路径</li>
-                                <li>ANH 会自动扫描挂载目录中的所有角色文件</li>
-                                <li>外部资源中的角色与项目内角色享有相同的补全、高亮和引用能力</li>
-                            </ul>
+                            <button class="doc-toggle" data-doc-id="external-resource">查看文档</button>
                         </div>
                     </div>
 
-                    <div class="card" data-keywords="引用维护 热力图 reference maintenance heatmap 角色引用 断裂">
+                    <div class="card" data-keywords="引用维护 热力图 角色出场 circle packing 可视化 角色引用 出场次数 趋势图">
                         <div class="card-header">
                             <div class="card-icon">&#x1F525;</div>
                             <div class="card-title">引用维护与热力图</div>
                         </div>
-                        <div class="card-desc">查看角色在各章节中的出场频次热力图，检测引用断裂和孤立引用，维护角色引用一致性。</div>
+                        <div class="card-desc">用圆圈打包可视化展示角色出场次数分布，附带各章节出场趋势图。支持重建引用索引和清理过期路径。</div>
                         <div class="card-actions">
                             <button data-cmd="AndreaNovelHelper.showReferenceMaintenance">打开引用维护</button>
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>功能</h4>
-                            <ul>
-                                <li><b>热力图</b> — 可视化展示每个角色在各章节中的出场频次</li>
-                                <li><b>引用断裂检测</b> — 发现文本中提到但未定义的角色名</li>
-                                <li><b>孤立引用检测</b> — 发现定义了但从未在文本中出现的角色</li>
-                            </ul>
-                            <div class="doc-note">引用维护是保持角色一致性的关键工具，尤其在长篇小说中角色众多时非常有用。</div>
+                            <button class="doc-toggle" data-doc-id="reference-heatmap">查看文档</button>
                         </div>
                     </div>
 
-                    <div class="card" data-keywords="git 版本控制 提交 commit push pull 自动 自动提交">
+                    <div class="card" data-keywords="git 版本控制 提交 commit push pull 手动 自动">
                         <div class="card-header">
                             <div class="card-icon">&#x1F500;</div>
                             <div class="card-title">Git 集成</div>
                         </div>
-                        <div class="card-desc">可选的 Git 版本控制集成。支持自动提交、自动推送、自动拉取，追踪每次重要改动。</div>
+                        <div class="card-desc">推荐手动使用 Git 管理版本。ANH 提供 Git 身份配置向导、可选的自动提交功能和智能字数统计联动。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>功能</h4>
-                            <ul>
-                                <li><b>自动提交</b> — 保存文件时自动创建 Git 提交</li>
-                                <li><b>自动推送</b> — 提交后自动推送到远程仓库</li>
-                                <li><b>自动拉取</b> — 打开项目时自动拉取最新更改</li>
-                            </ul>
-                            <p>所有 Git 功能均可在设置中独立开关。初始化向导可一键完成 Git 仓库配置。</p>
+                            <button class="doc-toggle" data-doc-id="git-integration">查看文档</button>
                         </div>
                     </div>
 
@@ -830,18 +593,8 @@
                         </div>
                         <div class="card-desc">用可视化关系图管理角色之间的关系（亲属、敌对、同盟等）。支持自定义关系类型和方向。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="doc-toggle" data-doc-id="relationship">查看文档</button>
                             <span class="hint">在包管理器中右键文件夹可新建关系文件</span>
-                        </div>
-                        <div class="card-doc">
-                            <h4>关系文件</h4>
-                            <p>关系文件扩展名为 <code>.rjson5</code>，用 JSON5 格式定义角色之间的关系。支持：</p>
-                            <ul>
-                                <li>自定义关系类型（亲属、敌对、同盟、师徒等）</li>
-                                <li>有向/无向关系</li>
-                                <li>关系描述文本</li>
-                            </ul>
-                            <p>可视化关系图会自动从关系文件渲染，支持交互式浏览。</p>
                         </div>
                     </div>
 
@@ -852,18 +605,8 @@
                         </div>
                         <div class="card-desc">管理故事中的事件时间线。按时间顺序排列事件，关联涉及的角色和地点。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
+                            <button class="doc-toggle" data-doc-id="timeline">查看文档</button>
                             <span class="hint">在包管理器中右键文件夹可新建时间线</span>
-                        </div>
-                        <div class="card-doc">
-                            <h4>时间线文件</h4>
-                            <p>时间线文件扩展名为 <code>.tjson5</code>，用于管理故事中的事件序列。每个事件可包含：</p>
-                            <ul>
-                                <li>事件名称和描述</li>
-                                <li>发生时间（支持自定义时间体系）</li>
-                                <li>涉及的角色和地点</li>
-                                <li>事件之间的因果关系</li>
-                            </ul>
                         </div>
                     </div>
 
@@ -875,22 +618,7 @@
                         <div class="card-desc">在 ANH 中运行自定义 JS/TS 脚本，支持 MCP 服务器集成和丰富的运行时上下文注入。</div>
                         <div class="card-actions">
                             <button class="primary-action" data-cmd="andrea.scripts.newScript">新建脚本</button>
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>脚本运行</h4>
-                            <p>脚本位于 <code>novel-helper/scripts/</code> 目录下（可在设置中修改）。右键脚本文件即可运行。</p>
-                            <h4>运行时上下文</h4>
-                            <p>脚本执行时会注入丰富的上下文对象：</p>
-                            <ul>
-                                <li><code>ctx.activeDoc</code> — 当前编辑器文档的原始文本和纯文本</li>
-                                <li><code>ctx.mcp</code> — MCP 客户端实例，可调用 MCP 工具</li>
-                                <li><code>ctx.os</code> / <code>ctx.fs</code> / <code>ctx.path</code> — Node.js 内置模块</li>
-                                <li><code>ctx.output</code> — 输出通道（<code>console.log</code> 自动重定向到此）</li>
-                            </ul>
-                            <h4>MCP 服务器集成</h4>
-                            <p>可配置多个 MCP 服务器，脚本运行时自动连接。支持 Chrome 浏览器控制、数据库访问等扩展能力。</p>
-                            <div class="doc-note">脚本运行时是 ANH 最灵活的扩展机制。你可以用它实现自定义的文本处理、批量操作、数据导入导出等任何自动化任务。</div>
+                            <button class="doc-toggle" data-doc-id="script-runtime">查看文档</button>
                         </div>
                     </div>
 
@@ -901,16 +629,7 @@
                         </div>
                         <div class="card-desc">通过 WebDAV 协议同步项目文件到云端，支持多设备协作。可配置同步策略和自动同步间隔。</div>
                         <div class="card-actions">
-                            <button class="doc-toggle" data-doc>查看文档</button>
-                        </div>
-                        <div class="card-doc">
-                            <h4>功能</h4>
-                            <ul>
-                                <li>通过 WebDAV 协议将项目文件同步到支持 WebDAV 的云存储</li>
-                                <li>支持配置同步策略（全量同步 / 仅同步特定目录）</li>
-                                <li>可设置自动同步间隔</li>
-                                <li>适合多设备写作场景</li>
-                            </ul>
+                            <button class="doc-toggle" data-doc-id="webdav">查看文档</button>
                         </div>
                     </div>
                 </div>

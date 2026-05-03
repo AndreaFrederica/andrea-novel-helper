@@ -1,0 +1,100 @@
+<div class="doc-section beginner">
+<h4>WebDAV 同步是什么</h4>
+<p>WebDAV 同步就是 ANH 的<strong>网盘备份功能</strong>。它可以把你的小说项目自动同步到云端存储（如坚果云、ownCloud 等），防止数据丢失。</p>
+
+<h4>为什么不用普通网盘</h4>
+<p>普通网盘（如百度网盘、OneDrive）是整文件夹同步，而 WebDAV 同步更精细：ANH 会智能判断哪些文件变了、哪些没变，只同步需要同步的文件。</p>
+
+<h4>如何设置</h4>
+<ol>
+    <li>按 <kbd>Ctrl+Shift+P</kbd>，输入"WebDAV"</li>
+    <li>选择"管理 WebDAV 账户"</li>
+    <li>输入服务器地址、用户名、密码</li>
+    <li>关联当前项目到这个账户</li>
+</ol>
+
+<h4>密码安全</h4>
+<p>密码存储在 VS Code 的安全存储区里，不会明文保存在设置文件中。</p>
+
+<h4>自动同步</h4>
+<p>可以设置自动同步：每隔一段时间自动检查变更并同步。也可以手动触发同步。</p>
+
+<h4>同步方向</h4>
+<ul>
+    <li><b>双向同步</b> — 本地和云端互相更新</li>
+    <li><b>仅上传</b> — 只把本地改动传上去</li>
+    <li><b>仅下载</b> — 只把云端改动拉下来</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>功能</h4>
+<p>ANH 的 WebDAV 同步支持将项目文件同步到任意支持 WebDAV 协议的云存储（如坚果云、ownCloud、Nextcloud 等）。采用账户管理器模式，支持多账户和项目关联。</p>
+
+<h4>账户管理</h4>
+<p>WebDAV 采用<strong>账户管理器</strong>模式，而非在 settings.json 中直接填写服务器信息：</p>
+<ul>
+    <li><b>管理账户</b> — 命令 <code>andrea.webdav.manageAccounts</code> 打开账户管理面板</li>
+    <li><b>添加账户</b> — 在面板中输入服务器地址、用户名、密码。密码存储在 VS Code 的 SecretStorage 中，安全可靠</li>
+    <li><b>项目关联</b> — 每个工作区可以与特定 WebDAV 账户关联，实现多项目对应不同云端</li>
+    <li><b>多账户支持</b> — 可配置多个 WebDAV 账户，不同项目使用不同账户</li>
+</ul>
+
+<h4>同步机制</h4>
+<ul>
+    <li><b>智能比较</b> — 通过文件大小、修改时间、内容哈希综合判断文件是否需要同步</li>
+    <li><b>时间容差</b> — <code>AndreaNovelHelper.webdav.sync.timeTolerance</code> 处理文件系统时间精度差异</li>
+    <li><b>侧车元数据</b> — <code>AndreaNovelHelper.webdav.sync.enableMetadataSidecar</code> 使用 <code>.anhmeta.json</code> 存储本地文件的同步状态，避免重复传输未变更文件。后缀可通过 <code>metadataSidecarSuffix</code> 自定义</li>
+    <li><b>差异对比表</b> — <code>AndreaNovelHelper.webdav.sync.showDiffTable</code> 在同步前显示文件差异列表</li>
+    <li><b>Worker 线程</b> — 同步操作在后台执行，不阻塞 UI</li>
+</ul>
+
+<h4>同步策略</h4>
+<p><code>AndreaNovelHelper.webdav.sync.strategy</code> 控制如何判断文件是否需要同步：</p>
+<ul>
+    <li><code>timestamp</code> — 仅比较修改时间</li>
+    <li><code>size</code> — 仅比较文件大小</li>
+    <li><code>both</code> — 同时比较时间和大小</li>
+    <li><code>content</code> — 比较内容哈希（最精确，但开销最大）</li>
+</ul>
+
+<h4>自动同步</h4>
+<ul>
+    <li><code>AndreaNovelHelper.webdav.sync.autoSync.enabled</code> — 自动同步开关</li>
+    <li><code>AndreaNovelHelper.webdav.sync.autoSync.intervalMinutes</code> — 自动同步间隔（分钟）</li>
+    <li><code>AndreaNovelHelper.webdav.sync.autoSync.method</code> — 自动同步方向：
+        <ul>
+            <li><code>bidirectional</code> — 双向同步</li>
+            <li><code>upload</code> — 仅上传</li>
+            <li><code>download</code> — 仅下载</li>
+        </ul>
+    </li>
+</ul>
+
+<h4>忽略规则</h4>
+<ul>
+    <li><code>AndreaNovelHelper.webdav.sync.ignoredDirectories</code> — 忽略的目录列表（默认包含 .git、node_modules、.vscode、.anh-fsdb 等 20+ 个）</li>
+    <li><code>AndreaNovelHelper.webdav.sync.ignoredFiles</code> — 忽略的文件模式</li>
+    <li><code>AndreaNovelHelper.webdav.sync.ignoreAppDataDirectories</code> — 是否忽略应用数据目录</li>
+</ul>
+
+<h4>文件浏览器</h4>
+<p>ANH 提供 WebDAV 文件浏览器侧边栏，支持以下操作：</p>
+<ul>
+    <li>浏览远程文件和目录结构</li>
+    <li><code>andrea.webdav.openFile</code> — 打开远程文件</li>
+    <li><code>andrea.webdav.uploadFile</code> — 上传本地文件到远程</li>
+    <li><code>andrea.webdav.deleteFile</code> — 删除远程文件</li>
+    <li><code>andrea.webdav.createFolder</code> — 创建远程文件夹</li>
+    <li><code>andrea.webdav.renameFile</code> / <code>copyFile</code> — 重命名/复制</li>
+</ul>
+
+<h4>其他配置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.webdav.sync.skipDatabaseAccess</code> — 跳过数据库访问（用于故障排查）</li>
+</ul>
+
+<h4>手动同步</h4>
+<p>即使关闭了自动同步，也可以通过命令面板手动触发："ANH: WebDAV 同步"。同步前会自动检测冲突并提示处理方案。</p>
+<div class="doc-note">WebDAV 密码存储在 VS Code 的 SecretStorage 中，不会明文保存在 settings.json 里。首次使用需要先通过账户管理器添加账户。</div>
+</div>

@@ -1,0 +1,129 @@
+<div class="doc-section beginner">
+<p style="text-align:center;margin-bottom:12px;"><img src="images/anh_logo_dark.svg" alt="ANH Logo" style="max-width:120px;height:auto;"></p>
+<h4>👋 ANH 是什么</h4>
+<p><b>Andrea Novel Helper（ANH）</b>是一个帮你写小说的 VS Code 插件。你可以把它想象成一个<strong>智能写作助手</strong>——它帮你记住所有角色名字、自动给角色名上色、还能在你忘记某个词怎么写的时候自动提醒。</p>
+<p>核心理念很简单：把你的<strong>角色、地名、敏感词、特殊用语</strong>放进一个"资料集"里，然后 ANH 会在你写作时自动调用这些资料。就像你写作时旁边放了一本"设定百科全书"，ANH 会帮你自动翻阅。</p>
+
+<h4>5 分钟快速上手</h4>
+<p>不需要任何技术基础，跟着下面的步骤做，5 分钟后你就能体验到 ANH 的核心功能。</p>
+
+<h4>第 1 步：创建你的小说项目</h4>
+<ol>
+    <li>打开 VS Code，新建或打开一个空文件夹作为你的小说项目</li>
+    <li>ANH 会自动弹窗询问：<b>"是否在当前工作区启用 Andrea Novel Helper？"</b> — 点击<b>"启用本工作区"</b></li>
+    <li>如果 ANH 检测到没有角色/词汇等描述文件，会再次弹窗：<b>"是否运行项目初始化向导？"</b> — 点击<b>"运行向导"</b></li>
+    <li>跟着向导填写：项目名称、你的名字（其他都可以跳过）</li>
+    <li>完成后，ANH 的视图（包管理器、字数统计等）就会出现在侧边栏中</li>
+</ol>
+
+<h4>第 2 步：创建你的第一个角色</h4>
+<ol>
+    <li>在左侧活动栏点击 ANH 图标，打开"包管理器"，右键 <code>novel-helper/main/</code> 目录节点</li>
+    <li>选择"创建角色库 (MD/JSON5/TXT)" → 选择 <b>Markdown</b> 格式 → 输入文件名 <code>my-characters</code></li>
+    <li>在打开的文件中写入你的第一个角色：
+        <pre><code># 我的角色
+
+## 林小满
+
+### 类型
+主角
+
+### 颜色
+#FF6B6B
+
+### 别名
+小满
+
+### 描述
+一个喜欢雨天咖啡店的女孩。
+</code></pre>
+    </li>
+    <li>按 <kbd>Ctrl+S</kbd> 保存文件</li>
+</ol>
+
+<h4>第 3 步：体验角色自动提示</h4>
+<ol>
+    <li>新建一个 Markdown 文件（如 <code>chapter1.md</code>）</li>
+    <li>输入 <code>@</code>，会弹出一个列表，里面有"林小满"</li>
+    <li>点击"林小满"，名字会自动插入到文档中</li>
+    <li>你也可以直接输入"小满"（别名），同样会弹出提示</li>
+</ol>
+
+<h4>第 4 步：观察魔法上色效果</h4>
+<ol>
+    <li>在文档中写一段文字：
+        <pre><code>林小满推开咖啡店的门，风铃轻轻响了一声。
+
+"今天还是老样子？" 老板问。
+
+"嗯，美式加一份浓缩。" 林小满笑着坐下。
+</code></pre>
+    </li>
+    <li>你会发现"林小满"三个字变成了你设定的颜色（珊瑚红）</li>
+    <li>把鼠标停在"林小满"上，会显示你写的描述</li>
+    <li>按住 <kbd>Ctrl</kbd> 点击"林小满"，会直接跳转到角色资料</li>
+</ol>
+
+<h4>第 5 步：实时预览你的章节</h4>
+<ol>
+    <li>按 <kbd>Ctrl+Shift+P</kbd>，输入"打开预览"</li>
+    <li>选择"ANH: 打开 Markdown/TXT 预览" <img src="images/preview_dark.svg" alt="预览" style="width:16px;height:16px;vertical-align:middle;margin-left:4px;"></li>
+    <li>右侧会出现预览面板，实时显示你的内容</li>
+    <li>预览中"林小满"也会以珊瑚红色高亮显示</li>
+</ol>
+
+<h4>第 6 步：查看写作字数</h4>
+<ol>
+    <li>看 VS Code 底部状态栏，会显示当前字数（如 <code>1.2k</code>）</li>
+    <li>点击字数可以切换统计方式</li>
+    <li>继续写作，观察字数变化</li>
+</ol>
+
+<h4>🎉 你已完成 Hello World！</h4>
+<p>到这里，你已经体验了 ANH 最核心的功能：</p>
+<ul>
+    <li>✅ 项目初始化向导</li>
+    <li>✅ 用 Markdown 创建角色</li>
+    <li>✅ 角色名自动提示（@触发 + 别名匹配）</li>
+    <li>✅ 角色名自动上色</li>
+    <li>✅ 悬停查看角色信息</li>
+    <li>✅ Ctrl+Click 跳转角色定义</li>
+    <li>✅ 实时预览</li>
+    <li>✅ 实时字数统计</li>
+</ul>
+
+<h4>接下来可以探索</h4>
+<ul>
+    <li>在"包管理器"中创建<b>敏感词库</b>，体验实时敏感词检测</li>
+    <li>创建<b>词汇表</b>管理世界观专有名词</li>
+    <li>尝试<b>角色卡编辑器</b>：右键角色文件 → Open With → 角色 JSON5 编辑器</li>
+    <li>打开<b>双重大纲</b>查看目录结构</li>
+    <li>按 <kbd>Ctrl+Alt+I</kbd> 打开<b>快速设置面板</b></li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>ANH 架构概览</h4>
+<p><b>Andrea Novel Helper</b> 是一个围绕"Package / Role"统一对象模型构建的 VS Code 扩展。所有资源（角色、词汇、敏感词、正则规则）共享同一套底层机制：Aho-Corasick 自动机匹配、Decoration API 高亮、CompletionItemProvider 补全、ReferenceProvider 引用追踪。</p>
+
+<h4>核心模块</h4>
+<ul>
+    <li><b>Package Manager</b> — TreeDataProvider，管理 <code>novel-helper/</code> 目录下的包结构，支持 Markdown/JSON5/CSV/TXT 四种格式</li>
+    <li><b>Role Service</b> — 统一角色接口，通过 <code>type</code> 字段区分资源类型。运行时样式平级存储，编辑器保存时收敛到 <code>style</code> 对象</li>
+    <li><b>Typo Service</b> — 段落级 FNV-1a 哈希缓存 + 批量并发检测。支持外部 HTTP 服务（macro/llm）和客户端直连 LLM 两种模式</li>
+    <li><b>Word Count</b> — 多级缓存（内存 + 持久化分片 + Worker 线程），GitGuard 校验缓存有效性</li>
+    <li><b>Webview Panels</b> — 文档中心、角色卡编辑器、时间线/关系图编辑器、设置面板等均基于 Webview API</li>
+</ul>
+
+<h4>配置体系</h4>
+<p>三层优先级：<code>project-config.json5</code> > VS Code 工作区设置 > 插件默认值。项目配置可覆盖同名 VS Code 设置，实现多项目隔离。</p>
+
+<h4>扩展点</h4>
+<ul>
+    <li>Custom Text Editor — 角色卡 JSON5 编辑器、时间线编辑器、关系图编辑器</li>
+    <li>CompletionItemProvider — 角色/词汇补全</li>
+    <li>DocumentLinkProvider / ReferenceProvider — 跳转定义与查找引用</li>
+    <li>TreeDataProvider — 包管理器、字数统计、所有角色</li>
+</ul>
+<div class="doc-note">ANH 通过检测 <code>anhproject.md</code> 或 <code>novel-helper/</code> 目录来识别项目根目录。确保直接打开项目文件夹而非父目录。</div>
+</div>

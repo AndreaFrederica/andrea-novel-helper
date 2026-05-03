@@ -1,0 +1,88 @@
+<div class="doc-section beginner">
+<h4>字数统计看哪里</h4>
+<p>ANH 的字数统计主要有两个入口：底部状态栏显示当前正在写的文件，左侧 VS Code 资源管理器里的<strong>写作资源管理器（小说助手）</strong>显示整个工作区的文件和文件夹字数。</p>
+
+<h4>状态栏显示什么</h4>
+<ul>
+    <li><b>当前速度</b> — 你最近一段时间的输入速度，单位可以是 CPM（字/分钟）或 CPH（字/小时）</li>
+    <li><b>累计用时</b> — 当前文件已经记录到的写作时间</li>
+    <li><b>当前文件字数</b> — 默认按“词计”显示，即中文按字、英文按单词</li>
+    <li><b>活跃状态</b> — 笔形表示正在写，睡眠标记表示已经闲置</li>
+</ul>
+<p>把鼠标悬停在状态栏统计项上，可以看到中文字符、英文单词、含标点、不含标点、会话数、文件路径等详细信息。点击状态栏统计项会打开写作统计仪表板。</p>
+
+<h4>写作资源管理器</h4>
+<p>在 VS Code 左侧活动栏点击<strong>资源管理器</strong>图标，然后找到<strong>写作资源管理器（小说助手）</strong>。这里会显示工作区内支持统计的文件和文件夹，文件夹会自动汇总下级内容。</p>
+<ul>
+    <li><b>展开文件夹</b> — 查看章节和子目录</li>
+    <li><b>点击文件</b> — 打开该文件</li>
+    <li><b>右键文件/文件夹</b> — 新建、重命名、删除、复制、剪切、粘贴、导出、强制重算</li>
+    <li><b>拖拽</b> — 移动文件，或在手动排序模式下调整顺序</li>
+</ul>
+
+<h4>新建和整理章节</h4>
+<p>每个文件夹末尾都有两个快捷节点：<b>+ 新建文章</b>和<b>+ 新建文件夹</b>。也可以右键文件夹创建文章或文件夹。新建文章支持 Markdown 和 TXT。</p>
+
+<h4>哪些文件会统计</h4>
+<p>默认统计 Markdown、TXT、JSON5、CSV、OJSON5、RJSON5、TJSON5 等 ANH 支持的文本资源。图片、PDF、Office 文档、思维导图等可以显示为参考资料，但不会计入字数。</p>
+
+<h4>不想统计某些文件</h4>
+<p>在工作区根目录创建 <code>.wcignore</code>，写入要排除的路径或文件名。默认也会遵循 <code>.gitignore</code>。当 <code>.wcignore</code> 或 <code>.gitignore</code> 变化时，ANH 会自动刷新字数统计。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>统计口径</h4>
+<p>ANH 内部统计多组数值，状态栏显示哪一组由配置决定：</p>
+<ul>
+    <li><code>excludePunct</code> — 词计：中文 CJK 字符 + 英文单词，默认推荐</li>
+    <li><code>includePunct</code> — 含标点：所有非空白字符</li>
+    <li><code>nonWSNoPunct</code> — 不含标点：非空白且排除标点</li>
+</ul>
+<p>显示格式由 <code>AndreaNovelHelper.wordCount.displayFormat</code> 控制，支持 <code>raw</code>、<code>wan</code>、<code>k</code>、<code>qian</code>。</p>
+
+<h4>写作资源管理器行为</h4>
+<ul>
+    <li><b>位置</b>：注册在 VS Code 原生资源管理器视图组内，视图名是<strong>写作资源管理器（小说助手）</strong></li>
+    <li><b>目录聚合</b>：文件夹节点显示下级文件的合计字数，目录聚合有内存缓存并在文件变化后增量刷新</li>
+    <li><b>参考文件</b>：<code>AndreaNovelHelper.wordCount.referenceVisibleExtensions</code> 中的扩展名只显示不计数</li>
+    <li><b>资源目录标记</b>：目录内存在 ANH 资源标记文件时，树节点会按资源目录提示</li>
+    <li><b>自动定位</b>：切换活动编辑器时，若字数视图可见，会尝试在树中定位当前文件</li>
+</ul>
+
+<h4>右键菜单</h4>
+<ul>
+    <li><b>新建</b>：新建文章、新建文件夹、在当前节点上方/下方插入文章或文件夹</li>
+    <li><b>打开</b>：打开文件、Open With、在系统资源管理器中显示</li>
+    <li><b>文件操作</b>：重命名、删除、复制、剪切、粘贴</li>
+    <li><b>排序</b>：启用/关闭手动排序、按文件名生成索引、手动设置索引、清除索引、批量重建索引</li>
+    <li><b>重算</b>：强制重算当前节点或整个工作区，重扫目录内资源文件</li>
+    <li><b>导出</b>：复制纯文本、导出 TXT、使用 Typst 模板导出</li>
+</ul>
+
+<h4>手动排序</h4>
+<p>默认是自动排序。对文件夹启用手动排序后，可以拖拽调整同一父目录下的顺序。排序数据使用内部索引保存，不会改真实文件名；如果开启 <code>AndreaNovelHelper.wordCount.order.showIndexInLabel</code>，树节点前会显示连续序号。</p>
+
+<h4>缓存与性能</h4>
+<ul>
+    <li><b>Worker 统计</b>：文件字数通过后台 Worker 计算，避免阻塞编辑器</li>
+    <li><b>持久化缓存</b>：字数缓存写入文件追踪数据库，位置在 <code>novel-helper/.anh-fsdb/</code></li>
+    <li><b>GitGuard</b>：存在 Git 仓库时，会结合 Git 状态判断缓存可信度</li>
+    <li><b>无 Git 仓库</b>：启动后会强制刷新字数缓存，并提示建议执行 <code>git init</code></li>
+    <li><b>大文件估算</b>：超过 <code>AndreaNovelHelper.wordCount.largeFileThreshold</code> 时先显示估算，再排队精确统计</li>
+    <li><b>启动优化</b>：<code>skipStartupStatCheck</code> 可以跳过启动校验，速度更快但风险更高；<code>parallelStatCheck</code> 控制并行校验</li>
+</ul>
+
+<h4>常用配置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.supportedFileTypes</code> — 被 ANH 视为支持文本的语言/文件类型</li>
+    <li><code>AndreaNovelHelper.wordCount.primaryUnit</code> — 状态栏首要字数单位</li>
+    <li><code>AndreaNovelHelper.wordCount.statusBar.mode</code> — <code>detailed</code>、<code>semi</code>、<code>compact</code></li>
+    <li><code>AndreaNovelHelper.wordCount.statusBar.speedUnit</code> — <code>cpm</code> 或 <code>cph</code></li>
+    <li><code>AndreaNovelHelper.wordCount.respectGitignore</code> — 是否遵循 <code>.gitignore</code></li>
+    <li><code>AndreaNovelHelper.wordCount.respectWcignore</code> — 是否遵循 <code>.wcignore</code></li>
+    <li><code>AndreaNovelHelper.wordCount.maxWorkers</code> / <code>maxWorkersUpperLimit</code> — 后台统计并发控制</li>
+    <li><code>AndreaNovelHelper.wordCount.order.step</code> / <code>padWidth</code> / <code>autoResequence</code> — 手动排序索引参数</li>
+</ul>
+
+<div class="doc-note">字数统计负责“当前项目文本有多少”；写作时间统计负责“你什么时候写、写了多久、写作速度如何”。两者共享部分状态栏显示和内部文件追踪数据。</div>
+</div>

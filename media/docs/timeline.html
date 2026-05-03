@@ -1,0 +1,138 @@
+<div class="doc-section beginner">
+<h4>时间线是什么</h4>
+<p>时间线是用来记录小说中<strong>事件先后顺序</strong>的工具。你可以把它想象成一个"故事日历"，把重要事件按时间排列，还能把角色和地点关联到每个事件上。</p>
+
+<h4>什么时候会用到</h4>
+<ul>
+    <li>整理复杂的时间线（如穿越、轮回、多时间线）</li>
+    <li>追踪角色在不同时间点的位置和行动</li>
+    <li>确保事件顺序不出错</li>
+</ul>
+
+<h4>如何创建</h4>
+<ol>
+    <li>在包管理器中右键目录节点</li>
+    <li>选择"创建时间线文件 (.tjson5)"</li>
+    <li>输入文件名，ANH 会自动生成模板</li>
+</ol>
+
+<h4>可视化编辑器</h4>
+<p>双击 <code>.tjson5</code> 文件会打开可视化编辑器：</p>
+<ul>
+    <li>事件以卡片形式显示在时间轴上</li>
+    <li>可以拖拽调整顺序和位置</li>
+    <li>支持不同连线类型：正常顺序、闪回、梦境、平行世界等</li>
+    <li>可以关联角色和地点</li>
+</ul>
+
+<h4>时间格式很自由</h4>
+<p>不需要用真实日期，可以用任何你喜欢的时间体系：</p>
+<ul>
+    <li>"第一章"、"第二章"</li>
+    <li>"2024年春"</li>
+    <li>"第三纪元"</li>
+    <li>"早/中/晚"</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>时间线文件格式（.tjson5）</h4>
+<p>时间线文件使用 <code>.tjson5</code> 扩展名，采用 JSON5 格式定义故事中的事件序列。支持注释、尾随逗号等 JSON5 特性。</p>
+
+<p><b>根结构</b>：</p>
+<pre><code>{
+  events: [],      // 事件数组
+  connections: []  // 事件连接数组
+}
+</code></pre>
+
+<p><b>事件（event）字段</b>：</p>
+<ul>
+    <li><code>id</code> — 事件唯一标识（必填）</li>
+    <li><code>title</code> — 事件名称（必填）</li>
+    <li><code>description</code> — 事件描述</li>
+    <li><code>date</code> — 发生时间，支持任意自定义时间体系（如"第一章"、"2024年春"、"第三纪元"）</li>
+    <li><code>endDate</code> — 结束时间，支持时间区间事件</li>
+    <li><code>timeless</code> — 布尔值，标记为无时间事件</li>
+    <li><code>type</code> — 事件类型：<code>main</code>（主线）或 <code>side</code>（支线）</li>
+    <li><code>data.type</code> — 详细类型：如 <code>condition</code>（条件/状态节点）</li>
+    <li><code>color</code> — 事件节点颜色</li>
+    <li><code>position</code> — 布局坐标 <code>{ x, y }</code></li>
+    <li><code>width</code> / <code>height</code> — 节点尺寸</li>
+    <li><code>parentNode</code> — 父节点 id，支持嵌套事件</li>
+    <li><code>extent</code> — 嵌套范围</li>
+    <li><code>expandParent</code> — 是否扩展父节点</li>
+    <li><code>bindings</code> — 绑定数组，统一存放角色、地点、物品等关联：
+        <ul>
+            <li><code>uuid</code> — 绑定对象标识</li>
+            <li><code>type</code> — 绑定类型：<code>character</code>（角色）、<code>location</code>（地点）、<code>item</code>（物品）、<code>article</code>（文章）、<code>other</code></li>
+            <li><code>label</code> — 显示标签</li>
+            <li><code>status</code> — 状态</li>
+            <li><code>documentTitle</code> — 关联文档标题</li>
+        </ul>
+    </li>
+</ul>
+
+<p><b>连接（connection）字段</b>：</p>
+<ul>
+    <li><code>source</code> — 起始事件 id（必填）</li>
+    <li><code>target</code> — 目标事件 id（必填）</li>
+    <li><code>connectionType</code> — 连接类型：
+        <ul>
+            <li><code>normal</code> — 正常顺序</li>
+            <li><code>time-travel</code> — 时间穿越</li>
+            <li><code>reincarnation</code> — 转世/轮回</li>
+            <li><code>parallel</code> — 平行世界</li>
+            <li><code>dream</code> — 梦境</li>
+            <li><code>flashback</code> — 闪回</li>
+            <li><code>other</code> — 其他</li>
+        </ul>
+    </li>
+    <li><code>sourceHandle</code> / <code>targetHandle</code> — 条件节点手柄 ID（如条件节点的 'true'/'false' 输出）</li>
+</ul>
+
+<p><b>完整示例</b>：</p>
+<pre><code>{
+  events: [
+    {
+      id: "event1",
+      title: "幻想乡建立",
+      date: "1885年",
+      description: "博丽大结界建立，幻想乡与外界隔绝。",
+      type: "main",
+      bindings: [
+        { uuid: "reimu", type: "character", label: "博丽灵梦" },
+        { uuid: "hakurei", type: "location", label: "博丽神社" }
+      ]
+    },
+    {
+      id: "event2",
+      title: "第一次异变",
+      date: "春",
+      type: "side"
+    }
+  ],
+  connections: [
+    { source: "event1", target: "event2", connectionType: "normal" }
+  ]
+}
+</code></pre>
+
+<h4>GUI 编辑器</h4>
+<p>ANH 为时间线文件提供了可视化编辑器（<code>TimelineJson5EditorProvider</code>）：</p>
+<ul>
+    <li><b>时间轴布局</b> — 事件按时间顺序排列在时间轴上，支持水平/垂直切换</li>
+    <li><b>事件卡片</b> — 每个事件以卡片形式展示，包含标题、时间、描述</li>
+    <li><b>连接可视化</b> — 不同连接类型使用不同样式（实线/虚线/曲线/颜色）</li>
+    <li><b>拖拽编辑</b> — 支持拖动事件调整顺序和位置，拖拽创建连接</li>
+    <li><b>条件节点</b> — 支持条件分支，通过 sourceHandle/targetHandle 连接 true/false 分支</li>
+    <li><b>嵌套事件</b> — 通过 parentNode 实现事件层级嵌套</li>
+    <li><b>绑定管理</b> — 在编辑器中直接关联角色、地点、物品</li>
+    <li><b>自动保存</b> — 布局变更自动写回 <code>.tjson5</code> 文件</li>
+</ul>
+<p>打开方式：双击 <code>.tjson5</code> 文件即可打开可视化时间线编辑器。</p>
+
+<h4>创建时间线文件</h4>
+<p>在包管理器中右键目录节点 → "创建时间线文件 (.tjson5)"，输入文件名即可生成带模板的 <code>.tjson5</code> 文件。</p>
+<div class="doc-note">时间线支持完全自定义的时间体系，不要求使用真实日期。事件使用 <code>title</code> 而非 <code>name</code>，时间使用 <code>date</code> 而非 <code>time</code>。角色和地点统一放在 <code>bindings</code> 数组中，通过 <code>type</code> 区分。</div>
+</div>

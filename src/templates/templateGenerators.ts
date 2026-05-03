@@ -235,6 +235,52 @@ export function generateRegexPatternsTemplate(): string {
 ]`;
 }
 
+/** 正则着色配置 Markdown 模板 */
+export function generateMarkdownRegexPatternsTemplate(): string {
+    return `# 着色规则
+
+> 每个“## 规则名称”是一条正则表达式角色。正则内容建议放在代码块中，避免 #、*、[] 等字符被 Markdown 当成格式。
+
+## 中文对话
+
+### 类型
+正则表达式
+
+### 正则
+\`\`\`regex
+「[^」]*」
+\`\`\`
+
+### 正则标志
+g
+
+### 颜色
+#98FB98
+
+### 优先级
+100
+
+## 书名号
+
+### 类型
+正则表达式
+
+### 正则
+\`\`\`regex
+《[^》]+》
+\`\`\`
+
+### 正则标志
+g
+
+### 颜色
+#87CEEB
+
+### 优先级
+90
+`;
+}
+
 /** 示例角色（JSON5 / 代码中复用） */
 // 公共示例角色，供多种模板复用，避免重复硬编码
 const EXAMPLE_ROLE: Role = {

@@ -1,0 +1,138 @@
+<div class="doc-section beginner">
+<h4>敏感词检测是什么</h4>
+<p>敏感词检测就像你写作时的<strong>自动审查员</strong>。如果你在文中写了某些敏感词，ANH 会在这些词下面画波浪线提醒你，并提供一键替换建议。</p>
+
+<h4>为什么需要这个功能</h4>
+<ul>
+    <li>有些平台对特定词汇有限制，提前检查可以避免发布后出问题</li>
+    <li>提醒自己避免使用某些不合适的表达</li>
+    <li>快速批量替换为更合适的说法</li>
+</ul>
+
+<h4>如何创建敏感词库</h4>
+<ol>
+    <li>在包管理器中右键目录节点</li>
+    <li>选择"创建敏感词库 (MD/JSON5/TXT)"</li>
+    <li>选择 Markdown 格式（推荐）</li>
+    <li>输入文件名，比如 <code>sensitive-words.md</code></li>
+</ol>
+
+<h4>敏感词格式示例（Markdown）</h4>
+<pre><code># 敏感词库
+
+## 暴力
+
+### 类型
+敏感词
+
+### 修复
+打斗
+冲突
+
+### 优先级
+2
+
+### 颜色
+#FF4D4F
+
+### 别名
+bao力
+</code></pre>
+
+<h4>关键字段说明</h4>
+<ul>
+    <li><b>名称</b> — 敏感词本身</li>
+    <li><b>别名</b> — 变体写法，比如拼音、谐音</li>
+    <li><b>修复</b> — 建议替换的词，可以写多个</li>
+    <li><b>颜色</b> — 高亮显示的颜色</li>
+    <li><b>优先级</b> — 严重程度，数字越小越严重</li>
+</ul>
+
+<h4>如何使用</h4>
+<ol>
+    <li>在编辑器中写文时，敏感词会自动标记波浪线</li>
+    <li>点击波浪线或旁边的 💡 灯泡图标</li>
+    <li>选择"替换为：xxx"一键替换</li>
+</ol>
+
+<h4>角色名不会被误报</h4>
+<p>如果你把某个词同时设成了角色名和敏感词，ANH 会智能判断，不会在你的角色名上画波浪线。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>工作原理</h4>
+<p>敏感词本质上是 <code>type: '敏感词'</code> 的角色。ANH 使用 Aho-Corasick 自动机对编辑器文本进行实时扫描，匹配 <code>name</code> 和 <code>aliases</code> 字段。匹配到的词汇会在编辑器中用波浪线诊断标记（Diagnostic）高亮显示。</p>
+<p>敏感词检测具有以下特性：</p>
+<ul>
+    <li><b>实时检测</b> — 输入时即时标记，延迟极低</li>
+    <li><b>角色名误报抑制</b> — 如果某个"敏感词"实际上是你作品中已定义的角色名，ANH 会自动跳过，避免误报</li>
+    <li><b>大文件保护</b> — 当文件超过 <code>AndreaNovelHelper.hugeFile.thresholdBytes</code>（默认 51200 字节，约 50KB）时，自动降级为轻量模式</li>
+    <li><b>分词过滤</b> — 角色的 <code>wordSegmentFilter</code> 字段可避免单字误匹配</li>
+</ul>
+
+<h4>文件格式规范</h4>
+<p>敏感词库支持 Markdown、JSON5、CSV 三种格式（不支持纯 TXT），命名规则为 <code>sensitive-words.md</code> 或 <code>*_sensitive.md</code>。</p>
+
+<p><b>Markdown 格式示例</b>：</p>
+<pre><code># 敏感词库
+
+## 暴力
+
+### 类型
+敏感词
+
+### 修复
+打斗
+冲突
+
+### 优先级
+2
+
+### 颜色
+#FF4D4F
+
+### 别名
+bao力
+</code></pre>
+
+<p><b>JSON5 格式示例</b>：</p>
+<pre><code>[
+  {
+    name: "暴力",
+    type: "敏感词",
+    aliases: ["bao力"],
+    fixes: ["打斗", "冲突"],
+    replacements: ["打斗"],
+    priority: 2,
+    color: "#FF4D4F",
+    wordSegmentFilter: true
+  }
+]
+</code></pre>
+
+<h4>关键字段</h4>
+<ul>
+    <li><code>name</code> — 敏感词本身，必填</li>
+    <li><code>aliases</code> — 敏感词的别名变体，如拼音、谐音、缩写</li>
+    <li><code>fixes</code> / <code>fixs</code> / <code>fix</code> / <code>replacements</code> / <code>replacement</code> — 修复建议列表。右键点击编辑器中的敏感词标记时，会弹出 Quick Fix 菜单，可一键替换为建议词</li>
+    <li><code>priority</code> — 严重级别，影响标记颜色。数字越小优先级越高，默认 999</li>
+    <li><code>color</code> — 敏感词的高亮颜色</li>
+    <li><code>wordSegmentFilter</code> — 是否启用分词过滤，避免单字误匹配</li>
+</ul>
+
+<h4>fixes 字段兼容性</h4>
+<p>ANH 对修复字段有广泛的兼容处理：字段名可以是 <code>fixes</code>、<code>fixs</code>、<code>fix</code>、<code>replacements</code>、<code>replacement</code>，解析时会统一处理为修复候选数组。当你将某个词汇标记为敏感词并提供了修复值后，其他角色的 <code>fixes</code> 值被匹配时不会触发敏感词警告。</p>
+
+<h4>创建敏感词库</h4>
+<p>在包管理器中右键目录节点 → "创建敏感词库 (MD/JSON5/TXT)"，选择格式（推荐 Markdown 或 JSON5），输入文件名即可创建。创建后会自动打开文件供你编辑。</p>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.sensitiveWordsFile</code> — 默认敏感词文件路径（默认 <code>novel-helper/sensitive-words.json5</code>）</li>
+    <li><code>AndreaNovelHelper.sensitiveWords.warningLevel</code> — 诊断级别（error/warning/information/hint，默认 error）</li>
+</ul>
+
+<h4>GUI 编辑器</h4>
+<p>敏感词可以通过角色卡编辑器进行可视化编辑。在编辑器中将类型设为"敏感词"后，界面会显示专属的"修复词"输入框，支持逐行添加修复建议。编辑器按 VS Code 的 autoSave 策略保存。</p>
+<div class="doc-note">敏感词也支持角色名误报抑制 — 如果某个"敏感词"实际上是你作品中的角色名，ANH 会自动跳过。这避免了正常角色名被错误标记的尴尬。</div>
+</div>

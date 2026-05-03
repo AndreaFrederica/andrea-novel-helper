@@ -139,10 +139,13 @@ export async function checkGitConfigAndGuide(workspaceRoot: string, options?: Gi
 }
 
 export function registerGitConfigCommand(context: vscode.ExtensionContext) {
-    const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!ws) { return; }
     const cmd = vscode.commands.registerCommand('AndreaNovelHelper.setupGitIdentity', () => {
-    checkGitConfigAndGuide(ws);
+        const ws = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!ws) {
+            vscode.window.showErrorMessage('没有工作区，无法配置 Git 用户信息');
+            return;
+        }
+        checkGitConfigAndGuide(ws);
     });
     context.subscriptions.push(cmd);
 }

@@ -125,7 +125,7 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
             // 验证并保存每个设置项
             for (const [key, value] of Object.entries(settings)) {
                 // 验证键名是否有效（以AndreaNovelHelper开头） 或者以andrea开头
-                if (!key.startsWith('AndreaNovelHelper') && !key.startsWith('andrea')) {
+                if (!key.startsWith('AndreaNovelHelper') && !key.startsWith('andrea') && !key.startsWith('editor.')) {
                     console.warn(`跳过无效的配置键: ${key}`);
                     continue;
                 }
@@ -242,7 +242,10 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
             let section: string;
             let name: string;
 
-            if (dotCount >= 2) {
+            if (key.startsWith('editor.')) {
+                section = 'editor';
+                name = key.substring('editor.'.length);
+            } else if (dotCount >= 2) {
                 // 两个或两个以上.的情况：保留xxx.xxxx为section名称
                 const firstDotIndex = key.indexOf('.');
                 const secondDotIndex = key.indexOf('.', firstDotIndex + 1);
@@ -321,6 +324,7 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
 
             // 2. VS Code 编辑器配置
             'editor.wordWrap',
+            'editor.wrappingIndent',
             'editor.minimap.enabled',
             'editor.mouseWheelZoom',
             'editor.insertSpaces',
@@ -409,11 +413,122 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
                 }
             }
 
+            const existingKeys = new Set(properties.map(item => item.key));
+            for (const item of this.getBuiltInEditorConfigurations()) {
+                if (!existingKeys.has(item.key)) {
+                    properties.push(item);
+                }
+            }
+
             return properties;
         } catch (error) {
             this._logChannel.appendLine('读取配置定义时出错:'+error);
             return [];
         }
+    }
+
+    private getBuiltInEditorConfigurations(): Array<{key: string, schema: any}> {
+        return [
+            {
+                key: 'editor.wordWrap',
+                schema: {
+                    type: 'string',
+                    default: 'off',
+                    enum: ['off', 'on', 'wordWrapColumn', 'bounded'],
+                    enumDescriptions: [
+                        '不自动换行',
+                        '按编辑器窗口宽度换行',
+                        '按 editor.wordWrapColumn 换行',
+                        '在窗口宽度和 editor.wordWrapColumn 之间取较小值换行'
+                    ],
+                    anhName: '自动换行模式',
+                    markdownDescription: '控制长行是否在编辑器中自动折到下一行。写长段落时通常建议使用 on。'
+                }
+            },
+            {
+                key: 'editor.wrappingIndent',
+                schema: {
+                    type: 'string',
+                    default: 'same',
+                    enum: ['none', 'same', 'indent', 'deepIndent'],
+                    enumDescriptions: [
+                        '折行不额外缩进',
+                        '折行与原行同列',
+                        '折行增加一层缩进',
+                        '折行增加两层缩进'
+                    ],
+                    anhName: '折行缩进',
+                    markdownDescription: '控制自动换行后的视觉缩进。它只影响屏幕显示，不会向文件写入空格；写小说时推荐 none，符合常见写作软件的习惯。'
+                }
+            },
+            {
+                key: 'editor.minimap.enabled',
+                schema: {
+                    type: 'boolean',
+                    default: true,
+                    anhName: '显示 Minimap 小地图',
+                    markdownDescription: '控制编辑器右侧的小地图。长篇写作时可关闭以腾出横向空间。'
+                }
+            },
+            {
+                key: 'editor.mouseWheelZoom',
+                schema: {
+                    type: 'boolean',
+                    default: false,
+                    anhName: 'Ctrl+滚轮缩放字体',
+                    markdownDescription: '开启后可按住 Ctrl 并滚动鼠标滚轮快速调整编辑器字号。'
+                }
+            },
+            {
+                key: 'editor.insertSpaces',
+                schema: {
+                    type: 'boolean',
+                    default: true,
+                    anhName: '缩进使用空格',
+                    markdownDescription: '开启后按 Tab 会插入空格；关闭后插入制表符。'
+                }
+            },
+            {
+                key: 'editor.tabSize',
+                schema: {
+                    type: 'number',
+                    default: 4,
+                    minimum: 1,
+                    maximum: 8,
+                    anhName: '缩进宽度',
+                    markdownDescription: '控制一个 Tab 或一个缩进层级显示为几列。'
+                }
+            },
+            {
+                key: 'editor.detectIndentation',
+                schema: {
+                    type: 'boolean',
+                    default: true,
+                    anhName: '从文件内容检测缩进',
+                    markdownDescription: '开启后 VS Code 会根据当前文件内容猜测缩进设置；需要固定写作格式时可关闭。'
+                }
+            },
+            {
+                key: 'editor.fontSize',
+                schema: {
+                    type: 'number',
+                    default: 14,
+                    minimum: 6,
+                    maximum: 80,
+                    anhName: '编辑器字体大小',
+                    markdownDescription: '控制编辑器正文的字号。'
+                }
+            },
+            {
+                key: 'editor.fontFamily',
+                schema: {
+                    type: 'string',
+                    default: "Consolas, 'Courier New', monospace",
+                    anhName: '编辑器字体家族',
+                    markdownDescription: '控制编辑器正文使用的字体列表。建议优先通过快速设置里的图形化字体管理器调整。'
+                }
+            }
+        ];
     }
 
     private getConfigl10n(key: string): string {
@@ -475,6 +590,7 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
             'AndreaNovelHelper.startupSnapshot': '启动快照',
             'andrea.typst': 'Typst设置',
             'AndreaNovelHelper.scripts': '脚本设置',
+            'editor': 'VS Code 编辑器',
             'other': '其它设置'
         };
 

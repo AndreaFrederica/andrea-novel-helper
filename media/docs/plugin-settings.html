@@ -1,0 +1,69 @@
+<div class="doc-section beginner">
+<h4>什么是插件设置</h4>
+<p>插件设置就是 ANH 的"偏好设置"，用来调整各种功能的开关和参数。就像手机里的"设置"App 一样。</p>
+
+<h4>如何打开插件设置</h4>
+<p>ANH 提供了两种设置页面：</p>
+<ul>
+    <li><b>设置侧边栏</b> — 点击左侧活动栏的"ANH 设置"图标，是一个完整的设置界面</li>
+    <li><b>编辑器设置增强版</b> — 独立的设置面板，交互更友好</li>
+</ul>
+
+<h4>常用的设置分类</h4>
+<p>设置页面把选项分成了很多类，你可以按需查找：</p>
+<ul>
+    <li><b>基础设置</b> — 插件的核心行为</li>
+    <li><b>排版设置</b> — 自动空行、首行缩进等</li>
+    <li><b>字数统计</b> — 统计方式和显示格式</li>
+    <li><b>角色显示</b> — 左侧角色面板的分组方式</li>
+    <li><b>拼写检查</b> — 校对功能的开关和模式</li>
+    <li><b>翻译设置</b> — 目标语言和默认行为</li>
+    <li><b>自动补全</b> — 角色提示的触发方式</li>
+</ul>
+
+<h4>工作区设置 vs 全局设置</h4>
+<p>设置可以选"仅当前项目生效"或"所有项目生效"。比如你的 A 小说想用红色高亮，B 小说想用蓝色，就可以分别设置。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>插件自定义设置页面</h4>
+<p>ANH 提供了两套自定义设置页面，以更直观的方式管理插件配置：</p>
+<ul>
+    <li><b>设置侧边栏</b>（<code>andrea.settingsView</code>）— 基于 Quasar SPA 的完整设置界面，在左侧活动栏"ANH 设置"中打开。自动读取 package.json 中所有 contributes.configuration 定义，按分类分组渲染</li>
+    <li><b>编辑器设置增强版</b>（<code>andrea.openEditorSettingsEnhanced</code>）— 独立的 Webview 面板，专注于编辑器相关配置，支持更丰富的交互组件</li>
+</ul>
+
+<h4>设置分类</h4>
+<p>设置侧边栏将配置项按以下分类组织（来自 <code>settingView.ts</code> 的 <code>formatSectionName</code>）：</p>
+<ul>
+    <li><b>基础设置</b>（AndreaNovelHelper）— 插件核心行为、启动快照、大文件阈值</li>
+    <li><b>排版设置</b>（andrea.typeset）— 段间空行、首行缩进、去尾空格、智能引号、智能回车、跳出括号</li>
+    <li><b>字数统计</b>（AndreaNovelHelper.wordCount）— 统计模式、状态栏显示、速度单位、紧凑模式</li>
+    <li><b>时间统计</b>（AndreaNovelHelper.timeStats）— 里程碑、通知方式、是否统计粘贴内容</li>
+    <li><b>角色显示</b>（AndreaNovelHelper.docRoles/allRoles）— 分组方式、颜色、自定义分组、显示选项</li>
+    <li><b>拼写检查</b>（AndreaNovelHelper.typo）— 校对模式、API 端点、自动扫描、LLM 供应商选择</li>
+    <li><b>翻译设置</b>（AndreaNovelHelper.translate）— 目标语言、默认处理方式</li>
+    <li><b>批注设置</b>（AndreaNovelHelper.comments）— 批注面板行为</li>
+    <li><b>角色设置</b>（AndreaNovelHelper.roles）— 默认角色文件路径</li>
+    <li><b>分词设置</b>（AndreaNovelHelper.wordSegment）— 分词器配置</li>
+    <li><b>角色 JSON5</b>（andrea.roleJson5）— 角色卡管理器相关配置</li>
+    <li><b>大纲设置</b>（AndreaNovelHelper.outline）— 懒加载模式</li>
+    <li><b>大文件处理</b>（AndreaNovelHelper.hugeFile）— 阈值、保护策略</li>
+    <li><b>文件追踪</b>（AndreaNovelHelper.fileTracker）— 文件追踪数据库配置</li>
+    <li><b>调试设置</b>（AndreaNovelHelper.debug）— 调试输出</li>
+    <li><b>自动补全</b>（AndreaNovelHelper.completion）— 触发模式、最小字符数</li>
+    <li><b>装饰设置</b>（AndreaNovelHelper.decorations）— 编辑器装饰行为</li>
+    <li><b>外部文件夹</b>（AndreaNovelHelper.externalFolder）— 外部资源目录配置</li>
+    <li><b>敏感词设置</b>（AndreaNovelHelper.sensitiveWords）— 敏感词检测配置</li>
+    <li><b>智能标签组锁定</b>（AndreaNovelHelper.smartTabGroupLock）— 标签组锁定行为</li>
+    <li><b>数据库设置</b>（AndreaNovelHelper.database）— 数据库后端选择</li>
+    <li><b>启动快照</b>（AndreaNovelHelper.startupSnapshot）— 启动加速缓存</li>
+    <li><b>Typst 设置</b>（andrea.typst）— Typst 预览配置</li>
+    <li><b>脚本设置</b>（AndreaNovelHelper.scripts）— 脚本目录、MCP 服务器配置</li>
+    <li><b>其他</b> — WebDAV、Git、自动 Git、多语言、IME 修复等</li>
+</ul>
+
+<h4>作用域切换</h4>
+<p>设置侧边栏支持"工作区"和"全局"两种作用域切换。工作区设置仅对当前项目生效，全局设置对所有项目生效。切换后页面会自动重新加载对应作用域的配置值。</p>
+<div class="doc-note">配置优先级：项目配置（project-config.json5）> VSCode 设置（工作区/全局）> 插件默认值。部分设置（如排版开关）可在底部状态栏快速切换，无需打开设置页面。</div>
+</div>

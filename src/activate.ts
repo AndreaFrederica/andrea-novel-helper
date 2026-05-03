@@ -97,6 +97,7 @@ import { initI18n } from './utils/i18n';
 import { ProjectConfigManager } from './projectConfig/projectConfigManager';
 import { ProjectConfigLinter } from './projectConfig/projectConfigLinter';
 import { registerNameGeneratorCommands } from './commands/nameGeneratorCommands';
+import { registerLookupKeyCommands } from './commands/lookupKeyCommands';
 import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
 import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
 import { ProjectKeywordConfigJson5CompletionProvider, ProjectKeywordConfigJson5Linter } from './projectConfig/projectKeywordConfigJson5';
@@ -109,6 +110,7 @@ import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintena
 import { registerSettingsView } from './Provider/view/settingView'
 import { registerProjectSettingsPage } from './Provider/view/projectSettingsPage'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
+import { registerDocViewerPage } from './guide/docViewerPage'
 import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
 
@@ -175,6 +177,39 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
     const useVsCodeManagedDisabling = cfg1.get<boolean>('useVsCodeManagedDisabling', false);
+
+    // 输出通道用于调试激活阶段错误/栈。需要在任何早退分支之前创建，
+    // 因为初始化/文档向导类命令也必须在工作区启用询问前可用。
+    const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
+    context.subscriptions.push(logChannel);
+    const log = (msg: string, err?: any) => {
+        const time = new Date().toISOString();
+        logChannel.appendLine(`[${time}] ${msg}`);
+        if (err) {
+            if (err instanceof Error) {
+                logChannel.appendLine(err.message);
+                if (err.stack) { logChannel.appendLine(err.stack); }
+            } else {
+                try { logChannel.appendLine(JSON.stringify(err)); } catch { logChannel.appendLine(String(err)); }
+            }
+        }
+    };
+
+    // 提前注册向导和文档入口：这些命令必须在“是否启用工作区”和“是否打开工作区”
+    // 之类的分支之前生效，否则命令面板/原生 walkthrough 中的入口会失效。
+    if (!gitCommandRegistered) {
+        try { registerGitConfigCommand(context); gitCommandRegistered = true; log('Git 配置命令已注册'); } catch (e) { log('注册 Git 配置命令失败', e); }
+    } else { log('Git 配置命令已存在，跳过注册'); }
+    try { registerGitDownloadTestCommand(context); log('Git 下载测试命令已注册'); } catch (e) { log('注册 Git 下载测试命令失败', e); }
+    try { registerGitSimulateNoGitCommand(context); log('Git 未安装模拟命令已注册'); } catch (e) { log('注册 Git 未安装模拟命令失败', e); }
+    try { registerSetupWizardCommands(context); log('配置向导命令已注册'); } catch (e) { log('注册 配置向导命令 失败', e); }
+    try {
+        registerProjectInitWizard(context);
+        registerGraphicalProjectInitWizard(context);
+        registerGuidePage(context);
+        registerDocViewerPage(context);
+        log('项目初始化/文档向导命令已注册');
+    } catch (e) { log('注册 项目初始化/文档向导命令 失败', e); }
 
     registerContextKeys(context);
 
@@ -268,8 +303,6 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     await vscode.commands.executeCommand('setContext', 'andrea.anh.enabled', true);
-    // 输出通道用于调试激活阶段错误/栈
-    const logChannel = vscode.window.createOutputChannel('Andrea Novel Helper');
     setWordCounterContext(context);
     setAsyncRoleMatcherContext(context);
     initializeRoleUsageStore(context);
@@ -312,20 +345,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
     registerRoleUsageIndexCommands(context, roles)
     registerFileTrackingMaintenance(context)
+    registerLookupKeyCommands(context)
     // registerTypeInterceptor(context);
-    context.subscriptions.push(logChannel);
-    const log = (msg: string, err?: any) => {
-        const time = new Date().toISOString();
-        logChannel.appendLine(`[${time}] ${msg}`);
-        if (err) {
-            if (err instanceof Error) {
-                logChannel.appendLine(err.message);
-                if (err.stack) { logChannel.appendLine(err.stack); }
-            } else {
-                try { logChannel.appendLine(JSON.stringify(err)); } catch { logChannel.appendLine(String(err)); }
-            }
-        }
-    };
     registerCopilotDocsCommands(context, log);
     const rolesFile1 = cfg1.get<string>('rolesFile')!;
 
@@ -364,20 +385,6 @@ export async function activate(context: vscode.ExtensionContext) {
         return;
     }
     const wsRoot = wsFolders[0].uri.fsPath;
-    // 提前注册 Git 向导命令（即使后续激活流程出错也可用）
-    if (!gitCommandRegistered) {
-        try { registerGitConfigCommand(context); gitCommandRegistered = true; log('Git 配置命令已注册'); } catch (e) { log('注册 Git 配置命令失败', e); }
-    } else { log('Git 配置命令已存在，跳过注册'); }
-    // 注册测试下载链接命令
-    try { registerGitDownloadTestCommand(context); log('Git 下载测试命令已注册'); } catch (e) { log('注册 Git 下载测试命令失败', e); }
-    try { registerGitSimulateNoGitCommand(context); log('Git 未安装模拟命令已注册'); } catch (e) { log('注册 Git 未安装模拟命令失败', e); }
-    try { registerSetupWizardCommands(context); log('配置向导命令已注册'); } catch (e) { log('注册 配置向导命令 失败', e); }
-    try {
-        registerProjectInitWizard(context);
-        registerGraphicalProjectInitWizard(context);
-        registerGuidePage(context);
-        log('项目初始化向导命令已注册');
-    } catch (e) { log('注册 项目初始化向导命令 失败', e); }
     // 将后续复杂初始化包裹在 try/catch 内，避免单点异常导致整个扩展未激活（从而命令缺失）
     try {
         log('开始执行主初始化');

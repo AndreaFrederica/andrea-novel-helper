@@ -6,6 +6,7 @@
     "command.refreshSensitiveWords.title": "刷新敏感词库",
     "command.addVocabulary.title": "从选中内容创建词汇",
     "command.refreshVocabulary.title": "刷新词汇库",
+    "command.showGuideDoc.title": "打开文档中心",
     "command.openDoubleOutline.title": "打开双重大纲",
     "command.refreshOutlineDir.title": "刷新目录大纲",
     "command.refreshOutlineFile.title": "刷新文件大纲",

@@ -50,6 +50,8 @@
     "onLanguage:rjson5",
     "onLanguage:tjson5",
     "onFileSystem:andrea-outline",
+    "onWebviewPanel:andrea.guide",
+    "onWebviewPanel:andrea.guideDoc",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -247,6 +249,18 @@
       {
         "command": "andrea.configureMilestones",
         "title": "%command.andrea.configureMilestones.title%"
+      },
+      {
+        "command": "AndreaNovelHelper.openTimeStats",
+        "title": "打开写作统计仪表板",
+        "category": "Andrea Novel Helper",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "AndreaNovelHelper.exportTimeStatsCSV",
+        "title": "导出写作时间统计 CSV",
+        "category": "Andrea Novel Helper",
+        "icon": "$(file-code)"
       },
       {
         "command": "andrea.toggleIndentFirst",
@@ -520,6 +534,10 @@
         "title": "%command.openFile.title%"
       },
       {
+        "command": "AndreaNovelHelper.openProjectConfigFile",
+        "title": "打开项目设置文件"
+      },
+      {
         "command": "AndreaNovelHelper.deleteNode",
         "title": "%command.deleteNode.title%"
       },
@@ -766,6 +784,18 @@
         "title": "打开功能引导",
         "category": "Andrea Novel Helper",
         "icon": "$(book)"
+      },
+      {
+        "command": "AndreaNovelHelper.showGuideDoc",
+        "title": "%command.showGuideDoc.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(book)"
+      },
+      {
+        "command": "AndreaNovelHelper.generateLookupKeysForCurrentFile",
+        "title": "为当前角色文件生成查询键",
+        "category": "Andrea Novel Helper",
+        "icon": "$(symbol-key)"
       },
       {
         "command": "AndreaNovelHelper.disableWorkspace",
@@ -3454,6 +3484,11 @@
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
+          "command": "AndreaNovelHelper.showGuideDoc",
+          "group": "0_create@10"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createSubPackage",
           "group": "1_package@1"
         },
@@ -3468,12 +3503,17 @@
           "group": "3_open"
         },
         {
+          "when": "view == packageManagerView && (viewItem == projectConfigFile || viewItem == missingProjectConfigFile)",
+          "command": "AndreaNovelHelper.openProjectConfigFile",
+          "group": "3_open"
+        },
+        {
           "when": "view == packageManagerView && (viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
           "command": "AndreaNovelHelper.openWith",
           "group": "3_open"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == projectConfigFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.revealInExplorer",
           "group": "3_open"
         },

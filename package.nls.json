@@ -6,6 +6,7 @@
     "command.refreshSensitiveWords.title": "ANH:Refresh Sensitive Words",
     "command.addVocabulary.title": "ANH:Create Vocabulary from Selection",
     "command.refreshVocabulary.title": "ANH:Refresh Vocabulary",
+    "command.showGuideDoc.title": "ANH:Open Document Center",
     "command.openDoubleOutline.title": "ANH:Open Double Outline",
     "command.refreshOutlineDir.title": "ANH:Refresh Outline_Directory",
     "command.refreshOutlineFile.title": "ANH:Refresh Outline_File",
