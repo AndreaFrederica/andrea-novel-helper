@@ -110,6 +110,7 @@ import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintena
 import { registerSettingsView } from './Provider/view/settingView'
 import { registerProjectSettingsPage } from './Provider/view/projectSettingsPage'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
+import { registerQuickSettingsPage } from './Provider/view/quickSettingsView'
 import { registerDocViewerPage } from './guide/docViewerPage'
 import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
@@ -669,6 +670,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerSettingsView(context);
         registerProjectSettingsPage(context);
         registerEditorSettingsPage(context);
+        registerQuickSettingsPage(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);

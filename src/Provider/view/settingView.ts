@@ -13,6 +13,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
     private _context: vscode.ExtensionContext;
     private _scope: 'workspace' | 'global' = 'workspace';
     private _editorSettingsProvider?: EditorSettingsWebviewProvider;
+    private _externalWebview?: vscode.Webview;
     
     private _logChannel = vscode.window.createOutputChannel('Andrea Novel Helper:buildSettings');
 
@@ -77,14 +78,14 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
     }
 
     private _handleGetSettings() {
-        if (!this._view) {
+        if (!this._view && !this._externalWebview) {
             return;
         }
 
         // 使用新的buildSettings方法动态生成配置
         const settingsData = this.buildSettings();
 
-        this._view.webview.postMessage({
+        this._postMessage({
             command: 'settingsData',
             data: settingsData
         });
@@ -105,7 +106,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             
             // 仍然发送消息给 webview 以保持兼容性
             if (this._view) {
-                this._view.webview.postMessage({
+                this._postMessage({
                     command: 'settingUpdated',
                     key: key,
                     value: value
@@ -124,7 +125,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
             // 仍然发送错误消息给 webview 以保持兼容性
             if (this._view) {
-                this._view.webview.postMessage({
+                this._postMessage({
                     command: 'error',
                     message: `Failed to update setting: ${error}`
                 });
@@ -166,7 +167,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
             // 仍然发送消息给 webview 以保持兼容性
             if (this._view) {
-                this._view.webview.postMessage({
+                this._postMessage({
                     command: 'settingsSaved',
                     message: '设置已保存'
                 });
@@ -185,7 +186,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
             // 仍然发送错误消息给 webview 以保持兼容性
             if (this._view) {
-                this._view.webview.postMessage({
+                this._postMessage({
                     command: 'error',
                     message: `Failed to save settings: ${error}`
                 });
@@ -217,7 +218,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
 
             // 仍然发送错误消息给 webview 以保持兼容性
             if (this._view) {
-                this._view.webview.postMessage({
+                this._postMessage({
                     command: 'error',
                     message: `Failed to jump to settings: ${error}`
                 });
@@ -619,6 +620,41 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
         };
         
         return sectionNames[sectionId] || sectionId;
+    }
+
+    public setExternalWebview(webview: vscode.Webview) {
+        this._externalWebview = webview;
+    }
+
+    public async processMessage(message: any) {
+        switch (message.command) {
+            case 'getSettings':
+                this._handleGetSettings();
+                break;
+            case 'updateSetting':
+                await this._handleUpdateSetting(message.key, message.value);
+                break;
+            case 'saveSettings':
+                await this._handleSaveSettings(message.settings);
+                break;
+            case 'jumpToSettings':
+                await this._handleJumpToSettings(message.key);
+                break;
+            case 'setScope':
+                this._handleSetScope(message.scope);
+                break;
+            case 'openEditorSettings':
+                this._handleOpenEditorSettings();
+                break;
+        }
+    }
+
+    private _postMessage(message: any) {
+        if (this._view) {
+            this._view.webview.postMessage(message);
+        } else if (this._externalWebview) {
+            this._externalWebview.postMessage(message);
+        }
     }
 
     public refresh() {

@@ -241,6 +241,12 @@
         "title": "%command.andrea.quickSettings.title%"
       },
       {
+        "command": "andrea.openGraphicalQuickSettings",
+        "title": "打开图形化快速设置",
+        "category": "Andrea Novel Helper",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "andrea.openProjectSettings",
         "title": "打开项目设置",
         "category": "Andrea Novel Helper",

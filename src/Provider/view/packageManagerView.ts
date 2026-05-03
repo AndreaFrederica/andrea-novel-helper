@@ -264,6 +264,24 @@ class DocCenterNode extends vscode.TreeItem {
     }
 }
 
+// 图形化快速设置节点
+class GraphicalQuickSettingsNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 图形化快速设置', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'graphicalQuickSettings';
+        this.iconPath = new vscode.ThemeIcon('settings-gear');
+        this.description = '可视化调整写作环境，带实时预览';
+        this.command = {
+            command: 'andrea.openGraphicalQuickSettings',
+            title: '打开图形化快速设置',
+            arguments: []
+        };
+    }
+}
+
 // 书籍根目录节点（真正的目录，可展开）
 class BookRootNode extends vscode.TreeItem {
     public readonly resourceUri: vscode.Uri;
@@ -553,7 +571,8 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 new ExternalResourceManageNode(this.workspaceRoot),
                 new CopilotDocsManageNode(this.workspaceRoot),
                 new GuideNode(this.workspaceRoot),
-                new DocCenterNode(this.workspaceRoot)
+                new DocCenterNode(this.workspaceRoot),
+                new GraphicalQuickSettingsNode(this.workspaceRoot)
             ];
         }
 
