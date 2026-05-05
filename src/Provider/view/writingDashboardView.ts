@@ -36,6 +36,10 @@ type DashboardState = Record<string, unknown> & {
     planMarkdown?: unknown;
 };
 
+type DashboardWebviewSettings = {
+    widgetShowHeader: boolean;
+};
+
 const dashboardDirName = path.join('novel-helper', 'dashboard');
 const dashboardLayoutFileName = 'layout.json';
 const dashboardTasksFileName = 'tasks.json5';
@@ -208,7 +212,11 @@ export class WritingDashboardPanel {
     private async postDashboardData() {
         try {
             const data = await loadDashboardState();
-            await this.panel.webview.postMessage({ command: 'dashboard.data', data });
+            await this.panel.webview.postMessage({
+                command: 'dashboard.data',
+                data,
+                settings: getDashboardWebviewSettings()
+            });
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             await this.panel.webview.postMessage({ command: 'dashboard.error', message });
@@ -302,6 +310,13 @@ function normalizeWidgetId(widgetId: string): DashboardWidgetId {
         return widgetId as DashboardWidgetId;
     }
     return 'energy';
+}
+
+function getDashboardWebviewSettings(): DashboardWebviewSettings {
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.writingDashboard');
+    return {
+        widgetShowHeader: cfg.get<boolean>('widget.showHeader', true)
+    };
 }
 
 async function loadDashboardState(): Promise<DashboardState> {

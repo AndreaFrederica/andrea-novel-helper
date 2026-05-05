@@ -31,6 +31,7 @@
         dense outlined readonly
         :model-value="dateInputLabel"
         class="date-input"
+        :style="dateInputStyle"
       >
         <template #append>
           <q-icon name="event" size="16px" class="date-picker-icon" />
@@ -94,15 +95,19 @@
         </aside>
 
         <!-- 右侧时间轴 -->
-        <main class="timeline-wrap" ref="timelineRef">
-          <div class="timeline-inner" :style="{ width: `${ticks.length * colWidth}px` }">
+        <main
+          class="timeline-wrap"
+          ref="timelineRef"
+          @scroll="onHorizontalTimelineScroll"
+        >
+          <div class="timeline-inner" :style="timelineInnerStyle">
             <!-- 刻度头部 -->
             <div class="tick-header">
               <div
                 v-for="tick in ticks"
                 :key="tick.timestamp"
                 :class="['tick-col', { now: tick.isNow, special: tick.isSpecial }]"
-                :style="{ width: `${colWidth}px` }"
+                :style="horizontalTickStyle(tick)"
               >
                 <div class="tick-main">{{ tick.label }}</div>
                 <div v-if="tick.subLabel" class="tick-sub">{{ tick.subLabel }}</div>
@@ -130,7 +135,7 @@
                         v-for="tick in ticks"
                         :key="tick.timestamp"
                         :class="['grid-cell', { now: tick.isNow, special: tick.isSpecial }]"
-                        :style="{ width: `${colWidth}px` }"
+                        :style="horizontalTickStyle(tick)"
                       />
                     </div>
                     <div
@@ -138,6 +143,7 @@
                       class="task-bar"
                       :style="barStyle(task)"
                       @pointerdown.stop="startDrag($event, task)"
+                      @click.stop="onTaskBarClick(task)"
                     >
                       <span>{{ task.title }}</span>
                     </div>
@@ -177,23 +183,29 @@
         </div>
 
         <!-- 主体：时间轴 + 纵向任务条 -->
-        <div class="vg-body">
-          <div class="vg-time-axis">
+        <div
+          class="vg-body"
+          ref="vgBodyRef"
+          @scroll="onVerticalTimelineScroll"
+        >
+          <div class="vg-time-axis" :style="vgAxisStyle">
             <div
               v-for="tick in ticks"
               :key="tick.timestamp"
               :class="['vg-tick', { now: tick.isNow, special: tick.isSpecial }]"
+              :style="verticalTickStyle(tick)"
             >
               <span class="vg-tick-label">{{ tick.label }}</span>
               <span v-if="tick.subLabel" class="vg-tick-sub">{{ tick.subLabel }}</span>
             </div>
           </div>
-          <div class="vg-bars-area" :style="{ width: `${timelineTasks.length * vgColWidth}px` }">
+          <div class="vg-bars-area" :style="vgBarsAreaStyle">
             <div class="vg-grid-bg">
               <div
                 v-for="(_t, i) in ticks"
-                :key="i"
+                :key="ticks[i]?.timestamp"
                 :class="['vg-grid-row', { now: ticks[i]?.isNow, special: ticks[i]?.isSpecial }]"
+                :style="ticks[i] ? verticalTickStyle(ticks[i]) : undefined"
               />
             </div>
             <div class="vg-cols">
@@ -343,7 +355,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { Task } from '../sampleData'
 import {
   type CalendarSystem,
@@ -351,7 +363,6 @@ import {
   type TimeTick,
   type TimeUnit,
   getColWidth,
-  getDefaultSpan,
   getNavStep,
   getTimeSystem,
 } from '../timeSystem'
@@ -407,11 +418,13 @@ function resetSettings() {
 
 function setLayout(l: GanttLayout) {
   settings.layout = l
+  requestTimelineCenter()
 }
 
 function onUnitChange() {
   // 切换时间单位时，重新以当前中心点对齐到该粒度的起点
   centerTimestamp.value = ts.value.startOf(centerTimestamp.value, settings.timeUnit)
+  requestTimelineCenter()
 }
 
 /* ── 时间系统 ────────────────────────────── */
@@ -424,20 +437,132 @@ const expandedGroups = ref(new Set<string>())
 const centerTimestamp = ref(Date.now())
 const editorOpen = ref(false)
 const editingTask = ref<Task | null>(null)
+const recentDraggedTaskId = ref<string | null>(null)
+const timelineRef = ref<HTMLElement | null>(null)
+const vgBodyRef = ref<HTMLElement | null>(null)
+const timelineViewportWidth = ref(0)
+const vgViewportHeight = ref(0)
+const timelineScrollLeft = ref(0)
+const vgScrollTop = ref(0)
+const axisCenterTimestamp = ref(Date.now())
 
 const colWidth = computed(() => getColWidth(settings.timeUnit))
-const span = computed(() => getDefaultSpan(settings.timeUnit))
+const vgColWidth = 132
+const vgRowHeight = 36
+let timelineCenterPending = true
+let timelineResizeObserver: ResizeObserver | undefined
+let vgResizeObserver: ResizeObserver | undefined
+const VIRTUAL_TICK_COUNT = 400_000
+const VIRTUAL_CENTER_INDEX = Math.floor(VIRTUAL_TICK_COUNT / 2)
+const VIRTUAL_RENDER_BUFFER = 16
 
 /* ── 刻度计算 ────────────────────────────── */
-const ticks = computed((): TimeTick[] => {
-  return ts.value.getTicks(centerTimestamp.value, span.value, settings.timeUnit)
+const visibleTickCount = computed(() => {
+  const horizontalVisible = Math.ceil(timelineViewportWidth.value / colWidth.value)
+  const verticalVisible = Math.ceil(vgViewportHeight.value / vgRowHeight)
+  return Math.max(1, horizontalVisible, verticalVisible)
 })
 
-const tickIndex = computed(() => {
-  const map = new Map<number, number>()
-  ticks.value.forEach((t, i) => map.set(t.timestamp, i))
-  return map
+const visibleAxisStartIndex = computed(() => {
+  const axis = settings.layout === 'timeline' ? 'y' : 'x'
+  const offset = axis === 'x' ? timelineScrollLeft.value : vgScrollTop.value
+  const unitPx = getTimelineUnitPixels(axis)
+  return clampNumber(Math.floor(offset / unitPx) - VIRTUAL_RENDER_BUFFER, 0, VIRTUAL_TICK_COUNT - 1)
 })
+
+const visibleAxisEndIndex = computed(() => {
+  return clampNumber(
+    visibleAxisStartIndex.value + visibleTickCount.value + VIRTUAL_RENDER_BUFFER * 2,
+    visibleAxisStartIndex.value,
+    VIRTUAL_TICK_COUNT - 1
+  )
+})
+
+type VisibleTimeTick = TimeTick & { index: number; offset: number }
+
+const ticks = computed((): VisibleTimeTick[] => {
+  const result: VisibleTimeTick[] = []
+  for (let index = visibleAxisStartIndex.value; index <= visibleAxisEndIndex.value; index += 1) {
+    const timestamp = indexToTimestamp(index)
+    result.push({
+      ...createTimeTick(timestamp),
+      index,
+      offset: index,
+    })
+  }
+  return result
+})
+
+const timelineInnerStyle = computed(() => ({
+  width: `${Math.max(VIRTUAL_TICK_COUNT * colWidth.value, timelineViewportWidth.value)}px`
+}))
+
+const vgBarsAreaStyle = computed(() => ({
+  width: `${timelineTasks.value.length * vgColWidth}px`,
+  height: `${VIRTUAL_TICK_COUNT * vgRowHeight}px`,
+  minHeight: `${Math.max(VIRTUAL_TICK_COUNT * vgRowHeight, vgViewportHeight.value)}px`
+}))
+
+const vgAxisStyle = computed(() => ({
+  height: `${VIRTUAL_TICK_COUNT * vgRowHeight}px`,
+  minHeight: `${Math.max(VIRTUAL_TICK_COUNT * vgRowHeight, vgViewportHeight.value)}px`
+}))
+
+onMounted(() => {
+  timelineResizeObserver = new ResizeObserver(() => updateTimelineViewport())
+  vgResizeObserver = new ResizeObserver(() => updateTimelineViewport())
+  if (timelineRef.value) timelineResizeObserver.observe(timelineRef.value)
+  if (vgBodyRef.value) vgResizeObserver.observe(vgBodyRef.value)
+  void nextTick(() => {
+    updateTimelineViewport()
+    centerTimelineViewportIfNeeded()
+  })
+})
+
+onBeforeUnmount(() => {
+  timelineResizeObserver?.disconnect()
+  vgResizeObserver?.disconnect()
+})
+
+watch(() => settings.layout, () => {
+  requestTimelineCenter()
+})
+
+watch(() => settings.timeUnit, () => {
+  requestTimelineCenter()
+})
+
+function updateTimelineViewport() {
+  if (timelineRef.value) timelineResizeObserver?.observe(timelineRef.value)
+  if (vgBodyRef.value) vgResizeObserver?.observe(vgBodyRef.value)
+  timelineViewportWidth.value = timelineRef.value?.clientWidth ?? 0
+  vgViewportHeight.value = vgBodyRef.value?.clientHeight ?? 0
+  if (timelineCenterPending) void nextTick(centerTimelineViewportIfNeeded)
+}
+
+function requestTimelineCenter() {
+  timelineCenterPending = true
+  void nextTick(() => {
+    updateTimelineViewport()
+    centerTimelineViewportIfNeeded()
+  })
+}
+
+function centerTimelineViewportIfNeeded() {
+  if (!timelineCenterPending) return
+  const target = settings.layout === 'gantt' ? timelineRef.value : settings.layout === 'timeline' ? vgBodyRef.value : null
+  if (!target) return
+  timelineCenterPending = false
+  axisCenterTimestamp.value = centerTimestamp.value
+  if (settings.layout === 'gantt') {
+    target.scrollLeft = indexToOffset(VIRTUAL_CENTER_INDEX, 'x')
+    timelineScrollLeft.value = target.scrollLeft
+  } else if (settings.layout === 'timeline') {
+    target.scrollTop = indexToOffset(VIRTUAL_CENTER_INDEX, 'y')
+    vgScrollTop.value = target.scrollTop
+  }
+  updateCenterTimestampFromScroll()
+}
 
 /* ── 分组 ────────────────────────────────── */
 const groups = computed(() => {
@@ -487,10 +612,12 @@ function toggleStatus(id: string) {
 function shiftView(dir: number) {
   const step = getNavStep(settings.timeUnit)
   centerTimestamp.value = ts.value.add(centerTimestamp.value, dir * step, settings.timeUnit)
+  requestTimelineCenter()
 }
 
 function goToday() {
   centerTimestamp.value = ts.value.startOf(Date.now(), settings.timeUnit)
+  requestTimelineCenter()
 }
 
 /* ── 统一导航（根据布局自动切换）───────────── */
@@ -503,6 +630,10 @@ const dateInputLabel = computed(() => {
   if (settings.timeUnit === 'month') return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`
   return formatCompactDate(centerTimestamp.value)
 })
+
+const dateInputStyle = computed(() => ({
+  '--date-input-width': `${Math.max(13, dateInputLabel.value.length + 7)}ch`
+}))
 
 const datePickerValue = computed({
   get() {
@@ -520,6 +651,7 @@ const datePickerValue = computed({
       return
     }
     centerTimestamp.value = ts.value.startOf(timestamp, settings.timeUnit)
+    requestTimelineCenter()
   }
 })
 
@@ -536,6 +668,109 @@ function navNext() {
 function navToday() {
   if (settings.layout === 'calendar') goThisMonth()
   else goToday()
+}
+
+function onHorizontalTimelineScroll(event: Event) {
+  const el = event.currentTarget instanceof HTMLElement ? event.currentTarget : timelineRef.value
+  if (!el) return
+  timelineScrollLeft.value = el.scrollLeft
+  updateCenterTimestampFromScroll()
+}
+
+function onVerticalTimelineScroll(event: Event) {
+  const el = event.currentTarget instanceof HTMLElement ? event.currentTarget : vgBodyRef.value
+  if (!el) return
+  vgScrollTop.value = el.scrollTop
+  updateCenterTimestampFromScroll()
+}
+
+function getTimelineUnitPixels(axis: 'x' | 'y') {
+  return axis === 'x' ? colWidth.value : vgRowHeight
+}
+
+function updateCenterTimestampFromScroll() {
+  if (settings.layout === 'calendar') return
+  const axis = settings.layout === 'timeline' ? 'y' : 'x'
+  const viewport = axis === 'x' ? timelineViewportWidth.value : vgViewportHeight.value
+  const scrollOffset = axis === 'x' ? timelineScrollLeft.value : vgScrollTop.value
+  const centerIndex = offsetToIndex(scrollOffset + viewport / 2, axis)
+  centerTimestamp.value = indexToTimestamp(centerIndex)
+}
+
+function indexToTimestamp(index: number) {
+  return ts.value.add(axisCenterTimestamp.value, index - VIRTUAL_CENTER_INDEX, settings.timeUnit)
+}
+
+function timestampToAxisIndex(timestamp: number) {
+  return clampNumber(
+    VIRTUAL_CENTER_INDEX + ts.value.diff(timestamp, axisCenterTimestamp.value, settings.timeUnit),
+    0,
+    VIRTUAL_TICK_COUNT - 1
+  )
+}
+
+function indexToOffset(index: number, axis: 'x' | 'y') {
+  return index * getTimelineUnitPixels(axis)
+}
+
+function offsetToIndex(offset: number, axis: 'x' | 'y') {
+  return clampNumber(Math.round(offset / getTimelineUnitPixels(axis)), 0, VIRTUAL_TICK_COUNT - 1)
+}
+
+function horizontalTickStyle(tick: VisibleTimeTick) {
+  return {
+    left: `${indexToOffset(tick.index, 'x')}px`,
+    width: `${colWidth.value}px`,
+  }
+}
+
+function verticalTickStyle(tick: VisibleTimeTick) {
+  return {
+    top: `${indexToOffset(tick.index, 'y')}px`,
+    height: `${vgRowHeight}px`,
+  }
+}
+
+function createTimeTick(timestamp: number): TimeTick {
+  const d = new Date(timestamp)
+  const weekday = d.getDay()
+  const now = Date.now()
+  let label = ts.value.format(timestamp, settings.timeUnit)
+  let subLabel: string | undefined
+
+  if (settings.timeUnit === 'month') {
+    label = String(d.getFullYear())
+    subLabel = `${d.getMonth() + 1}月`
+  } else if (settings.timeUnit === 'week') {
+    subLabel = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+  } else if (settings.timeUnit === 'day') {
+    subLabel = ['日', '一', '二', '三', '四', '五', '六'][weekday]
+  } else if (settings.timeUnit === 'hour') {
+    subLabel = `${d.getMonth() + 1}/${d.getDate()}`
+  } else if (settings.timeUnit === 'minute') {
+    subLabel = pad2(d.getSeconds())
+  }
+
+  return {
+    timestamp,
+    label,
+    subLabel,
+    isNow: Math.abs(timestamp - now) < unitDurationMs(settings.timeUnit),
+    isSpecial: weekday === 0 || weekday === 6,
+  }
+}
+
+function unitDurationMs(unit: TimeUnit) {
+  const map: Record<TimeUnit, number> = {
+    second: 1000,
+    minute: 60 * 1000,
+    hour: 60 * 60 * 1000,
+    day: 24 * 60 * 60 * 1000,
+    week: 7 * 24 * 60 * 60 * 1000,
+    month: 30 * 24 * 60 * 60 * 1000,
+    year: 365 * 24 * 60 * 60 * 1000,
+  }
+  return map[unit]
 }
 
 function tsFormat(tsv: number) {
@@ -568,14 +803,14 @@ function parseQDate(value: string): number | null {
 
 /* ── 任务条（横向布局）─────────────────────── */
 function barVisible(task: Task) {
-  const s = nearestTickIndex(task.start)
-  const e = nearestTickIndex(task.end)
-  return s !== -1 || e !== -1
+  const s = timestampToAxisIndex(Math.min(task.start, task.end))
+  const e = timestampToAxisIndex(Math.max(task.start, task.end))
+  return e >= 0 && s <= VIRTUAL_TICK_COUNT - 1
 }
 
 function barStyle(task: Task) {
-  const s = Math.max(0, nearestTickIndex(task.start))
-  const e = Math.max(s, nearestTickIndex(task.end))
+  const s = timestampToAxisIndex(Math.min(task.start, task.end))
+  const e = Math.max(s, timestampToAxisIndex(Math.max(task.start, task.end)))
   return {
     left: `${s * colWidth.value + 2}px`,
     width: `${(e - s + 1) * colWidth.value - 4}px`,
@@ -584,25 +819,10 @@ function barStyle(task: Task) {
 }
 
 function nearestTickIndex(timestamp: number): number {
-  const list = ticks.value
-  let best = -1
-  let bestDiff = Infinity
-  for (let i = 0; i < list.length; i++) {
-    const tick = list[i]
-    if (!tick) continue
-    const diff = Math.abs(tick.timestamp - timestamp)
-    if (diff < bestDiff) {
-      bestDiff = diff
-      best = i
-    }
-  }
-  return best
+  return timestampToAxisIndex(timestamp)
 }
 
 /* ── 纵向甘特图（timeline 布局）────────────── */
-const vgColWidth = 132
-const vgRowHeight = 36
-
 const timelineTasks = computed(() => {
   let list = props.tasks
   if (searchQuery.value.trim()) {
@@ -613,14 +833,14 @@ const timelineTasks = computed(() => {
 })
 
 function vgBarVisible(task: Task) {
-  const s = nearestTickIndex(task.start)
-  const e = nearestTickIndex(task.end)
-  return s !== -1 || e !== -1
+  const s = timestampToAxisIndex(Math.min(task.start, task.end))
+  const e = timestampToAxisIndex(Math.max(task.start, task.end))
+  return e >= 0 && s <= VIRTUAL_TICK_COUNT - 1
 }
 
 function vgBarStyle(task: Task) {
-  const s = Math.max(0, nearestTickIndex(task.start))
-  const e = Math.max(s, nearestTickIndex(task.end))
+  const s = timestampToAxisIndex(Math.min(task.start, task.end))
+  const e = Math.max(s, timestampToAxisIndex(Math.max(task.start, task.end)))
   return {
     top: `${s * vgRowHeight + 2}px`,
     height: `${(e - s + 1) * vgRowHeight - 4}px`,
@@ -644,8 +864,8 @@ function vgBarClass(task: Task) {
 }
 
 function vgTaskRows(task: Task) {
-  const s = Math.max(0, nearestTickIndex(task.start))
-  const e = Math.max(s, nearestTickIndex(task.end))
+  const s = timestampToAxisIndex(Math.min(task.start, task.end))
+  const e = Math.max(s, timestampToAxisIndex(Math.max(task.start, task.end)))
   return e - s + 1
 }
 
@@ -676,6 +896,11 @@ function completedSubtasks(task: Task) {
   return task.subtasks.filter(item => item.done).length
 }
 
+function onTaskBarClick(task: Task) {
+  if (recentDraggedTaskId.value === task.id) return
+  openEditor(task)
+}
+
 function startDrag(event: PointerEvent, task: Task) {
   const el = event.currentTarget as HTMLElement
   const startX = event.clientX
@@ -695,9 +920,13 @@ function startDrag(event: PointerEvent, task: Task) {
 
     const newSIdx = origS + tickDelta
     const newEIdx = origE + tickDelta
-    const newStart = ticks.value[newSIdx]?.timestamp
-    const newEnd = ticks.value[newEIdx]?.timestamp
-    if (newStart !== undefined && newEnd !== undefined) {
+    const newStart = indexToTimestamp(clampNumber(newSIdx, 0, VIRTUAL_TICK_COUNT - 1))
+    const newEnd = indexToTimestamp(clampNumber(newEIdx, 0, VIRTUAL_TICK_COUNT - 1))
+    if (tickDelta !== 0 && Number.isFinite(newStart) && Number.isFinite(newEnd)) {
+      recentDraggedTaskId.value = task.id
+      window.setTimeout(() => {
+        if (recentDraggedTaskId.value === task.id) recentDraggedTaskId.value = null
+      }, 180)
       emit('update:tasks', props.tasks.map(t =>
         t.id === task.id ? { ...t, start: newStart, end: newEnd } : t
       ))
@@ -1115,8 +1344,15 @@ const layoutLabel = computed(() => {
 }
 
 .date-input {
-  width: 108px;
+  flex: 0 0 auto;
+  width: var(--date-input-width, 15ch);
+  min-width: var(--date-input-width, 15ch);
   cursor: pointer;
+}
+
+.date-input :deep(.q-field__native) {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .date-picker-icon {
@@ -1237,14 +1473,15 @@ const layoutLabel = computed(() => {
   position: sticky;
   top: 0;
   z-index: 2;
-  display: flex;
   height: 48px;
   background: var(--dash-panel-bg);
   border-bottom: 1px solid var(--dash-border-light);
 }
 
 .tick-col {
-  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1298,11 +1535,11 @@ const layoutLabel = computed(() => {
 .row-grid {
   position: absolute;
   inset: 0;
-  display: flex;
 }
 
 .grid-cell {
-  flex-shrink: 0;
+  position: absolute;
+  top: 0;
   height: 100%;
   border-right: 1px solid var(--dash-border-lighter);
 }
@@ -1411,6 +1648,7 @@ const layoutLabel = computed(() => {
 }
 
 .vg-time-axis {
+  position: relative;
   width: 90px;
   flex-shrink: 0;
   background: var(--dash-panel-bg);
@@ -1418,6 +1656,9 @@ const layoutLabel = computed(() => {
 }
 
 .vg-tick {
+  position: absolute;
+  left: 0;
+  right: 0;
   height: 36px;
   display: flex;
   flex-direction: column;
@@ -1455,14 +1696,14 @@ const layoutLabel = computed(() => {
 .vg-grid-bg {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 .vg-grid-row {
+  position: absolute;
+  left: 0;
+  right: 0;
   height: 36px;
   border-bottom: 1px solid var(--dash-border-lighter);
-  flex-shrink: 0;
 }
 
 .vg-grid-row.now {
@@ -1817,9 +2058,9 @@ const layoutLabel = computed(() => {
   }
 
   .date-input {
-    flex: 0 1 108px;
-    width: auto;
-    min-width: 0;
+    flex: 0 0 auto;
+    width: var(--date-input-width, 15ch);
+    min-width: var(--date-input-width, 15ch);
   }
 
   .gantt-body {

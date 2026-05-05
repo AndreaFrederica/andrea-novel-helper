@@ -29,6 +29,11 @@ const routes: RouteRecordRaw[] = [
   },
 
   {
+    path: '/timeline-gantt',
+    component: () => import('pages/TimelineGanttPage.vue'),
+  },
+
+  {
     path: '/editor-settings',
     component: () => import('pages/EditorSettingsPage.vue'),
   },

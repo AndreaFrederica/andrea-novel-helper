@@ -107,6 +107,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "andrea.timelineGanttJson5Editor",
+        "displayName": "时间线甘特图编辑器",
+        "selector": [
+          {
+            "filenamePattern": "**/*.tjson5"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "configurationDefaults": {
@@ -1183,6 +1193,12 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "在LLM分段结果(partial)阶段是否立刻应用错别字高亮（默认否，仅在最终结果阶段应用，避免\"瞬间出现又消失\"的闪烁）"
+        },
+        "AndreaNovelHelper.writingDashboard.widget.showHeader": {
+          "anhName": "创作工作台独立组件显示顶栏",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "独立打开创作工作台组件时是否显示顶部标题栏和“打开工作台”按钮。关闭后组件内容会占满整个 Webview。"
         },
         "AndreaNovelHelper.typo.suppressRolesMode": {
           "anhName": "角色抑制模式",

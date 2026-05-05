@@ -87,10 +87,12 @@ function stringifyTimelineJsonDataToJson5(data: TimelineJsonData): string {
    ========================= */
 
 export interface TimelineJson5EditorOptions {
+    viewType?: string;
     spaRoot: vscode.Uri;
     connectSrc?: string[];
     retainContextWhenHidden?: boolean;
     title?: string;
+    route?: string;
     resourceMapperScriptUri?: string;
 }
 
@@ -103,7 +105,7 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
         const provider = new TimelineJson5EditorProvider(context, opts);
 
         const reg = vscode.window.registerCustomEditorProvider(
-            'andrea.timelineJson5Editor',
+            opts.viewType ?? 'andrea.timelineJson5Editor',
             provider,
             {
                 webviewOptions: { retainContextWhenHidden: opts.retainContextWhenHidden ?? true },
@@ -587,7 +589,7 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
             spaRoot: this.opts.spaRoot,
             connectSrc: this.opts.connectSrc,
             resourceMapperScriptUri: this.opts.resourceMapperScriptUri,
-            route: '/timeline',
+            route: this.opts.route ?? '/timeline',
             editorTitle: this.opts.title || '时间线编辑器',
         });
     }
@@ -596,10 +598,22 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
 // 导出激活函数
 export function activate(context: vscode.ExtensionContext) {
     TimelineJson5EditorProvider.register(context, {
+        viewType: 'andrea.timelineJson5Editor',
         spaRoot: vscode.Uri.joinPath(context.extensionUri, 'packages', 'webview', 'dist', 'spa'),
         connectSrc: ['https:', 'http:', 'ws:', 'wss:'],
         retainContextWhenHidden: true,
         title: '时间线编辑器',
+        route: '/timeline',
+        resourceMapperScriptUri: undefined
+    });
+
+    TimelineJson5EditorProvider.register(context, {
+        viewType: 'andrea.timelineGanttJson5Editor',
+        spaRoot: vscode.Uri.joinPath(context.extensionUri, 'packages', 'webview', 'dist', 'spa'),
+        connectSrc: ['https:', 'http:', 'ws:', 'wss:'],
+        retainContextWhenHidden: true,
+        title: '时间线甘特图编辑器',
+        route: '/timeline-gantt',
         resourceMapperScriptUri: undefined
     });
 }

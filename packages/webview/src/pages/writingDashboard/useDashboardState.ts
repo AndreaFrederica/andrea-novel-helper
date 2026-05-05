@@ -60,8 +60,12 @@ type VsCodeApi = {
 }
 
 type DashboardMessage =
-  | { command: 'dashboard.data'; data: DashboardState }
+  | { command: 'dashboard.data'; data: DashboardState; settings?: DashboardWebviewSettings }
   | { command: 'dashboard.error'; message: string }
+
+export interface DashboardWebviewSettings {
+  widgetShowHeader: boolean
+}
 
 function cloneState(): DashboardState {
   return JSON.parse(JSON.stringify(defaultDashboardState)) as DashboardState
@@ -87,6 +91,9 @@ export function useDashboardState() {
   const backendAvailable = ref(!!vscode)
   const isLoading = ref(!!vscode)
   const lastError = ref('')
+  const settings = ref<DashboardWebviewSettings>({
+    widgetShowHeader: true
+  })
 
   function post(message: unknown) {
     if (!vscode) return
@@ -125,6 +132,7 @@ export function useDashboardState() {
     const message = event.data
     if (message?.command === 'dashboard.data') {
       state.value = cloneForMessage(normalizeState(message.data))
+      settings.value = normalizeSettings(message.settings)
       lastError.value = ''
       isLoading.value = false
       return
@@ -153,6 +161,13 @@ export function useDashboardState() {
     saveState,
     updateWindows,
     resetState,
+    settings,
+  }
+}
+
+function normalizeSettings(value: DashboardWebviewSettings | undefined): DashboardWebviewSettings {
+  return {
+    widgetShowHeader: value?.widgetShowHeader !== false
   }
 }
 

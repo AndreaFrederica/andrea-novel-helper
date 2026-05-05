@@ -1,9 +1,9 @@
 <template>
-  <div class="widget-page">
-    <header>
+  <div :class="['widget-page', { 'no-header': !showHeader }]">
+    <header v-if="showHeader">
       <div>
         <h1>{{ title }}</h1>
-        <span>{{ backendAvailable ? '工作区后端存储' : '独立调试模式，不持久化' }}</span>
+        <span v-if="!backendAvailable">独立调试模式，不持久化</span>
       </div>
       <q-btn dense flat icon="dashboard_customize" label="打开工作台" @click="openDashboard" />
     </header>
@@ -46,13 +46,14 @@ import { widgetTitles, type WidgetType } from './writingDashboard/sampleData'
 import { useDashboardState } from './writingDashboard/useDashboardState'
 
 const route = useRoute()
-const { state, backendAvailable, isLoading, vscode, saveState } = useDashboardState()
+const { state, backendAvailable, isLoading, vscode, saveState, settings } = useDashboardState()
 
 const type = computed<WidgetType>(() => {
   const id = String(route.params.id || 'energy')
   return id in widgetTitles ? id as WidgetType : 'energy'
 })
 const title = computed(() => widgetTitles[type.value])
+const showHeader = computed(() => settings.value.widgetShowHeader)
 
 function openDashboard() {
   vscode?.postMessage({ command: 'dashboard.openCommand', commandId: 'andrea.openWritingDashboard' })
@@ -99,6 +100,10 @@ function openPlanFile() {
   overflow: hidden;
   background: var(--dash-page-bg);
   color: var(--dash-page-fg);
+}
+
+.widget-page.no-header {
+  grid-template-rows: 1fr;
 }
 
 header {
