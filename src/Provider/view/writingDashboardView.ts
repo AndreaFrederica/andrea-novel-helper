@@ -11,6 +11,7 @@ type DashboardWidgetId =
     | 'clock'
     | 'profile'
     | 'gantt'
+    | 'quadrant'
     | 'plan'
     | 'tasks'
     | 'yearPlan'
@@ -23,6 +24,7 @@ const widgetTitles: Record<DashboardWidgetId, string> = {
     clock: '当前时间',
     profile: '我的小说',
     gantt: '任务甘特图',
+    quadrant: '任务四象限',
     plan: '今日计划',
     tasks: '任务清单',
     yearPlan: '年计划',

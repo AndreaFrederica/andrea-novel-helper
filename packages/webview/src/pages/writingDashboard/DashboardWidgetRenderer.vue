@@ -23,6 +23,12 @@
     :window-id="windowId ?? ''"
     @update:tasks="$emit('update:tasks', $event)"
   />
+  <TaskQuadrant
+    v-else-if="type === 'quadrant'"
+    :tasks="tasks"
+    :window-id="windowId ?? ''"
+    @update:tasks="$emit('update:tasks', $event)"
+  />
   <MarkdownPlanCard
     v-else-if="type === 'plan'"
     :markdown="planMarkdown"
@@ -73,6 +79,7 @@ import LifeHeatmap from './components/LifeHeatmap.vue'
 import ClockCard from './components/ClockCard.vue'
 import ProfileCard from './components/ProfileCard.vue'
 import TaskGantt from './components/TaskGantt.vue'
+import TaskQuadrant from './components/TaskQuadrant.vue'
 import MarkdownPlanCard from './components/MarkdownPlanCard.vue'
 import TaskListBoard from './components/TaskListBoard.vue'
 import YearPlanCard from './components/YearPlanCard.vue'

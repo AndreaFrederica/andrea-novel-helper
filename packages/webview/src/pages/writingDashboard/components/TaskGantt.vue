@@ -145,7 +145,15 @@
                       @pointerdown.stop="startDrag($event, task)"
                       @click.stop="onTaskBarClick(task)"
                     >
-                      <span>{{ task.title }}</span>
+                      <span
+                        class="task-resize-handle start"
+                        @pointerdown.stop="startHorizontalResize($event, task, 'start')"
+                      />
+                      <span class="task-bar-label">{{ task.title }}</span>
+                      <span
+                        class="task-resize-handle end"
+                        @pointerdown.stop="startHorizontalResize($event, task, 'end')"
+                      />
                     </div>
                   </div>
                 </div>
@@ -221,7 +229,13 @@
                   v-if="vgBarVisible(task)"
                   :class="vgBarClass(task)"
                   :style="vgBarStyle(task)"
+                  @pointerdown.stop="startVerticalDrag($event, task)"
+                  @click.stop="onTaskBarClick(task)"
                 >
+                  <span
+                    class="vg-resize-handle start"
+                    @pointerdown.stop="startVerticalResize($event, task, 'start')"
+                  />
                   <div class="vg-progress-fill" :style="vgProgressStyle(task)" />
                   <div class="vg-bar-content">
                     <div class="vg-bar-top">
@@ -238,6 +252,10 @@
                       <span v-if="task.tags.length" class="vg-tag">{{ task.tags[0] }}</span>
                     </div>
                   </div>
+                  <span
+                    class="vg-resize-handle end"
+                    @pointerdown.stop="startVerticalResize($event, task, 'end')"
+                  />
                 </div>
               </div>
             </div>
@@ -555,10 +573,10 @@ function centerTimelineViewportIfNeeded() {
   timelineCenterPending = false
   axisCenterTimestamp.value = centerTimestamp.value
   if (settings.layout === 'gantt') {
-    target.scrollLeft = indexToOffset(VIRTUAL_CENTER_INDEX, 'x')
+    target.scrollLeft = centeredScrollOffset(target, 'x')
     timelineScrollLeft.value = target.scrollLeft
   } else if (settings.layout === 'timeline') {
-    target.scrollTop = indexToOffset(VIRTUAL_CENTER_INDEX, 'y')
+    target.scrollTop = centeredScrollOffset(target, 'y')
     vgScrollTop.value = target.scrollTop
   }
   updateCenterTimestampFromScroll()
@@ -702,11 +720,21 @@ function indexToTimestamp(index: number) {
 }
 
 function timestampToAxisIndex(timestamp: number) {
+  return Math.round(timestampToAxisPosition(timestamp))
+}
+
+function timestampToAxisPosition(timestamp: number) {
   return clampNumber(
-    VIRTUAL_CENTER_INDEX + ts.value.diff(timestamp, axisCenterTimestamp.value, settings.timeUnit),
+    VIRTUAL_CENTER_INDEX + (timestamp - axisCenterTimestamp.value) / unitDurationMs(settings.timeUnit),
     0,
     VIRTUAL_TICK_COUNT - 1
   )
+}
+
+function offsetTimestampByPixels(timestamp: number, deltaPx: number, axis: 'x' | 'y') {
+  const unitPx = getTimelineUnitPixels(axis)
+  if (unitPx <= 0) return timestamp
+  return timestamp + (deltaPx / unitPx) * unitDurationMs(settings.timeUnit)
 }
 
 function indexToOffset(index: number, axis: 'x' | 'y') {
@@ -715,6 +743,11 @@ function indexToOffset(index: number, axis: 'x' | 'y') {
 
 function offsetToIndex(offset: number, axis: 'x' | 'y') {
   return clampNumber(Math.round(offset / getTimelineUnitPixels(axis)), 0, VIRTUAL_TICK_COUNT - 1)
+}
+
+function centeredScrollOffset(target: HTMLElement, axis: 'x' | 'y') {
+  const viewport = axis === 'x' ? target.clientWidth : target.clientHeight
+  return Math.max(0, indexToOffset(VIRTUAL_CENTER_INDEX, axis) - viewport / 2)
 }
 
 function horizontalTickStyle(tick: VisibleTimeTick) {
@@ -755,9 +788,15 @@ function createTimeTick(timestamp: number): TimeTick {
     timestamp,
     label,
     subLabel,
-    isNow: Math.abs(timestamp - now) < unitDurationMs(settings.timeUnit),
+    isNow: isTimestampInCurrentUnit(timestamp, now),
     isSpecial: weekday === 0 || weekday === 6,
   }
+}
+
+function isTimestampInCurrentUnit(timestamp: number, now: number) {
+  const unitStart = ts.value.startOf(timestamp, settings.timeUnit)
+  const unitEnd = ts.value.add(unitStart, 1, settings.timeUnit)
+  return now >= unitStart && now < unitEnd
 }
 
 function unitDurationMs(unit: TimeUnit) {
@@ -803,17 +842,19 @@ function parseQDate(value: string): number | null {
 
 /* ── 任务条（横向布局）─────────────────────── */
 function barVisible(task: Task) {
-  const s = timestampToAxisIndex(Math.min(task.start, task.end))
-  const e = timestampToAxisIndex(Math.max(task.start, task.end))
+  const s = timestampToAxisPosition(Math.min(task.start, task.end))
+  const e = timestampToAxisPosition(Math.max(task.start, task.end))
   return e >= 0 && s <= VIRTUAL_TICK_COUNT - 1
 }
 
 function barStyle(task: Task) {
-  const s = timestampToAxisIndex(Math.min(task.start, task.end))
-  const e = Math.max(s, timestampToAxisIndex(Math.max(task.start, task.end)))
+  const s = timestampToAxisPosition(Math.min(task.start, task.end))
+  const e = Math.max(s, timestampToAxisPosition(Math.max(task.start, task.end)))
+  const left = s * colWidth.value + 2
+  const width = Math.max(18, (e - s) * colWidth.value - 4)
   return {
-    left: `${s * colWidth.value + 2}px`,
-    width: `${(e - s + 1) * colWidth.value - 4}px`,
+    left: `${left}px`,
+    width: `${width}px`,
     background: task.color
   }
 }
@@ -833,17 +874,19 @@ const timelineTasks = computed(() => {
 })
 
 function vgBarVisible(task: Task) {
-  const s = timestampToAxisIndex(Math.min(task.start, task.end))
-  const e = timestampToAxisIndex(Math.max(task.start, task.end))
+  const s = timestampToAxisPosition(Math.min(task.start, task.end))
+  const e = timestampToAxisPosition(Math.max(task.start, task.end))
   return e >= 0 && s <= VIRTUAL_TICK_COUNT - 1
 }
 
 function vgBarStyle(task: Task) {
-  const s = timestampToAxisIndex(Math.min(task.start, task.end))
-  const e = Math.max(s, timestampToAxisIndex(Math.max(task.start, task.end)))
+  const s = timestampToAxisPosition(Math.min(task.start, task.end))
+  const e = Math.max(s, timestampToAxisPosition(Math.max(task.start, task.end)))
+  const top = s * vgRowHeight + 2
+  const height = Math.max(22, (e - s) * vgRowHeight - 4)
   return {
-    top: `${s * vgRowHeight + 2}px`,
-    height: `${(e - s + 1) * vgRowHeight - 4}px`,
+    top: `${top}px`,
+    height: `${height}px`,
     '--task-color': task.color
   }
 }
@@ -864,9 +907,9 @@ function vgBarClass(task: Task) {
 }
 
 function vgTaskRows(task: Task) {
-  const s = timestampToAxisIndex(Math.min(task.start, task.end))
-  const e = Math.max(s, timestampToAxisIndex(Math.max(task.start, task.end)))
-  return e - s + 1
+  const s = timestampToAxisPosition(Math.min(task.start, task.end))
+  const e = Math.max(s, timestampToAxisPosition(Math.max(task.start, task.end)))
+  return Math.max(1, Math.ceil(e - s))
 }
 
 function vgProgressStyle(task: Task) {
@@ -901,13 +944,30 @@ function onTaskBarClick(task: Task) {
   openEditor(task)
 }
 
+function markTaskDragHandled(taskId: string) {
+  recentDraggedTaskId.value = taskId
+  window.setTimeout(() => {
+    if (recentDraggedTaskId.value === taskId) recentDraggedTaskId.value = null
+  }, 180)
+}
+
+function minTaskDurationMs() {
+  return Math.max(1000, Math.min(60_000, unitDurationMs(settings.timeUnit) / 24))
+}
+
+function resizedTaskRange(task: Task, edge: 'start' | 'end', deltaPx: number, axis: 'x' | 'y') {
+  const minDuration = minTaskDurationMs()
+  if (edge === 'start') {
+    const nextStart = Math.min(task.end - minDuration, offsetTimestampByPixels(task.start, deltaPx, axis))
+    return { start: nextStart, end: task.end }
+  }
+  const nextEnd = Math.max(task.start + minDuration, offsetTimestampByPixels(task.end, deltaPx, axis))
+  return { start: task.start, end: nextEnd }
+}
+
 function startDrag(event: PointerEvent, task: Task) {
   const el = event.currentTarget as HTMLElement
   const startX = event.clientX
-  const sIdx = nearestTickIndex(task.start)
-  const eIdx = nearestTickIndex(task.end)
-  const origS = Math.max(0, sIdx)
-  const origE = Math.max(origS, eIdx)
 
   function onMove(e: PointerEvent) {
     el.style.transform = `translateX(${e.clientX - startX}px)`
@@ -915,20 +975,126 @@ function startDrag(event: PointerEvent, task: Task) {
 
   function onUp(e: PointerEvent) {
     const delta = e.clientX - startX
-    const tickDelta = Math.round(delta / colWidth.value)
     el.style.transform = ''
 
-    const newSIdx = origS + tickDelta
-    const newEIdx = origE + tickDelta
-    const newStart = indexToTimestamp(clampNumber(newSIdx, 0, VIRTUAL_TICK_COUNT - 1))
-    const newEnd = indexToTimestamp(clampNumber(newEIdx, 0, VIRTUAL_TICK_COUNT - 1))
-    if (tickDelta !== 0 && Number.isFinite(newStart) && Number.isFinite(newEnd)) {
-      recentDraggedTaskId.value = task.id
-      window.setTimeout(() => {
-        if (recentDraggedTaskId.value === task.id) recentDraggedTaskId.value = null
-      }, 180)
+    const newStart = offsetTimestampByPixels(task.start, delta, 'x')
+    const newEnd = offsetTimestampByPixels(task.end, delta, 'x')
+    if (Math.abs(delta) > 1 && Number.isFinite(newStart) && Number.isFinite(newEnd)) {
+      markTaskDragHandled(task.id)
       emit('update:tasks', props.tasks.map(t =>
         t.id === task.id ? { ...t, start: newStart, end: newEnd } : t
+      ))
+    }
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+  }
+
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
+function startHorizontalResize(event: PointerEvent, task: Task, edge: 'start' | 'end') {
+  const handle = event.currentTarget
+  if (!(handle instanceof HTMLElement)) return
+  const parent = handle.parentElement
+  if (!(parent instanceof HTMLElement)) return
+  const el = parent
+  const startX = event.clientX
+  const originalLeft = timestampToAxisPosition(Math.min(task.start, task.end)) * colWidth.value + 2
+  const originalWidth = Math.max(18, (timestampToAxisPosition(Math.max(task.start, task.end)) - timestampToAxisPosition(Math.min(task.start, task.end))) * colWidth.value - 4)
+
+  function onMove(e: PointerEvent) {
+    const delta = e.clientX - startX
+    if (edge === 'start') {
+      const nextWidth = Math.max(18, originalWidth - delta)
+      const nextLeft = originalLeft + originalWidth - nextWidth
+      el.style.left = `${nextLeft}px`
+      el.style.width = `${nextWidth}px`
+    } else {
+      el.style.width = `${Math.max(18, originalWidth + delta)}px`
+    }
+  }
+
+  function onUp(e: PointerEvent) {
+    const delta = e.clientX - startX
+    el.style.left = ''
+    el.style.width = ''
+
+    const next = resizedTaskRange(task, edge, delta, 'x')
+    if (Math.abs(delta) > 1 && Number.isFinite(next.start) && Number.isFinite(next.end)) {
+      markTaskDragHandled(task.id)
+      emit('update:tasks', props.tasks.map(t =>
+        t.id === task.id ? { ...t, start: next.start, end: next.end } : t
+      ))
+    }
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+  }
+
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
+function startVerticalDrag(event: PointerEvent, task: Task) {
+  const el = event.currentTarget as HTMLElement
+  const startY = event.clientY
+
+  function onMove(e: PointerEvent) {
+    el.style.transform = `translateY(${e.clientY - startY}px)`
+  }
+
+  function onUp(e: PointerEvent) {
+    const delta = e.clientY - startY
+    el.style.transform = ''
+
+    const newStart = offsetTimestampByPixels(task.start, delta, 'y')
+    const newEnd = offsetTimestampByPixels(task.end, delta, 'y')
+    if (Math.abs(delta) > 1 && Number.isFinite(newStart) && Number.isFinite(newEnd)) {
+      markTaskDragHandled(task.id)
+      emit('update:tasks', props.tasks.map(t =>
+        t.id === task.id ? { ...t, start: newStart, end: newEnd } : t
+      ))
+    }
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+  }
+
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+}
+
+function startVerticalResize(event: PointerEvent, task: Task, edge: 'start' | 'end') {
+  const handle = event.currentTarget
+  if (!(handle instanceof HTMLElement)) return
+  const parent = handle.parentElement
+  if (!(parent instanceof HTMLElement)) return
+  const el = parent
+  const startY = event.clientY
+  const originalTop = timestampToAxisPosition(Math.min(task.start, task.end)) * vgRowHeight + 2
+  const originalHeight = Math.max(22, (timestampToAxisPosition(Math.max(task.start, task.end)) - timestampToAxisPosition(Math.min(task.start, task.end))) * vgRowHeight - 4)
+
+  function onMove(e: PointerEvent) {
+    const delta = e.clientY - startY
+    if (edge === 'start') {
+      const nextHeight = Math.max(22, originalHeight - delta)
+      const nextTop = originalTop + originalHeight - nextHeight
+      el.style.top = `${nextTop}px`
+      el.style.height = `${nextHeight}px`
+    } else {
+      el.style.height = `${Math.max(22, originalHeight + delta)}px`
+    }
+  }
+
+  function onUp(e: PointerEvent) {
+    const delta = e.clientY - startY
+    el.style.top = ''
+    el.style.height = ''
+
+    const next = resizedTaskRange(task, edge, delta, 'y')
+    if (Math.abs(delta) > 1 && Number.isFinite(next.start) && Number.isFinite(next.end)) {
+      markTaskDragHandled(task.id)
+      emit('update:tasks', props.tasks.map(t =>
+        t.id === task.id ? { ...t, start: next.start, end: next.end } : t
       ))
     }
     window.removeEventListener('pointermove', onMove)
@@ -1463,6 +1629,13 @@ const layoutLabel = computed(() => {
   min-height: 0;
   overflow: auto;
   background: var(--dash-window-bg);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.timeline-wrap::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .timeline-inner {
@@ -1561,7 +1734,7 @@ const layoutLabel = computed(() => {
   color: #fff;
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 12px;
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
@@ -1570,9 +1743,50 @@ const layoutLabel = computed(() => {
   z-index: 1;
 }
 
-.task-bar span {
+.task-bar-label {
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.task-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: 2;
+  cursor: ew-resize;
+}
+
+.task-resize-handle.start {
+  left: 0;
+}
+
+.task-resize-handle.end {
+  right: 0;
+}
+
+.task-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  opacity: 0;
+}
+
+.task-bar:hover .task-resize-handle::after {
+  opacity: 1;
+}
+
+.task-resize-handle.start::after {
+  left: 3px;
+}
+
+.task-resize-handle.end::after {
+  right: 3px;
 }
 
 /* ── 纵向甘特图 ──────────────────────────── */
@@ -1612,6 +1826,13 @@ const layoutLabel = computed(() => {
   overflow-x: auto;
   overflow-y: hidden;
   display: flex;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.vg-headers::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .vg-col-header {
@@ -1645,6 +1866,13 @@ const layoutLabel = computed(() => {
   display: flex;
   min-height: 0;
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.vg-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .vg-time-axis {
@@ -1691,6 +1919,13 @@ const layoutLabel = computed(() => {
   position: relative;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.vg-bars-area::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .vg-grid-bg {
@@ -1754,6 +1989,46 @@ const layoutLabel = computed(() => {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
   overflow: hidden;
   cursor: pointer;
+}
+
+.vg-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10px;
+  z-index: 3;
+  cursor: ns-resize;
+}
+
+.vg-resize-handle.start {
+  top: 0;
+}
+
+.vg-resize-handle.end {
+  bottom: 0;
+}
+
+.vg-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--task-color) 68%, #fff);
+  opacity: 0;
+}
+
+.vg-resize-handle.start::after {
+  top: 3px;
+}
+
+.vg-resize-handle.end::after {
+  bottom: 3px;
+}
+
+.vg-bar:hover .vg-resize-handle::after {
+  opacity: 1;
 }
 
 .vg-bar::before {

@@ -58,6 +58,7 @@
     "onWebviewPanel:andrea.writingDashboard.clock",
     "onWebviewPanel:andrea.writingDashboard.profile",
     "onWebviewPanel:andrea.writingDashboard.gantt",
+    "onWebviewPanel:andrea.writingDashboard.quadrant",
     "onWebviewPanel:andrea.writingDashboard.plan",
     "onWebviewPanel:andrea.writingDashboard.tasks",
     "onWebviewPanel:andrea.writingDashboard.yearPlan",

@@ -4,7 +4,7 @@
       <div class="header-actions">
         <q-toggle v-model="showRelations" dense label="关系" />
         <q-btn dense flat round icon="refresh" title="重新加载" @click="requestTimelineData" />
-        <q-btn dense unelevated round color="pink-5" icon="save" title="保存" @click="saveTimelineData" />
+        <q-btn dense flat icon="save" title="保存文件" @click="saveTimelineData" />
       </div>
     </header>
 
@@ -406,15 +406,18 @@ function onUpdateTasks(nextTasks: Task[]) {
 
   events.value = nextEvents
   connections.value = nextConnections
-  saveTimelineData()
+  syncTimelineData()
 }
 
-function saveTimelineData() {
-  const data: TimelineData = {
+function buildTimelinePayload(): TimelineData {
+  return {
     events: toPlainEvents(events.value),
     connections: connections.value.map(conn => ({ ...conn }))
   }
+}
 
+function syncTimelineData() {
+  const data = buildTimelinePayload()
   if (!vscodeApi?.postMessage) {
     saveStatus.value = '当前不在 VS Code Webview 中，无法写回文件'
     return
@@ -424,7 +427,21 @@ function saveTimelineData() {
     type: 'dataChanged',
     data
   })
-  saveStatus.value = `已发送保存请求：${data.events.length} 个事件，${data.connections.length} 条连接`
+  saveStatus.value = `已同步到编辑器：${data.events.length} 个事件，${data.connections.length} 条连接`
+}
+
+function saveTimelineData() {
+  const data = buildTimelinePayload()
+  if (!vscodeApi?.postMessage) {
+    saveStatus.value = '当前不在 VS Code Webview 中，无法保存文件'
+    return
+  }
+
+  vscodeApi.postMessage({
+    type: 'saveTimelineData',
+    data
+  })
+  saveStatus.value = '正在保存文件'
 }
 
 function openConnectionEditor(connection?: TimelineConnection) {
@@ -461,12 +478,12 @@ function saveConnection() {
     ? connections.value.map(conn => conn.id === editingConnectionId.value ? next : conn)
     : [...connections.value, next]
   connectionEditorOpen.value = false
-  saveTimelineData()
+  syncTimelineData()
 }
 
 function removeConnection(id: string) {
   connections.value = connections.value.filter(conn => conn.id !== id)
-  saveTimelineData()
+  syncTimelineData()
 }
 
 function openEventEditor(event?: TimelineEvent) {
@@ -529,7 +546,7 @@ function saveEvent() {
     }))
   }
   eventEditorOpen.value = false
-  saveTimelineData()
+  syncTimelineData()
 }
 
 function applyOptionalEventFields(event: TimelineEvent) {
@@ -574,7 +591,7 @@ function applyOptionalEventFields(event: TimelineEvent) {
 function removeEvent(id: string) {
   events.value = events.value.filter(event => event.id !== id)
   connections.value = connections.value.filter(conn => conn.source !== id && conn.target !== id)
-  saveTimelineData()
+  syncTimelineData()
 }
 
 function removeEditingEvent() {
@@ -631,6 +648,11 @@ function handleMessage(event: MessageEvent) {
 
   if (message.type === 'dataChangeAck') {
     saveStatus.value = message.ok ? '文件已同步' : '文件同步失败'
+    return
+  }
+
+  if (message.type === 'saveAck') {
+    saveStatus.value = message.ok ? '文件已保存' : `保存失败：${message.error ?? '未知错误'}`
   }
 }
 
@@ -1169,13 +1191,17 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .timeline-gantt-header,
   .timeline-gantt-status {
     flex-direction: column;
   }
 
+  .timeline-gantt-header {
+    align-items: center;
+  }
+
   .header-actions {
     justify-content: flex-end;
+    width: 100%;
   }
 
   .timeline-gantt-body.with-relations {

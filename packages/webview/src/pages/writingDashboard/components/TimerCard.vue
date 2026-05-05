@@ -5,7 +5,7 @@
       <button
         v-for="m in modes"
         :key="m.key"
-        :class="['mode-btn', { active: mode === m.key }]"
+        :class="['mode-btn', { active: mode === m.key, running: runtimeState[m.key].running }]"
         @click="switchMode(m.key)"
       >
         {{ m.label }}
@@ -99,10 +99,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, reactive, ref, onBeforeUnmount } from 'vue'
 import WindowModal from './WindowModal.vue'
 
 type TimerMode = 'pomodoro' | 'countdown' | 'stopwatch'
+interface TimerRuntimeState {
+  running: boolean
+  elapsedMs: number
+  lastTick: number
+  isBreak: boolean
+  pomodoroCount: number
+}
 
 const props = defineProps<{
   windowId?: string
@@ -127,11 +134,31 @@ const modes = [
 
 /* ── 状态 ────────────────────────────────── */
 const mode = ref<TimerMode>('pomodoro')
-const isRunning = ref(false)
-const isBreak = ref(false)
-const elapsedMs = ref(0)      // 已流逝时间（毫秒）
-const pomodoroCount = ref(0)  // 已完成轮数
 const showSettings = ref(false)
+
+const runtimeState = reactive<Record<TimerMode, TimerRuntimeState>>({
+  pomodoro: {
+    running: false,
+    elapsedMs: 0,
+    lastTick: 0,
+    isBreak: false,
+    pomodoroCount: 0,
+  },
+  countdown: {
+    running: false,
+    elapsedMs: 0,
+    lastTick: 0,
+    isBreak: false,
+    pomodoroCount: 0,
+  },
+  stopwatch: {
+    running: false,
+    elapsedMs: 0,
+    lastTick: 0,
+    isBreak: false,
+    pomodoroCount: 0,
+  },
+})
 
 const settings = reactive({
   workMinutes: 25,
@@ -141,15 +168,15 @@ const settings = reactive({
   countdownS: 0,
 })
 
+const currentState = computed(() => runtimeState[mode.value])
+const isRunning = computed(() => currentState.value.running)
+const isBreak = computed(() => runtimeState.pomodoro.isBreak)
+const elapsedMs = computed(() => currentState.value.elapsedMs)
+const pomodoroCount = computed(() => runtimeState.pomodoro.pomodoroCount)
+
 /* ── 计算总时长 ──────────────────────────── */
 const totalMs = computed(() => {
-  if (mode.value === 'pomodoro') {
-    return (isBreak.value ? settings.breakMinutes : settings.workMinutes) * 60 * 1000
-  }
-  if (mode.value === 'countdown') {
-    return (settings.countdownH * 3600 + settings.countdownM * 60 + settings.countdownS) * 1000
-  }
-  return 0 // stopwatch 不需要总时长
+  return getTotalMs(mode.value)
 })
 
 /* ── 环形进度 ────────────────────────────── */
@@ -185,31 +212,40 @@ const displayTime = computed(() => {
 
 /* ── 计时器核心 ──────────────────────────── */
 let intervalId: ReturnType<typeof setInterval> | null = null
-let lastTick = 0
 
 function tick() {
   const now = Date.now()
-  const delta = now - lastTick
-  lastTick = now
-  elapsedMs.value += delta
+  for (const timerMode of modes.map(item => item.key)) {
+    const state = runtimeState[timerMode]
+    if (!state.running) continue
+    const delta = now - state.lastTick
+    state.lastTick = now
+    state.elapsedMs += Math.max(0, delta)
 
-  // 倒计时 / 番茄钟 自动结束
-  if ((mode.value === 'countdown' || mode.value === 'pomodoro') && elapsedMs.value >= totalMs.value) {
-    onComplete()
+    const modeTotal = getTotalMs(timerMode)
+    if ((timerMode === 'countdown' || timerMode === 'pomodoro') && modeTotal > 0 && state.elapsedMs >= modeTotal) {
+      onComplete(timerMode)
+    }
   }
+  stopTickerIfIdle()
 }
 
-function onComplete() {
-  pause()
-  if (mode.value === 'pomodoro') {
-    if (!isBreak.value) {
-      pomodoroCount.value++
+function onComplete(completedMode: TimerMode) {
+  pause(completedMode)
+  const state = runtimeState[completedMode]
+  if (completedMode === 'pomodoro') {
+    if (!state.isBreak) {
+      state.pomodoroCount++
     }
-    // 自动切换工作/休息
-    isBreak.value = !isBreak.value
-    elapsedMs.value = 0
+    state.isBreak = !state.isBreak
+    state.elapsedMs = 0
+  } else if (completedMode === 'countdown') {
+    state.elapsedMs = getTotalMs('countdown')
   }
-  // 播放提示音（如果浏览器支持）
+  playCompleteTone()
+}
+
+function playCompleteTone() {
   try {
     const ctx = new AudioContext()
     const osc = ctx.createOscillator()
@@ -220,22 +256,25 @@ function onComplete() {
     gain.gain.value = 0.3
     osc.start()
     osc.stop(ctx.currentTime + 0.3)
+    window.setTimeout(() => void ctx.close(), 500)
   } catch { /* ignore */ }
 }
 
 function start() {
-  if (isRunning.value) return
-  isRunning.value = true
-  lastTick = Date.now()
-  intervalId = setInterval(tick, 100)
+  const state = currentState.value
+  if (state.running) return
+  if (mode.value === 'countdown' && getTotalMs('countdown') <= 0) return
+  if (mode.value === 'countdown' && state.elapsedMs >= getTotalMs('countdown')) {
+    state.elapsedMs = 0
+  }
+  state.running = true
+  state.lastTick = Date.now()
+  ensureTicker()
 }
 
-function pause() {
-  isRunning.value = false
-  if (intervalId) {
-    clearInterval(intervalId)
-    intervalId = null
-  }
+function pause(targetMode: TimerMode = mode.value) {
+  runtimeState[targetMode].running = false
+  stopTickerIfIdle()
 }
 
 function toggle() {
@@ -245,27 +284,46 @@ function toggle() {
 
 function reset() {
   pause()
-  elapsedMs.value = 0
+  const state = currentState.value
+  state.elapsedMs = 0
   if (mode.value === 'pomodoro') {
-    isBreak.value = false
+    state.isBreak = false
   }
 }
 
 function switchMode(newMode: TimerMode) {
-  pause()
   mode.value = newMode
-  elapsedMs.value = 0
-  isBreak.value = false
 }
 
-/* ── 切换模式时重置 ──────────────────────── */
-watch(mode, () => {
-  elapsedMs.value = 0
-  isBreak.value = false
-})
+function getTotalMs(timerMode: TimerMode) {
+  if (timerMode === 'pomodoro') {
+    const state = runtimeState.pomodoro
+    return Math.max(0, state.isBreak ? settings.breakMinutes : settings.workMinutes) * 60 * 1000
+  }
+  if (timerMode === 'countdown') {
+    return Math.max(0, settings.countdownH * 3600 + settings.countdownM * 60 + settings.countdownS) * 1000
+  }
+  return 0
+}
+
+function ensureTicker() {
+  if (intervalId) return
+  intervalId = setInterval(tick, 100)
+}
+
+function stopTickerIfIdle() {
+  if (Object.values(runtimeState).some(state => state.running)) return
+  if (intervalId) {
+    clearInterval(intervalId)
+    intervalId = null
+  }
+}
 
 onBeforeUnmount(() => {
-  pause()
+  if (intervalId) {
+    clearInterval(intervalId)
+    intervalId = null
+  }
 })
 </script>
 
@@ -309,6 +367,17 @@ onBeforeUnmount(() => {
   background: var(--dash-window-bg);
   color: var(--dash-accent);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.mode-btn.running:not(.active)::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--dash-accent);
+  vertical-align: middle;
 }
 
 /* 时间显示区 */

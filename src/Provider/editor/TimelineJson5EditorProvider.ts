@@ -408,13 +408,36 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
                         
                         // 直接保存数据格式，确保前端数据完全覆盖后端
                         const text = JSON5.stringify(timelineData, null, 2) + '\n';
+                        const fullRange = new vscode.Range(
+                            document.positionAt(0),
+                            document.positionAt(document.getText().length)
+                        );
+                        const edit = new vscode.WorkspaceEdit();
+                        edit.replace(document.uri, fullRange, text);
 
-                        // 按 autosave 策略写入/排队
-                        this.scheduleWrite(document, text);
+                        this.refreshMuteUntil.set(key, Date.now() + 500);
+                        this.currentJsonData.set(key, text);
 
-                        // 立即 ACK，若 autosave=off，提示已排队等待用户保存
-                        const queued = this.getAutoSaveMode(document) === 'off';
-                        webviewPanel.webview.postMessage({ type: 'saveAck', ok: true, queued });
+                        const applied = document.getText() === text || await vscode.workspace.applyEdit(edit);
+                        if (!applied) {
+                            webviewPanel.webview.postMessage({ type: 'saveAck', ok: false, error: '应用编辑失败' });
+                            break;
+                        }
+
+                        const saved = await document.save();
+                        if (saved) {
+                            this.pendingText.delete(key);
+                            const t = this.saveTimers.get(key);
+                            if (t) {
+                                clearTimeout(t);
+                                this.saveTimers.delete(key);
+                            }
+                        }
+                        webviewPanel.webview.postMessage({
+                            type: 'saveAck',
+                            ok: saved,
+                            error: saved ? undefined : 'VS Code 保存失败'
+                        });
                         break;
                     }
                     

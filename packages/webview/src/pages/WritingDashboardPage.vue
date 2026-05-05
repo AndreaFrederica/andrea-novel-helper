@@ -25,24 +25,27 @@
             <span>{{ windowItem.title }}</span>
           </div>
           <div class="window-actions" @pointerdown.stop>
-            <q-btn dense flat round icon="remove" @click.stop="minimizeWindow(windowItem.id)">
-              <q-tooltip>最小化</q-tooltip>
-            </q-btn>
-            <q-btn dense flat round icon="open_in_new" @click.stop="openStandalone(windowItem.type)">
+            <q-btn class="window-action utility" dense flat square icon="open_in_new" @click.stop="openStandalone(windowItem.type)">
               <q-tooltip>独立打开</q-tooltip>
             </q-btn>
-            <q-btn
-              dense
-              flat
-              round
-              :icon="windowItem.maximized ? 'filter_none' : 'crop_square'"
-              @click.stop="toggleMaximize(windowItem.id)"
-            >
-              <q-tooltip>{{ windowItem.maximized ? '还原' : '最大化' }}</q-tooltip>
-            </q-btn>
-            <q-btn dense flat round icon="close" @click.stop="removeWindow(windowItem.id)">
-              <q-tooltip>从工作台移除</q-tooltip>
-            </q-btn>
+            <div class="system-actions">
+              <q-btn class="window-action" dense flat square icon="remove" @click.stop="minimizeWindow(windowItem.id)">
+                <q-tooltip>最小化</q-tooltip>
+              </q-btn>
+              <q-btn
+                class="window-action"
+                dense
+                flat
+                square
+                :icon="windowItem.maximized ? 'filter_none' : 'crop_square'"
+                @click.stop="toggleMaximize(windowItem.id)"
+              >
+                <q-tooltip>{{ windowItem.maximized ? '还原' : '最大化' }}</q-tooltip>
+              </q-btn>
+              <q-btn class="window-action close" dense flat square icon="close" @click.stop="removeWindow(windowItem.id)">
+                <q-tooltip>从工作台移除</q-tooltip>
+              </q-btn>
+            </div>
           </div>
         </div>
         <div class="window-body">
@@ -314,8 +317,8 @@ function activateWindow(id: string) {
 function addWindow(type: WidgetType) {
   const count = windows.value.length
   const stageSize = getStageSize()
-  const preferredW = type === 'gantt' || type === 'tasks' ? 720 : type === 'timer' ? 320 : 360
-  const preferredH = type === 'gantt' ? 330 : type === 'timer' ? 360 : 240
+  const preferredW = type === 'gantt' || type === 'tasks' || type === 'quadrant' ? 720 : type === 'timer' ? 320 : 360
+  const preferredH = type === 'gantt' || type === 'quadrant' ? 330 : type === 'timer' ? 360 : 240
   const size = fitWindowSize(preferredW, preferredH, stageSize)
   const pos = clampWindowPosition(
     40 + (count % 4) * 36,
@@ -1050,6 +1053,7 @@ function widgetIcon(type: WidgetType) {
     clock: 'schedule',
     profile: 'person',
     gantt: 'timeline',
+    quadrant: 'dashboard',
     plan: 'article',
     tasks: 'checklist',
     yearPlan: 'track_changes',
@@ -1370,6 +1374,37 @@ function openPlanFile() {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  gap: 6px;
+}
+
+.system-actions {
+  display: flex;
+  align-items: center;
+}
+
+.window-action {
+  width: 36px;
+  height: 32px;
+  border-radius: 0;
+  color: var(--dash-text-secondary);
+}
+
+.window-action :deep(.q-icon) {
+  font-size: 20px;
+}
+
+.window-action:hover {
+  color: var(--dash-page-fg);
+  background: color-mix(in srgb, var(--dash-page-fg) 10%, transparent);
+}
+
+.window-action.utility {
+  border-radius: 6px;
+}
+
+.window-action.close:hover {
+  color: #fff;
+  background: #c42b1c;
 }
 
 .window-body {
