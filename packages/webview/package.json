@@ -17,6 +17,7 @@
   "dependencies": {
     "@devui-design/icons": "^1.4.0",
     "@he-tree/vue": "^2.9.4",
+    "@infectoone/vue-ganttastic": "^2.3.2",
     "@quasar/extras": "^1.16.4",
     "@vue-flow/background": "^1.3.2",
     "@vue-flow/controls": "^1.1.3",
@@ -24,6 +25,7 @@
     "@vue-flow/minimap": "^1.5.4",
     "@vue-flow/node-resizer": "^1.5.0",
     "d3-hierarchy": "^3.1.2",
+    "dayjs": "^1.11.20",
     "echarts": "^6.0.0",
     "monaco-editor": "^0.53.0",
     "pinia": "^3.0.1",
@@ -32,6 +34,7 @@
     "vditor": "^3.11.2",
     "vue": "^3.4.18",
     "vue-devui": "^1.6.36",
+    "vue-draggable-plus": "^0.6.1",
     "vue-i18n": "^11.0.0",
     "vue-router": "^4.0.12",
     "webview": "^0.0.1"

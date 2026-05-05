@@ -58,6 +58,16 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/whatsNew/WhatsNewPage.vue'),
   },
 
+  {
+    path: '/writing-dashboard',
+    component: () => import('pages/WritingDashboardPage.vue'),
+  },
+
+  {
+    path: '/writing-dashboard-widget/:id',
+    component: () => import('pages/WritingDashboardWidgetPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

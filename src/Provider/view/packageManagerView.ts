@@ -16,7 +16,7 @@ import { globalRelationshipManager } from '../../utils/globalRelationshipManager
 import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
 import { PROJECT_CONFIG_MARKDOWN_FILE_NAME, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../../projectConfig/constants';
 
-type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | ProjectInitWizardNode | ProjectSettingsNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
+type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | ProjectInitWizardNode | ProjectSettingsNode | WritingDashboardNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
 
 function normalizeFsPathForCompare(p: string): string {
     const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
@@ -134,6 +134,24 @@ class ProjectSettingsNode extends vscode.TreeItem {
         this.command = {
             command: 'andrea.openProjectSettings',
             title: '打开项目设置',
+            arguments: []
+        };
+    }
+}
+
+// 创作工作台节点
+class WritingDashboardNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 创作工作台', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'writingDashboard';
+        this.iconPath = new vscode.ThemeIcon('dashboard');
+        this.description = '打开任务、计划和创作记录工作台';
+        this.command = {
+            command: 'andrea.openWritingDashboard',
+            title: '打开创作工作台',
             arguments: []
         };
     }
@@ -603,6 +621,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
             return [
                 new ProjectInitWizardNode(this.workspaceRoot),
                 new ProjectSettingsNode(this.workspaceRoot),
+                new WritingDashboardNode(this.workspaceRoot),
                 new ReferenceMaintenanceNode(this.workspaceRoot),
                 new ExternalResourceManageNode(this.workspaceRoot),
                 new CopilotDocsManageNode(this.workspaceRoot),

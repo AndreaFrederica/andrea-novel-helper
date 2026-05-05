@@ -1,0 +1,96 @@
+/* Writing Dashboard 主题变量
+ * 默认保持粉色系，在 VS Code webview 暗色主题下自动跟随 VS Code 变量
+ */
+:root {
+  --dash-page-bg: #fff4fa;
+  --dash-page-fg: #5e5260;
+  --dash-toolbar-bg: rgba(255, 250, 253, 0.9);
+  --dash-toolbar-border: rgba(218, 108, 176, 0.22);
+  --dash-accent: #c33f96;
+  --dash-accent-light: #d44ca4;
+  --dash-window-bg: rgba(255, 255, 255, 0.94);
+  --dash-window-border: rgba(226, 144, 195, 0.5);
+  --dash-titlebar-bg: linear-gradient(180deg, #fffafd, #fff3fa);
+  --dash-titlebar-border: rgba(226, 144, 195, 0.28);
+  --dash-title-fg: #8b4e78;
+  --dash-text-secondary: #977f92;
+  --dash-text-muted: #7a6172;
+  --dash-text-muted2: #a18a9a;
+  --dash-border-light: #f0dcea;
+  --dash-border-lighter: #f6e9f1;
+  --dash-panel-bg: #fffafd;
+  --dash-panel-bg2: #fff8fb;
+  --dash-done: #4d927f;
+  --dash-done-bg: #cbe5df;
+  --dash-todo: #c44896;
+  --dash-todo-bg: #efc6df;
+  --dash-input-fg: #665866;
+  --dash-table-head: #d14d99;
+  --dash-chart-axis: #6f6370;
+  --dash-chart-line: #f0e5ef;
+  --dash-chart-split: #f0e5ef;
+  --dash-today-bg: #ffe5f1;
+  --dash-shadow: rgba(202, 77, 154, 0.13);
+  --dash-shadow-active: rgba(202, 77, 154, 0.22);
+  --dash-bar-shadow: rgba(166, 47, 128, 0.22);
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(180, 84, 146, 0.25);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 84, 146, 0.45);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.body--dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+.body--dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.body--dark {
+  --dash-page-bg: var(--vscode-editor-background, #1e1e1e);
+  --dash-page-fg: var(--vscode-editor-foreground, #cccccc);
+  --dash-toolbar-bg: var(--vscode-sideBar-background, rgba(50, 50, 50, 0.95));
+  --dash-toolbar-border: var(--vscode-panel-border, rgba(255, 255, 255, 0.08));
+  --dash-accent: var(--vscode-textLink-foreground, #d478b1);
+  --dash-accent-light: var(--vscode-textLink-foreground, #e08ec4);
+  --dash-window-bg: var(--vscode-editorWidget-background, rgba(45, 45, 45, 0.96));
+  --dash-window-border: var(--vscode-panel-border, rgba(255, 255, 255, 0.08));
+  --dash-titlebar-bg: linear-gradient(180deg, #2d2d2d, #252525);
+  --dash-titlebar-border: rgba(255, 255, 255, 0.06);
+  --dash-title-fg: var(--vscode-textLink-foreground, #d478b1);
+  --dash-text-secondary: var(--vscode-descriptionForeground, #a0a0a0);
+  --dash-text-muted: var(--vscode-foreground, #808080);
+  --dash-text-muted2: var(--vscode-descriptionForeground, #808080);
+  --dash-border-light: var(--vscode-panel-border, rgba(255, 255, 255, 0.08));
+  --dash-border-lighter: var(--vscode-panel-border, rgba(255, 255, 255, 0.06));
+  --dash-panel-bg: var(--vscode-sideBar-background, #252526);
+  --dash-panel-bg2: var(--vscode-sideBar-background, #252526);
+  --dash-done: var(--vscode-charts-green, #89d185);
+  --dash-done-bg: var(--vscode-charts-green, #89d185);
+  --dash-todo: var(--vscode-charts-yellow, #cca700);
+  --dash-todo-bg: var(--vscode-charts-yellow, #cca700);
+  --dash-input-fg: var(--vscode-input-foreground, #cccccc);
+  --dash-table-head: var(--vscode-textLink-foreground, #d478b1);
+  --dash-chart-axis: var(--vscode-foreground, #a0a0a0);
+  --dash-chart-line: var(--vscode-panel-border, rgba(255, 255, 255, 0.08));
+  --dash-chart-split: var(--vscode-panel-border, rgba(255, 255, 255, 0.08));
+  --dash-today-bg: var(--vscode-editor-inactiveSelectionBackground, rgba(255, 229, 241, 0.15));
+  --dash-shadow: rgba(0, 0, 0, 0.25);
+  --dash-shadow-active: rgba(0, 0, 0, 0.35);
+  --dash-bar-shadow: rgba(0, 0, 0, 0.3);
+}

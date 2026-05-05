@@ -50,6 +50,19 @@
     "onLanguage:rjson5",
     "onLanguage:tjson5",
     "onFileSystem:andrea-outline",
+    "onCommand:andrea.openWritingDashboard",
+    "onCommand:andrea.openWritingDashboardWidget",
+    "onWebviewPanel:andrea.writingDashboard",
+    "onWebviewPanel:andrea.writingDashboard.energy",
+    "onWebviewPanel:andrea.writingDashboard.heatmap",
+    "onWebviewPanel:andrea.writingDashboard.clock",
+    "onWebviewPanel:andrea.writingDashboard.profile",
+    "onWebviewPanel:andrea.writingDashboard.gantt",
+    "onWebviewPanel:andrea.writingDashboard.plan",
+    "onWebviewPanel:andrea.writingDashboard.tasks",
+    "onWebviewPanel:andrea.writingDashboard.yearPlan",
+    "onWebviewPanel:andrea.writingDashboard.logs",
+    "onWebviewPanel:andrea.writingDashboard.timer",
     "onWebviewPanel:andrea.guide",
     "onWebviewPanel:andrea.guideDoc",
     "onCommand:andrea.openWhatsNew",
@@ -253,6 +266,18 @@
         "title": "打开项目设置",
         "category": "Andrea Novel Helper",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "andrea.openWritingDashboard",
+        "title": "打开创作工作台",
+        "category": "Andrea Novel Helper",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "andrea.openWritingDashboardWidget",
+        "title": "独立打开创作工作台组件",
+        "category": "Andrea Novel Helper",
+        "icon": "$(window)"
       },
       {
         "command": "andrea.configureMilestones",
