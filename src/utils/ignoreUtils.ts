@@ -5,6 +5,7 @@ export interface IgnoreConfig {
     workspaceRoot: string;
     respectWcignore: boolean;
     respectGitignore?: boolean; // 是否遵循 .gitignore（默认 true）
+    respectFileTrackingIgnore?: boolean; // 是否遵循 .ftignore
     includePatterns?: string[];
     excludePatterns?: string[];
     ignoreParser?: CombinedIgnoreParser | null;
@@ -14,10 +15,10 @@ export interface IgnoreConfig {
 }
 
 /**
- * 判断某文件当前配置下是否会被追踪忽略（含 .git / 可选 .wcignore / 内部数据库与排除规则）
+ * 判断某文件当前配置下是否会被忽略（含 .git / 可选 .wcignore / 可选 .ftignore / 内部数据库与排除规则）
  * @param filePath 文件路径
  * @param config 忽略配置
- * @param config.allowedLanguages 允许的文件扩展名（不带点），未提供时使用默认值 ['md', 'txt', 'json', 'json5']
+ * @param config.allowedLanguages 允许的文件扩展名（不带点），未提供时使用默认写作资源类型。
  * @param config.ignoreReferenceFiles 是否忽略参考文件（防止生成数据库记录），默认为 false
  */
 export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
@@ -30,7 +31,7 @@ export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
         }
     }
     
-    // 语言类型过滤（默认：仅允许 md, txt, json, json5）
+    // 语言类型过滤（默认：仅允许写作资源类型；普通 .json 不进入默认字数/追踪口径）
     const ext = path.extname(filePath).slice(1).toLowerCase();
     const allowed = getAllowedFileTypes(config.allowedLanguages);
     if (ext && !allowed.includes(ext)) {
@@ -68,12 +69,16 @@ export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
     if (config.ignoreParser) {
         const respectGit = config.respectGitignore !== false; // 默认 true
         const respectWc = !!config.respectWcignore;
+        const respectFileTracking = !!config.respectFileTrackingIgnore;
         if (respectGit && respectWc) {
             if (config.ignoreParser.shouldIgnore(filePath)) { return true; } // 同时应用两者
         } else if (respectGit && !respectWc) {
             if (config.ignoreParser.shouldIgnoreByGit(filePath)) { return true; } // 仅 git
         } else if (!respectGit && respectWc) {
             if (config.ignoreParser.shouldIgnoreByWordCount(filePath)) { return true; } // 仅 wcignore
+        }
+        if (respectFileTracking && config.ignoreParser.shouldIgnoreByFileTracking(filePath)) {
+            return true;
         }
         // 两者都不尊重：跳过忽略解析
     }
@@ -100,7 +105,7 @@ export function isFileIgnored(filePath: string, config: IgnoreConfig): boolean {
     return false;
 }
 
-const DEFAULT_ALLOWED_LANGUAGES = ['md', 'txt', 'json', 'json5', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5'];
+const DEFAULT_ALLOWED_LANGUAGES = ['md', 'txt', 'json5', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5'];
 
 function getAllowedFileTypes(configAllowed?: string[]): string[] {
     return configAllowed ?? DEFAULT_ALLOWED_LANGUAGES;

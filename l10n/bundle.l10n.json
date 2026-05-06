@@ -137,7 +137,7 @@
   "config.timeStats.exitIdleOn.textChange": "Exit idle state only on text changes",
   "config.timeStats.exitIdleOn.windowFocus": "Exit idle state on window focus or text changes",
   "config.timeStats.exitIdleOn.editorChange": "Exit idle state on editor switch, window focus, or text changes",
-  "config.fileTracker.respectWcignore.description": "(File Tracking only) Whether file tracking respects .wcignore ignore rules (default: false; only .gitignore). Writing time stats do not use this flag.",
+  "config.fileTracker.respectWcignore.description": "Deprecated compatibility option. Base file tracking no longer respects .wcignore; .wcignore only affects word count / writing-time statistics.",
   "command.showFileTrackingStats.title": "ANH:Show File Tracking Statistics",
   "command.cleanupMissingFiles.title": "ANH:Cleanup Missing Files",
   "command.exportTrackingData.title": "ANH:Export Tracking Data",
@@ -291,5 +291,6 @@
   "walkthrough.anh.step.anhFeatures.title": "ANH Features",
   "walkthrough.anh.step.anhFeatures.description": "Explore the Novel Helper's feature panels and core entry points, including Documentation Center, Quick Settings, and Feature Guide.",
   "walkthrough.anh.step.finish.title": "Ready to Go",
-  "walkthrough.anh.step.finish.description": "Setup complete! You can now start writing with Andrea Novel Helper."
+  "walkthrough.anh.step.finish.description": "Setup complete! You can now start writing with Andrea Novel Helper.",
+  "config.fileTracker.respectGitignore.description": "Whether base file tracking respects .gitignore. Enabled by default; disable it to track writing-resource files even when Git ignores them."
 }

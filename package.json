@@ -155,6 +155,17 @@
         "configuration": "./language-configuration.json"
       },
       {
+        "id": "ftignore",
+        "aliases": [
+          "FileTracking Ignore",
+          "ftignore"
+        ],
+        "extensions": [
+          ".ftignore"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
         "id": "gitignore",
         "aliases": [
           "Git Ignore",
@@ -171,6 +182,11 @@
         "language": "wcignore",
         "scopeName": "source.wcignore",
         "path": "./syntaxes/wcignore.tmLanguage.json"
+      },
+      {
+        "language": "ftignore",
+        "scopeName": "source.ftignore",
+        "path": "./syntaxes/ftignore.tmLanguage.json"
       },
       {
         "language": "gitignore",
@@ -2301,6 +2317,12 @@
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.respectWcignore.description%"
+        },
+        "AndreaNovelHelper.fileTracker.respectGitignore": {
+          "anhName": "遵循 Git 忽略",
+          "type": "boolean",
+          "default": true,
+          "description": "%config.fileTracker.respectGitignore.description%"
         },
         "AndreaNovelHelper.fileTracker.trustCallerFilters": {
           "anhName": "信任调用方过滤器",

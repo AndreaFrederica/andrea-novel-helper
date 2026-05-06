@@ -1,0 +1,72 @@
+{
+    "name": "FileTracking Ignore",
+    "scopeName": "source.ftignore",
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#patterns"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.number-sign.ftignore",
+                    "match": "^\\s*#.*$"
+                },
+                {
+                    "name": "comment.line.number-sign.inline.ftignore",
+                    "match": "(?<!\\\\)#.*$"
+                }
+            ]
+        },
+        "patterns": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.ftignore",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.ftignore",
+                            "match": "\\\\."
+                        }
+                    ]
+                },
+                {
+                    "name": "string.quoted.single.ftignore",
+                    "begin": "'",
+                    "end": "'",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.ftignore",
+                            "match": "\\\\."
+                        }
+                    ]
+                },
+                {
+                    "name": "keyword.operator.glob.ftignore",
+                    "match": "[*?\\[\\]]"
+                },
+                {
+                    "name": "constant.character.escape.ftignore",
+                    "match": "\\\\."
+                },
+                {
+                    "name": "keyword.operator.negation.ftignore",
+                    "match": "^\\s*!"
+                },
+                {
+                    "name": "keyword.operator.directory.ftignore",
+                    "match": "/$"
+                },
+                {
+                    "name": "string.unquoted.ftignore",
+                    "match": "^(?:\\s*!?)?[^#\\r\\n]+"
+                }
+            ]
+        }
+    }
+}

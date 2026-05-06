@@ -24,11 +24,13 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
 
     // 获取配置
     const config = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker');
+    const respectGitignore = config.get<boolean>('respectGitignore', true);
     const respectWcignore = config.get<boolean>('respectWcignore', false);
 
     // 初始化文件追踪器
     const fileTracker = initializeFileTracker({
         workspaceRoot: ws,
+        respectGitignore,
         respectWcignore: respectWcignore
     });
 
@@ -92,9 +94,11 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
     const configWatcher = vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('AndreaNovelHelper.fileTracker')) {
             const newConfig = vscode.workspace.getConfiguration('AndreaNovelHelper.fileTracker');
+            const newRespectGitignore = newConfig.get<boolean>('respectGitignore', true);
             const newRespectWcignore = newConfig.get<boolean>('respectWcignore', false);
             
             fileTracker.updateConfig({
+                respectGitignore: newRespectGitignore,
                 respectWcignore: newRespectWcignore
             });
             
