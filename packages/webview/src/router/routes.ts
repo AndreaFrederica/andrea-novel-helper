@@ -24,6 +24,11 @@ const routes: RouteRecordRaw[] = [
   },
 
   {
+    path: '/role-relationship-graph',
+    component: () => import('pages/RoleRelationshipGraphPage.vue'),
+  },
+
+  {
     path: '/timeline',
     component: () => import('pages/TimelinePage.vue'),
   },

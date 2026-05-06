@@ -30,6 +30,7 @@ declare module 'vue' {
     RelationGraphToolBar: typeof import('./src/components/RelationGraphToolBar.vue')['default']
     RelationshipCard: typeof import('./src/components/RelationshipCard.vue')['default']
     RoleCard: typeof import('./src/components/RoleCard.vue')['default']
+    RoleHoverTooltip: typeof import('./src/components/RoleHoverTooltip.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     TimelineEventEditor: typeof import('./src/components/TimelineEventEditor.vue')['default']

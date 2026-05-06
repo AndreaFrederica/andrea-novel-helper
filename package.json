@@ -52,6 +52,7 @@
     "onFileSystem:andrea-outline",
     "onCommand:andrea.openWritingDashboard",
     "onCommand:andrea.openWritingDashboardWidget",
+    "onCommand:andrea.openRoleRelationshipGraph",
     "onView:andrea.commentsExplorer",
     "onView:andrea.commentsPanelView",
     "onView:andrea.commentsManagerView",
@@ -67,6 +68,7 @@
     "onWebviewPanel:andrea.writingDashboard.yearPlan",
     "onWebviewPanel:andrea.writingDashboard.logs",
     "onWebviewPanel:andrea.writingDashboard.timer",
+    "onWebviewPanel:andrea.roleRelationshipGraph",
     "onWebviewPanel:andrea.guide",
     "onWebviewPanel:andrea.guideDoc",
     "onCommand:andrea.openWhatsNew",
@@ -308,6 +310,12 @@
         "title": "独立打开创作工作台组件",
         "category": "Andrea Novel Helper",
         "icon": "$(window)"
+      },
+      {
+        "command": "andrea.openRoleRelationshipGraph",
+        "title": "打开角色关系图谱",
+        "category": "Andrea Novel Helper",
+        "icon": "$(graph)"
       },
       {
         "command": "andrea.configureMilestones",

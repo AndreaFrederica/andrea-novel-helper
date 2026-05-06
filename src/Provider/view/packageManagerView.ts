@@ -157,6 +157,24 @@ class WritingDashboardNode extends vscode.TreeItem {
     }
 }
 
+// 角色关系图谱节点
+class RoleRelationshipGraphNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 角色关系图谱', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'roleRelationshipGraph';
+        this.iconPath = new vscode.ThemeIcon('graph');
+        this.description = '查看角色引用和关系表生成的图谱';
+        this.command = {
+            command: 'andrea.openRoleRelationshipGraph',
+            title: '打开角色关系图谱',
+            arguments: []
+        };
+    }
+}
+
 class ProjectSettingsFilesRootNode extends vscode.TreeItem {
     public readonly resourceUri: vscode.Uri;
     public readonly id: string;
@@ -622,6 +640,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 new ProjectInitWizardNode(this.workspaceRoot),
                 new ProjectSettingsNode(this.workspaceRoot),
                 new WritingDashboardNode(this.workspaceRoot),
+                new RoleRelationshipGraphNode(this.workspaceRoot),
                 new ReferenceMaintenanceNode(this.workspaceRoot),
                 new ExternalResourceManageNode(this.workspaceRoot),
                 new CopilotDocsManageNode(this.workspaceRoot),

@@ -15,13 +15,19 @@ export class NodeRoleParser {
    * @param graphData 图形数据
    * @returns 解析出的关系数组
    */
-  public parseGraphData(graphData: GraphData): RoleRelationship[] {
+  public parseGraphData(graphData: GraphData, sourceFile?: string): RoleRelationship[] {
     this.buildNodeMap(graphData.nodes);
     const relationships: RoleRelationship[] = [];
 
     for (const line of graphData.lines) {
       const relationship = this.parseLineToRelationship(line);
       if (relationship) {
+        if (sourceFile) {
+          relationship.metadata = {
+            ...(relationship.metadata || {}),
+            sourceFile
+          };
+        }
         relationships.push(relationship);
         // 将关系添加到全局管理器
         globalRelationshipManager.addRelationship(relationship);
@@ -114,14 +120,7 @@ export class NodeRoleParser {
         }
       }
 
-      const relationships = this.parseGraphData(graphData);
-
-      // 为每个关系添加源文件信息
-      for (const relationship of relationships) {
-        if (relationship.metadata) {
-          relationship.metadata.sourceFile = fullPath;
-        }
-      }
+      const relationships = this.parseRelationshipData(graphData, fullPath);
 
       return relationships;
     } catch (error) {
@@ -142,6 +141,66 @@ export class NodeRoleParser {
    */
   public getNodeCount(): number {
     return this.nodeMap.size;
+  }
+
+  private parseRelationshipData(data: any, sourceFile: string): RoleRelationship[] {
+    if (data && Array.isArray(data.nodes) && Array.isArray(data.lines)) {
+      return this.parseGraphData(data as GraphData, sourceFile);
+    }
+
+    const relationshipItems = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.relationships)
+        ? data.relationships
+        : [];
+
+    const relationships: RoleRelationship[] = [];
+    for (const item of relationshipItems) {
+      const relationship = this.parseRelationshipItem(item, sourceFile);
+      if (relationship) {
+        relationships.push(relationship);
+        globalRelationshipManager.addRelationship(relationship);
+      }
+    }
+
+    return relationships;
+  }
+
+  private parseRelationshipItem(item: any, sourceFile: string): RoleRelationship | null {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const sourceRef = pickString(item.sourceRole, item.sourceRoleName, item.fromRoleId, item.from, item.source, item.sourceRoleUuid);
+    const targetRef = pickString(item.targetRole, item.targetRoleName, item.toRoleId, item.to, item.target, item.targetRoleUuid);
+    if (!sourceRef || !targetRef) {
+      return null;
+    }
+
+    const sourceRoleUuid = pickString(item.sourceRoleUuid, item.fromUuid, item.fromRoleUuid);
+    const targetRoleUuid = pickString(item.targetRoleUuid, item.toUuid, item.toRoleUuid);
+    const inferredSourceName = sourceRoleUuid ? globalRelationshipManager.getRoleNameByUuid(sourceRoleUuid) : globalRelationshipManager.getRoleNameByUuid(sourceRef);
+    const inferredTargetName = targetRoleUuid ? globalRelationshipManager.getRoleNameByUuid(targetRoleUuid) : globalRelationshipManager.getRoleNameByUuid(targetRef);
+    const type = pickString(item.relationshipType, item.type, item.relation) || '关系';
+    const literalValue = pickString(item.literalValue, item.label, item.description, item.notes) || type;
+
+    return {
+      sourceRole: inferredSourceName || sourceRef,
+      targetRole: inferredTargetName || targetRef,
+      literalValue,
+      type,
+      metadata: {
+        sourceRoleUuid: sourceRoleUuid || (inferredSourceName ? sourceRef : undefined),
+        targetRoleUuid: targetRoleUuid || (inferredTargetName ? targetRef : undefined),
+        lineId: pickString(item.id, item.uuid),
+        strength: typeof item.strength === 'number' ? item.strength : undefined,
+        status: pickString(item.status),
+        tags: Array.isArray(item.tags) ? item.tags.filter((tag: unknown) => typeof tag === 'string') : undefined,
+        isDirectional: typeof item.isDirectional === 'boolean' ? item.isDirectional : undefined,
+        sourceFile,
+        ...((item.metadata && typeof item.metadata === 'object') ? item.metadata : {})
+      }
+    };
   }
 
   /**
@@ -176,3 +235,12 @@ export class NodeRoleParser {
 
 // 导出单例实例
 export const nodeRoleParser = new NodeRoleParser();
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
