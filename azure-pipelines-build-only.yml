@@ -48,7 +48,7 @@ stages:
             displayName: Publish webview dist
 
       - job: PackageDesktop
-        displayName: Package ${{ matrix.target }}
+        displayName: Package desktop targets
         dependsOn: Webview
         strategy:
           matrix:
@@ -186,7 +186,7 @@ stages:
             displayName: Publish VSIX artifacts
 
       - job: PackageLinux
-        displayName: Package ${{ matrix.target }}
+        displayName: Package Linux targets
         dependsOn: Webview
         strategy:
           matrix:
