@@ -46,6 +46,8 @@ export class FileTracker {
     private callbacks: FileChangeCallback[] = [];
     private isActive = false;
     private processingQueue: Promise<void> = Promise.resolve();
+    private pendingCreateTimers = new Map<string, NodeJS.Timeout>();
+    private pendingDeleteTimers = new Map<string, NodeJS.Timeout>();
 
     constructor(config: FileTrackerConfig) {
         this.config = {
@@ -129,6 +131,40 @@ export class FileTracker {
         await this.triggerFileChange('create', filePath);
     }
 
+    private eventKey(filePath: string): string {
+        const resolved = path.resolve(filePath);
+        return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    }
+
+    private clearPendingTimer(map: Map<string, NodeJS.Timeout>, filePath: string): void {
+        const key = this.eventKey(filePath);
+        const timer = map.get(key);
+        if (timer) {
+            clearTimeout(timer);
+            map.delete(key);
+        }
+    }
+
+    private scheduleCreated(filePath: string): void {
+        const key = this.eventKey(filePath);
+        this.clearPendingTimer(this.pendingCreateTimers, filePath);
+        const timer = setTimeout(() => {
+            this.pendingCreateTimers.delete(key);
+            void this.triggerFileChange('create', filePath);
+        }, 150);
+        this.pendingCreateTimers.set(key, timer);
+    }
+
+    private scheduleDeleted(filePath: string): void {
+        const key = this.eventKey(filePath);
+        this.clearPendingTimer(this.pendingDeleteTimers, filePath);
+        const timer = setTimeout(() => {
+            this.pendingDeleteTimers.delete(key);
+            void this.triggerFileChange('delete', filePath);
+        }, 300);
+        this.pendingDeleteTimers.set(key, timer);
+    }
+
     /**
      * 触发文件变化事件（异步处理）
      */
@@ -144,9 +180,9 @@ export class FileTracker {
                 let uuid: string | undefined;
                 let statsInfo: { size: number; mtime: number } | null = null;
                 if (type === 'delete') {
-                    this.dataManager.removeFile(filePath);
+                    await this.dataManager.removeFile(filePath);
                 } else if (type === 'rename' && oldPath) {
-                            this.dataManager.renameFile(oldPath, filePath);
+                            await this.dataManager.renameFile(oldPath, filePath);
                             // 如果是目录重命名，批量迁移子项
                             try {
                                 const stat = await fs.promises.stat(filePath);
@@ -215,17 +251,20 @@ export class FileTracker {
 
         // 监听文件创建
         watcher.onDidCreate(uri => {
-            this.triggerFileChange('create', uri.fsPath);
+            this.scheduleCreated(uri.fsPath);
         });
 
         // 监听文件修改
         watcher.onDidChange(uri => {
+            if (this.pendingCreateTimers.has(this.eventKey(uri.fsPath))) {
+                return;
+            }
             this.triggerFileChange('change', uri.fsPath);
         });
 
         // 监听文件删除
         watcher.onDidDelete(uri => {
-            this.triggerFileChange('delete', uri.fsPath);
+            this.scheduleDeleted(uri.fsPath);
         });
 
         this.watchers.push(watcher);
@@ -233,6 +272,8 @@ export class FileTracker {
         // 监听文件重命名
         const renameWatcher = vscode.workspace.onDidRenameFiles(event => {
             event.files.forEach(file => {
+                this.clearPendingTimer(this.pendingDeleteTimers, file.oldUri.fsPath);
+                this.clearPendingTimer(this.pendingCreateTimers, file.newUri.fsPath);
                 this.triggerFileChange('rename', file.newUri.fsPath, file.oldUri.fsPath);
             });
         });
@@ -274,6 +315,14 @@ export class FileTracker {
             }
         });
         this.watchers = [];
+        for (const timer of this.pendingCreateTimers.values()) {
+            clearTimeout(timer);
+        }
+        for (const timer of this.pendingDeleteTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.pendingCreateTimers.clear();
+        this.pendingDeleteTimers.clear();
     }
 
     /**

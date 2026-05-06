@@ -106,6 +106,7 @@ export class FileTrackingDataManager {
     // 数据库后端
     private backend: IDatabaseBackend | null = null;
     private backendInitialized = false;
+    private backendInitPromise: Promise<void> | null = null;
     private backendType: 'json' | 'sqlite' = 'json';
     private backendInitQueueTimer: NodeJS.Timeout | null = null;
     private readonly BACKEND_INIT_QUEUE_TIMEOUT_MS = 15000;
@@ -830,7 +831,7 @@ export class FileTrackingDataManager {
      */
     private initializeBackendSync(): void {
         // 在后台异步初始化后端
-        this.initializeBackend().catch(err => {
+        this.backendInitPromise = this.initializeBackend().catch(err => {
             console.error('[FileTracking] 后端初始化失败（后台）:', err);
         });
     }
@@ -846,21 +847,10 @@ export class FileTrackingDataManager {
             const backend = await DatabaseFactory.createBackend(this.workspaceRoot);
             this.backend = backend;
 
-            if (backendType === 'sqlite') {
-                await this.importLegacyDatabaseIntoBackendIfNeeded(backend);
-                await this.drainPendingBackendMutations(backend);
-                console.log('[FileTracking] SQLite 后端已接管初始化窗口中的待写操作');
-            }
-
             this.backendInitialized = true;
 
             if (backendType === 'sqlite') {
-                await this.drainPendingBackendMutations(backend);
-                this.useSharded = false;
-                this.backendQueueTimedOut = false;
-                this.clearBackendInitQueueWindow();
-                this.clearQueuedFallbackStateAfterBackendReady();
-                console.log('[FileTracking] SQLite后端已启用，JSON分片写入已禁用');
+                await this.importLegacyDatabaseIntoBackendIfNeeded(backend);
             }
 
             // 后端初始化完成后尝试加载后端中的路径映射（只加载映射，以便查询时能使用后端为权威）
@@ -894,6 +884,15 @@ export class FileTrackingDataManager {
                 }
             } catch (e) {
                 console.warn('[FileTracking] 从后端加载路径映射失败，回退到本地索引', e);
+            }
+
+            if (backendType === 'sqlite') {
+                await this.drainPendingBackendMutations(backend);
+                this.useSharded = false;
+                this.backendQueueTimedOut = false;
+                this.clearBackendInitQueueWindow();
+                this.clearQueuedFallbackStateAfterBackendReady();
+                console.log('[FileTracking] SQLite后端已启用，JSON分片写入已禁用');
             }
 
             try {
@@ -1053,13 +1052,16 @@ export class FileTrackingDataManager {
      * 数据库版本迁移
      */
     private migrateDatabase(oldDb: any): FileTrackingDatabase {
-        // 这里可以实现版本迁移逻辑
-        // 目前简单地创建新数据库
+        const files = oldDb?.files && typeof oldDb.files === 'object' ? oldDb.files : {};
+        const pathToUuid = oldDb?.pathToUuid && typeof oldDb.pathToUuid === 'object' ? oldDb.pathToUuid : {};
+        if (Object.keys(files).length > 0 || Object.keys(pathToUuid).length > 0) {
+            console.log(`[FileTracking] 保留旧版本追踪数据 files=${Object.keys(files).length} mappings=${Object.keys(pathToUuid).length}`);
+        }
         return {
             version: this.DB_VERSION,
             lastUpdated: Date.now(),
-            files: {},
-            pathToUuid: {}
+            files,
+            pathToUuid
         };
     }
 
@@ -1304,6 +1306,57 @@ export class FileTrackingDataManager {
         return this.database.pathToUuid[key];
     }
 
+    private async waitForBackendInitializationIfPending(): Promise<void> {
+        if (this.backendType !== 'sqlite' || this.backendInitialized || this.backendQueueTimedOut) {
+            return;
+        }
+        if (!this.backendInitPromise) {
+            return;
+        }
+        try {
+            await this.backendInitPromise;
+        } catch {
+            // initializeBackend already records the failure and flips fallback state.
+        }
+    }
+
+    private async resolveExistingUuidForKey(key: string): Promise<string | undefined> {
+        let uuid = this.database.pathToUuid[key];
+        if (uuid) {
+            return uuid;
+        }
+
+        await this.waitForBackendInitializationIfPending();
+
+        uuid = this.database.pathToUuid[key];
+        if (uuid) {
+            return uuid;
+        }
+
+        if (!this.backend || !this.backendInitialized) {
+            return undefined;
+        }
+
+        try {
+            const persistedUuid = await this.backend.getUuidByPath(key);
+            if (!persistedUuid) {
+                return undefined;
+            }
+            this.database.pathToUuid[key] = persistedUuid;
+            const meta = await this.loadPersistedMetadata(persistedUuid);
+            if (meta) {
+                this.database.files[persistedUuid] = meta;
+                if (meta.isDirectory) {
+                    this.indexDirFlag.add(persistedUuid);
+                }
+            }
+            return persistedUuid;
+        } catch (error) {
+            console.warn(`[FileTracking] 查询持久化 UUID 映射失败 key=${key}`, error);
+            return undefined;
+        }
+    }
+
 
     /**
      * 通过 UUID 获取文件元数据
@@ -1498,8 +1551,8 @@ export class FileTrackingDataManager {
             // 目录不做内容哈希，避免 EISDIR
             const hash = isDirectory ? '' : await this.calculateFileHash(filePath);
 
-            // 检查是否已存在
-            let uuid = this.database.pathToUuid[key];
+            // 检查是否已存在。SQLite 后端启动时映射可能还未预热，必须先查持久化映射再决定新建 UUID。
+            let uuid = await this.resolveExistingUuidForKey(key);
             let existingFile = uuid ? this.database.files[uuid] : undefined;
 
             // 惰性：如果已有 uuid 但尚未加载分片，先加载以便正确比较（避免误判为变化）
@@ -1524,15 +1577,16 @@ export class FileTrackingDataManager {
                 if (existingFile.size !== stats.size) { existingFile.size = stats.size; changed = true; }
                 if (existingFile.mtime !== stats.mtimeMs) { existingFile.mtime = stats.mtimeMs; changed = true; }
                 if (changed) {
+                    const existingUuid = uuid;
                     existingFile.lastTrackedAt = nowLite;
                     existingFile.updatedAt = nowLite;
                     
                     await this.persistBackendMutation(
                         'existing file content changed (hash/size/mtime)',
                         async (backend) => {
-                            await backend.saveFileMetadata(uuid, existingFile);
+                            await backend.saveFileMetadata(existingUuid, existingFile);
                         },
-                        { dirtyUuids: [uuid] }
+                        { dirtyUuids: [existingUuid] }
                     );
                     
                     if (!isDirectory) { this.markAncestorsDirty(filePath); }
@@ -1612,7 +1666,7 @@ export class FileTrackingDataManager {
      */
     public async removeFile(filePath: string): Promise<void> {
         const key = this.toRelKey(filePath);
-        const uuid = this.database.pathToUuid[key];
+        const uuid = await this.resolveExistingUuidForKey(key);
         if (uuid) {
             const rawMetadata = this.database.files[uuid] || await this.getMetaAsync(uuid, true);
             const removedWritingStats = rawMetadata?.writingStats;
@@ -1657,7 +1711,7 @@ export class FileTrackingDataManager {
     public async renameFile(oldPath: string, newPath: string): Promise<void> {
         const oldKey = this.toRelKey(oldPath);
         const newKey = this.toRelKey(newPath);
-        const uuid = this.database.pathToUuid[oldKey];
+        const uuid = await this.resolveExistingUuidForKey(oldKey);
         if (uuid) {
             // 更新内存数据库
             const metadata = this.database.files[uuid];
@@ -3308,6 +3362,11 @@ export class FileTrackingDataManager {
 
         const existing = this.getFileUuid(normalizedPath);
         if (existing) { this.markFileTemporary(normalizedPath); return existing; }
+
+        // SQLite 启动窗口里同步 API 无法等待旧映射预热；此时不要为已存在文件抢先生成新 UUID。
+        if (this.backendType === 'sqlite' && !this.backendInitialized && !this.backendQueueTimedOut) {
+            return undefined;
+        }
 
         // 对于工作区内已存在的文件，直接写入“正式”记录，避免写绝对键的临时分片
         const now = Date.now();

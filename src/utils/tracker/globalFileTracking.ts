@@ -51,44 +51,8 @@ export function initializeGlobalFileTracking(context: vscode.ExtensionContext): 
     // 启动追踪
     fileTracker.start();
 
-    // 监听文件系统事件（用于处理删除和重命名）
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
-    if (workspaceRoot) {
-        // 监听文件删除
-        const deleteWatcher = vscode.workspace.createFileSystemWatcher('**/*');
-        deleteWatcher.onDidDelete(async (uri) => {
-            const filePath = uri.fsPath;
-            const dataManager = fileTracker.getDataManager();
-            if (!dataManager) { return; }
-            // 统一过滤：只处理允许类型
-            if (fileTracker.isFileIgnored(filePath)) {
-                return;
-            }
-            if (await dataManager.handleFileDeleted(filePath)) {
-                console.log(`文件删除事件处理: ${filePath}`);
-            }
-        });
-
-        context.subscriptions.push(deleteWatcher);
-
-        // 监听文件重命名（通过创建事件检测）
-        deleteWatcher.onDidCreate(async (uri) => {
-            const filePath = uri.fsPath;
-            const dataManager = fileTracker.getDataManager();
-            if (!dataManager) { return; }
-            // 统一过滤：只处理允许类型
-            if (fileTracker.isFileIgnored(filePath)) {
-                return;
-            }
-            setTimeout(async () => {
-                try {
-                    await fileTracker.handleFileCreated(filePath);
-                } catch (error) {
-                    console.error(`处理文件创建事件时出错: ${filePath}`, error);
-                }
-            }, 100);
-        });
-    }
+    // 文件创建/删除/重命名统一由 FileTracker.start() 内部处理。
+    // 这里不再额外注册 watcher，避免 rename 同时被拆成 delete + create 而丢失旧 UUID。
 
     // 监听配置变化
     const configWatcher = vscode.workspace.onDidChangeConfiguration(e => {
