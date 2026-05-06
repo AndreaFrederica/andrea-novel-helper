@@ -52,6 +52,9 @@
     "onFileSystem:andrea-outline",
     "onCommand:andrea.openWritingDashboard",
     "onCommand:andrea.openWritingDashboardWidget",
+    "onView:andrea.commentsExplorer",
+    "onView:andrea.commentsPanelView",
+    "onView:andrea.commentsManagerView",
     "onWebviewPanel:andrea.writingDashboard",
     "onWebviewPanel:andrea.writingDashboard.energy",
     "onWebviewPanel:andrea.writingDashboard.heatmap",
@@ -4063,6 +4066,12 @@
           "type": "webview",
           "name": "%view.comments.panel.name%",
           "icon": "comment"
+        },
+        {
+          "id": "andrea.commentsManagerView",
+          "type": "webview",
+          "name": "%view.comments.manager.name%",
+          "icon": "list-flat"
         }
       ],
       "AndreaWebDAVSidebar": [

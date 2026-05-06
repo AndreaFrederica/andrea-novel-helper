@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { v4 as uuidv4 } from 'uuid';
-import { CommentDocumentIndex, CommentThreadData, CommentMetadata, vscodeRangeToAnchorRange } from './types';
+import { CommentDocumentIndex, CommentThreadData, CommentMetadata, CommentStatus, vscodeRangeToAnchorRange } from './types';
 import { getFileUuid } from '../utils/tracker/globalFileTracking';
 import { MdCommentStorage } from './mdStorage';
 
@@ -160,6 +160,7 @@ export async function loadComments(docUuid: string): Promise<CommentThreadData[]
         updatedAt: metadata.updatedAt,
         docUuid: metadata.docUuid,
         anchor: metadata.anchor,
+        tags: normalizeCommentTags(metadata.tags),
         contentFile: metadata.contentFile,
         messages: metadata.messages
       };
@@ -189,6 +190,7 @@ export async function loadCommentsFromMd(docUuid: string): Promise<CommentThread
         updatedAt: metadata.updatedAt,
         docUuid: metadata.docUuid,
         anchor: metadata.anchor,
+        tags: normalizeCommentTags(metadata.tags),
         contentFile: metadata.contentFile,
         messages: MdCommentStorage.toCommentMessages(mdThread)
       };
@@ -494,6 +496,7 @@ export async function addThread(
       selTexts,
       contexts
     },
+    tags: [],
     contentFile,
     messages: [{ id: uuidv4(), author, body: initialBody, createdAt: now }]
   };
@@ -506,6 +509,7 @@ export async function addThread(
     updatedAt: now,
     docUuid,
     anchor: metadata.anchor,
+    tags: metadata.tags,
     contentFile,
     messages: metadata.messages
   };
@@ -563,6 +567,18 @@ export async function updateThread(commentId: string, updater: (metadata: Commen
   }
   
   return metadata;
+}
+
+export async function updateThreadTags(commentId: string, tags: string[]): Promise<CommentMetadata | null> {
+  return updateThread(commentId, metadata => {
+    metadata.tags = normalizeCommentTags(tags);
+  });
+}
+
+export async function updateThreadStatus(commentId: string, status: CommentStatus): Promise<CommentMetadata | null> {
+  return updateThread(commentId, metadata => {
+    metadata.status = status;
+  });
 }
 
 // 删除批注
@@ -668,6 +684,7 @@ export async function updateThreadsByDoc(docUuid: string, updater: (threads: Com
       metadata.updatedAt = thread.updatedAt;
       metadata.messages = thread.messages || [];
       metadata.anchor = thread.anchor;
+      metadata.tags = normalizeCommentTags(thread.tags);
       await saveCommentMetadata(metadata);
       
       // 如果消息内容有变化，同时更新md文件
@@ -695,6 +712,17 @@ export async function updateThreadsByDoc(docUuid: string, updater: (threads: Com
   await saveCommentIndex(index);
   
   return threads;
+}
+
+function normalizeCommentTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) {
+    return [];
+  }
+  return Array.from(new Set(
+    tags
+      .map(tag => typeof tag === 'string' ? tag.trim() : '')
+      .filter(Boolean)
+  ));
 }
 
 export function paragraphIndexOfRange(doc: vscode.TextDocument, sel: vscode.Selection): { startIndex: number; endIndex: number } {

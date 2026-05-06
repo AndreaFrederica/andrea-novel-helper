@@ -291,5 +291,6 @@
   "walkthrough.anh.step.anhFeatures.description": "认识小说助手的功能面板和核心入口，包括文档中心、快速设置和功能引导。",
   "walkthrough.anh.step.finish.title": "准备就绪",
   "walkthrough.anh.step.finish.description": "配置完成！你现在可以开始使用小说助手进行创作了。",
-  "config.fileTracker.respectGitignore.description": "基础文件追踪是否遵循 .gitignore。默认开启；关闭后即使文件被 Git 忽略，只要属于写作资源类型仍会被追踪。"
+  "config.fileTracker.respectGitignore.description": "基础文件追踪是否遵循 .gitignore。默认开启；关闭后即使文件被 Git 忽略，只要属于写作资源类型仍会被追踪。",
+  "view.comments.manager.name": "批注总览"
 }

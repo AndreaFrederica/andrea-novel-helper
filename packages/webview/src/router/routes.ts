@@ -73,6 +73,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/WritingDashboardWidgetPage.vue'),
   },
 
+  {
+    path: '/comments-manager',
+    component: () => import('pages/CommentsManagerPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

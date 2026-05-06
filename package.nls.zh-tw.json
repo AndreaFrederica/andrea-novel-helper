@@ -52,6 +52,7 @@
     "command.commentsExplorer.exportToJson.title": "導出為 JSON",
     "view.comments.explorer.name": "批注管理",
     "view.comments.panel.name": "批注面板",
+    "view.comments.manager.name": "批注總覽",
     "command.webdav.manageAccounts.title": "WebDAV同步: 帳戶管理",
     "command.webdav.syncNow.title": "WebDAV同步: 立即同步",
     "command.webdav.openPanel.title": "打開WebDAV管理面板",

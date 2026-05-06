@@ -68,6 +68,7 @@
     "command.commentsExplorer.exportToJson.title": "Export as JSON",
     "view.comments.explorer.name": "Comments",
     "view.comments.panel.name": "Comments Panel",
+    "view.comments.manager.name": "Comments Overview",
     "command.webdav.manageAccounts.title": "WebDAV: Manage Accounts",
     "command.webdav.syncNow.title": "WebDAV: Sync Now",
     "command.webdav.openPanel.title": "Open WebDAV Manager",

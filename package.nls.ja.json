@@ -51,6 +51,7 @@
     "command.commentsExplorer.exportToJson.title": "JSON としてエクスポート",
     "view.comments.explorer.name": "コメント",
     "view.comments.panel.name": "コメントパネル",
+    "view.comments.manager.name": "コメント概要",
     "command.webdav.manageAccounts.title": "WebDAV同期: アカウント管理",
     "command.webdav.syncNow.title": "WebDAV同期: 今すぐ同期",
     "command.webdav.openPanel.title": "WebDAV管理を開く",

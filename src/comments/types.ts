@@ -37,6 +37,7 @@ export interface CommentThreadData {
   updatedAt: number;
   docUuid: string; // 关联的文档UUID
   anchor: CommentAnchor;
+  tags?: string[];
   // 批注内容现在存储在独立的MD文件中
   contentFile: string; // MD文件的相对路径
   messages: CommentMessage[];
@@ -58,6 +59,7 @@ export interface CommentMetadata {
   updatedAt: number;
   docUuid: string;
   anchor: CommentAnchor;
+  tags?: string[];
   contentFile: string; // 对应的MD文件名
   messages: CommentMessage[];
   deleted?: boolean; // 软删除标记，true表示已删除

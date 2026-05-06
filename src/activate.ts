@@ -53,6 +53,7 @@ import { registerMissingRolesBootstrap } from './commands/missingRolesBootstrap'
 import { PreviewManager, registerPreviewPane, stopAllPreviewTTS } from './Provider/view/previewPane';
 import { registerCommentsFeature } from './comments/controller';
 import { CommentsPanelSidebarProvider } from './Provider/view/commentsPanelSidebar';
+import { registerCommentsManagerWebview } from './Provider/view/commentsManagerWebview';
 import { TypstMemoryProvider } from './Provider/fileSystem/TypstMemoryProvider';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
@@ -670,6 +671,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerDocRolesTreeView(context);
         registerDocRolesExplorerView(context);
         registerCommentsTreeView(context);
+        registerCommentsManagerWebview(context);
         registerScriptRunnerView(context);
         registerSettingsView(context);
         registerProjectSettingsPage(context);

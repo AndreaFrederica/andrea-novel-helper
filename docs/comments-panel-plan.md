@@ -57,6 +57,14 @@ created: 2026-03-25
 - P1: 扁平列表渲染、跳转、标签显示与筛选、标签更新 API
 - P2: 老面板标签集成、标签颜色与预定义配置、自动补全与 UX 优化
 
+## 实施状态
+
+- [x] 数据模型新增 `tags?: string[]`，并为批注元数据提供标签读写兼容。
+- [x] 新增 `updateThreadTags` 与 `updateThreadStatus` 存储 API。
+- [x] 新增 Quasar 批注总览页面，默认按文档分组显示，并支持切换扁平列表、搜索、状态过滤、标签过滤、标签编辑、跳转、解决/重开。
+- [x] 新增 `andrea.commentsManagerView` WebView 侧栏视图，并与老面板并行注册。
+- [ ] P2：老 TreeView 标签前缀、标签颜色配置和预定义标签设置仍保留为后续增强。
+
 ## 技术与实现要点
 
 - 数据层尽量复用现有 storage/worker，避免重复扫描逻辑。
