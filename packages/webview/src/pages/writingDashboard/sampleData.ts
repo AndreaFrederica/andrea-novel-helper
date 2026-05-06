@@ -10,6 +10,8 @@ export type WidgetType =
   | 'yearPlan'
   | 'logs'
   | 'timer'
+  | 'about'
+  | 'whatsNew'
 
 export interface DashboardWindow {
   id: string
@@ -20,18 +22,25 @@ export interface DashboardWindow {
   w: number
   h: number
   /** 是否最小化 */
-  minimized?: boolean
+  minimized?: boolean | undefined
   /** 是否最大化到工作台可用区域 */
-  maximized?: boolean
+  maximized?: boolean | undefined
   /** 最大化前的窗口尺寸，用于还原 */
   restoreBounds?: {
     x: number
     y: number
     w: number
     h: number
-  }
+  } | undefined
+  /** 吸附到边缘前的窗口尺寸，用于拖离吸附区时恢复 */
+  snapRestoreBounds?: {
+    x: number
+    y: number
+    w: number
+    h: number
+  } | undefined
   /** 堆叠层级（点击顺序历史） */
-  z?: number
+  z?: number | undefined
 }
 
 export interface EnergyMetric {
@@ -113,10 +122,52 @@ export interface YearPlan {
   year: number
   title: string
   category: string
+  summary: string
   progress: number
   completedGoals: number
   totalGoals: number
   tags: string[]
+  goals?: YearPlanGoal[]
+}
+
+export interface DashboardYearPlanFile {
+  year: number
+  name: string
+  path: string
+}
+
+export interface YearPlanGoal {
+  id: string
+  title: string
+  quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4'
+  status: 'todo' | 'doing' | 'done'
+  progress: number
+}
+
+export interface ClockExtraZone {
+  id: string
+  label: string
+  timeZone: string
+  showDate: boolean
+}
+
+export interface ClockSettings {
+  preset: 'standard' | 'compact' | 'minimal' | 'analog'
+  title: string
+  customLabel: string
+  showTitle: boolean
+  timeZone: string
+  hour12: boolean
+  showSeconds: boolean
+  secondsStyle: 'suffix' | 'colon' | 'plain'
+  showDate: boolean
+  showWeekday: boolean
+  showPeriod: boolean
+  showProgress: boolean
+  showTimezone: boolean
+  dateStyle: 'long' | 'short' | 'numeric'
+  align: 'left' | 'center'
+  extraClocks: ClockExtraZone[]
 }
 
 export interface DashboardPlanFile {
@@ -133,6 +184,9 @@ export interface DashboardState {
   logs: DashboardLog[]
   profile: DashboardProfile
   yearPlan: YearPlan
+  selectedYearPlanYear?: number
+  yearPlanFiles?: DashboardYearPlanFile[]
+  clockSettings: ClockSettings
   planMarkdown: string
   selectedPlanFile?: string
   planFiles?: DashboardPlanFile[]
@@ -141,6 +195,8 @@ export interface DashboardState {
     tasksPath?: string
     planPath?: string
     planDirPath?: string
+    yearPlanPath?: string
+    yearPlanDirPath?: string
   }
 }
 
@@ -155,14 +211,15 @@ export const widgetTitles: Record<WidgetType, string> = {
   tasks: '任务清单',
   yearPlan: '年计划',
   logs: '创作记录',
-  timer: '计时器'
+  timer: '计时器',
+  about: '关于',
+  whatsNew: "What's New"
 }
 
 export const defaultWindows: DashboardWindow[] = [
-  { id: 'win-energy', type: 'energy', title: widgetTitles.energy, x: 20, y: 20, w: 360, h: 180 },
-  { id: 'win-heatmap', type: 'heatmap', title: widgetTitles.heatmap, x: 400, y: 20, w: 360, h: 180 },
-  { id: 'win-clock', type: 'clock', title: widgetTitles.clock, x: 780, y: 20, w: 260, h: 180 },
-  { id: 'win-profile', type: 'profile', title: widgetTitles.profile, x: 1060, y: 20, w: 280, h: 300 },
+  { id: 'win-heatmap', type: 'heatmap', title: widgetTitles.heatmap, x: 20, y: 20, w: 360, h: 180 },
+  { id: 'win-clock', type: 'clock', title: widgetTitles.clock, x: 400, y: 20, w: 260, h: 180 },
+  { id: 'win-profile', type: 'profile', title: widgetTitles.profile, x: 680, y: 20, w: 320, h: 300 },
   { id: 'win-gantt', type: 'gantt', title: widgetTitles.gantt, x: 20, y: 220, w: 760, h: 330 },
   { id: 'win-plan', type: 'plan', title: widgetTitles.plan, x: 800, y: 220, w: 540, h: 330 },
   { id: 'win-tasks', type: 'tasks', title: widgetTitles.tasks, x: 20, y: 570, w: 760, h: 260 },
@@ -286,10 +343,36 @@ export const defaultYearPlan: YearPlan = {
   year: 2026,
   title: '专注成长，拥抱变化',
   category: '学习',
+  summary: '把年度目标拆成可执行的季度成果，围绕写作、设定、发布和复盘形成稳定节奏。',
   progress: 0.72,
-  completedGoals: 0,
-  totalGoals: 2,
-  tags: ['阅读', '工作', '健康', '写作']
+  completedGoals: 2,
+  totalGoals: 4,
+  tags: ['阅读', '工作', '健康', '写作'],
+  goals: [
+    { id: 'yg-1', title: '完成主线大纲与核心角色档案', quarter: 'Q1', status: 'done', progress: 100 },
+    { id: 'yg-2', title: '稳定每周章节计划与复盘流程', quarter: 'Q2', status: 'done', progress: 100 },
+    { id: 'yg-3', title: '完成第一卷修订与设定一致性检查', quarter: 'Q3', status: 'doing', progress: 62 },
+    { id: 'yg-4', title: '准备样章、简介和发布材料', quarter: 'Q4', status: 'todo', progress: 18 }
+  ]
+}
+
+export const defaultClockSettings: ClockSettings = {
+  preset: 'standard',
+  title: '当前时间',
+  customLabel: '',
+  showTitle: true,
+  timeZone: '',
+  hour12: false,
+  showSeconds: true,
+  secondsStyle: 'suffix',
+  showDate: true,
+  showWeekday: true,
+  showPeriod: true,
+  showProgress: true,
+  showTimezone: true,
+  dateStyle: 'long',
+  align: 'center',
+  extraClocks: []
 }
 
 export const defaultPlanMarkdown = `---
@@ -316,6 +399,9 @@ export const defaultDashboardState: DashboardState = {
   logs,
   profile: defaultProfile,
   yearPlan: defaultYearPlan,
+  selectedYearPlanYear: defaultYearPlan.year,
+  yearPlanFiles: [],
+  clockSettings: defaultClockSettings,
   planMarkdown: defaultPlanMarkdown,
   selectedPlanFile: 'plan.md',
   planFiles: []

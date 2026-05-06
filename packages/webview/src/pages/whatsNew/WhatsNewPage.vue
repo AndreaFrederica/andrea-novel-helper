@@ -1,5 +1,5 @@
 <template>
-  <div class="whats-new-page">
+  <div class="whats-new-page" :class="{ embedded }">
     <div class="container">
       <!-- Header -->
       <div class="header">
@@ -24,6 +24,7 @@
           </div>
         </div>
         <q-btn
+          v-if="!embedded"
           flat
           round
           dense
@@ -107,7 +108,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="footer">
+      <div v-if="!embedded" class="footer">
         <q-btn
           flat
           color="grey-7"
@@ -132,6 +133,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useVsCodeApiStore } from 'stores/vscode';
+
+defineProps<{
+  embedded?: boolean;
+}>();
 
 interface WhatsNewSection {
   header: string;
@@ -222,6 +227,12 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+.whats-new-page.embedded {
+  height: 100%;
+  min-height: 0;
+  color: var(--dash-page-fg);
+}
+
 .container {
   max-width: 720px;
   margin: 0 auto;
@@ -230,6 +241,17 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   flex: 1;
+}
+
+.embedded .container {
+  max-width: none;
+  min-height: 0;
+  padding: 0;
+}
+
+.embedded .content {
+  min-height: 0;
+  overflow: auto;
 }
 
 /* Header */

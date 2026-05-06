@@ -21,17 +21,23 @@
         :logs="state.logs"
         :profile="state.profile"
         :year-plan="state.yearPlan"
+        :selected-year-plan-year="state.selectedYearPlanYear"
+        :year-plan-files="state.yearPlanFiles"
+        :clock-settings="state.clockSettings"
         :plan-markdown="state.planMarkdown"
         :plan-file-path="state.dashboardFiles?.planPath"
+        :dashboard-files="state.dashboardFiles"
         :plan-files="state.planFiles"
         :selected-plan-file="state.selectedPlanFile"
         @update:energy-metrics="saveState({ ...state, energyMetrics: $event })"
         @update:tasks="saveState({ ...state, tasks: $event })"
         @update:logs="saveState({ ...state, logs: $event })"
         @update:profile="saveState({ ...state, profile: $event })"
-        @update:year-plan="saveState({ ...state, yearPlan: $event })"
+        @update:year-plan="saveState({ ...state, yearPlan: $event, selectedYearPlanYear: $event.year })"
+        @update:clock-settings="saveState({ ...state, clockSettings: $event })"
         @update:plan-markdown="saveState({ ...state, planMarkdown: $event })"
         @select-plan-file="selectPlanFile"
+        @select-year-plan="selectYearPlan"
         @create-plan-file="createPlanFile"
         @open-plan-file="openPlanFile"
       />
@@ -71,6 +77,15 @@ function selectPlanFile(fileName: string) {
     return
   }
   saveState({ ...state.value, selectedPlanFile: fileName })
+}
+
+function selectYearPlan(year: number) {
+  if (!Number.isFinite(year) || year === state.value.selectedYearPlanYear) return
+  if (vscode) {
+    vscode.postMessage({ command: 'dashboard.selectYearPlan', year, currentState: serializableDashboardState() })
+    return
+  }
+  saveState({ ...state.value, selectedYearPlanYear: year, yearPlan: { ...state.value.yearPlan, year } })
 }
 
 function createPlanFile(fileName: string) {

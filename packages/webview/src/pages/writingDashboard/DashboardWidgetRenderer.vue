@@ -11,6 +11,8 @@
   />
   <ClockCard
     v-else-if="type === 'clock'"
+    :settings="clockSettings"
+    @update:settings="$emit('update:clockSettings', $event)"
   />
   <ProfileCard
     v-else-if="type === 'profile'"
@@ -50,7 +52,10 @@
   <YearPlanCard
     v-else-if="type === 'yearPlan'"
     :plan="yearPlan"
+    :files="yearPlanFiles"
+    :selected-year="selectedYearPlanYear"
     @update:plan="$emit('update:yearPlan', $event)"
+    @select-year="$emit('selectYearPlan', $event)"
   />
   <LogTable
     v-else-if="type === 'logs'"
@@ -59,6 +64,14 @@
   <TimerCard
     v-else-if="type === 'timer'"
     :window-id="windowId ?? ''"
+  />
+  <AboutCard
+    v-else-if="type === 'about'"
+    :dashboard-files="dashboardFiles"
+  />
+  <WhatsNewPage
+    v-else-if="type === 'whatsNew'"
+    embedded
   />
   <div v-else class="missing">未知组件：{{ type }}</div>
 </template>
@@ -70,6 +83,8 @@ import type {
   DashboardLog,
   Task,
   YearPlan,
+  DashboardYearPlanFile,
+  ClockSettings,
   WidgetType,
   DashboardPlanFile,
 } from './sampleData'
@@ -84,6 +99,8 @@ import TaskListBoard from './components/TaskListBoard.vue'
 import YearPlanCard from './components/YearPlanCard.vue'
 import LogTable from './components/LogTable.vue'
 import TimerCard from './components/TimerCard.vue'
+import AboutCard from './components/AboutCard.vue'
+import WhatsNewPage from '../whatsNew/WhatsNewPage.vue'
 
 /* ── Props：每个 widget 只订阅自己需要的数据片段 ─── */
 defineProps<{
@@ -95,10 +112,14 @@ defineProps<{
   logs: DashboardLog[]
   profile: DashboardProfile
   yearPlan: YearPlan
+  selectedYearPlanYear?: number | undefined
+  yearPlanFiles?: DashboardYearPlanFile[] | undefined
+  clockSettings: ClockSettings
   planMarkdown: string
   planFilePath?: string | undefined
   planFiles?: DashboardPlanFile[] | undefined
   selectedPlanFile?: string | undefined
+  dashboardFiles?: Record<string, string> | undefined
 }>()
 
 /* ── Emits：独立的数据更新通道 ─────────────── */
@@ -108,8 +129,10 @@ defineEmits<{
   'update:logs': [logs: DashboardLog[]]
   'update:profile': [profile: DashboardProfile]
   'update:yearPlan': [plan: YearPlan]
+  'update:clockSettings': [settings: ClockSettings]
   'update:planMarkdown': [markdown: string]
   selectPlanFile: [fileName: string]
+  selectYearPlan: [year: number]
   createPlanFile: [fileName: string]
   openPlanFile: []
 }>()

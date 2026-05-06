@@ -8,6 +8,10 @@ import {
   type Task,
   type DashboardTask,
   type DailyTask,
+  type YearPlan,
+  type YearPlanGoal,
+  type ClockSettings,
+  type ClockExtraZone,
 } from './sampleData'
 import { toTimestamp } from './timeSystem'
 
@@ -32,13 +36,13 @@ export interface LayoutSettings {
   taskbarVisible: boolean
   taskbarAutoHide: boolean
   tilingMode: boolean
-  tilingDirection: 'horizontal' | 'vertical' | 'grid'
+  tilingDirection: 'horizontal' | 'vertical' | 'grid' | 'free'
 }
 
 export function loadLayoutSettings(): LayoutSettings {
   try {
     const raw = localStorage.getItem(LS_LAYOUT_KEY)
-    if (raw) return { ...defaultLayoutSettings, ...JSON.parse(raw) }
+    if (raw) return normalizeLayoutSettings(JSON.parse(raw))
   } catch { /* ignore */ }
   return { ...defaultLayoutSettings }
 }
@@ -54,6 +58,17 @@ const defaultLayoutSettings: LayoutSettings = {
   taskbarAutoHide: false,
   tilingMode: false,
   tilingDirection: 'grid',
+}
+
+function normalizeLayoutSettings(value: Partial<LayoutSettings> | undefined): LayoutSettings {
+  const direction = value?.tilingDirection
+  return {
+    ...defaultLayoutSettings,
+    ...value,
+    tilingDirection: direction === 'horizontal' || direction === 'vertical' || direction === 'grid' || direction === 'free'
+      ? direction
+      : defaultLayoutSettings.tilingDirection
+  }
 }
 
 type VsCodeApi = {
@@ -198,7 +213,7 @@ function normalizeState(value: DashboardState): DashboardState {
     ...fallback,
     ...value,
     windows: normalizeWindows(
-      Array.isArray(value?.windows) && value.windows.length > 0
+      Array.isArray(value?.windows)
         ? value.windows
         : loadWindowsFromLS() || defaultWindows.map(item => ({ ...item }))
     ),
@@ -206,9 +221,99 @@ function normalizeState(value: DashboardState): DashboardState {
     heatmapData: normalizeHeatmapData((value as any)?.heatmapData),
     tasks,
     logs: Array.isArray(value?.logs) ? value.logs : [],
+    yearPlan: normalizeYearPlan(value?.yearPlan, fallback.yearPlan),
+    selectedYearPlanYear: normalizeYear(value?.selectedYearPlanYear, normalizeYearPlan(value?.yearPlan, fallback.yearPlan).year),
+    yearPlanFiles: Array.isArray((value as any)?.yearPlanFiles) ? (value as any).yearPlanFiles : fallback.yearPlanFiles,
+    clockSettings: normalizeClockSettings(value?.clockSettings, fallback.clockSettings),
     planMarkdown: typeof value?.planMarkdown === 'string' ? value.planMarkdown : fallback.planMarkdown,
     selectedPlanFile: typeof (value as any)?.selectedPlanFile === 'string' ? (value as any).selectedPlanFile : fallback.selectedPlanFile,
     planFiles: Array.isArray((value as any)?.planFiles) ? (value as any).planFiles : fallback.planFiles,
+  }
+}
+
+function normalizeYear(value: unknown, fallback: number): number {
+  const year = Number(value)
+  return Number.isFinite(year) && year >= 1900 && year <= 3000 ? Math.round(year) : fallback
+}
+
+function normalizeClockSettings(value: ClockSettings | undefined, fallback: ClockSettings): ClockSettings {
+  const source = value && typeof value === 'object' ? value : fallback
+  const preset = source.preset === 'compact' || source.preset === 'minimal' || source.preset === 'analog' || source.preset === 'standard'
+    ? source.preset
+    : fallback.preset
+  const secondsStyle = source.secondsStyle === 'colon' || source.secondsStyle === 'plain' || source.secondsStyle === 'suffix'
+    ? source.secondsStyle
+    : fallback.secondsStyle
+  const dateStyle = source.dateStyle === 'short' || source.dateStyle === 'numeric' || source.dateStyle === 'long'
+    ? source.dateStyle
+    : fallback.dateStyle
+  const align = source.align === 'left' || source.align === 'center' ? source.align : fallback.align
+  return {
+    ...fallback,
+    ...source,
+    preset,
+    title: typeof source.title === 'string' ? source.title : fallback.title,
+    customLabel: typeof source.customLabel === 'string' ? source.customLabel : fallback.customLabel,
+    showTitle: source.showTitle !== false,
+    timeZone: typeof source.timeZone === 'string' ? source.timeZone : fallback.timeZone,
+    hour12: !!source.hour12,
+    showSeconds: source.showSeconds !== false,
+    secondsStyle,
+    showDate: source.showDate !== false,
+    showWeekday: source.showWeekday !== false,
+    showPeriod: source.showPeriod !== false,
+    showProgress: source.showProgress !== false,
+    showTimezone: source.showTimezone !== false,
+    dateStyle,
+    align,
+    extraClocks: normalizeExtraClocks(source.extraClocks, fallback.extraClocks)
+  }
+}
+
+function normalizeExtraClocks(value: ClockExtraZone[] | undefined, fallback: ClockExtraZone[]): ClockExtraZone[] {
+  const source = Array.isArray(value) ? value : fallback
+  return source
+    .filter(item => item && typeof item === 'object')
+    .map((item, index) => ({
+      id: typeof item.id === 'string' && item.id ? item.id : `clock-zone-${index}`,
+      label: typeof item.label === 'string' && item.label ? item.label : '其他时区',
+      timeZone: typeof item.timeZone === 'string' && item.timeZone ? item.timeZone : 'UTC',
+      showDate: item.showDate !== false
+    }))
+}
+
+function normalizeYearPlan(value: YearPlan | undefined, fallback: YearPlan): YearPlan {
+  const source = value && typeof value === 'object' ? value : fallback
+  const goals = Array.isArray(source.goals) && source.goals.length > 0
+    ? source.goals.map((goal, index) => normalizeYearPlanGoal(goal, index))
+    : fallback.goals?.map((goal, index) => normalizeYearPlanGoal(goal, index)) || []
+  const completedGoals = goals.filter(goal => goal.status === 'done').length
+  return {
+    ...fallback,
+    ...source,
+    year: Number.isFinite(Number(source.year)) ? Number(source.year) : fallback.year,
+    title: source.title || fallback.title,
+    category: source.category || fallback.category,
+    summary: typeof source.summary === 'string' ? source.summary : fallback.summary,
+    progress: clamp01(typeof source.progress === 'number' ? source.progress : fallback.progress),
+    completedGoals,
+    totalGoals: goals.length || Math.max(1, Number(source.totalGoals) || fallback.totalGoals),
+    tags: Array.isArray(source.tags) ? source.tags.filter(Boolean).map(String) : fallback.tags,
+    goals
+  }
+}
+
+function normalizeYearPlanGoal(goal: Partial<YearPlanGoal>, index: number): YearPlanGoal {
+  const status = goal.status === 'done' || goal.status === 'doing' || goal.status === 'todo' ? goal.status : 'todo'
+  const quarter = goal.quarter === 'Q1' || goal.quarter === 'Q2' || goal.quarter === 'Q3' || goal.quarter === 'Q4'
+    ? goal.quarter
+    : (['Q1', 'Q2', 'Q3', 'Q4'][index % 4] as YearPlanGoal['quarter'])
+  return {
+    id: goal.id || `yg-${Date.now()}-${index}`,
+    title: goal.title || '年度目标',
+    quarter,
+    status,
+    progress: clampPercent(Number(goal.progress))
   }
 }
 
@@ -282,6 +387,16 @@ function normalizeTask(t: any): Task {
       done: !!s?.done
     })) : [],
   }
+}
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(1, Math.max(0, value))
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0
+  return Math.min(100, Math.max(0, Math.round(value)))
 }
 
 function migrateDashboardTask(t: DashboardTask): Task {

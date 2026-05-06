@@ -4,6 +4,7 @@ import * as path from 'path';
 import JSON5 from 'json5';
 import { buildHtml } from '../utils/html-builder';
 import { roles } from '../../activate';
+import { getAllWhatsNewVersions, getWhatsNewData } from '../../whatsnew/whatsnew-data';
 import {
     getAllTrackedFilesAsync,
     getAllWritingStatsAsync,
@@ -25,7 +26,9 @@ type DashboardWidgetId =
     | 'tasks'
     | 'yearPlan'
     | 'logs'
-    | 'timer';
+    | 'timer'
+    | 'about'
+    | 'whatsNew';
 
 const widgetTitles: Record<DashboardWidgetId, string> = {
     energy: '能量条形图',
@@ -39,11 +42,14 @@ const widgetTitles: Record<DashboardWidgetId, string> = {
     yearPlan: '年计划',
     logs: '创作记录',
     timer: '计时器',
+    about: '关于',
+    whatsNew: "What's New",
 };
 
 type DashboardState = Record<string, unknown> & {
     windows?: unknown[];
     selectedPlanFile?: unknown;
+    selectedYearPlanYear?: unknown;
     planMarkdown?: unknown;
 };
 
@@ -63,6 +69,7 @@ const dashboardDirName = path.join('novel-helper', 'dashboard');
 const dashboardLayoutFileName = 'layout.json';
 const dashboardTasksFileName = 'tasks.json5';
 const dashboardPlanDirName = 'plan';
+const dashboardYearPlanDirName = 'year-plan';
 const defaultDashboardPlanFileName = 'plan.md';
 const legacyDashboardPlanFileName = 'plan.md';
 const dashboardViewType = 'andrea.writingDashboard';
@@ -107,6 +114,9 @@ export class WritingDashboardPanel {
                     case 'dashboard.createPlanFile':
                         await this.createPlanFile(message.fileName, message.currentState);
                         break;
+                    case 'dashboard.selectYearPlan':
+                        await this.selectYearPlan(message.year, message.currentState);
+                        break;
                     case 'dashboard.openWidget':
                         this.openWidget(message.widgetId);
                         break;
@@ -117,6 +127,17 @@ export class WritingDashboardPanel {
                         break;
                     case 'dashboard.openPlanFile':
                         await openDashboardPlanFile(message.fileName);
+                        break;
+                    case 'whatsnewReady':
+                        await this.postWhatsNewData();
+                        break;
+                    case 'loadVersion':
+                        await this.postWhatsNewVersion(message.version);
+                        break;
+                    case 'openSettings':
+                        await vscode.commands.executeCommand('workbench.action.openSettings', 'AndreaNovelHelper.whatsNew.autoShow');
+                        break;
+                    case 'closePanel':
                         break;
                 }
             },
@@ -282,6 +303,42 @@ export class WritingDashboardPanel {
         }
     }
 
+    private async postWhatsNewData() {
+        const extensionPath = this.extensionUri.fsPath;
+        const currentVersion = getCurrentExtensionVersion(extensionPath);
+        const versions = getAllWhatsNewVersions(extensionPath);
+        const data = getWhatsNewData(extensionPath, currentVersion) ?? getWhatsNewData(extensionPath, versions[0]?.version || currentVersion);
+        await this.panel.webview.postMessage({
+            command: 'initData',
+            currentVersion: data?.version || currentVersion,
+            versions,
+            data
+        });
+    }
+
+    private async postWhatsNewVersion(version: unknown) {
+        if (typeof version !== 'string' || !version.trim()) { return; }
+        const data = getWhatsNewData(this.extensionUri.fsPath, version);
+        await this.panel.webview.postMessage({
+            command: 'setChangelog',
+            data
+        });
+    }
+
+    private async selectYearPlan(year: unknown, currentState: unknown) {
+        try {
+            if (isRecord(currentState)) {
+                await saveDashboardState(currentState);
+            }
+            await setSelectedYearPlan(year);
+            await this.postDashboardData();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await this.panel.webview.postMessage({ command: 'dashboard.error', message });
+            vscode.window.showErrorMessage(`切换年计划失败: ${message}`);
+        }
+    }
+
     public dispose() {
         if (this.instanceKey === 'dashboard') {
             WritingDashboardPanel.dashboardInstance = undefined;
@@ -330,7 +387,17 @@ function normalizeWidgetId(widgetId: string): DashboardWidgetId {
     if (widgetId in widgetTitles) {
         return widgetId as DashboardWidgetId;
     }
-    return 'energy';
+    return 'heatmap';
+}
+
+function getCurrentExtensionVersion(extensionPath: string): string {
+    try {
+        const raw = fs.readFileSync(path.join(extensionPath, 'package.json'), 'utf8');
+        const parsed = JSON.parse(raw) as { version?: unknown };
+        return typeof parsed.version === 'string' && parsed.version.trim() ? parsed.version.trim() : 'unknown';
+    } catch {
+        return 'unknown';
+    }
 }
 
 function getDashboardWebviewSettings(): DashboardWebviewSettings {
@@ -357,6 +424,13 @@ async function loadDashboardState(): Promise<DashboardState> {
 
     const merged = mergeDashboardState(layoutState);
     const tasks = await loadDashboardTasks(defaults.tasks as unknown[]);
+    const defaultYearPlan = isRecord(merged.yearPlan) ? merged.yearPlan : defaults.yearPlan;
+    let selectedYearPlanYear = normalizeYearPlanYear(merged.selectedYearPlanYear, getYearFromPlan(defaultYearPlan));
+    const yearPlanFiles = await loadDashboardYearPlanFiles(selectedYearPlanYear, defaultYearPlan);
+    if (yearPlanFiles.length > 0 && !yearPlanFiles.some(file => file.year === selectedYearPlanYear)) {
+        selectedYearPlanYear = yearPlanFiles[0].year;
+    }
+    const yearPlan = await loadDashboardYearPlan(selectedYearPlanYear, defaultYearPlan);
     let selectedPlanFile = normalizePlanFileName(merged.selectedPlanFile);
     const planFiles = await loadDashboardPlanFiles(selectedPlanFile, String(defaults.planMarkdown || ''));
     if (planFiles.length > 0 && !planFiles.some(file => file.name === selectedPlanFile)) {
@@ -366,7 +440,7 @@ async function loadDashboardState(): Promise<DashboardState> {
     const realtime = await loadDashboardRealtimeData({
         tasks,
         profile: merged.profile,
-        yearPlan: merged.yearPlan,
+        yearPlan,
         logs: merged.logs,
     });
     const profile = isRecord(merged.profile)
@@ -377,13 +451,15 @@ async function loadDashboardState(): Promise<DashboardState> {
         tasks,
         profile,
         yearPlan: realtime.yearPlan,
+        selectedYearPlanYear,
+        yearPlanFiles,
         logs: realtime.logs,
         heatmapData: realtime.heatmapData,
         writingStats: realtime.writingStats,
         selectedPlanFile,
         planFiles,
         planMarkdown,
-        dashboardFiles: getDashboardFileInfo(selectedPlanFile),
+        dashboardFiles: getDashboardFileInfo(selectedPlanFile, selectedYearPlanYear),
     };
 }
 
@@ -414,6 +490,7 @@ async function loadDashboardRealtimeData(input: {
     const novelProfile = await buildNovelProfileData(input.profile);
     const taskStats = countTaskStats(input.tasks);
     const baseYearPlan = isRecord(input.yearPlan) ? input.yearPlan : {};
+    const yearGoalStats = countYearPlanGoals(baseYearPlan.goals);
 
     return {
         profileStats: {
@@ -424,9 +501,11 @@ async function loadDashboardRealtimeData(input: {
         },
         yearPlan: {
             ...baseYearPlan,
-            completedGoals: taskStats.done,
-            totalGoals: taskStats.total,
-            progress: taskStats.total > 0 ? Number((taskStats.done / taskStats.total).toFixed(4)) : 0,
+            completedGoals: yearGoalStats?.done ?? taskStats.done,
+            totalGoals: yearGoalStats?.total ?? taskStats.total,
+            progress: yearGoalStats
+                ? Number((yearGoalStats.progress / 100).toFixed(4))
+                : (taskStats.total > 0 ? Number((taskStats.done / taskStats.total).toFixed(4)) : 0),
         },
         logs: recentWritingLogs.length > 0
             ? recentWritingLogs
@@ -656,6 +735,30 @@ function countTaskStats(tasks: unknown[]): { total: number; done: number } {
     return { total, done };
 }
 
+function countYearPlanGoals(value: unknown): { total: number; done: number; progress: number } | null {
+    if (!Array.isArray(value) || value.length === 0) {
+        return null;
+    }
+    let total = 0;
+    let done = 0;
+    let progress = 0;
+    for (const goal of value) {
+        if (!isRecord(goal)) {
+            continue;
+        }
+        total += 1;
+        if (goal.status === 'done') {
+            done += 1;
+        }
+        const goalProgress = typeof goal.progress === 'number' ? goal.progress : (goal.status === 'done' ? 100 : 0);
+        progress += Math.min(100, Math.max(0, goalProgress));
+    }
+    if (total === 0) {
+        return null;
+    }
+    return { total, done, progress: progress / total };
+}
+
 function getWorkspaceRelativeLabel(filePath: string): string {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
@@ -718,13 +821,18 @@ async function saveDashboardState(data: unknown): Promise<void> {
     if (typeof state.planMarkdown === 'string') {
         await saveDashboardPlan(state.planMarkdown, selectedPlanFile);
     }
+    const selectedYearPlanYear = normalizeYearPlanYear(state.selectedYearPlanYear, getYearFromPlan(state.yearPlan));
+    if (isRecord(state.yearPlan)) {
+        await saveDashboardYearPlan(state.yearPlan, getYearFromPlan(state.yearPlan) || selectedYearPlanYear);
+    }
 
     const layoutState = {
         windows: state.windows,
         energyMetrics: state.energyMetrics,
         logs: state.logs,
         profile: state.profile,
-        yearPlan: state.yearPlan,
+        clockSettings: state.clockSettings,
+        selectedYearPlanYear: getYearFromPlan(state.yearPlan) || selectedYearPlanYear,
         selectedPlanFile,
     };
     await fs.promises.writeFile(layoutPath, `${JSON.stringify(layoutState, null, 2)}\n`, 'utf8');
@@ -784,6 +892,70 @@ async function saveDashboardPlan(markdown: string, fileName: unknown): Promise<v
     const filePath = getDashboardPlanFilePath(fileName);
     if (!filePath) { return; }
     await fs.promises.writeFile(filePath, markdown, 'utf8');
+}
+
+async function loadDashboardYearPlanFiles(selectedYear: number, defaultYearPlan: unknown): Promise<Array<{ year: number; name: string; path: string }>> {
+    await ensureDashboardYearPlanDir(defaultYearPlan);
+    const dir = getDashboardYearPlanDirPath();
+    if (!dir) { return []; }
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    const years = entries
+        .filter(entry => entry.isFile() && path.extname(entry.name).toLowerCase() === '.json')
+        .map(entry => Number(path.basename(entry.name, '.json')))
+        .filter(year => Number.isFinite(year))
+        .map(year => Math.round(year))
+        .filter((year, index, list) => list.indexOf(year) === index)
+        .sort((a, b) => b - a);
+    if (!years.includes(selectedYear)) {
+        years.unshift(selectedYear);
+    }
+    return years.map(year => ({
+        year,
+        name: `${year}.json`,
+        path: getDashboardYearPlanFilePath(year) ?? `${year}.json`,
+    }));
+}
+
+async function loadDashboardYearPlan(year: number, defaultYearPlan: unknown): Promise<unknown> {
+    await ensureDashboardYearPlanDir(defaultYearPlan);
+    const filePath = getDashboardYearPlanFilePath(year);
+    if (!filePath || !fs.existsSync(filePath)) {
+        return isRecord(defaultYearPlan) ? { ...defaultYearPlan, year } : { year };
+    }
+    try {
+        const parsed = JSON.parse(await fs.promises.readFile(filePath, 'utf8')) as unknown;
+        return isRecord(parsed) ? { ...parsed, year: normalizeYearPlanYear(parsed.year, year) } : defaultYearPlan;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`${filePath} 解析失败: ${message}`);
+    }
+}
+
+async function saveDashboardYearPlan(yearPlan: Record<string, unknown>, yearValue?: unknown): Promise<void> {
+    const year = normalizeYearPlanYear(yearValue, getYearFromPlan(yearPlan));
+    await ensureDashboardYearPlanDir(yearPlan);
+    const filePath = getDashboardYearPlanFilePath(year);
+    if (!filePath) { return; }
+    await fs.promises.writeFile(filePath, `${JSON.stringify({ ...yearPlan, year }, null, 2)}\n`, 'utf8');
+}
+
+async function setSelectedYearPlan(yearValue: unknown): Promise<number> {
+    const year = normalizeYearPlanYear(yearValue, getYearFromPlan(createDefaultDashboardState().yearPlan));
+    const layoutPath = getDashboardLayoutFilePath();
+    if (!layoutPath) {
+        throw new Error('当前没有工作区，无法切换年计划。');
+    }
+    await ensureDashboardYearPlanDir(createDefaultDashboardState().yearPlan);
+    const filePath = getDashboardYearPlanFilePath(year);
+    if (filePath && !fs.existsSync(filePath)) {
+        const defaults = createDefaultDashboardState().yearPlan;
+        await saveDashboardYearPlan(isRecord(defaults) ? { ...defaults, year } : { year }, year);
+    }
+    const layoutState = await readDashboardLayoutState();
+    layoutState.selectedYearPlanYear = year;
+    await ensureDashboardDir();
+    await fs.promises.writeFile(layoutPath, `${JSON.stringify(layoutState, null, 2)}\n`, 'utf8');
+    return year;
 }
 
 async function setSelectedPlanFile(fileName: unknown): Promise<string> {
@@ -871,6 +1043,26 @@ async function ensureDashboardPlanDir(defaultMarkdown?: string): Promise<void> {
     }
 }
 
+async function ensureDashboardYearPlanDir(defaultYearPlan?: unknown): Promise<void> {
+    const dir = getDashboardYearPlanDirPath();
+    if (!dir) { return; }
+    await fs.promises.mkdir(dir, { recursive: true });
+
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    const hasYearPlanFile = entries.some(entry =>
+        entry.isFile()
+        && path.extname(entry.name).toLowerCase() === '.json'
+        && Number.isFinite(Number(path.basename(entry.name, '.json')))
+    );
+    if (!hasYearPlanFile && isRecord(defaultYearPlan)) {
+        const year = getYearFromPlan(defaultYearPlan);
+        const filePath = getDashboardYearPlanFilePath(year);
+        if (filePath) {
+            await fs.promises.writeFile(filePath, `${JSON.stringify({ ...defaultYearPlan, year }, null, 2)}\n`, 'utf8');
+        }
+    }
+}
+
 async function readDashboardLayoutState(): Promise<Record<string, unknown>> {
     const layoutPath = getDashboardLayoutFilePath();
     if (!layoutPath || !fs.existsSync(layoutPath)) { return {}; }
@@ -921,6 +1113,11 @@ function getDashboardPlanDirPath(): string | undefined {
     return dir ? path.join(dir, dashboardPlanDirName) : undefined;
 }
 
+function getDashboardYearPlanDirPath(): string | undefined {
+    const dir = getDashboardDirPath();
+    return dir ? path.join(dir, dashboardYearPlanDirName) : undefined;
+}
+
 function getDashboardLayoutFilePath(): string | undefined {
     const dir = getDashboardDirPath();
     return dir ? path.join(dir, dashboardLayoutFileName) : undefined;
@@ -941,17 +1138,38 @@ function getDashboardPlanFilePath(fileName?: unknown): string | undefined {
     return dir ? path.join(dir, normalizePlanFileName(fileName)) : undefined;
 }
 
-function getDashboardFileInfo(selectedPlanFile?: unknown): Record<string, string> {
+function getDashboardYearPlanFilePath(yearValue?: unknown): string | undefined {
+    const dir = getDashboardYearPlanDirPath();
+    return dir ? path.join(dir, `${normalizeYearPlanYear(yearValue, new Date().getFullYear())}.json`) : undefined;
+}
+
+function getDashboardFileInfo(selectedPlanFile?: unknown, selectedYear?: unknown): Record<string, string> {
     const info: Record<string, string> = {};
     const layoutPath = getDashboardLayoutFilePath();
     const tasksPath = getDashboardTasksFilePath();
     const planDirPath = getDashboardPlanDirPath();
     const planPath = getDashboardPlanFilePath(selectedPlanFile);
+    const yearPlanDirPath = getDashboardYearPlanDirPath();
+    const yearPlanPath = getDashboardYearPlanFilePath(selectedYear);
     if (layoutPath) { info.layoutPath = layoutPath; }
     if (tasksPath) { info.tasksPath = tasksPath; }
     if (planDirPath) { info.planDirPath = planDirPath; }
     if (planPath) { info.planPath = planPath; }
+    if (yearPlanDirPath) { info.yearPlanDirPath = yearPlanDirPath; }
+    if (yearPlanPath) { info.yearPlanPath = yearPlanPath; }
     return info;
+}
+
+function normalizeYearPlanYear(value: unknown, fallback: number): number {
+    const year = Number(value);
+    if (!Number.isFinite(year)) { return fallback; }
+    const rounded = Math.round(year);
+    return rounded >= 1900 && rounded <= 3000 ? rounded : fallback;
+}
+
+function getYearFromPlan(value: unknown): number {
+    const fallback = new Date().getFullYear();
+    return isRecord(value) ? normalizeYearPlanYear(value.year, fallback) : fallback;
 }
 
 function mergeDashboardState(value: Record<string, unknown>): DashboardState {
@@ -959,12 +1177,14 @@ function mergeDashboardState(value: Record<string, unknown>): DashboardState {
     return {
         ...defaults,
         ...value,
-        windows: Array.isArray(value.windows) && value.windows.length > 0 ? value.windows : defaults.windows,
+        windows: Array.isArray(value.windows) ? value.windows : defaults.windows,
         energyMetrics: Array.isArray(value.energyMetrics) ? value.energyMetrics : defaults.energyMetrics,
         tasks: Array.isArray(value.tasks) ? value.tasks : defaults.tasks,
         logs: Array.isArray(value.logs) ? value.logs : defaults.logs,
         profile: isRecord(value.profile) ? value.profile : defaults.profile,
         yearPlan: isRecord(value.yearPlan) ? value.yearPlan : defaults.yearPlan,
+        clockSettings: isRecord(value.clockSettings) ? { ...(defaults.clockSettings as Record<string, unknown>), ...value.clockSettings } : defaults.clockSettings,
+        selectedYearPlanYear: normalizeYearPlanYear(value.selectedYearPlanYear, getYearFromPlan(value.yearPlan || defaults.yearPlan)),
         planMarkdown: typeof value.planMarkdown === 'string' ? value.planMarkdown : defaults.planMarkdown,
     };
 }
@@ -977,10 +1197,9 @@ function createDefaultDashboardState(): DashboardState {
     const roleCount = getRoleCount();
     return {
         windows: [
-            { id: 'win-energy', type: 'energy', title: '能量条形图', x: 20, y: 20, w: 360, h: 180 },
-            { id: 'win-heatmap', type: 'heatmap', title: '码字热力图', x: 400, y: 20, w: 360, h: 180 },
-            { id: 'win-clock', type: 'clock', title: '当前时间', x: 780, y: 20, w: 260, h: 180 },
-            { id: 'win-profile', type: 'profile', title: '我的小说', x: 1060, y: 20, w: 280, h: 300 },
+            { id: 'win-heatmap', type: 'heatmap', title: '码字热力图', x: 20, y: 20, w: 360, h: 180 },
+            { id: 'win-clock', type: 'clock', title: '当前时间', x: 400, y: 20, w: 260, h: 180 },
+            { id: 'win-profile', type: 'profile', title: '我的小说', x: 680, y: 20, w: 320, h: 300 },
             { id: 'win-gantt', type: 'gantt', title: '任务甘特图', x: 20, y: 220, w: 760, h: 330 },
             { id: 'win-plan', type: 'plan', title: '今日计划', x: 800, y: 220, w: 540, h: 330 },
             { id: 'win-tasks', type: 'tasks', title: '任务清单', x: 20, y: 570, w: 760, h: 260 },
@@ -1032,10 +1251,37 @@ function createDefaultDashboardState(): DashboardState {
             year: 2026,
             title: '专注成长，拥抱变化',
             category: '学习',
+            summary: '把年度目标拆成可执行的季度成果，围绕写作、设定、发布和复盘形成稳定节奏。',
             progress: 0.72,
-            completedGoals: 0,
-            totalGoals: 2,
+            completedGoals: 2,
+            totalGoals: 4,
             tags: ['阅读', '工作', '健康', '写作'],
+            goals: [
+                { id: 'yg-1', title: '完成主线大纲与核心角色档案', quarter: 'Q1', status: 'done', progress: 100 },
+                { id: 'yg-2', title: '稳定每周章节计划与复盘流程', quarter: 'Q2', status: 'done', progress: 100 },
+                { id: 'yg-3', title: '完成第一卷修订与设定一致性检查', quarter: 'Q3', status: 'doing', progress: 62 },
+                { id: 'yg-4', title: '准备样章、简介和发布材料', quarter: 'Q4', status: 'todo', progress: 18 },
+            ],
+        },
+        selectedYearPlanYear: 2026,
+        yearPlanFiles: [],
+        clockSettings: {
+            preset: 'standard',
+            title: '当前时间',
+            customLabel: '',
+            showTitle: true,
+            timeZone: '',
+            hour12: false,
+            showSeconds: true,
+            secondsStyle: 'suffix',
+            showDate: true,
+            showWeekday: true,
+            showPeriod: true,
+            showProgress: true,
+            showTimezone: true,
+            dateStyle: 'long',
+            align: 'center',
+            extraClocks: [],
         },
         planMarkdown: [
             '---',

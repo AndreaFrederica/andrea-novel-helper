@@ -58,8 +58,12 @@
             :logs="state.logs"
             :profile="state.profile"
             :year-plan="state.yearPlan"
+            :selected-year-plan-year="state.selectedYearPlanYear"
+            :year-plan-files="state.yearPlanFiles"
+            :clock-settings="state.clockSettings"
             :plan-markdown="state.planMarkdown"
             :plan-file-path="state.dashboardFiles?.planPath"
+            :dashboard-files="state.dashboardFiles"
             :plan-files="state.planFiles"
             :selected-plan-file="state.selectedPlanFile"
             @update:energy-metrics="onUpdateEnergyMetrics"
@@ -67,8 +71,10 @@
             @update:logs="onUpdateLogs"
             @update:profile="onUpdateProfile"
             @update:year-plan="onUpdateYearPlan"
+            @update:clock-settings="onUpdateClockSettings"
             @update:plan-markdown="onUpdatePlanMarkdown"
             @select-plan-file="selectPlanFile"
+            @select-year-plan="selectYearPlan"
             @create-plan-file="createPlanFile"
             @open-plan-file="openPlanFile"
           />
@@ -135,27 +141,28 @@
     </Transition>
 
     <!-- 页面设置面板 -->
-    <q-dialog v-model="showPageSettings">
-      <q-card style="min-width: 300px">
-        <q-card-section class="row items-center">
-          <div class="text-h6">工作台设置</div>
-          <q-space />
-          <q-btn icon="close" flat round dense v-close-popup />
-        </q-card-section>
+    <WindowModal
+      v-model="showPageSettings"
+      title="工作台设置"
+      icon="settings"
+      modal-id="dashboard-settings"
+      :owner-id="activeId || 'dashboard'"
+      :width="360"
+      modal
+    >
+      <div class="dashboard-settings-body">
+        <q-toggle v-model="layoutSettings.taskbarVisible" label="显示任务栏" />
+        <q-toggle v-model="layoutSettings.taskbarAutoHide" label="任务栏自动隐藏" />
         <q-separator />
-        <q-card-section class="q-gutter-md">
-          <q-toggle v-model="layoutSettings.taskbarVisible" label="显示任务栏" />
-          <q-toggle v-model="layoutSettings.taskbarAutoHide" label="任务栏自动隐藏" />
-          <q-separator />
-          <div class="text-caption q-mb-sm">平铺方向</div>
-          <q-btn-group spread>
-            <q-btn dense :outline="layoutSettings.tilingDirection !== 'horizontal'" color="pink-5" label="左右" @click="layoutSettings.tilingDirection = 'horizontal'; applyTiling()" />
-            <q-btn dense :outline="layoutSettings.tilingDirection !== 'vertical'" color="pink-5" label="上下" @click="layoutSettings.tilingDirection = 'vertical'; applyTiling()" />
-            <q-btn dense :outline="layoutSettings.tilingDirection !== 'grid'" color="pink-5" label="网格" @click="layoutSettings.tilingDirection = 'grid'; applyTiling()" />
-          </q-btn-group>
-        </q-card-section>
-      </q-card>
-    </q-dialog>
+        <div class="settings-caption">平铺方向</div>
+        <q-btn-group spread>
+          <q-btn dense :outline="layoutSettings.tilingDirection !== 'horizontal'" color="pink-5" label="左右" @click="setTilingDirection('horizontal')" />
+          <q-btn dense :outline="layoutSettings.tilingDirection !== 'vertical'" color="pink-5" label="上下" @click="setTilingDirection('vertical')" />
+          <q-btn dense :outline="layoutSettings.tilingDirection !== 'grid'" color="pink-5" label="网格" @click="setTilingDirection('grid')" />
+          <q-btn dense :outline="layoutSettings.tilingDirection !== 'free'" color="pink-5" label="自由" @click="setTilingDirection('free')" />
+        </q-btn-group>
+      </div>
+    </WindowModal>
   </div>
 </template>
 
@@ -163,7 +170,8 @@
 import { computed, onBeforeUnmount, onMounted, provide, reactive, ref, watch } from 'vue'
 import DashboardWidgetRenderer from './writingDashboard/DashboardWidgetRenderer.vue'
 import DashboardStartMenu from './writingDashboard/components/DashboardStartMenu.vue'
-import { widgetTitles, type DashboardWindow, type WidgetType, type EnergyMetric, type DashboardLog, type Task, type DashboardProfile, type YearPlan } from './writingDashboard/sampleData'
+import WindowModal from './writingDashboard/components/WindowModal.vue'
+import { widgetTitles, type DashboardWindow, type WidgetType, type EnergyMetric, type DashboardLog, type Task, type DashboardProfile, type YearPlan, type ClockSettings } from './writingDashboard/sampleData'
 import { useDashboardState, loadLayoutSettings, saveLayoutSettings, type LayoutSettings } from './writingDashboard/useDashboardState'
 import { WindowLayerManager, loadLayerManager, saveLayerManager } from './writingDashboard/windowLayer'
 
@@ -199,6 +207,7 @@ const dragState = ref<DragState | null>(null)
 const dragPreview = ref<{ id: string; patch: WindowDraftPatch } | null>(null)
 const splitPreview = ref<Record<string, WindowDraftPatch> | null>(null)
 const snapPreview = ref<{ id: string; patch: Required<WindowDraftPatch> } | null>(null)
+const preTilingWindows = ref<DashboardWindow[] | null>(null)
 const lastValidStageSize = ref<StageSize | null>(null)
 const showPageSettings = ref(false)
 const taskbarHover = ref(false)
@@ -281,7 +290,7 @@ const allWindows = computed(() => windows.value)
 const visibleWindows = computed(() => windows.value.filter(w => !w.minimized))
 const renderedWindows = computed(() => visibleWindows.value.map(item => windowWithPreview(item)))
 const splitHandles = computed(() => {
-  if (layoutSettings.tilingMode || dragState.value?.mode === 'move') return []
+  if (dragState.value?.mode === 'move') return []
   return buildSplitHandles(renderedWindows.value.filter(item => !item.maximized))
 })
 const snapPreviewStyle = computed(() => {
@@ -302,6 +311,7 @@ const widgetOptions = computed(() => Object.entries(widgetTitles).map(([type, ti
 /* ── 基础操作 ────────────────────────────── */
 function resetLayout() {
   layoutSettings.tilingMode = false
+  preTilingWindows.value = null
   resetState()
 }
 
@@ -318,8 +328,8 @@ function activateWindow(id: string) {
 function addWindow(type: WidgetType) {
   const count = windows.value.length
   const stageSize = getStageSize()
-  const preferredW = type === 'gantt' || type === 'tasks' || type === 'quadrant' ? 720 : type === 'timer' ? 320 : 360
-  const preferredH = type === 'gantt' || type === 'quadrant' ? 330 : type === 'timer' ? 360 : 240
+  const preferredW = type === 'gantt' || type === 'tasks' || type === 'quadrant' || type === 'whatsNew' ? 720 : type === 'timer' ? 320 : type === 'about' ? 420 : 360
+  const preferredH = type === 'gantt' || type === 'quadrant' ? 330 : type === 'timer' ? 360 : type === 'whatsNew' ? 520 : type === 'about' ? 280 : 240
   const size = fitWindowSize(preferredW, preferredH, stageSize)
   const pos = clampWindowPosition(
     40 + (count % 4) * 36,
@@ -337,7 +347,11 @@ function addWindow(type: WidgetType) {
     w: size.w,
     h: size.h,
   }
-  updateWindows([...windows.value, item])
+  const next = [...windows.value, item]
+  if (layoutSettings.tilingMode && preTilingWindows.value) {
+    preTilingWindows.value = [...preTilingWindows.value, { ...item }]
+  }
+  updateWindows(layoutSettings.tilingMode ? buildTilingWindows(next) : next)
   // 注册到层级管理器并激活
   layerManager.activate(item.id)
   layerVersion.value++
@@ -346,20 +360,32 @@ function addWindow(type: WidgetType) {
 }
 
 function removeWindow(id: string) {
-  updateWindows(windows.value.filter(item => item.id !== id))
+  const removed = windows.value.find(item => item.id === id)
+  let next = windows.value.filter(item => item.id !== id)
+  if (preTilingWindows.value) {
+    preTilingWindows.value = preTilingWindows.value.filter(item => item.id !== id)
+  }
+  if (layoutSettings.tilingMode && removed) {
+    next = layoutSettings.tilingDirection === 'free'
+      ? fillRemovedTile(windows.value, id)
+      : buildTilingWindows(next)
+  }
+  updateWindows(next)
   layerManager.remove(id)
   saveLayerManager(layerManager)
   if (activeId.value === id) {
-    activeId.value = windows.value[0]?.id || ''
+    activeId.value = next[0]?.id || ''
   }
 }
 
 function minimizeWindow(id: string) {
-  updateWindowItem(id, { minimized: true })
+  const next = windows.value.map(entry => entry.id === id ? { ...entry, minimized: true } : entry)
+  updateWindows(layoutSettings.tilingMode ? buildTilingWindows(next) : next)
 }
 
 function restoreWindow(id: string) {
-  updateWindowItem(id, { minimized: false })
+  const next = windows.value.map(entry => entry.id === id ? { ...entry, minimized: false } : entry)
+  updateWindows(layoutSettings.tilingMode ? buildTilingWindows(next) : next)
 }
 
 function toggleMaximize(id: string) {
@@ -378,7 +404,8 @@ function maximizeWindow(item: DashboardWindow) {
     ...bounds,
     minimized: false,
     maximized: true,
-    restoreBounds: currentWindowBounds(item)
+    restoreBounds: currentWindowBounds(item),
+    snapRestoreBounds: undefined
   })
   activateWindow(item.id)
 }
@@ -391,7 +418,23 @@ function restoreMaximizedWindow(item: DashboardWindow, pointerEvent?: PointerEve
   updateWindowItem(item.id, {
     ...nextBounds,
     maximized: false,
-    restoreBounds
+    restoreBounds,
+    snapRestoreBounds: undefined
+  })
+  return nextBounds
+}
+
+function restoreWindowFromStoredBounds(item: DashboardWindow, pointerEvent: PointerEvent): WindowBounds {
+  const storedBounds = item.maximized
+    ? item.restoreBounds ?? currentWindowBounds(item)
+    : item.snapRestoreBounds ?? currentWindowBounds(item)
+  const restoreBounds = fitRestoreBounds(storedBounds)
+  const nextBounds = restoredDragStartBounds(restoreBounds, pointerEvent)
+  updateWindowItem(item.id, {
+    ...nextBounds,
+    maximized: false,
+    restoreBounds: item.maximized ? restoreBounds : item.restoreBounds,
+    snapRestoreBounds: undefined
   })
   return nextBounds
 }
@@ -754,7 +797,7 @@ function startDrag(event: PointerEvent, id: string) {
     startY: event.clientY,
     originalX: item.x,
     originalY: item.y,
-    restoreOnMove: !!item.maximized
+    restoreOnMove: !!item.maximized || !!item.snapRestoreBounds
   }
   addPointerActionListeners(captureEl)
 }
@@ -827,7 +870,7 @@ function handlePointerMove(event: PointerEvent) {
 
   if (s.mode === 'move') {
     if (s.restoreOnMove && !s.restored) {
-      const restored = restoreMaximizedWindow(item, event)
+      const restored = restoreWindowFromStoredBounds(item, event)
       s.originalX = restored.x
       s.originalY = restored.y
       s.startX = event.clientX
@@ -940,6 +983,9 @@ function finishPointerAction(commit: boolean) {
   removePointerActionListeners(s)
 
   if (s?.mode === 'split' && commit && split) {
+    if (layoutSettings.tilingMode) {
+      layoutSettings.tilingDirection = 'free'
+    }
     const next = windows.value.map(entry => split[entry.id] ? { ...entry, ...split[entry.id] } : entry)
     updateWindows(next)
     return
@@ -949,7 +995,18 @@ function finishPointerAction(commit: boolean) {
     if (s.mode === 'split') return
     const patch = s.mode === 'move' && snap?.id === s.id ? snap.patch : preview?.id === s.id ? preview.patch : null
     if (!patch) return
-    const next = windows.value.map(entry => entry.id === s.id ? { ...entry, ...patch } : entry)
+    const isSnapCommit = s.mode === 'move' && snap?.id === s.id
+    const next = windows.value.map(entry => {
+      if (entry.id !== s.id) return entry
+      return {
+        ...entry,
+        ...patch,
+        maximized: false,
+        snapRestoreBounds: isSnapCommit
+          ? (entry.snapRestoreBounds ?? currentWindowBounds(entry))
+          : undefined
+      }
+    })
     updateWindows(next)
   }
 }
@@ -1059,7 +1116,9 @@ function widgetIcon(type: WidgetType) {
     tasks: 'checklist',
     yearPlan: 'track_changes',
     logs: 'table_rows',
-    timer: 'timer'
+    timer: 'timer',
+    about: 'info',
+    whatsNew: 'celebration'
   }
   return icons[type]
 }
@@ -1083,7 +1142,10 @@ function onUpdateProfile(profile: DashboardProfile) {
   saveState({ ...state.value, profile })
 }
 function onUpdateYearPlan(plan: YearPlan) {
-  saveState({ ...state.value, yearPlan: plan })
+  saveState({ ...state.value, yearPlan: plan, selectedYearPlanYear: plan.year })
+}
+function onUpdateClockSettings(settings: ClockSettings) {
+  saveState({ ...state.value, clockSettings: settings })
 }
 function onUpdatePlanMarkdown(markdown: string) {
   saveState({ ...state.value, planMarkdown: markdown })
@@ -1126,22 +1188,72 @@ function createPlanFile(fileName: string) {
 
 /* ── 平铺窗口管理 ────────────────────────── */
 function toggleTiling() {
-  layoutSettings.tilingMode = !layoutSettings.tilingMode
+  if (!layoutSettings.tilingMode) {
+    preTilingWindows.value = windows.value.map(item => ({ ...item }))
+    layoutSettings.tilingMode = true
+    applyTiling()
+    return
+  }
+  layoutSettings.tilingMode = false
+  restorePreTilingWindows()
+}
+
+function applyTiling() {
+  updateWindows(buildTilingWindows(windows.value))
+}
+
+function setTilingDirection(direction: LayoutSettings['tilingDirection']) {
+  layoutSettings.tilingDirection = direction
   if (layoutSettings.tilingMode) {
     applyTiling()
   }
 }
 
-function applyTiling() {
+function restorePreTilingWindows() {
+  const snapshot = preTilingWindows.value
+  preTilingWindows.value = null
+  if (!snapshot) return
+  const currentById = new Map(windows.value.map(item => [item.id, item]))
+  const restored = snapshot
+    .filter(item => currentById.has(item.id))
+    .map(item => ({
+      ...item,
+      minimized: currentById.get(item.id)?.minimized ?? item.minimized,
+      z: currentById.get(item.id)?.z ?? item.z
+    }))
+  const restoredIds = new Set(restored.map(item => item.id))
+  const addedDuringTiling = windows.value
+    .filter(item => !restoredIds.has(item.id))
+    .map(item => ({ ...item, maximized: false }))
+  updateWindows([...restored, ...addedDuringTiling])
+}
+
+function selectYearPlan(year: number) {
+  if (!Number.isFinite(year) || year === state.value.selectedYearPlanYear) return
+  if (vscode) {
+    vscode.postMessage({
+      command: 'dashboard.selectYearPlan',
+      year,
+      currentState: serializableDashboardState()
+    })
+    return
+  }
+  saveState({ ...state.value, selectedYearPlanYear: year, yearPlan: { ...state.value.yearPlan, year } })
+}
+
+function buildTilingWindows(source: DashboardWindow[]): DashboardWindow[] {
   const stageSize = readVisibleStageSize()
-  if (!stageSize) return
+  if (!stageSize) return source
   const availW = stageSize.width
   const availH = stageSize.height
-  const list = visibleWindows.value
+  const list = source.filter(item => !item.minimized)
   const n = list.length
-  if (n === 0) return
+  if (n === 0) return source
 
-  const next = windows.value.map(w => ({ ...w }))
+  const next = source.map(w => ({ ...w }))
+  if (layoutSettings.tilingDirection === 'free') {
+    return normalizeFreeTiling(next, stageSize)
+  }
 
   if (layoutSettings.tilingDirection === 'horizontal') {
     const w = Math.floor(availW / n)
@@ -1195,7 +1307,110 @@ function applyTiling() {
     }
   }
 
-  updateWindows(next)
+  return next
+}
+
+function normalizeFreeTiling(source: DashboardWindow[], stageSize = getStageSize()): DashboardWindow[] {
+  const visible = source.filter(item => !item.minimized)
+  if (visible.length === 0) return source
+  const minX = Math.min(...visible.map(item => item.x))
+  const minY = Math.min(...visible.map(item => item.y))
+  const maxX = Math.max(...visible.map(item => item.x + item.w))
+  const maxY = Math.max(...visible.map(item => item.y + item.h))
+  const sourceW = Math.max(1, maxX - minX)
+  const sourceH = Math.max(1, maxY - minY)
+  return source.map(item => {
+    if (item.minimized) return item
+    return {
+      ...item,
+      x: Math.round(((item.x - minX) / sourceW) * stageSize.width),
+      y: Math.round(((item.y - minY) / sourceH) * stageSize.height),
+      w: Math.max(MIN_WINDOW_WIDTH, Math.round((item.w / sourceW) * stageSize.width) - 4),
+      h: Math.max(MIN_WINDOW_HEIGHT, Math.round((item.h / sourceH) * stageSize.height) - 4),
+      maximized: false
+    }
+  })
+}
+
+function fillRemovedTile(source: DashboardWindow[], removedId: string): DashboardWindow[] {
+  const removed = source.find(item => item.id === removedId)
+  const next = source.filter(item => item.id !== removedId).map(item => ({ ...item }))
+  if (!removed) return next
+  const stageSize = readVisibleStageSize()
+  if (!stageSize) return next
+  const visible = next.filter(item => !item.minimized)
+  if (visible.length === 0) return next
+  const side = findBestVacancyFillSide(removed, visible)
+  if (!side) return normalizeFreeTiling(next, stageSize)
+
+  const groupIds = new Set(side.items.map(item => item.id))
+  return normalizeFreeTiling(next.map(item => {
+    if (!groupIds.has(item.id)) return item
+    if (side.kind === 'left') {
+      return { ...item, w: removed.x + removed.w - item.x, maximized: false }
+    }
+    if (side.kind === 'right') {
+      return { ...item, x: removed.x, w: item.x + item.w - removed.x, maximized: false }
+    }
+    if (side.kind === 'top') {
+      return { ...item, h: removed.y + removed.h - item.y, maximized: false }
+    }
+    return { ...item, y: removed.y, h: item.y + item.h - removed.y, maximized: false }
+  }), stageSize)
+}
+
+function findBestVacancyFillSide(removed: DashboardWindow, candidates: DashboardWindow[]) {
+  type SideCandidate = { kind: 'left' | 'right' | 'top' | 'bottom'; items: DashboardWindow[]; score: number }
+  const sideCandidates: SideCandidate[] = []
+  const tolerance = SPLIT_EDGE_TOLERANCE + 2
+  const left = candidates.filter(item => Math.abs(item.x + item.w - removed.x) <= tolerance && rangesOverlap(item.y, item.y + item.h, removed.y, removed.y + removed.h) > 0)
+  const right = candidates.filter(item => Math.abs(item.x - (removed.x + removed.w)) <= tolerance && rangesOverlap(item.y, item.y + item.h, removed.y, removed.y + removed.h) > 0)
+  const top = candidates.filter(item => Math.abs(item.y + item.h - removed.y) <= tolerance && rangesOverlap(item.x, item.x + item.w, removed.x, removed.x + removed.w) > 0)
+  const bottom = candidates.filter(item => Math.abs(item.y - (removed.y + removed.h)) <= tolerance && rangesOverlap(item.x, item.x + item.w, removed.x, removed.x + removed.w) > 0)
+  addSideCandidate(sideCandidates, 'left', left, removed, 'vertical')
+  addSideCandidate(sideCandidates, 'right', right, removed, 'vertical')
+  addSideCandidate(sideCandidates, 'top', top, removed, 'horizontal')
+  addSideCandidate(sideCandidates, 'bottom', bottom, removed, 'horizontal')
+  return sideCandidates.sort((a, b) => b.score - a.score)[0] || null
+}
+
+function addSideCandidate(
+  target: Array<{ kind: 'left' | 'right' | 'top' | 'bottom'; items: DashboardWindow[]; score: number }>,
+  kind: 'left' | 'right' | 'top' | 'bottom',
+  items: DashboardWindow[],
+  removed: DashboardWindow,
+  axis: 'vertical' | 'horizontal'
+) {
+  if (items.length === 0) return
+  const spanStart = axis === 'vertical' ? removed.y : removed.x
+  const spanEnd = axis === 'vertical' ? removed.y + removed.h : removed.x + removed.w
+  const ranges: Array<[number, number]> = items.map(item => axis === 'vertical'
+    ? [Math.max(item.y, spanStart), Math.min(item.y + item.h, spanEnd)]
+    : [Math.max(item.x, spanStart), Math.min(item.x + item.w, spanEnd)]
+  )
+  const score = coveredRangeScore(ranges, spanStart, spanEnd)
+  target.push({ kind, items, score })
+}
+
+function coveredRangeScore(ranges: Array<[number, number]>, start: number, end: number) {
+  const sorted = ranges
+    .filter(([a, b]) => b > a)
+    .sort((a, b) => a[0] - b[0])
+  let cursor = start
+  let covered = 0
+  for (const [a, b] of sorted) {
+    if (b <= cursor) continue
+    const nextStart = Math.max(cursor, a)
+    if (nextStart > cursor + SPLIT_GROUP_TOLERANCE) break
+    covered += Math.max(0, b - nextStart)
+    cursor = Math.max(cursor, b)
+    if (cursor >= end) break
+  }
+  return covered / Math.max(1, end - start)
+}
+
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number) {
+  return Math.max(0, Math.min(aEnd, bEnd) - Math.max(aStart, bStart))
 }
 
 /* ── 生命周期 ────────────────────────────── */
@@ -1236,6 +1451,17 @@ function openPlanFile() {
     var(--dash-page-bg);
   background-size: 24px 24px;
   color: var(--dash-page-fg);
+}
+
+.dashboard-settings-body {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-caption {
+  color: var(--dash-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 /* 主舞台 */
