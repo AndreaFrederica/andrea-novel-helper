@@ -1,0 +1,406 @@
+trigger:
+  tags:
+    include:
+      - v*
+  branches:
+    exclude:
+      - "*"
+
+pr: none
+
+parameters:
+  - name: electronVersion
+    displayName: VS Code Electron version
+    type: string
+    default: "30.0.9"
+  - name: publish
+    displayName: Publish VSIX files to Marketplace/OpenVSX
+    type: boolean
+    default: false
+
+variables:
+  npm_config_cache: "$(Pipeline.Workspace)/.npm"
+  CARGO_HOME: "$(Pipeline.Workspace)/.cargo"
+  RUSTUP_HOME: "$(Pipeline.Workspace)/.rustup"
+
+stages:
+  - stage: Build
+    displayName: Build VSIX packages
+    jobs:
+      - job: Webview
+        displayName: Build webview once
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+            displayName: Use Node.js 20
+
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: "$(npm_config_cache)"
+            displayName: Cache npm
+
+          - script: |
+              set -euo pipefail
+              npm ci
+              npm --workspace=packages/webview run build
+            displayName: Install deps and build webview
+
+          - publish: packages/webview/dist
+            artifact: webview-dist
+            displayName: Publish webview dist
+
+      - job: PackageDesktop
+        displayName: Package ${{ matrix.target }}
+        dependsOn: Webview
+        strategy:
+          matrix:
+            win32_x64:
+              imageName: windows-latest
+              target: win32-x64
+              platform: win32
+              arch: x64
+            darwin_x64:
+              imageName: macos-13
+              target: darwin-x64
+              platform: darwin
+              arch: x64
+            darwin_arm64:
+              imageName: macos-latest
+              target: darwin-arm64
+              platform: darwin
+              arch: arm64
+        pool:
+          vmImage: $(imageName)
+        variables:
+          ELECTRON_VERSION: ${{ parameters.electronVersion }}
+          npm_config_arch: $(arch)
+          npm_config_target_arch: $(arch)
+          npm_config_platform: $(platform)
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+            displayName: Use Node.js 20
+
+          - task: Cache@2
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: "$(npm_config_cache)"
+            displayName: Cache npm
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | "$(Agent.OS)" | packages/enigo-keyboard/Cargo.lock'
+              restoreKeys: |
+                cargo | "$(Agent.OS)"
+              path: "$(CARGO_HOME)"
+            displayName: Cache Cargo
+
+          - task: Cache@2
+            inputs:
+              key: 'rustup | "$(Agent.OS)"'
+              restoreKeys: |
+                rustup | "$(Agent.OS)"
+              path: "$(RUSTUP_HOME)"
+            displayName: Cache Rustup
+
+          - script: npm ci
+            displayName: Install dependencies
+
+          - download: current
+            artifact: webview-dist
+            displayName: Download webview dist
+
+          - pwsh: |
+              New-Item -ItemType Directory -Force -Path "packages/webview/dist" | Out-Null
+              Copy-Item -Recurse -Force "$(Pipeline.Workspace)/webview-dist/*" "packages/webview/dist/"
+            displayName: Restore webview dist
+
+          - script: rustup default stable
+            displayName: Install Rust toolchain
+
+          - script: npm --workspace=packages/enigo-keyboard run build:ci
+            displayName: Build native enigo-keyboard
+
+          - script: npm run compile
+            displayName: Compile extension
+
+          - script: npm --workspace=packages/enigo-keyboard run sign:macos
+            condition: eq(variables['Agent.OS'], 'Darwin')
+            displayName: Sign macOS binary when identity is configured
+
+          - script: |
+              npm rebuild @vscode/sqlite3 ^
+                --runtime=electron ^
+                --target="$(ELECTRON_VERSION)" ^
+                --dist-url=https://electronjs.org/headers ^
+                --platform="$(platform)" ^
+                --arch="$(arch)"
+            condition: eq(variables['Agent.OS'], 'Windows_NT')
+            displayName: Rebuild @vscode/sqlite3 for Electron (Windows)
+
+          - script: |
+              set -euo pipefail
+              npm rebuild @vscode/sqlite3 \
+                --runtime=electron \
+                --target="$(ELECTRON_VERSION)" \
+                --dist-url=https://electronjs.org/headers \
+                --platform="$(platform)" \
+                --arch="$(arch)"
+            condition: ne(variables['Agent.OS'], 'Windows_NT')
+            displayName: Rebuild @vscode/sqlite3 for Electron (Unix)
+
+          - pwsh: |
+              New-Item -ItemType Directory -Force -Path dist | Out-Null
+              $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+              $pkg.activationEvents = @($pkg.activationEvents | Where-Object { $_ -ne "onStartupFinished" })
+              if ($pkg.scripts.PSObject.Properties.Name -contains "vscode:prepublish") {
+                $pkg.scripts."vscode:prepublish" = "npm run compile"
+              }
+              $pkg | ConvertTo-Json -Depth 100 | Set-Content package.json
+              npx vsce package --target "$(target)" --out "dist/anh-std-$(target).vsix"
+            displayName: Package STD variant
+
+          - pwsh: |
+              $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+              $events = [System.Collections.Generic.HashSet[string]]::new()
+              foreach ($event in @($pkg.activationEvents)) { [void]$events.Add([string]$event) }
+              [void]$events.Add("onStartupFinished")
+              $pkg.activationEvents = @($events)
+              $parts = @($pkg.version.Split(".") | ForEach-Object { [int]$_ })
+              if ($parts.Count -ne 3) { throw "Invalid semver: $($pkg.version)" }
+              $parts[2] = $parts[2] + 1
+              $pkg.version = ($parts -join ".")
+              if ($pkg.scripts.PSObject.Properties.Name -contains "vscode:prepublish") {
+                $pkg.scripts."vscode:prepublish" = "npm run compile"
+              }
+              $pkg | ConvertTo-Json -Depth 100 | Set-Content package.json
+              npx vsce package --target "$(target)" --pre-release --out "dist/anh-exp-$(target).vsix"
+            displayName: Package EXP variant
+
+          - publish: dist
+            artifact: "$(target)-vsix"
+            displayName: Publish VSIX artifacts
+
+      - job: PackageLinux
+        displayName: Package ${{ matrix.target }}
+        dependsOn: Webview
+        strategy:
+          matrix:
+            linux_x64:
+              target: linux-x64
+              platform: linux
+              arch: x64
+              buildTarget: ""
+              linkerEnvName: ""
+              linkerValue: ""
+            linux_arm64:
+              target: linux-arm64
+              platform: linux
+              arch: arm64
+              buildTarget: aarch64-unknown-linux-gnu
+              linkerEnvName: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER
+              linkerValue: aarch64-linux-gnu-gcc
+            linux_armhf:
+              target: linux-armhf
+              platform: linux
+              arch: arm
+              buildTarget: arm-unknown-linux-gnueabihf
+              linkerEnvName: CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER
+              linkerValue: arm-linux-gnueabihf-gcc
+        pool:
+          vmImage: ubuntu-latest
+        container: node:20-buster
+        variables:
+          ELECTRON_VERSION: ${{ parameters.electronVersion }}
+        steps:
+          - script: |
+              set -euo pipefail
+              echo 'deb http://archive.debian.org/debian buster main' > /etc/apt/sources.list
+              echo 'deb http://archive.debian.org/debian-security buster/updates main' >> /etc/apt/sources.list
+              echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99disable-check-valid-until
+              apt-get -o Acquire::AllowInsecureRepositories=true update
+              apt-get install -y --no-install-recommends git curl python3 make g++ ca-certificates pkg-config
+              if [ "$(arch)" = "arm64" ]; then
+                apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+              elif [ "$(arch)" = "arm" ]; then
+                apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+              fi
+            displayName: Install Linux build dependencies
+
+          - checkout: self
+            fetchDepth: 0
+
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+            displayName: Use Node.js 20
+
+          - task: Cache@2
+            inputs:
+              key: 'npm | linux-buster | package-lock.json'
+              restoreKeys: |
+                npm | linux-buster
+              path: "$(npm_config_cache)"
+            displayName: Cache npm
+
+          - task: Cache@2
+            inputs:
+              key: 'cargo | linux-buster | packages/enigo-keyboard/Cargo.lock'
+              restoreKeys: |
+                cargo | linux-buster
+              path: "$(CARGO_HOME)"
+            displayName: Cache Cargo
+
+          - task: Cache@2
+            inputs:
+              key: 'rustup | linux-buster'
+              restoreKeys: |
+                rustup | linux-buster
+              path: "$(RUSTUP_HOME)"
+            displayName: Cache Rustup
+
+          - script: |
+              set -euo pipefail
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+              echo "##vso[task.prependpath]$CARGO_HOME/bin"
+            displayName: Install Rust toolchain
+
+          - script: |
+              set -euo pipefail
+              if [ -n "$(buildTarget)" ]; then
+                rustup target add "$(buildTarget)"
+              fi
+            displayName: Add Rust cross target
+
+          - script: npm ci
+            displayName: Install dependencies
+
+          - download: current
+            artifact: webview-dist
+            displayName: Download webview dist
+
+          - script: |
+              set -euo pipefail
+              mkdir -p packages/webview/dist
+              cp -R "$(Pipeline.Workspace)/webview-dist/." packages/webview/dist/
+            displayName: Restore webview dist
+
+          - script: |
+              set -euo pipefail
+              if [ -n "$(linkerEnvName)" ]; then
+                export "$(linkerEnvName)"="$(linkerValue)"
+              fi
+              export BUILD_TARGET="$(buildTarget)"
+              npm --workspace=packages/enigo-keyboard run build:ci
+            displayName: Build native enigo-keyboard
+
+          - script: npm run compile
+            displayName: Compile extension
+
+          - script: |
+              set -euo pipefail
+              npm rebuild @vscode/sqlite3 \
+                --runtime=electron \
+                --target="$(ELECTRON_VERSION)" \
+                --dist-url=https://electronjs.org/headers \
+                --platform="$(platform)" \
+                --arch="$(arch)"
+            displayName: Rebuild @vscode/sqlite3 for Electron
+
+          - script: |
+              set -euo pipefail
+              mkdir -p dist
+              node -e '
+                const fs=require("fs");
+                const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+                pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
+                if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+                fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+              '
+              npx vsce package --target "$(target)" --out "dist/anh-std-$(target).vsix"
+            displayName: Package STD variant
+
+          - script: |
+              set -euo pipefail
+              node -e '
+                const fs=require("fs");
+                const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+                const evs=new Set(pkg.activationEvents||[]);
+                evs.add("onStartupFinished");
+                pkg.activationEvents=[...evs];
+                const parts=pkg.version.split(".").map(Number);
+                if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
+                parts[2]+=1;
+                pkg.version=parts.join(".");
+                if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+                fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+              '
+              npx vsce package --target "$(target)" --pre-release --out "dist/anh-exp-$(target).vsix"
+            displayName: Package EXP variant
+
+          - publish: dist
+            artifact: "$(target)-vsix"
+            displayName: Publish VSIX artifacts
+
+  - ${{ if eq(parameters.publish, true) }}:
+      - stage: Publish
+        displayName: Publish to Marketplace/OpenVSX
+        dependsOn: Build
+        jobs:
+          - job: PublishMarketplaces
+            displayName: Publish VSIX files
+            pool:
+              vmImage: ubuntu-latest
+            steps:
+              - checkout: self
+                fetchDepth: 0
+
+              - task: NodeTool@0
+                inputs:
+                  versionSpec: "20.x"
+                displayName: Use Node.js 20
+
+              - download: current
+                patterns: "**/*.vsix"
+                displayName: Download VSIX artifacts
+
+              - script: |
+                  set -euo pipefail
+                  npm i -g @vscode/vsce ovsx
+                  mkdir -p release_artifacts
+                  find "$(Pipeline.Workspace)" -name "*.vsix" -type f -exec cp {} release_artifacts/ \;
+                  ls -al release_artifacts
+                  shopt -s nullglob
+                  files=( release_artifacts/*.vsix )
+                  if [ ${#files[@]} -eq 0 ]; then
+                    echo "No VSIX files found"
+                    exit 1
+                  fi
+                  for f in "${files[@]}"; do
+                    if [[ "$f" == *"exp"* ]]; then
+                      vsce publish --packagePath "$f" --pre-release
+                      ovsx publish "$f" --pre-release
+                    else
+                      vsce publish --packagePath "$f"
+                      ovsx publish "$f"
+                    fi
+                  done
+                env:
+                  VSCE_PAT: $(VSCE_PAT)
+                  OVSX_PAT: $(OVSX_PAT)
+                displayName: Publish to VS Code Marketplace and OpenVSX
