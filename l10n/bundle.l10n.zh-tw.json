@@ -73,7 +73,7 @@
   "config.timeStats.exitIdleOn.textChange": "僅在文字變化時退出閒置狀態",
   "config.timeStats.exitIdleOn.windowFocus": "視窗獲得焦點或文字變化時退出閒置狀態",
   "config.timeStats.exitIdleOn.editorChange": "編輯器切換、視窗獲得焦點或文字變化時退出閒置狀態",
-  "config.fileTracker.respectWcignore.description": "（僅文件追蹤）是否遵循 .wcignore 忽略規則（預設：false，僅遵循 .gitignore；寫作統計目前不讀取此開關）。",
+  "config.fileTracker.respectWcignore.description": "已棄用的相容選項。基礎文件追蹤不再遵循 .wcignore；.wcignore 只影響字數統計 / 寫作時間統計口徑。",
   "command.showFileTrackingStats.title": "顯示文件追蹤統計",
   "command.cleanupMissingFiles.title": "清理不存在的文件",
   "command.exportTrackingData.title": "匯出追蹤數據",
@@ -162,5 +162,6 @@
   "config.lookupKeys.autoGeneratePinyin.description": "是否在擴充功能本體後端依據角色名與別名自動生成 lookupKeys_pinyin。此設定會影響所有已載入的角色格式，以及 JSON5 視覺化編輯器的顯示與保存流程。",
   "config.lookupKeys.autoGenerateRomanized.description": "是否在擴充功能本體後端依據角色名與別名自動生成 lookupKeys_romanized。此設定會影響所有已載入的角色格式，以及 JSON5 視覺化編輯器的顯示與保存流程。",
   "config.defaultRoleLookupKeys.description": "新建角色時預設補齊的索引鍵欄位。會與 project-config.json5 中的 defaultRoleLookupKeys 合併（專案設定優先級更高）。可填寫後綴如 pinyin、romanized、jp，或完整鍵名如 lookupKeys_en。",
-  "config.extendedLookupKeyPrefixes.description": "額外的前綴列表，使系統將其開頭的欄位也識別為索引鍵家族成員（如 refkeys、tagkeys）。這些欄位將像內建索引鍵一樣參與匹配、補全和編輯器展示。"
+  "config.extendedLookupKeyPrefixes.description": "額外的前綴列表，使系統將其開頭的欄位也識別為索引鍵家族成員（如 refkeys、tagkeys）。這些欄位將像內建索引鍵一樣參與匹配、補全和編輯器展示。",
+  "config.fileTracker.respectGitignore.description": "基礎文件追蹤是否遵循 .gitignore。預設開啟；關閉後即使文件被 Git 忽略，只要屬於寫作資源類型仍會被追蹤。"
 }

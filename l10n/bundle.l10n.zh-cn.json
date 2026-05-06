@@ -137,7 +137,7 @@
   "config.timeStats.exitIdleOn.textChange": "仅在文本变化时退出空闲状态",
   "config.timeStats.exitIdleOn.windowFocus": "窗口获得焦点或文本变化时退出空闲状态",
   "config.timeStats.exitIdleOn.editorChange": "编辑器切换、窗口获得焦点或文本变化时退出空闲状态",
-  "config.fileTracker.respectWcignore.description": "（仅文件追踪）是否遵循 .wcignore 忽略规则（默认：false，只遵循 .gitignore；写作统计当前不读取此开关）。",
+  "config.fileTracker.respectWcignore.description": "已弃用的兼容选项。基础文件追踪不再遵循 .wcignore；.wcignore 只影响字数统计 / 写作时间统计口径。",
   "command.showFileTrackingStats.title": "显示文件追踪统计",
   "command.cleanupMissingFiles.title": "清理不存在的文件",
   "command.exportTrackingData.title": "导出追踪数据",
@@ -290,5 +290,6 @@
   "walkthrough.anh.step.anhFeatures.title": "ANH 功能入口",
   "walkthrough.anh.step.anhFeatures.description": "认识小说助手的功能面板和核心入口，包括文档中心、快速设置和功能引导。",
   "walkthrough.anh.step.finish.title": "准备就绪",
-  "walkthrough.anh.step.finish.description": "配置完成！你现在可以开始使用小说助手进行创作了。"
+  "walkthrough.anh.step.finish.description": "配置完成！你现在可以开始使用小说助手进行创作了。",
+  "config.fileTracker.respectGitignore.description": "基础文件追踪是否遵循 .gitignore。默认开启；关闭后即使文件被 Git 忽略，只要属于写作资源类型仍会被追踪。"
 }

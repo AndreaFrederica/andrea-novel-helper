@@ -50,6 +50,20 @@
     "onLanguage:rjson5",
     "onLanguage:tjson5",
     "onFileSystem:andrea-outline",
+    "onCommand:andrea.openWritingDashboard",
+    "onCommand:andrea.openWritingDashboardWidget",
+    "onWebviewPanel:andrea.writingDashboard",
+    "onWebviewPanel:andrea.writingDashboard.energy",
+    "onWebviewPanel:andrea.writingDashboard.heatmap",
+    "onWebviewPanel:andrea.writingDashboard.clock",
+    "onWebviewPanel:andrea.writingDashboard.profile",
+    "onWebviewPanel:andrea.writingDashboard.gantt",
+    "onWebviewPanel:andrea.writingDashboard.quadrant",
+    "onWebviewPanel:andrea.writingDashboard.plan",
+    "onWebviewPanel:andrea.writingDashboard.tasks",
+    "onWebviewPanel:andrea.writingDashboard.yearPlan",
+    "onWebviewPanel:andrea.writingDashboard.logs",
+    "onWebviewPanel:andrea.writingDashboard.timer",
     "onWebviewPanel:andrea.guide",
     "onWebviewPanel:andrea.guideDoc",
     "onCommand:andrea.openWhatsNew",
@@ -94,6 +108,16 @@
           }
         ],
         "priority": "default"
+      },
+      {
+        "viewType": "andrea.timelineGanttJson5Editor",
+        "displayName": "时间线甘特图编辑器",
+        "selector": [
+          {
+            "filenamePattern": "**/*.tjson5"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "configurationDefaults": {
@@ -131,6 +155,17 @@
         "configuration": "./language-configuration.json"
       },
       {
+        "id": "ftignore",
+        "aliases": [
+          "FileTracking Ignore",
+          "ftignore"
+        ],
+        "extensions": [
+          ".ftignore"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
         "id": "gitignore",
         "aliases": [
           "Git Ignore",
@@ -147,6 +182,11 @@
         "language": "wcignore",
         "scopeName": "source.wcignore",
         "path": "./syntaxes/wcignore.tmLanguage.json"
+      },
+      {
+        "language": "ftignore",
+        "scopeName": "source.ftignore",
+        "path": "./syntaxes/ftignore.tmLanguage.json"
       },
       {
         "language": "gitignore",
@@ -253,6 +293,18 @@
         "title": "打开项目设置",
         "category": "Andrea Novel Helper",
         "icon": "$(settings-gear)"
+      },
+      {
+        "command": "andrea.openWritingDashboard",
+        "title": "打开创作工作台",
+        "category": "Andrea Novel Helper",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "andrea.openWritingDashboardWidget",
+        "title": "独立打开创作工作台组件",
+        "category": "Andrea Novel Helper",
+        "icon": "$(window)"
       },
       {
         "command": "andrea.configureMilestones",
@@ -1158,6 +1210,12 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "在LLM分段结果(partial)阶段是否立刻应用错别字高亮（默认否，仅在最终结果阶段应用，避免\"瞬间出现又消失\"的闪烁）"
+        },
+        "AndreaNovelHelper.writingDashboard.widget.showHeader": {
+          "anhName": "创作工作台独立组件显示顶栏",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "独立打开创作工作台组件时是否显示顶部标题栏和“打开工作台”按钮。关闭后组件内容会占满整个 Webview。"
         },
         "AndreaNovelHelper.typo.suppressRolesMode": {
           "anhName": "角色抑制模式",
@@ -2259,6 +2317,12 @@
           "type": "boolean",
           "default": false,
           "description": "%config.fileTracker.respectWcignore.description%"
+        },
+        "AndreaNovelHelper.fileTracker.respectGitignore": {
+          "anhName": "遵循 Git 忽略",
+          "type": "boolean",
+          "default": true,
+          "description": "%config.fileTracker.respectGitignore.description%"
         },
         "AndreaNovelHelper.fileTracker.trustCallerFilters": {
           "anhName": "信任调用方过滤器",

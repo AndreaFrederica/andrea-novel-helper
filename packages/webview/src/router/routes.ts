@@ -29,6 +29,11 @@ const routes: RouteRecordRaw[] = [
   },
 
   {
+    path: '/timeline-gantt',
+    component: () => import('pages/TimelineGanttPage.vue'),
+  },
+
+  {
     path: '/editor-settings',
     component: () => import('pages/EditorSettingsPage.vue'),
   },
@@ -56,6 +61,16 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/whats-new',
     component: () => import('pages/whatsNew/WhatsNewPage.vue'),
+  },
+
+  {
+    path: '/writing-dashboard',
+    component: () => import('pages/WritingDashboardPage.vue'),
+  },
+
+  {
+    path: '/writing-dashboard-widget/:id',
+    component: () => import('pages/WritingDashboardWidgetPage.vue'),
   },
 
   // Always leave this as last one,

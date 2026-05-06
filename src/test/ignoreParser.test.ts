@@ -3,26 +3,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import ignore from 'ignore';
-import { GitIgnoreParser, WordCountIgnoreParser, CombinedIgnoreParser } from '../utils/Parser/gitignoreParser';
+import { GitIgnoreParser, WordCountIgnoreParser, FileTrackingIgnoreParser, CombinedIgnoreParser } from '../utils/Parser/gitignoreParser';
+import { isFileIgnored } from '../utils/ignoreUtils';
 
 suite('Ignore Parser Test Suite', () => {
     let tempDir: string;
     let gitignorePath: string;
     let wcignorePath: string;
+    let ftignorePath: string;
 
     setup(() => {
         // 创建临时测试目录
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ignore-test-'));
         gitignorePath = path.join(tempDir, '.gitignore');
         wcignorePath = path.join(tempDir, '.wcignore');
+        ftignorePath = path.join(tempDir, '.ftignore');
     });
 
     teardown(() => {
         // 清理测试目录
         try {
-            if (fs.existsSync(gitignorePath)) { fs.unlinkSync(gitignorePath); }
-            if (fs.existsSync(wcignorePath)) { fs.unlinkSync(wcignorePath); }
-            fs.rmdirSync(tempDir);
+            fs.rmSync(tempDir, { recursive: true, force: true });
         } catch (error) {
             console.warn('Failed to cleanup test directory:', error);
         }
@@ -87,5 +88,108 @@ suite('Ignore Parser Test Suite', () => {
             assert.strictEqual(result, testCase.expected, 
                 `Failed for ${testCase.desc}: ${testCase.path} should ${testCase.expected ? 'be ignored' : 'not be ignored'}`);
         });
+    });
+
+    test('FTIgnore supports inline comments', () => {
+        fs.writeFileSync(ftignorePath, 'tracked-cache/  # file tracking cache\n');
+
+        const parser = new FileTrackingIgnoreParser(tempDir);
+
+        const fullPath = path.join(tempDir, 'tracked-cache', 'chapter.md');
+        assert.strictEqual(parser.shouldIgnore(fullPath), true, 'file in .ftignore directory should be ignored');
+    });
+
+    test('WCIgnore can be disabled for base file tracking filters', () => {
+        fs.writeFileSync(gitignorePath, 'git-drafts/\n');
+        fs.writeFileSync(wcignorePath, 'drafts/\n');
+        fs.writeFileSync(ftignorePath, 'tracked-cache/\n');
+        const parser = new CombinedIgnoreParser(tempDir);
+        const gitDraftPath = path.join(tempDir, 'git-drafts', 'chapter.md');
+        const filePath = path.join(tempDir, 'drafts', 'chapter.md');
+        const trackedCachePath = path.join(tempDir, 'tracked-cache', 'chapter.md');
+
+        assert.strictEqual(
+            isFileIgnored(gitDraftPath, {
+                workspaceRoot: tempDir,
+                respectWcignore: false,
+                respectGitignore: true,
+                respectFileTrackingIgnore: true,
+                ignoreParser: parser,
+            }),
+            true,
+            '.gitignore should block base file tracking filters by default'
+        );
+
+        assert.strictEqual(
+            isFileIgnored(gitDraftPath, {
+                workspaceRoot: tempDir,
+                respectWcignore: false,
+                respectGitignore: false,
+                respectFileTrackingIgnore: true,
+                ignoreParser: parser,
+            }),
+            false,
+            '.gitignore should not block base file tracking filters when respectGitignore is false'
+        );
+
+        assert.strictEqual(
+            isFileIgnored(filePath, {
+                workspaceRoot: tempDir,
+                respectWcignore: false,
+                respectGitignore: true,
+                ignoreParser: parser,
+            }),
+            false,
+            '.wcignore should not block tracking when respectWcignore is false'
+        );
+
+        assert.strictEqual(
+            isFileIgnored(filePath, {
+                workspaceRoot: tempDir,
+                respectWcignore: true,
+                respectGitignore: true,
+                ignoreParser: parser,
+            }),
+            true,
+            '.wcignore should still block word-count style filters when enabled'
+        );
+
+        assert.strictEqual(
+            isFileIgnored(trackedCachePath, {
+                workspaceRoot: tempDir,
+                respectWcignore: false,
+                respectGitignore: true,
+                respectFileTrackingIgnore: true,
+                ignoreParser: parser,
+            }),
+            true,
+            '.ftignore should block base file tracking filters'
+        );
+
+        assert.strictEqual(
+            isFileIgnored(trackedCachePath, {
+                workspaceRoot: tempDir,
+                respectWcignore: true,
+                respectGitignore: true,
+                respectFileTrackingIgnore: false,
+                ignoreParser: parser,
+            }),
+            false,
+            '.ftignore should not block word-count style filters'
+        );
+    });
+
+    test('Plain JSON is not a default writing resource file type', () => {
+        const filePath = path.join(tempDir, 'package.json');
+
+        assert.strictEqual(
+            isFileIgnored(filePath, {
+                workspaceRoot: tempDir,
+                respectWcignore: false,
+                respectGitignore: false,
+            }),
+            true,
+            '.json should be ignored by the default writing-resource file type filter'
+        );
     });
 });

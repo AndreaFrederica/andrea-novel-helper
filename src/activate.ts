@@ -115,6 +115,7 @@ import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPage
 import { registerQuickSettingsPage } from './Provider/view/quickSettingsView'
 import { registerDocViewerPage } from './guide/docViewerPage'
 import { registerCopilotDocsCommands } from './commands/copilotDocs'
+import { registerWritingDashboardPage } from './Provider/view/writingDashboardView'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
 
 // 避免重复注册相同命令
@@ -674,6 +675,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerProjectSettingsPage(context);
         registerEditorSettingsPage(context);
         registerQuickSettingsPage(context);
+        registerWritingDashboardPage(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);

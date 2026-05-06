@@ -172,6 +172,11 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 return;
             }
 
+            if (this.isIgnoredByWordCountRules(fsPath)) {
+                wcDebug(`WordCount: Ignoring saved document by .wcignore/.gitignore: ${fsPath}`);
+                return;
+            }
+
             // 2) 非跟踪类型直接忽略
             const ext = path.extname(fileName).slice(1).toLowerCase();
             if (!isSpecialVisibleFile(fileName) && !getSupportedExtensions().includes(ext)) return;
@@ -239,6 +244,12 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         const fileName = path.basename(filePath);
 
         wcDebug(`WordCount: File change detected - ${event.type}: ${filePath}`);
+
+        if (this.isIgnoredByWordCountRules(filePath)) {
+            wcDebug(`WordCount: Ignoring file change by .wcignore/.gitignore: ${filePath}`);
+            return;
+        }
+
         this.resourceFolderMarkCache.clear();
 
         // 检查是否为支持的文件类型或参考文件类型
@@ -422,6 +433,22 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         if (workspaceRoot) {
             this.ignoreParser = new CombinedIgnoreParser(workspaceRoot);
         }
+    }
+
+    private isIgnoredByWordCountRules(fullPath: string): boolean {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) return false;
+        const fileName = path.basename(fullPath);
+        if (fileName === '.gitignore' || fileName === '.wcignore') return false;
+        const refExts = (vscode.workspace.getConfiguration('AndreaNovelHelper')
+            .get<string[]>('wordCount.referenceVisibleExtensions', []) || [])
+            .map(s => (s || '').toLowerCase());
+        return shouldIgnoreWordCountFile(fullPath, this.ignoreParser, {
+            workspaceRoot,
+            respectWcignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectWcignore', true),
+            respectGitignore: vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>('wordCount.respectGitignore', true),
+            allowedLanguages: [...getAllowedExtensions(), ...refExts]
+        });
     }
 
     /**

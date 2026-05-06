@@ -13,6 +13,9 @@
                 const key = u.pathname;
                 return resourceMap[key] || (baseUri + key);
             }
+            if (u.protocol === 'vscode-webview:' || u.protocol === 'vscode-resource:') {
+                return path;
+            }
             if (/^(https?:|data:|blob:|javascript:)/i.test(u.protocol + '')) {
                 return path;
             }
@@ -26,7 +29,7 @@
             return resourceMap[normalized] || (baseUri + normalized);
         }
 
-        if (/^(https?:|data:|blob:|javascript:)/i.test(path)) { return path; }
+        if (/^(https?:|data:|blob:|javascript:|vscode-webview:|vscode-resource:)/i.test(path)) { return path; }
 
         const full = path.startsWith('/') ? path : ('/' + path);
         return baseUri + full;

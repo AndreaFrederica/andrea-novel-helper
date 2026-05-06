@@ -2,12 +2,12 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CombinedIgnoreParser } from '../Parser/gitignoreParser';
-import { isFileIgnored, IgnoreConfig } from '../ignoreUtils';
+import { isFileIgnored } from '../ignoreUtils';
 import { FileTrackingDataManager } from './fileTrackingData';
 
 /**
  * 文件追踪器 - 负责追踪项目中所有文件的变化
- * 支持 .gitignore 和可选的 .wcignore 规则
+ * 支持 .gitignore 和 .ftignore。基础文件追踪不遵循 .wcignore；.wcignore 只应影响字数/写作统计口径。
  */
 
 // 文件变化事件类型
@@ -29,7 +29,8 @@ export type FileChangeCallback = (event: FileChangeEvent) => void;
 // 文件追踪器配置
 export interface FileTrackerConfig {
     workspaceRoot: string;
-    respectWcignore: boolean; // 是否遵循 .wcignore 规则
+    respectGitignore: boolean; // 是否遵循 .gitignore，默认开启
+    respectWcignore: boolean; // @deprecated 基础文件追踪不再遵循 .wcignore，仅保留配置兼容
     includePatterns?: string[]; // 包含模式（glob）
     excludePatterns?: string[]; // 排除模式（glob）
 }
@@ -47,7 +48,10 @@ export class FileTracker {
     private processingQueue: Promise<void> = Promise.resolve();
 
     constructor(config: FileTrackerConfig) {
-        this.config = config;
+        this.config = {
+            ...config,
+            respectGitignore: config.respectGitignore !== false,
+        };
         this.dataManager = new FileTrackingDataManager(config.workspaceRoot);
         this.initIgnoreParser();
     }
@@ -82,7 +86,9 @@ export class FileTracker {
             
         return isFileIgnored(filePath, {
             workspaceRoot: this.config.workspaceRoot,
-            respectWcignore: this.config.respectWcignore,
+            respectWcignore: false,
+            respectGitignore: this.config.respectGitignore,
+            respectFileTrackingIgnore: true,
             includePatterns: this.config.includePatterns,
             excludePatterns: this.config.excludePatterns,
             ignoreParser: this.ignoreParser,
@@ -91,7 +97,7 @@ export class FileTracker {
         });
     }
 
-    /** 公共：判断某文件当前配置下是否会被追踪忽略（含 .git / 可选 .wcignore / 内部数据库与排除规则） */
+    /** 公共：判断某文件当前配置下是否会被追踪忽略（含 .git / .ftignore / 内部数据库与排除规则） */
     public isFileIgnored(filePath: string): boolean {
         return this.shouldIgnoreFile(filePath);
     }
@@ -242,15 +248,13 @@ export class FileTracker {
         gitignoreWatcher.onDidDelete(() => this.refreshIgnoreParser());
         this.watchers.push(gitignoreWatcher);
 
-        if (this.config.respectWcignore) {
-            const wcignoreWatcher = vscode.workspace.createFileSystemWatcher(
-                new vscode.RelativePattern(this.config.workspaceRoot, '.wcignore')
-            );
-            wcignoreWatcher.onDidChange(() => this.refreshIgnoreParser());
-            wcignoreWatcher.onDidCreate(() => this.refreshIgnoreParser());
-            wcignoreWatcher.onDidDelete(() => this.refreshIgnoreParser());
-            this.watchers.push(wcignoreWatcher);
-        }
+        const ftignoreWatcher = vscode.workspace.createFileSystemWatcher(
+            new vscode.RelativePattern(this.config.workspaceRoot, '.ftignore')
+        );
+        ftignoreWatcher.onDidChange(() => this.refreshIgnoreParser());
+        ftignoreWatcher.onDidCreate(() => this.refreshIgnoreParser());
+        ftignoreWatcher.onDidDelete(() => this.refreshIgnoreParser());
+        this.watchers.push(ftignoreWatcher);
     }
 
     /**

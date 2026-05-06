@@ -332,4 +332,27 @@ suite('Writing Summary Test Suite', () => {
         assert.strictEqual(allFileSummaries.size, 2);
         assert.ok(backend.projectSummary, 'backend should persist rebuilt summary');
     });
+
+    test('getWritingProjectSummaryAsync should rebuild stale today summary cache', async () => {
+        const { manager, backend } = createManager();
+        const filePath = path.join(tempDir, 'chapter-today.md');
+        const metadata = createMetadata(filePath, 'uuid-today', createStats(150, 150_000));
+        await seedTrackedFile(manager, backend, metadata);
+
+        const internal = manager as any;
+        const yesterdayKey = internal.getTodayKey(Date.now() - 24 * 60 * 60 * 1000);
+        const staleSummary = internal.buildEmptyWritingProjectSummary(60000, yesterdayKey);
+        internal.writingProjectSummaryCache = staleSummary;
+        internal.setWritingSummaryState(staleSummary);
+        await backend.saveWritingProjectSummary(staleSummary);
+
+        const summary = await manager.getWritingProjectSummaryAsync();
+
+        assert.ok(summary, 'project summary should be rebuilt from stale cache');
+        assert.strictEqual(summary!.todayKey, internal.getTodayKey());
+        assert.strictEqual(summary!.today.millis, 150_000);
+        assert.strictEqual(summary!.today.chars, 150);
+        assert.strictEqual(summary!.today.avgCPM, 60);
+        assert.strictEqual(summary!.today.peakCPM, 150);
+    });
 });

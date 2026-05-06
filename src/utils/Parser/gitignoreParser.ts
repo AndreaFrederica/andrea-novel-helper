@@ -31,8 +31,8 @@ export class GitIgnoreParser {
             if (fs.existsSync(filePath)) {
                 const content = fs.readFileSync(filePath, 'utf8');
                 // 对于 .gitignore：直接交给 ignore 库处理完整内容（不支持行内注释，符合 Git 标准）
-                // 对于 .wcignore：先解析每一行以支持行内注释，然后传递清理后的内容
-                if (filePath.endsWith('.wcignore')) {
+                // 对于扩展专用 ignore：先解析每一行以支持行内注释，然后传递清理后的内容
+                if (filePath.endsWith('.wcignore') || filePath.endsWith('.ftignore')) {
                     const lines = content.split(/\r?\n/);
                     const cleanedLines: string[] = [];
                     for (const line of lines) {
@@ -56,7 +56,7 @@ export class GitIgnoreParser {
     }
 
     /**
-     * 解析一行忽略规则（仅用于 .wcignore，支持行内注释、转义和引号）：
+     * 解析一行忽略规则（仅用于扩展专用 ignore，支持行内注释、转义和引号）：
      * - 支持以 # 开头的整行注释（允许前导空白）
      * - 支持行内注释：遇到未转义的 # 视为注释起始，后续内容忽略
      * - 支持双引号和单引号路径
@@ -170,15 +170,37 @@ export class WordCountIgnoreParser extends GitIgnoreParser {
 }
 
 /**
- * 组合忽略解析器，同时检查 .gitignore 和 .wcignore
+ * 文件追踪忽略解析器，使用 .ftignore 文件
+ */
+export class FileTrackingIgnoreParser extends GitIgnoreParser {
+    constructor(workspaceRoot: string) {
+    super(workspaceRoot);
+    this.ig = ignore();
+    this.loadFileTrackingIgnore();
+    }
+
+    /**
+     * 加载 .ftignore 文件
+     */
+    private loadFileTrackingIgnore() {
+        const ftignorePath = path.join(this.workspaceRoot, '.ftignore');
+        this.loadIgnoreFile(ftignorePath);
+    }
+}
+
+/**
+ * 组合忽略解析器。默认组合仅用于字数统计：.gitignore + .wcignore。
+ * 文件追踪应显式调用 shouldIgnoreByFileTracking，避免 .wcignore 和 .ftignore 口径互相污染。
  */
 export class CombinedIgnoreParser {
     private gitIgnoreParser: GitIgnoreParser;
     private wcIgnoreParser: WordCountIgnoreParser;
+    private ftIgnoreParser: FileTrackingIgnoreParser;
 
     constructor(workspaceRoot: string) {
         this.gitIgnoreParser = new GitIgnoreParser(workspaceRoot);
         this.wcIgnoreParser = new WordCountIgnoreParser(workspaceRoot);
+        this.ftIgnoreParser = new FileTrackingIgnoreParser(workspaceRoot);
     }
 
     /**
@@ -201,5 +223,12 @@ export class CombinedIgnoreParser {
      */
     public shouldIgnoreByWordCount(filePath: string): boolean {
         return this.wcIgnoreParser.shouldIgnore(filePath);
+    }
+
+    /**
+     * 只检查文件追踪忽略规则
+     */
+    public shouldIgnoreByFileTracking(filePath: string): boolean {
+        return this.ftIgnoreParser.shouldIgnore(filePath);
     }
 }

@@ -2110,6 +2110,16 @@ export class FileTrackingDataManager {
 
     public async getWritingProjectSummaryAsync(forceReload = false): Promise<WritingProjectSummary | null> {
         if (!forceReload && this.writingProjectSummaryCache !== undefined) {
+            const invalidReason = this.validateWritingProjectSummary(this.writingProjectSummaryCache);
+            if (invalidReason) {
+                this.writingProjectSummaryCache = null;
+                this.setWritingSummaryState(null, invalidReason);
+                if (this.backend && this.backendInitialized) {
+                    await this.rebuildWritingProjectSummary(`summary-cache:${invalidReason}`);
+                }
+                return this.writingProjectSummaryCache ?? null;
+            }
+            this.setWritingSummaryState(this.writingProjectSummaryCache);
             return this.writingProjectSummaryCache;
         }
 
@@ -2266,6 +2276,7 @@ export class FileTrackingDataManager {
         if (summary.version !== this.WRITING_SUMMARY_SCHEMA_VERSION) { return 'version-mismatch'; }
         if (summary.bucketSizeMs !== this.getTimeStatsBucketSizeMs()) { return 'bucket-size-mismatch'; }
         if (!this.isFiniteNonNegativeNumber(summary.todayKey)) { return 'invalid-today-key'; }
+        if (summary.todayKey !== this.getTodayKey()) { return 'today-key-stale'; }
         if (!this.isFiniteNonNegativeNumber(summary.totalMillisAll)) { return 'invalid-total-millis'; }
         if (!this.isFiniteNonNegativeNumber(summary.filesWithWritingStats)) { return 'invalid-files-count'; }
         if (!summary.today || typeof summary.today !== 'object') { return 'invalid-today'; }
@@ -2382,9 +2393,12 @@ export class FileTrackingDataManager {
         };
     }
 
-    private recomputeProjectPeakFromFileSummaries(todayKey: number): number {
+    private recomputeProjectPeakFromFileSummaries(
+        todayKey: number,
+        fileSummaries: Iterable<WritingFileSummary> = this.writingFileSummaryCache.values()
+    ): number {
         let peak = 0;
-        for (const summary of this.writingFileSummaryCache.values()) {
+        for (const summary of fileSummaries) {
             if (summary.todayKey !== todayKey) {
                 continue;
             }
@@ -2489,6 +2503,10 @@ export class FileTrackingDataManager {
                 projectSummary.today.avgCPM = projectSummary.today.millis > 0
                     ? Math.round(projectSummary.today.chars / (projectSummary.today.millis / 60000))
                     : 0;
+                projectSummary.today.peakCPM = this.recomputeProjectPeakFromFileSummaries(
+                    projectSummary.todayKey,
+                    fileSummaries.values()
+                );
                 projectSummary.updatedAt = Date.now();
 
                 const existing = await this.backend!.loadAllWritingFileSummaries();
