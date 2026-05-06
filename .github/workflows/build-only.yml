@@ -1,0 +1,287 @@
+name: build-vsix-artifacts-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      electron_version:
+        description: "VS Code Electron version, e.g. 30.0.9"
+        required: true
+        default: "30.0.9"
+
+jobs:
+  webview:
+    name: Build webview once
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install deps and build webview
+        run: |
+          npm ci
+          npm --workspace=packages/webview run build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webview-dist
+          path: packages/webview/dist
+
+  build-desktop:
+    name: Build ${{ matrix.target }}
+    needs: webview
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win32-x64
+            platform: win32
+            arch: x64
+          - os: macos-13
+            target: darwin-x64
+            platform: darwin
+            arch: x64
+          - os: macos-latest
+            target: darwin-arm64
+            platform: darwin
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      EV: ${{ inputs.electron_version || '30.0.9' }}
+      npm_config_arch: ${{ matrix.arch }}
+      npm_config_target_arch: ${{ matrix.arch }}
+      npm_config_platform: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/enigo-keyboard/target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('packages/enigo-keyboard/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Download webview dist
+        uses: actions/download-artifact@v4
+        with:
+          name: webview-dist
+          path: packages/webview/dist
+
+      - name: Build native enigo-keyboard
+        working-directory: packages/enigo-keyboard
+        run: npm run build:ci
+
+      - name: Compile extension
+        run: npm run compile
+
+      - name: Sign macOS binary when identity is configured
+        if: runner.os == 'macOS'
+        working-directory: packages/enigo-keyboard
+        run: npm run sign:macos
+
+      - name: Rebuild @vscode/sqlite3 for Electron
+        shell: bash
+        run: |
+          npm rebuild @vscode/sqlite3 \
+            --runtime=electron \
+            --target="$EV" \
+            --dist-url=https://electronjs.org/headers \
+            --platform='${{ matrix.platform }}' \
+            --arch='${{ matrix.arch }}'
+
+      - name: Package STD variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          npx vsce package --target '${{ matrix.target }}' --out 'dist/anh-std-${{ matrix.target }}.vsix'
+
+      - name: Package EXP variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            const evs=new Set(pkg.activationEvents||[]);
+            evs.add("onStartupFinished");
+            pkg.activationEvents=[...evs];
+            const parts=pkg.version.split(".").map(Number);
+            if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
+            parts[2]+=1;
+            pkg.version=parts.join(".");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          npx vsce package --target '${{ matrix.target }}' --pre-release --out 'dist/anh-exp-${{ matrix.target }}.vsix'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-vsix
+          path: dist/*.vsix
+
+  build-linux:
+    name: Build ${{ matrix.target }}
+    needs: webview
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            platform: linux
+            arch: x64
+            build_target: ""
+            linker_env: ""
+            linker_value: ""
+          - target: linux-arm64
+            platform: linux
+            arch: arm64
+            build_target: aarch64-unknown-linux-gnu
+            linker_env: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER
+            linker_value: aarch64-linux-gnu-gcc
+          - target: linux-armhf
+            platform: linux
+            arch: arm
+            build_target: arm-unknown-linux-gnueabihf
+            linker_env: CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER
+            linker_value: arm-linux-gnueabihf-gcc
+    runs-on: ubuntu-latest
+    container:
+      image: debian:buster
+    env:
+      EV: ${{ inputs.electron_version || '30.0.9' }}
+
+    steps:
+      - name: Install OS deps
+        run: |
+          set -e
+          echo 'deb http://archive.debian.org/debian buster main' > /etc/apt/sources.list
+          echo 'deb http://archive.debian.org/debian-security buster/updates main' >> /etc/apt/sources.list
+          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99disable-check-valid-until
+          apt-get -o Acquire::AllowInsecureRepositories=true update
+          apt-get install -y --no-install-recommends git curl python3 make g++ ca-certificates pkg-config
+          if [ '${{ matrix.arch }}' = 'arm64' ]; then
+            apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          elif [ '${{ matrix.arch }}' = 'arm' ]; then
+            apt-get install -y --no-install-recommends gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/enigo-keyboard/target
+          key: linux-buster-${{ matrix.target }}-cargo-${{ hashFiles('packages/enigo-keyboard/Cargo.lock') }}
+          restore-keys: |
+            linux-buster-${{ matrix.target }}-cargo-
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust cross target
+        if: matrix.build_target != ''
+        run: rustup target add '${{ matrix.build_target }}'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Download webview dist
+        uses: actions/download-artifact@v4
+        with:
+          name: webview-dist
+          path: packages/webview/dist
+
+      - name: Build native enigo-keyboard
+        working-directory: packages/enigo-keyboard
+        env:
+          BUILD_TARGET: ${{ matrix.build_target }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.target == 'linux-arm64' && matrix.linker_value || '' }}
+          CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER: ${{ matrix.target == 'linux-armhf' && matrix.linker_value || '' }}
+        run: npm run build:ci
+
+      - name: Compile extension
+        run: npm run compile
+
+      - name: Rebuild @vscode/sqlite3 for Electron
+        run: |
+          npm rebuild @vscode/sqlite3 \
+            --runtime=electron \
+            --target="$EV" \
+            --dist-url=https://electronjs.org/headers \
+            --platform='${{ matrix.platform }}' \
+            --arch='${{ matrix.arch }}'
+
+      - name: Package STD variant
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=="onStartupFinished");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          npx vsce package --target '${{ matrix.target }}' --out 'dist/anh-std-${{ matrix.target }}.vsix'
+
+      - name: Package EXP variant
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs=require("fs");
+            const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
+            const evs=new Set(pkg.activationEvents||[]);
+            evs.add("onStartupFinished");
+            pkg.activationEvents=[...evs];
+            const parts=pkg.version.split(".").map(Number);
+            if(parts.length!==3||parts.some(Number.isNaN)) throw new Error("Invalid semver: "+pkg.version);
+            parts[2]+=1;
+            pkg.version=parts.join(".");
+            if(pkg.scripts&&pkg.scripts["vscode:prepublish"]) pkg.scripts["vscode:prepublish"]="npm run compile";
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          '
+          npx vsce package --target '${{ matrix.target }}' --pre-release --out 'dist/anh-exp-${{ matrix.target }}.vsix'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-vsix
+          path: dist/*.vsix
