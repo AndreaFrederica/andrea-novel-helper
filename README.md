@@ -2,10 +2,10 @@
 
 > 说明：预发布版本实际上是跟随 VS Code 自动启动的版本；启用 VS Code 的预发布渠道后，本扩展会随 Code 自动加载，而不是需要触发才加载，但是如果您使用了那个版本,Code的插件禁用功能将不生效，您需要使用ANH自己的禁用功能。
 
-> **最新版本：0.4.45 (2025-12-04)**
-> 🔗 **最新更新：新增了实时Typst模板导出预览功能**  
-> 📝 近期已大幅重构异步加载与性能管线，若从老版本升级，建议阅读"近期版本速览"。   
-> 独立组件（生成式AI组件） Anh Chat(小说助手 聊天组件)已经发布! [GitHub] (https://github.com/AndreaFrederica/Roo-Code-Chat) [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.anh-cline?label=VS%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.anh-cline) [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/anh-cline?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/anh-cline)
+> **最新版本：0.5.0 (2026-05-07)**
+> 🔗 **最新更新：创作工作台、角色关系图谱、MCP/Copilot 本地 AI 集成、图形化向导与文档中心全面上线**  
+> 📝 0.5.0 是一次大版本升级，重构了文件追踪、写作统计摘要、预览角色着色、包管理器入口和新用户引导。升级后可通过命令面板打开 "Andrea Novel Helper: 打开 What's New" 查看完整说明。   
+> 独立组件（生成式AI组件） Anh Chat(小说助手 聊天组件)已经发布! [GitHub](https://github.com/AndreaFrederica/Roo-Code-Chat) [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.anh-cline?label=VS%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.anh-cline) [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/anh-cline?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/anh-cline)
 > 如果您需要生成式AI相关功能（AI生成设定集或者润色，或者与AI聊天（聊天功能尤其强化）），请安装 Anh Chat 组件。
 
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)
@@ -30,6 +30,37 @@
 ## 📖 简介
 
 一个围绕"设定集 / 资料集"组织写作资产的 VS Code 小说写作增强扩展。核心理念：把你的世界观、角色、敏感词、专业词汇、正则高亮规则和章节文件放进一个"包"（Package），由"包管理器"统一可视化管理与快速生成。
+
+## 🌟 0.5.0 重大更新
+
+0.5.0 是 ANH 从"功能集合"走向"小说创作 IDE"的一次大版本升级。这个版本把写作计划、角色网络、AI 辅助入口、项目配置、文档和可靠性修复集中打通，重点改进大型项目的日常使用体验。
+
+### 创作工作台
+- 新增 **创作工作台**：集中管理任务、计划、时钟、计时器、写作日志、年度计划和热力图。
+- 支持自由平铺窗口，组件可以拖动、调整大小、置顶和独立查看。
+- 工作台优先读取写作统计摘要，避免每次打开都遍历全项目文件。
+
+### 角色关系图谱
+- 新增 **角色关系图谱**：聚合角色文件内引用、`relations` / `relationships` 标记和 `.rjson5/.json5` 关系表，生成全局角色网络。
+- 支持力导向、环形、中心层级、按类型分组、选中角色放射等布局。
+- 支持悬停高亮邻居、一跳网络聚焦、关系元数据查看和角色 Hover 卡片。
+
+### 本地 AI 与 Copilot 集成
+- 内置 MCP HTTP 服务器：默认地址 `http://127.0.0.1:13306/mcp`，用于让 VS Code Copilot Agent Mode、Cursor 等本地 AI 客户端读取项目上下文。
+- 自动写入 `.vscode/mcp.json`，并提供 stdio 代理桥，方便 Claude Desktop / Continue.dev 等工具接入。
+- 提供 ANH 项目、脚本运行时、Typst 模板等 Copilot Agent Skills / Prompt 文档。
+
+### 角色、预览和项目入口升级
+- 包管理器新增"常用功能"和"项目设置文件"入口，文件下可直接展开查看其定义的角色。
+- 新增角色查询键系统，支持拼音、罗马字、扩展索引键和多语言检索。
+- 预览面板支持按角色类型选择着色范围，并新增 Markdown 标题、列表、引用、代码、粗斜体和自定义阅读主题。
+- 新增图形化项目设置、图形化项目初始化向导、交互式功能引导、文档中心和图形化快速设置。
+
+### 可靠性修复
+- 文件追踪全面异步化，增加创建/删除事件防抖，减少批量操作时的重复刷新和索引抖动。
+- 新增路径索引修复能力，处理绝对/相对路径混用、Windows 大小写差异和同一路径多 UUID 冲突。
+- 修复预览角色着色偶发失效：Webview 改为主动请求角色颜色和高亮范围，避免页面重建时丢失消息。
+- 修复中文等无空格文本下角色补全只匹配最后一个分词，导致完整角色名无法补全或替换范围错误的问题。
 
 ## 💬 反馈和交流
 
@@ -56,6 +87,7 @@
 - **实时字数统计**：支持 CJK 字符与英文单词统计，提供多种统计标准（含标点/不含标点/词计）。
 - **写作速度监测**：实时显示 CPM (每分钟字符数) 或 CPH (每小时字符数)。
 - **统计仪表板**：可视化展示今日与历史写作时长、字数、平均速度及活跃度趋势。
+- **创作工作台**：把写作统计、任务、计划、时钟、计时器、日志和年度目标放进一个可自由平铺的工作台。
 - **状态栏自定义**：支持详细、半精简、精简三种显示模式。
 
 #### 名字生成器
@@ -97,11 +129,14 @@
 #### 阅读与预览
 - **侧边栏预览**：支持 Markdown 和 TXT 格式的实时预览。
 - **个性化阅读**：支持自定义预览界面的主题与字体设置。
+- **角色类型着色**：可按角色类型选择预览高亮范围，避免敏感词、词汇等类型让阅读画面过于杂乱。
+- **Markdown 阅读样式**：支持标题、列表、引用、代码块、行内粗体/斜体/删除线/代码等阅读样式开关。
 - **大纲视图**：支持懒加载大纲生成，提供双重大纲辅助写作。
 - **Typst模板渲染预览**：支持Typst格式的高质量排版预览。(为您的小说创作提供专业的排版体验) **需要配合Tinymist Typst插件使用**。
 
 #### 批注系统
 - **独立侧边栏**：专用的批注管理视图，支持归总、跳转与快速处理。
+- **批注管理器**：集中查看项目批注线程，支持跳转原文、处理开放/已解决状态和多轮回复。
 - **伏笔管理**：便于记录和追踪剧情伏笔。
 
 ### 🌍 设定集与世界观构建 (包管理器)
@@ -122,6 +157,7 @@
     - **跳转到定义 (Go to Definition)**：像查看代码定义一样，一键跳转到角色/词汇的源文件定义处。
     - **查看引用 (Find All References)**：查找该角色在所有章节中的出现位置，支持列表跳转。
   - **智能补全与高亮**：所有类型的对象均支持自动补全与文中高亮显示。
+  - **查询键与多语言检索**：支持 `lookupKeys` / `searchKeys` / `queryKeys` / `keywords` / `检索键` / `索引键` 等字段，并可生成拼音、罗马字等候选键。
   - **可视化编辑**：提供统一的图形化卡片编辑器。
   - **引用分析**：支持引用索引、热力图与气泡图，分析对象在文档中的分布。
 
@@ -150,10 +186,15 @@
   - 可视化拖拽编辑。
   - 支持节点筛选、过滤与样式自定义。
   - 支持 `.rjson5` 关系文件格式。
+- **角色关系图谱**：
+  - 面向整个角色库的只读聚合网络图，合并角色引用、`relations` 标记和关系表。
+  - 支持多布局、悬停高亮、一跳聚焦、关系元数据和角色 Hover 卡片。
 - **时间线编辑器**：
   - 支持嵌套节点（父子事件）。
   - 精确时间控制（ISO 8601 标准）。
   - 拖拽调整布局。
+- **时间线甘特视图**：
+  - 以横向计划方式查看和编辑 `.tjson5` 事件，适合章节推进、伏笔回收和长期任务安排。
 
 ### 📂 项目与文件管理
 
@@ -162,6 +203,7 @@
 - **灵活排序**：支持手动拖拽排序（生成稀疏索引）或自动排序。
 - **目录聚合**：自动聚合计算目录下的总字数。
 - **文件追踪**：基于分片数据库的高性能文件追踪系统。
+- **路径修复**：支持修复绝对/相对路径混用、大小写差异和 UUID 冲突造成的追踪异常。
 
 #### 云端同步 (WebDAV) WIP
 - **多账户支持**：配置多个 WebDAV 账户。
@@ -170,7 +212,8 @@
 - **冲突处理**：智能处理本地与云端文件冲突。
 
 #### 项目配置
-- **初始化向导**：一键生成项目结构、配置文件及忽略规则（`.gitignore`, `.wcignore`）。
+- **图形化初始化向导**：一页完成项目信息、Git 配置、目录结构和忽略规则创建。
+- **图形化项目设置**：可视化编辑 `anhproject.md` 和 `project-config.json5`，也可直接打开底层文件手动修改。
 - **`project-config.json5`**：项目级配置入口，支持自定义资源路径、默认角色索引键及扩展索引键前缀。团队成员克隆项目后无需额外设置即可加载正确资源。
 
 ### 🤖 自动化与扩展
@@ -178,6 +221,9 @@
 #### 用户脚本与 MCP 运行时
 - **用户脚本系统**：内置脚本运行器，允许用户编写自定义脚本扩展功能。
 - **MCP (Model Context Protocol) 支持**：
+  - 内置本地 MCP HTTP 服务器，可让 VS Code Copilot Agent Mode、Cursor 等客户端读取角色、批注、当前文档和项目统计上下文。
+  - 自动写入 `.vscode/mcp.json`，并提供 stdio 代理桥，方便更多 AI 客户端接入。
+  - 提供 ANH 项目、脚本运行时和 Typst 模板相关 Copilot Skills / Prompt 文档。
   - 集成 MCP 运行时，可调用外部工具与服务。
   - **自动发布场景**：结合浏览器自动化工具（如 Puppeteer/Playwright via MCP），可编写脚本实现章节**自动发布到小说网站**。
   - 侧边栏一键运行管理。

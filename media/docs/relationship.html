@@ -35,6 +35,9 @@
 
 <h4>小提示</h4>
 <p>关系线用 <code>source</code> 和 <code>target</code> 表示方向。关系类型放在 <code>data.type</code> 里。如果你把某个节点的 <code>roleUuid</code> 设成角色库里的角色 UUID，就能和角色库联动。</p>
+
+<h4>全局角色关系图谱</h4>
+<p>如果你想看的不是某一个 <code>.rjson5</code> 文件，而是整个角色库里所有角色的引用网络，可以打开“角色关系图谱”。它会把角色文件内引用、角色 <code>relations</code> 标记和关系表合并为一张全局网络图。</p>
 </div>
 
 <div class="doc-section pro">
@@ -127,4 +130,10 @@
 <h4>创建关系文件</h4>
 <p>在包管理器中右键目录节点 → "创建关系文件 (.rjson5)"，输入文件名即可生成带模板的 <code>.rjson5</code> 文件。</p>
 <div class="doc-note">关系线使用 <code>source</code> 和 <code>target</code> 表示方向，而不是 from/to。关系类型放在 <code>data.type</code> 中，而不是顶层字段。</div>
+
+<h4>关系图编辑器 vs 角色关系图谱</h4>
+<ul>
+    <li><b>关系图编辑器</b> — 编辑单个 <code>.rjson5</code> 文件，适合手工维护一张明确的关系表。</li>
+    <li><b>角色关系图谱</b> — 只读聚合视图，适合从整个角色库观察引用、标记关系和关系表形成的网络。</li>
+</ul>
 </div>
