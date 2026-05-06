@@ -4,6 +4,15 @@ import * as path from 'path';
 import JSON5 from 'json5';
 import { buildHtml } from '../utils/html-builder';
 import { roles } from '../../activate';
+import {
+    getAllTrackedFilesAsync,
+    getAllWritingStatsAsync,
+    getTrackingStatsAsync,
+    getWritingProjectOverviewAsync,
+    getWritingProjectSummaryAsync,
+    type WritingStatsView,
+} from '../../utils/tracker/globalFileTracking';
+import { ProjectConfigManager, type ProjectConfig } from '../../projectConfig/projectConfigManager';
 
 type DashboardWidgetId =
     | 'energy'
@@ -20,7 +29,7 @@ type DashboardWidgetId =
 
 const widgetTitles: Record<DashboardWidgetId, string> = {
     energy: '能量条形图',
-    heatmap: '生命热力图',
+    heatmap: '码字热力图',
     clock: '当前时间',
     profile: '我的小说',
     gantt: '任务甘特图',
@@ -36,6 +45,14 @@ type DashboardState = Record<string, unknown> & {
     windows?: unknown[];
     selectedPlanFile?: unknown;
     planMarkdown?: unknown;
+};
+
+type DashboardLogEntry = {
+    id: string;
+    createdAt: string;
+    completedAt: string;
+    title: string;
+    tag: string;
 };
 
 type DashboardWebviewSettings = {
@@ -109,13 +126,15 @@ export class WritingDashboardPanel {
     }
 
     private static getWebviewOptions(extensionUri: vscode.Uri): vscode.WebviewPanelOptions & vscode.WebviewOptions {
+        const workspaceRoots = vscode.workspace.workspaceFolders?.map(folder => folder.uri) ?? [];
         return {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [
                 vscode.Uri.joinPath(extensionUri, 'packages', 'webview', 'dist', 'spa'),
                 vscode.Uri.joinPath(extensionUri, 'packages', 'webview', 'dist', 'spa', 'assets'),
-                vscode.Uri.joinPath(extensionUri, 'media')
+                vscode.Uri.joinPath(extensionUri, 'media'),
+                ...workspaceRoots,
             ]
         };
     }
@@ -213,7 +232,7 @@ export class WritingDashboardPanel {
 
     private async postDashboardData() {
         try {
-            const data = await loadDashboardState();
+            const data = mapDashboardWebviewResources(await loadDashboardState(), this.panel.webview);
             await this.panel.webview.postMessage({
                 command: 'dashboard.data',
                 data,
@@ -344,18 +363,343 @@ async function loadDashboardState(): Promise<DashboardState> {
         selectedPlanFile = planFiles[0].name;
     }
     const planMarkdown = await loadDashboardPlan(String(defaults.planMarkdown || ''), selectedPlanFile);
+    const realtime = await loadDashboardRealtimeData({
+        tasks,
+        profile: merged.profile,
+        yearPlan: merged.yearPlan,
+        logs: merged.logs,
+    });
     const profile = isRecord(merged.profile)
-        ? { ...merged.profile, roleCount: roles.length, taskCount: tasks.length }
+        ? { ...merged.profile, ...realtime.profileStats }
         : merged.profile;
     return {
         ...merged,
         tasks,
         profile,
+        yearPlan: realtime.yearPlan,
+        logs: realtime.logs,
+        heatmapData: realtime.heatmapData,
+        writingStats: realtime.writingStats,
         selectedPlanFile,
         planFiles,
         planMarkdown,
         dashboardFiles: getDashboardFileInfo(selectedPlanFile),
     };
+}
+
+async function loadDashboardRealtimeData(input: {
+    tasks: unknown[];
+    profile: unknown;
+    yearPlan: unknown;
+    logs: unknown;
+}): Promise<{
+    profileStats: Record<string, unknown>;
+    yearPlan: unknown;
+    logs: unknown[];
+    heatmapData: Array<[string, number]>;
+    writingStats: Record<string, unknown>;
+}> {
+    const [summaryResult, overviewResult, trackingResult, writingStatsResult] = await Promise.allSettled([
+        getWritingProjectSummaryAsync(),
+        getWritingProjectOverviewAsync(),
+        getTrackingStatsAsync(),
+        getAllWritingStatsAsync(),
+    ]);
+
+    const summaryPayload = summaryResult.status === 'fulfilled' ? summaryResult.value : undefined;
+    const overviewPayload = overviewResult.status === 'fulfilled' ? overviewResult.value : undefined;
+    const trackingStats = trackingResult.status === 'fulfilled' ? trackingResult.value : null;
+    const fileWritingStats = writingStatsResult.status === 'fulfilled' ? writingStatsResult.value : [];
+    const recentWritingLogs = buildRecentWritingLogs(fileWritingStats);
+    const novelProfile = await buildNovelProfileData(input.profile);
+    const taskStats = countTaskStats(input.tasks);
+    const baseYearPlan = isRecord(input.yearPlan) ? input.yearPlan : {};
+
+    return {
+        profileStats: {
+            ...novelProfile,
+            roleCount: getRoleCount(),
+            taskCount: input.tasks.length,
+            noteCount: novelProfile.noteCount ?? trackingStats?.totalFiles ?? (isRecord(input.profile) ? input.profile.noteCount : 0),
+        },
+        yearPlan: {
+            ...baseYearPlan,
+            completedGoals: taskStats.done,
+            totalGoals: taskStats.total,
+            progress: taskStats.total > 0 ? Number((taskStats.done / taskStats.total).toFixed(4)) : 0,
+        },
+        logs: recentWritingLogs.length > 0
+            ? recentWritingLogs
+            : (Array.isArray(input.logs) ? input.logs : []),
+        heatmapData: buildWritingHeatmapData(summaryPayload?.summary?.heatmap),
+        writingStats: {
+            ready: !!summaryPayload?.ready,
+            staleReason: summaryPayload?.staleReason || overviewPayload?.staleReason,
+            today: summaryPayload?.summary?.today,
+            todayKey: summaryPayload?.summary?.todayKey,
+            overview: overviewPayload?.overview,
+            approximate: overviewPayload?.approximate,
+            filesWithWritingStats: summaryPayload?.summary?.filesWithWritingStats ?? overviewPayload?.overview?.filesWithWritingStats ?? 0,
+        },
+    };
+}
+
+async function buildNovelProfileData(currentProfile: unknown): Promise<Record<string, unknown>> {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const fallbackProfile = isRecord(currentProfile) ? currentProfile : {};
+    let projectConfig: ProjectConfig | null = null;
+
+    if (workspaceRoot) {
+        try {
+            projectConfig = await new ProjectConfigManager(workspaceRoot).readConfig();
+        } catch (error) {
+            console.warn('[WritingDashboard] 读取项目元数据失败', error);
+        }
+    }
+
+    const trackedFiles = await getAllTrackedFilesSafe();
+    const fileCount = trackedFiles.filter(file => !file.isDirectory).length;
+    const wordCount = trackedFiles.reduce((sum, file) => {
+        const stats = file.wordCountStats;
+        return sum + Math.max(0, Number(stats?.total ?? stats?.nonWSChars ?? 0) || 0);
+    }, 0);
+
+    const workspaceName = workspaceRoot ? path.basename(workspaceRoot) : '未命名项目';
+    const tags = normalizeStringArray(projectConfig?.tags).length > 0
+        ? normalizeStringArray(projectConfig?.tags)
+        : normalizeStringArray(fallbackProfile.tags);
+
+    return {
+        name: normalizeProfileString(projectConfig?.name) || normalizeProfileString(fallbackProfile.name) || workspaceName,
+        role: normalizeProfileString(projectConfig?.author) || normalizeProfileString(fallbackProfile.role) || '未设置作者',
+        quote: normalizeProfileString(projectConfig?.summary) || normalizeProfileString(projectConfig?.description) || normalizeProfileString(fallbackProfile.quote) || '未填写项目简介',
+        tags,
+        ...resolveProjectCover(projectConfig, workspaceRoot, fallbackProfile),
+        noteCount: fileCount,
+        wordCount,
+    };
+}
+
+function mapDashboardWebviewResources(state: DashboardState, webview: vscode.Webview): DashboardState {
+    const profile = isRecord(state.profile) ? { ...state.profile } : state.profile;
+    if (isRecord(profile)) {
+        const coverPath = normalizeProfileString(profile.coverPath);
+        if (coverPath) {
+            try {
+                profile.coverUrl = webview.asWebviewUri(vscode.Uri.file(coverPath)).toString();
+            } catch (error) {
+                console.warn('[WritingDashboard] 转换封面资源失败', error);
+                delete profile.coverUrl;
+            }
+        }
+    }
+    return {
+        ...state,
+        profile,
+    };
+}
+
+function resolveProjectCover(
+    projectConfig: ProjectConfig | null,
+    workspaceRoot: string | undefined,
+    fallbackProfile: Record<string, unknown>
+): Record<string, string> {
+    const rawCover = normalizeProfileString(projectConfig?.cover)
+        || normalizeProfileString(fallbackProfile.coverPath)
+        || normalizeProfileString(fallbackProfile.coverUrl);
+    const source = extractCoverImageSource(rawCover);
+    if (!source) {
+        return { coverPath: '', coverUrl: '' };
+    }
+    if (/^(https?:|data:|blob:)/i.test(source)) {
+        return { coverPath: '', coverUrl: source };
+    }
+    if (/^file:/i.test(source)) {
+        try {
+            const fsPath = vscode.Uri.parse(source).fsPath;
+            return fsPath ? { coverPath: fsPath, coverUrl: '' } : { coverPath: '', coverUrl: '' };
+        } catch {
+            return { coverPath: '', coverUrl: '' };
+        }
+    }
+    if (!workspaceRoot && !path.isAbsolute(source)) {
+        return { coverPath: '', coverUrl: '' };
+    }
+
+    const coverPath = path.isAbsolute(source) ? source : path.resolve(workspaceRoot || '', source);
+    return fs.existsSync(coverPath)
+        ? { coverPath, coverUrl: '' }
+        : { coverPath: '', coverUrl: '' };
+}
+
+function extractCoverImageSource(rawCover: string): string {
+    const raw = rawCover.trim();
+    if (!raw) {
+        return '';
+    }
+
+    const markdownMatch = raw.match(/!\[[^\]]*]\((.+?)\)/);
+    const content = (markdownMatch?.[1] || raw).trim();
+    if (!content) {
+        return '';
+    }
+
+    if (content.startsWith('<')) {
+        const end = content.indexOf('>');
+        return end > 1 ? content.slice(1, end).trim() : '';
+    }
+
+    const titledPath = content.match(/^(.+?)(?:\s+["'][^"']*["'])$/);
+    return (titledPath?.[1] || content).trim();
+}
+
+async function getAllTrackedFilesSafe(): Promise<Array<{
+    isDirectory?: boolean;
+    wordCountStats?: {
+        total?: number;
+        nonWSChars?: number;
+    };
+}>> {
+    try {
+        return await getAllTrackedFilesAsync();
+    } catch (error) {
+        console.warn('[WritingDashboard] 读取文件追踪元数据失败', error);
+        return [];
+    }
+}
+
+function buildWritingHeatmapData(heatmap: Record<number, number> | undefined): Array<[string, number]> {
+    if (!heatmap || typeof heatmap !== 'object') {
+        return [];
+    }
+    return Object.entries(heatmap)
+        .map(([key, value]) => {
+            const timestamp = Number(key);
+            const count = Number(value);
+            if (!Number.isFinite(timestamp) || !Number.isFinite(count) || count <= 0) {
+                return undefined;
+            }
+            return [formatLocalDate(timestamp), Math.round(count)] as [string, number];
+        })
+        .filter((item): item is [string, number] => !!item)
+        .sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function buildRecentWritingLogs(stats: WritingStatsView[]): DashboardLogEntry[] {
+    const rows: Array<DashboardLogEntry & { endTime: number }> = [];
+    const mergeGapMs = getWritingLogMergeGapMs();
+
+    for (const fileStats of stats) {
+        const sessions = mergeWritingSessions(
+            Array.isArray(fileStats.sessions) ? fileStats.sessions : [],
+            mergeGapMs
+        );
+        const title = getWorkspaceRelativeLabel(fileStats.filePath);
+        for (const session of sessions) {
+            rows.push({
+                id: `writing-${rows.length}-${session.start}-${session.end}`,
+                createdAt: formatLocalDateTime(session.start),
+                completedAt: formatLocalDateTime(session.end),
+                title,
+                tag: '写作',
+                endTime: session.end,
+            });
+        }
+    }
+    return rows
+        .sort((a, b) => b.endTime - a.endTime)
+        .slice(0, 30)
+        .map(({ endTime: _endTime, ...row }) => row);
+}
+
+function mergeWritingSessions(
+    sessions: Array<{ start: number; end: number }>,
+    mergeGapMs: number
+): Array<{ start: number; end: number }> {
+    const sorted = sessions
+        .filter(session =>
+            Number.isFinite(session.start) &&
+            Number.isFinite(session.end) &&
+            session.end > session.start
+        )
+        .map(session => ({ start: session.start, end: session.end }))
+        .sort((a, b) => a.start - b.start);
+
+    const merged: Array<{ start: number; end: number }> = [];
+    for (const session of sorted) {
+        const previous = merged[merged.length - 1];
+        if (previous && session.start - previous.end <= mergeGapMs) {
+            previous.end = Math.max(previous.end, session.end);
+            continue;
+        }
+        merged.push({ ...session });
+    }
+    return merged;
+}
+
+function getWritingLogMergeGapMs(): number {
+    return 120 * 60 * 1000;
+}
+
+function countTaskStats(tasks: unknown[]): { total: number; done: number } {
+    let total = 0;
+    let done = 0;
+    for (const task of tasks) {
+        if (!isRecord(task)) {
+            continue;
+        }
+        total += 1;
+        if (task.status === 'done') {
+            done += 1;
+        }
+    }
+    return { total, done };
+}
+
+function getWorkspaceRelativeLabel(filePath: string): string {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!workspaceRoot) {
+        return path.basename(filePath);
+    }
+    const relative = path.relative(workspaceRoot, filePath);
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+        return path.basename(filePath);
+    }
+    return relative.replace(/\\/g, '/');
+}
+
+function formatLocalDate(timestamp: number): string {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function formatLocalDateTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${formatLocalDate(timestamp)} ${hours}:${minutes}`;
+}
+
+function getRoleCount(): number {
+    return Array.isArray(roles) ? roles.length : 0;
+}
+
+function normalizeProfileString(value: unknown): string {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return Array.from(new Set(
+        value
+            .map(item => typeof item === 'string' ? item.trim() : '')
+            .filter(Boolean)
+    ));
 }
 
 async function saveDashboardState(data: unknown): Promise<void> {
@@ -630,11 +974,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function createDefaultDashboardState(): DashboardState {
-    const roleCount = roles.length;
+    const roleCount = getRoleCount();
     return {
         windows: [
             { id: 'win-energy', type: 'energy', title: '能量条形图', x: 20, y: 20, w: 360, h: 180 },
-            { id: 'win-heatmap', type: 'heatmap', title: '生命热力图', x: 400, y: 20, w: 360, h: 180 },
+            { id: 'win-heatmap', type: 'heatmap', title: '码字热力图', x: 400, y: 20, w: 360, h: 180 },
             { id: 'win-clock', type: 'clock', title: '当前时间', x: 780, y: 20, w: 260, h: 180 },
             { id: 'win-profile', type: 'profile', title: '我的小说', x: 1060, y: 20, w: 280, h: 300 },
             { id: 'win-gantt', type: 'gantt', title: '任务甘特图', x: 20, y: 220, w: 760, h: 330 },
@@ -672,13 +1016,17 @@ function createDefaultDashboardState(): DashboardState {
             { id: 'l2', createdAt: '2026/04/18 00:42', completedAt: '2026/04/21 00:42', title: '构建个人修炼系统', tag: '项目' },
         ],
         profile: {
-            name: 'novel workspace',
-            role: 'Obsidian 用户',
-            quote: 'study course, story every day.',
+            name: '未命名项目',
+            role: '未设置作者',
+            quote: '未填写项目简介',
+            coverUrl: '',
+            coverPath: '',
+            tags: [],
             noteCount: 0,
             taskCount: 0,
-            goalCount: 12,
+            goalCount: 0,
             roleCount,
+            wordCount: 0,
         },
         yearPlan: {
             year: 2026,

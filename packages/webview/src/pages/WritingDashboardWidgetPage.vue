@@ -16,6 +16,7 @@
         v-else
         :type="type"
         :energy-metrics="state.energyMetrics"
+        :heatmap-data="state.heatmapData || []"
         :tasks="state.tasks"
         :logs="state.logs"
         :profile="state.profile"

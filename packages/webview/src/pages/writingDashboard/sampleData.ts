@@ -99,10 +99,14 @@ export interface DashboardProfile {
   name: string
   role: string
   quote: string
+  coverUrl?: string
+  coverPath?: string
+  tags?: string[]
   noteCount: number
   taskCount: number
   goalCount: number
   roleCount?: number
+  wordCount?: number
 }
 
 export interface YearPlan {
@@ -123,6 +127,7 @@ export interface DashboardPlanFile {
 export interface DashboardState {
   windows: DashboardWindow[]
   energyMetrics: EnergyMetric[]
+  heatmapData: Array<[string, number]>
   /** 统一任务列表（甘特图 + 任务清单共用） */
   tasks: Task[]
   logs: DashboardLog[]
@@ -141,7 +146,7 @@ export interface DashboardState {
 
 export const widgetTitles: Record<WidgetType, string> = {
   energy: '能量条形图',
-  heatmap: '生命热力图',
+  heatmap: '码字热力图',
   clock: '当前时间',
   profile: '我的小说',
   gantt: '任务甘特图',
@@ -265,12 +270,15 @@ export const logs: DashboardLog[] = [
 ]
 
 export const defaultProfile: DashboardProfile = {
-  name: 'novel workspace',
-  role: 'Obsidian 用户',
-  quote: 'study course, story every day.',
-  noteCount: 128,
-  taskCount: 47,
-  goalCount: 12,
+  name: '未命名项目',
+  role: '未设置作者',
+  quote: '未填写项目简介',
+  coverUrl: '',
+  coverPath: '',
+  tags: [],
+  noteCount: 0,
+  taskCount: 0,
+  goalCount: 0,
   roleCount: 0
 }
 
@@ -303,6 +311,7 @@ update: 2026-04-21 星期二 19:58
 export const defaultDashboardState: DashboardState = {
   windows: defaultWindows,
   energyMetrics,
+  heatmapData: [],
   tasks: defaultTasks,
   logs,
   profile: defaultProfile,

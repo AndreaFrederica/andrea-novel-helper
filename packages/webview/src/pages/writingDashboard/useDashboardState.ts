@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   defaultDashboardState,
   defaultWindows,
+  widgetTitles,
   type DashboardState,
   type DashboardWindow,
   type Task,
@@ -202,12 +203,25 @@ function normalizeState(value: DashboardState): DashboardState {
         : loadWindowsFromLS() || defaultWindows.map(item => ({ ...item }))
     ),
     energyMetrics: Array.isArray(value?.energyMetrics) ? value.energyMetrics : fallback.energyMetrics,
+    heatmapData: normalizeHeatmapData((value as any)?.heatmapData),
     tasks,
     logs: Array.isArray(value?.logs) ? value.logs : [],
     planMarkdown: typeof value?.planMarkdown === 'string' ? value.planMarkdown : fallback.planMarkdown,
     selectedPlanFile: typeof (value as any)?.selectedPlanFile === 'string' ? (value as any).selectedPlanFile : fallback.selectedPlanFile,
     planFiles: Array.isArray((value as any)?.planFiles) ? (value as any).planFiles : fallback.planFiles,
   }
+}
+
+function normalizeHeatmapData(value: unknown): Array<[string, number]> {
+  if (!Array.isArray(value)) return []
+  const result: Array<[string, number]> = []
+  for (const item of value) {
+    if (!Array.isArray(item) || item.length < 2 || typeof item[0] !== 'string') continue
+    const count = Number(item[1])
+    if (!Number.isFinite(count) || count <= 0) continue
+    result.push([item[0], count])
+  }
+  return result
 }
 
 function normalizeWindows(windows: DashboardWindow[]): DashboardWindow[] {
@@ -219,11 +233,19 @@ function normalizeWindows(windows: DashboardWindow[]): DashboardWindow[] {
     const restoreBounds = normalizeRestoreBounds(w.restoreBounds, w)
     return {
       ...w,
+      title: normalizeWindowTitle(w),
       ...(restoreBounds ? { restoreBounds } : {}),
       maximized: !!w.maximized,
       z: typeof w.z === 'number' ? w.z : maxZ + i + 1,
     }
   })
+}
+
+function normalizeWindowTitle(windowItem: DashboardWindow): string {
+  if (windowItem.type === 'heatmap' && (!windowItem.title || windowItem.title === '生命热力图')) {
+    return widgetTitles.heatmap
+  }
+  return windowItem.title || widgetTitles[windowItem.type]
 }
 
 function normalizeRestoreBounds(bounds: DashboardWindow['restoreBounds'], fallback: DashboardWindow): DashboardWindow['restoreBounds'] {

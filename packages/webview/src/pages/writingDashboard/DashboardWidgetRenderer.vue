@@ -73,7 +73,6 @@ import type {
   WidgetType,
   DashboardPlanFile,
 } from './sampleData'
-import { buildHeatmapData } from './sampleData'
 import EnergyBars from './components/EnergyBars.vue'
 import LifeHeatmap from './components/LifeHeatmap.vue'
 import ClockCard from './components/ClockCard.vue'
@@ -91,6 +90,7 @@ defineProps<{
   type: WidgetType
   windowId?: string
   energyMetrics: EnergyMetric[]
+  heatmapData: Array<[string, number]>
   tasks: Task[]
   logs: DashboardLog[]
   profile: DashboardProfile
@@ -114,7 +114,6 @@ defineEmits<{
   openPlanFile: []
 }>()
 
-const heatmapData = buildHeatmapData()
 </script>
 
 <style scoped>

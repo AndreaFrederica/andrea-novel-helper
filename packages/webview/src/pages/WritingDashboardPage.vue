@@ -53,6 +53,7 @@
             :type="windowItem.type"
             :window-id="windowItem.id"
             :energy-metrics="state.energyMetrics"
+            :heatmap-data="state.heatmapData || []"
             :tasks="state.tasks"
             :logs="state.logs"
             :profile="state.profile"
