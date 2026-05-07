@@ -342,6 +342,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'andrea.typeset.indentFirstTwoSpaces',
             'andrea.typeset.trimTrailingSpaces',
             'andrea.typeset.enableAutoPairs',
+            'andrea.typeset.pairs',
             'andrea.typeset.enableSmartEnter',
             'andrea.typeset.enableSmartExit',
             'andrea.typeset.statusBar.compact',
@@ -368,8 +369,20 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.timeStats.milestone.enabled',
             'AndreaNovelHelper.timeStats.milestone.targets',
             'AndreaNovelHelper.timeStats.milestone.notificationType',
+
+            // 5. 补全与查询键配置
+            'AndreaNovelHelper.completion.triggerMode',
+            'AndreaNovelHelper.completion.symbolPrefixes',
+            'AndreaNovelHelper.completion.segmenterType',
+            'AndreaNovelHelper.lookupKeys.treatPinyinAsAlias',
+            'AndreaNovelHelper.lookupKeys.autoGeneratePinyin',
+            'AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias',
+            'AndreaNovelHelper.lookupKeys.autoGenerateRomanized',
+            'AndreaNovelHelper.defaultRoleLookupKeys',
+            'AndreaNovelHelper.extendedLookupKeyPrefixes',
+            'AndreaNovelHelper.debug.completionLog',
             
-            // 5. 角色显示配置 - 当前文章角色（docRoles）
+            // 6. 角色显示配置 - 当前文章角色（docRoles）
             'AndreaNovelHelper.docRoles.groupBy',
             'AndreaNovelHelper.docRoles.respectAffiliation',
             'AndreaNovelHelper.docRoles.respectType',
@@ -379,7 +392,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.docRoles.display.colorizeRoleName',
             'AndreaNovelHelper.docRoles.customGroups',
             
-            // 5. 角色显示配置 - 全部角色（allRoles）
+            // 7. 角色显示配置 - 全部角色（allRoles）
             'AndreaNovelHelper.allRoles.syncWithDocRoles',
             'AndreaNovelHelper.allRoles.groupBy',
             'AndreaNovelHelper.allRoles.respectAffiliation',
@@ -389,15 +402,16 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.allRoles.display.colorizeRoleName',
             'AndreaNovelHelper.allRoles.customGroups',
             
-            // 5. 角色显示配置 - 角色详情显示
+            // 8. 角色显示配置 - 角色详情显示
             'roles.details.wrapColumn',
             'roles.details.enableRoleExpansion',
             
-            // 6. 其他功能配置
+            // 9. 其他功能配置
+            'AndreaNovelHelper.useVsCodeManagedDisabling',
             'AndreaNovelHelper.smartTabGroupLock.enabled',
             'AndreaNovelHelper.autoGit.compactStatus',
             
-            // 7. 按键绑定相关 - 智能回车按键绑定配置
+            // 10. 按键绑定相关 - 智能回车按键绑定配置
             'markdown.extension.onEnterKey',
             'andrea.smartEnter'
         ];

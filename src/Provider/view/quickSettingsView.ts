@@ -76,6 +76,15 @@ export class QuickSettingsPanel {
 
         this._panel.webview.onDidReceiveMessage(
             async (message) => {
+                if (message.command === 'openFullSettings') {
+                    try {
+                        await vscode.commands.executeCommand('workbench.view.extension.AndreaSettingsSidebar');
+                        await vscode.commands.executeCommand('andrea.settingsView.focus');
+                    } catch (_) {
+                        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:AndreaFrederica.andrea-novel-helper');
+                    }
+                    return;
+                }
                 if (message.command === 'runCommand' && message.commandId) {
                     await vscode.commands.executeCommand(message.commandId);
                     return;

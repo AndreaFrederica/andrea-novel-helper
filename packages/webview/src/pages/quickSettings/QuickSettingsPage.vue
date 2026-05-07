@@ -25,6 +25,9 @@
             </button>
           </div>
           <div class="header-actions">
+            <button class="btn btn-secondary" @click="openFullSettings">
+              完整设置
+            </button>
             <button v-if="changedCount > 0" class="btn btn-reset" @click="resetConfig">
               放弃更改（{{ changedCount }}）
             </button>
@@ -159,7 +162,7 @@ const previewComponents: Record<string, any> = {
 const changedCount = computed(() => {
   let count = 0
   configItems.value.forEach(item => {
-    if (originalSettings.value[item.id] !== item.value) {
+    if (!areValuesEqual(originalSettings.value[item.id], item.value)) {
       count++
     }
   })
@@ -183,19 +186,31 @@ const settingGroups = computed(() => {
       id: 'paragraph',
       name: '段落排版',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 10H3M21 6H3M21 14H3M17 18H3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-      ids: ['andrea.typeset.indentFirstTwoSpaces', 'andrea.typeset.blankLinesBetweenParas', 'editor.tabSize']
+      ids: ['andrea.typeset.indentFirstTwoSpaces', 'andrea.typeset.blankLinesBetweenParas', 'editor.insertSpaces', 'editor.tabSize', 'editor.detectIndentation']
     },
     {
       id: 'smartEdit',
       name: '智能编辑',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      ids: ['andrea.typeset.enableAutoPairs', 'andrea.typeset.enableSmartExit', 'andrea.typeset.enableSmartEnter', 'andrea.typeset.trimTrailingSpaces']
+      ids: ['andrea.typeset.enableAutoPairs', 'andrea.typeset.pairs', 'andrea.typeset.enableSmartExit', 'andrea.typeset.enableSmartEnter', 'andrea.typeset.trimTrailingSpaces']
     },
     {
       id: 'wordCount',
       name: '字数统计',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-      ids: ['AndreaNovelHelper.timeStats.includePaste']
+      ids: ['AndreaNovelHelper.timeStats.includePaste', 'AndreaNovelHelper.timeStats.milestone.enabled', 'AndreaNovelHelper.timeStats.milestone.targets', 'AndreaNovelHelper.timeStats.milestone.notificationType']
+    },
+    {
+      id: 'completion',
+      name: '补全与查询键',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h10M4 12h16M4 18h7M17 4l3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      ids: ['AndreaNovelHelper.completion.triggerMode', 'AndreaNovelHelper.completion.symbolPrefixes', 'AndreaNovelHelper.completion.segmenterType', 'AndreaNovelHelper.lookupKeys.treatPinyinAsAlias', 'AndreaNovelHelper.lookupKeys.autoGeneratePinyin', 'AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias', 'AndreaNovelHelper.lookupKeys.autoGenerateRomanized', 'AndreaNovelHelper.defaultRoleLookupKeys', 'AndreaNovelHelper.extendedLookupKeyPrefixes', 'AndreaNovelHelper.debug.completionLog']
+    },
+    {
+      id: 'roleLists',
+      name: '角色列表显示',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 7a4 4 0 118 0 4 4 0 01-8 0zM4 21a8 8 0 0116 0M3 4h3M3 9h3M18 4h3M18 9h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+      ids: ['AndreaNovelHelper.docRoles.groupBy', 'AndreaNovelHelper.docRoles.respectAffiliation', 'AndreaNovelHelper.docRoles.respectType', 'AndreaNovelHelper.docRoles.primaryGroup', 'AndreaNovelHelper.docRoles.useCustomGroups', 'AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent', 'AndreaNovelHelper.docRoles.display.colorizeRoleName', 'AndreaNovelHelper.docRoles.customGroups', 'AndreaNovelHelper.allRoles.syncWithDocRoles', 'AndreaNovelHelper.allRoles.groupBy', 'AndreaNovelHelper.allRoles.respectAffiliation', 'AndreaNovelHelper.allRoles.respectType', 'AndreaNovelHelper.allRoles.primaryGroup', 'AndreaNovelHelper.allRoles.useCustomGroups', 'AndreaNovelHelper.allRoles.display.colorizeRoleName', 'AndreaNovelHelper.allRoles.customGroups']
     },
     {
       id: 'statusBar',
@@ -207,7 +222,7 @@ const settingGroups = computed(() => {
       id: 'other',
       name: '其他',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2"/></svg>',
-      ids: ['editor.mouseWheelZoom', 'AndreaNovelHelper.smartTabGroupLock.enabled']
+      ids: ['AndreaNovelHelper.useVsCodeManagedDisabling', 'editor.mouseWheelZoom', 'AndreaNovelHelper.smartTabGroupLock.enabled', 'markdown.extension.onEnterKey', 'andrea.smartEnter']
     }
   ]
 
@@ -296,9 +311,13 @@ function updateConfigValue(itemId: string, newValue: any) {
   }
 }
 
+function areValuesEqual(a: any, b: any) {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 function resetConfig() {
   configItems.value.forEach(item => {
-    if (originalSettings.value[item.id] !== item.value) {
+    if (!areValuesEqual(originalSettings.value[item.id], item.value)) {
       updateConfigValue(item.id, originalSettings.value[item.id])
     }
   })
@@ -309,7 +328,7 @@ function saveConfig() {
   let hasChanges = false
 
   configItems.value.forEach(item => {
-    if (originalSettings.value[item.id] !== item.value) {
+    if (!areValuesEqual(originalSettings.value[item.id], item.value)) {
       changedSettings[item.id] = item.value
       hasChanges = true
     }
@@ -335,6 +354,14 @@ function setScope(scope: 'global' | 'workspace') {
     vsCodeApiStore.vscode.postMessage({
       command: 'setScope',
       scope
+    })
+  }
+}
+
+function openFullSettings() {
+  if (vsCodeApiStore.vscode) {
+    vsCodeApiStore.vscode.postMessage({
+      command: 'openFullSettings'
     })
   }
 }
@@ -494,6 +521,15 @@ onMounted(() => {
 }
 
 .btn-reset:hover {
+  background-color: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+.btn-secondary {
+  background-color: var(--vscode-button-secondaryBackground, #3a3d41);
+  color: var(--vscode-button-secondaryForeground, #e0e0e0);
+}
+
+.btn-secondary:hover {
   background-color: var(--vscode-button-secondaryHoverBackground, #45494e);
 }
 

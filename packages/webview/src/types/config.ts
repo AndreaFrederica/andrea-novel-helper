@@ -1,6 +1,6 @@
 export interface ConfigItem {
   id: string
-  type: 'string' | 'boolean' | 'number' | 'integer' | 'array'
+  type: 'string' | 'boolean' | 'number' | 'integer' | 'array' | string[]
   name: string
   description: string
   value: any
