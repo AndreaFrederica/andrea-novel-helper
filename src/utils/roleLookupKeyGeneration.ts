@@ -447,7 +447,7 @@ async function generateJapaneseGuessCandidates(role: LookupKeyGeneratableRole): 
 function llmRomanizationEnabled(resourcePath?: string): boolean {
 	const resource = resourcePath ? vscode.Uri.file(resourcePath) : undefined;
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper', resource);
-	return cfg.get<boolean>('typo.clientLLM.enabled', false) === true;
+	return cfg.get<boolean>('lookupKeys.useLlmRomanization', false) === true;
 }
 
 function parseLlmRomanizationReply(reply: string): string[] {
@@ -466,7 +466,9 @@ async function requestRomanizationCandidatesFromLLM(
 	group: string,
 ): Promise<GeneratedLookupKeyCandidate[]> {
 	try {
-		const reply = await translateTextWithClientLLM(prompt, '英文（仅输出拉丁字母转写）');
+		const reply = await translateTextWithClientLLM(prompt, '英文（仅输出拉丁字母转写）', {
+			requireEnabled: false,
+		});
 
 		return parseLlmRomanizationReply(reply).flatMap(value =>
 			buildCandidateItems(primarySource, group, buildLookupKeyVariants(value))

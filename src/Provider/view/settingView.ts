@@ -73,6 +73,9 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 case 'openEditorSettings':
                     this._handleOpenEditorSettings();
                     break;
+                case 'fetchLlmModels':
+                    this._handleFetchLlmModels(message);
+                    break;
             }
         });
     }
@@ -105,13 +108,11 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             // });
             
             // 仍然发送消息给 webview 以保持兼容性
-            if (this._view) {
-                this._postMessage({
-                    command: 'settingUpdated',
-                    key: key,
-                    value: value
-                });
-            }
+            this._postMessage({
+                command: 'settingUpdated',
+                key: key,
+                value: value
+            });
         } catch (error) {
             console.error('Failed to update setting:', error);
             
@@ -124,12 +125,10 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             });
 
             // 仍然发送错误消息给 webview 以保持兼容性
-            if (this._view) {
-                this._postMessage({
-                    command: 'error',
-                    message: `Failed to update setting: ${error}`
-                });
-            }
+            this._postMessage({
+                command: 'error',
+                message: `Failed to update setting: ${error}`
+            });
         }
     }
 
@@ -166,12 +165,10 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             });
 
             // 仍然发送消息给 webview 以保持兼容性
-            if (this._view) {
-                this._postMessage({
-                    command: 'settingsSaved',
-                    message: '设置已保存'
-                });
-            }
+            this._postMessage({
+                command: 'settingsSaved',
+                message: '设置已保存'
+            });
         } catch (error) {
             console.error('Failed to save settings:', error);
             
@@ -185,12 +182,37 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             });
 
             // 仍然发送错误消息给 webview 以保持兼容性
-            if (this._view) {
-                this._postMessage({
-                    command: 'error',
-                    message: `Failed to save settings: ${error}`
-                });
+            this._postMessage({
+                command: 'error',
+                message: `Failed to save settings: ${error}`
+            });
+        }
+    }
+
+    private async _handleFetchLlmModels(message: any) {
+        const requestId = String(message.requestId ?? '');
+        const itemId = String(message.itemId ?? '');
+        try {
+            const apiBase = String(message.apiBase ?? '').trim();
+            const apiKey = String(message.apiKey ?? '').trim();
+            if (!apiBase) {
+                throw new Error('API Base 为空');
             }
+
+            const models = await fetchLlmModelsFromApi(apiBase, apiKey);
+            this._postMessage({
+                command: 'llmModelsFetched',
+                requestId,
+                itemId,
+                models
+            });
+        } catch (error) {
+            this._postMessage({
+                command: 'llmModelsFetchFailed',
+                requestId,
+                itemId,
+                message: error instanceof Error ? error.message : String(error)
+            });
         }
     }
 
@@ -249,10 +271,24 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
         const getConfigValue = (key: string) => {
             const inspection = config.inspect(key);
             if (this._scope === 'workspace') {
-                return inspection?.workspaceValue !== undefined ? inspection.workspaceValue : inspection?.defaultValue;
+                if (inspection?.workspaceFolderValue !== undefined) return inspection.workspaceFolderValue;
+                if (inspection?.workspaceValue !== undefined) return inspection.workspaceValue;
+                if (inspection?.globalValue !== undefined) return inspection.globalValue;
+                return inspection?.defaultValue;
             } else {
                 return inspection?.globalValue !== undefined ? inspection.globalValue : inspection?.defaultValue;
             }
+        };
+
+        const getConfigValueSource = (key: string): 'workspace' | 'global' | 'default' => {
+            const inspection = config.inspect(key);
+            if (this._scope === 'workspace') {
+                if (inspection?.workspaceFolderValue !== undefined || inspection?.workspaceValue !== undefined) return 'workspace';
+                if (inspection?.globalValue !== undefined) return 'global';
+                return 'default';
+            }
+            if (inspection?.globalValue !== undefined) return 'global';
+            return 'default';
         };
         
         // 处理每个配置项
@@ -287,7 +323,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             // 获取配置值和元数据
             const value = getConfigValue(key);
             // const value = config.get(name);
-            // const inspection = config.inspect(key);
+            const inspection = config.inspect(key);
             
             // 从schema中获取约束信息
             const type = schema.type ;
@@ -295,7 +331,9 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             const minimum = schema.minimum ;
             const maximum = schema.maximum ;
             const enumValues = schema.enum ;
-            const enumDescriptions = schema.enumDescriptions ;
+            const enumDescriptions = Array.isArray(schema.enumDescriptions)
+                ? schema.enumDescriptions.map((item: string) => this.getConfigl10n(item))
+                : schema.enumDescriptions ;
             
             // 构建配置项
             const configItem = {
@@ -307,6 +345,9 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
                 description: description,
                 value: value,
                 defaultValue: schema.default,
+                valueSource: getConfigValueSource(key),
+                hasWorkspaceValue: inspection?.workspaceFolderValue !== undefined || inspection?.workspaceValue !== undefined,
+                hasGlobalValue: inspection?.globalValue !== undefined,
                 minimum: minimum,
                 maximum: maximum,
                 enum: enumValues,
@@ -370,7 +411,59 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.timeStats.milestone.targets',
             'AndreaNovelHelper.timeStats.milestone.notificationType',
 
-            // 5. 补全与查询键配置
+            // 5. AI 翻译配置
+            'AndreaNovelHelper.translate.targets',
+            'AndreaNovelHelper.translate.defaultTarget',
+            'AndreaNovelHelper.translate.alwaysUseDefaultTarget',
+            'AndreaNovelHelper.translate.defaultAction',
+            'AndreaNovelHelper.translate.alwaysUseDefaultAction',
+
+            // 6. 错别字检查配置
+            'AndreaNovelHelper.typo.enabled',
+            'AndreaNovelHelper.typo.mode',
+            'AndreaNovelHelper.typo.service.baseUrl',
+            'AndreaNovelHelper.typo.autoIdentifyOnOpen',
+            'AndreaNovelHelper.typo.autoScanOnChange',
+            'AndreaNovelHelper.typo.suppressRolesMode',
+            'AndreaNovelHelper.typo.batchSize',
+            'AndreaNovelHelper.typo.docConcurrency',
+            'AndreaNovelHelper.typo.docGroupSize',
+            'AndreaNovelHelper.typo.timeoutMs',
+            'AndreaNovelHelper.typo.enableHighlight',
+            'AndreaNovelHelper.typo.highlightColor',
+            'AndreaNovelHelper.typo.warningLevel',
+            'AndreaNovelHelper.typo.applyPartialDecorationsImmediately',
+            'AndreaNovelHelper.typo.persistence.enabled',
+            'AndreaNovelHelper.typo.persistence.autoCleanup',
+            'AndreaNovelHelper.typo.persistence.maxAgeDays',
+            'AndreaNovelHelper.typo.keepCacheOnClose',
+            'AndreaNovelHelper.typo.maxDocs',
+            'AndreaNovelHelper.timeStats.typoDelay.enabled',
+            'AndreaNovelHelper.timeStats.typoDelay.windowMs',
+
+            // 7. AI / LLM 错别字配置
+            'AndreaNovelHelper.typo.clientLLM.enabled',
+            'AndreaNovelHelper.typo.clientLLM.apiBase',
+            'AndreaNovelHelper.typo.clientLLM.apiKey',
+            'AndreaNovelHelper.typo.clientLLM.model',
+            'AndreaNovelHelper.typo.clientLLM.temperature',
+            'AndreaNovelHelper.typo.clientLLM.enableThinking',
+            'AndreaNovelHelper.typo.clientLLM.thinkingProvider',
+            'AndreaNovelHelper.typo.clientLLM.customThinkingEnabled',
+            'AndreaNovelHelper.typo.clientLLM.customThinkingEnabledValue',
+            'AndreaNovelHelper.typo.clientLLM.customThinkingDisabledValue',
+            'AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod',
+            'AndreaNovelHelper.typo.clientLLM.geminiThinkingBudget',
+            'AndreaNovelHelper.typo.clientLLM.geminiApiFormat',
+            'AndreaNovelHelper.typo.llm.model',
+            'AndreaNovelHelper.typo.llm.apiBase',
+            'AndreaNovelHelper.typo.llm.apiKey',
+            'AndreaNovelHelper.typo.debug.llmTrace',
+            'AndreaNovelHelper.typo.debug.serverTrace',
+            'AndreaNovelHelper.typo.debug.compactTrace',
+            'AndreaNovelHelper.typo.debug.traceMaxLen',
+
+            // 8. 补全与查询键配置
             'AndreaNovelHelper.completion.triggerMode',
             'AndreaNovelHelper.completion.symbolPrefixes',
             'AndreaNovelHelper.completion.segmenterType',
@@ -378,11 +471,12 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.lookupKeys.autoGeneratePinyin',
             'AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias',
             'AndreaNovelHelper.lookupKeys.autoGenerateRomanized',
+            'AndreaNovelHelper.lookupKeys.useLlmRomanization',
             'AndreaNovelHelper.defaultRoleLookupKeys',
             'AndreaNovelHelper.extendedLookupKeyPrefixes',
             'AndreaNovelHelper.debug.completionLog',
             
-            // 6. 角色显示配置 - 当前文章角色（docRoles）
+            // 9. 角色显示配置 - 当前文章角色（docRoles）
             'AndreaNovelHelper.docRoles.groupBy',
             'AndreaNovelHelper.docRoles.respectAffiliation',
             'AndreaNovelHelper.docRoles.respectType',
@@ -392,7 +486,7 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.docRoles.display.colorizeRoleName',
             'AndreaNovelHelper.docRoles.customGroups',
             
-            // 7. 角色显示配置 - 全部角色（allRoles）
+            // 10. 角色显示配置 - 全部角色（allRoles）
             'AndreaNovelHelper.allRoles.syncWithDocRoles',
             'AndreaNovelHelper.allRoles.groupBy',
             'AndreaNovelHelper.allRoles.respectAffiliation',
@@ -402,16 +496,29 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.allRoles.display.colorizeRoleName',
             'AndreaNovelHelper.allRoles.customGroups',
             
-            // 8. 角色显示配置 - 角色详情显示
-            'roles.details.wrapColumn',
-            'roles.details.enableRoleExpansion',
+            // 11. 包管理器行为与角色节点显示
+            'AndreaNovelHelper.package.dragDefaultAction',
+            'AndreaNovelHelper.package.iconStyle',
+            'AndreaNovelHelper.package.roleNodes.display.useRoleSvgIfPresent',
+            'AndreaNovelHelper.package.roleNodes.display.colorizeRoleName',
+            'AndreaNovelHelper.package.roleNodes.details.showColorOnValue',
+            'AndreaNovelHelper.package.roleNodes.details.alwaysExpandable',
+            'AndreaNovelHelper.package.roleNodes.details.enableRoleExpansion',
+            'AndreaNovelHelper.package.roleNodes.details.enableWrapping',
+            'AndreaNovelHelper.package.roleNodes.details.wrapColumn',
+
+            // 12. 角色显示配置 - 角色详情显示
+            'AndreaNovelHelper.roles.details.alwaysExpandable',
+            'AndreaNovelHelper.roles.details.enableWrapping',
+            'AndreaNovelHelper.roles.details.wrapColumn',
+            'AndreaNovelHelper.roles.details.enableRoleExpansion',
             
-            // 9. 其他功能配置
+            // 13. 其他功能配置
             'AndreaNovelHelper.useVsCodeManagedDisabling',
             'AndreaNovelHelper.smartTabGroupLock.enabled',
             'AndreaNovelHelper.autoGit.compactStatus',
             
-            // 10. 按键绑定相关 - 智能回车按键绑定配置
+            // 14. 按键绑定相关 - 智能回车按键绑定配置
             'markdown.extension.onEnterKey',
             'andrea.smartEnter'
         ];
@@ -660,6 +767,9 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             case 'openEditorSettings':
                 this._handleOpenEditorSettings();
                 break;
+            case 'fetchLlmModels':
+                await this._handleFetchLlmModels(message);
+                break;
         }
     }
 
@@ -676,6 +786,76 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             this._handleGetSettings();
         }
     }
+}
+
+type LlmModelOption = { id: string; label?: string };
+
+async function fetchLlmModelsFromApi(apiBase: string, apiKey: string): Promise<LlmModelOption[]> {
+    const url = buildModelsUrl(apiBase, apiKey);
+    const headers: Record<string, string> = {
+        Accept: 'application/json'
+    };
+
+    if (apiKey && !isGeminiModelsUrl(url)) {
+        headers.Authorization = `Bearer ${apiKey}`;
+    }
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(`模型列表获取失败：HTTP ${response.status}${detail ? ` - ${detail.slice(0, 200)}` : ''}`);
+    }
+
+    const data = await response.json() as any;
+    const models = normalizeModelList(data);
+    if (!models.length) {
+        throw new Error('接口返回中没有可用模型');
+    }
+    return models;
+}
+
+function buildModelsUrl(apiBase: string, apiKey: string): string {
+    const base = apiBase.replace(/\/+$/, '');
+    if (/generativelanguage\.googleapis\.com/i.test(base)) {
+        const url = new URL(base.endsWith('/models') ? base : `${base}/models`);
+        if (apiKey && !url.searchParams.has('key')) {
+            url.searchParams.set('key', apiKey);
+        }
+        return url.toString();
+    }
+    return base.endsWith('/models') ? base : `${base}/models`;
+}
+
+function isGeminiModelsUrl(url: string): boolean {
+    return /generativelanguage\.googleapis\.com/i.test(url);
+}
+
+function normalizeModelList(data: any): LlmModelOption[] {
+    const rawItems = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.models)
+            ? data.models
+            : [];
+    const seen = new Set<string>();
+    const models: LlmModelOption[] = [];
+
+    for (const item of rawItems) {
+        const rawId = typeof item === 'string'
+            ? item
+            : String(item?.id ?? item?.name ?? item?.model ?? '').trim();
+        if (!rawId) {
+            continue;
+        }
+        const id = rawId.startsWith('models/') ? rawId.slice('models/'.length) : rawId;
+        if (seen.has(id)) {
+            continue;
+        }
+        seen.add(id);
+        const displayName = typeof item === 'object' && item?.displayName ? String(item.displayName) : '';
+        models.push({ id, label: displayName ? `${id} - ${displayName}` : id });
+    }
+
+    return models.sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true, sensitivity: 'base' }));
 }
 
 export function registerSettingsView(context: vscode.ExtensionContext): vscode.Disposable {

@@ -1,13 +1,33 @@
 <template>
   <div class="font-family-preview">
     <div class="preview-text" :style="{ fontFamily: value }">
-      <div class="preview-line zh">每个人心中都有一座城，住着一个不可能的人。</div>
-      <div class="preview-line en">The quick brown fox jumps over the lazy dog.</div>
-      <div class="preview-line ja">吾輩は猫である。名前はまだ無い。</div>
-      <div class="preview-line ru">Съешь ещё этих мягких французских булок.</div>
-      <div class="preview-line el">Ξεσκεπάζω τὴν ψυχοφθόρα βδελυγμία.</div>
-      <div class="preview-line fr">Portez ce vieux whisky au juge blond qui fume.</div>
-      <div class="preview-line de">Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.</div>
+      <div
+        v-for="sample in visibleSamples"
+        :key="sample.lang"
+        class="preview-line"
+        :class="sample.lang"
+      >
+        <span class="sample-lang">{{ sample.label }}</span>
+        <span>{{ sample.text }}</span>
+      </div>
+      <div class="sample-pager">
+        <button class="pager-btn" :disabled="samplePage === 0" @click="samplePage--" title="上一页">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <span class="pager-label">{{ samplePage + 1 }} / {{ samplePageCount }}</span>
+        <button
+          class="pager-btn"
+          :disabled="samplePage >= samplePageCount - 1"
+          @click="samplePage++"
+          title="下一页"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+            <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <div class="font-list">
       <span
@@ -30,7 +50,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useVsCodeApiStore } from '../../../../stores/vscode'
 
 const props = defineProps<{
@@ -38,6 +58,28 @@ const props = defineProps<{
 }>()
 
 const vsCodeApiStore = useVsCodeApiStore()
+const samplePage = ref(0)
+const samplesPerPage = 3
+
+const sampleLines = [
+  { lang: 'zh', label: '中', text: '每个人心中都有一座城，住着一个不可能的人。' },
+  { lang: 'en', label: 'EN', text: 'The quick brown fox jumps over the lazy dog.' },
+  { lang: 'ja', label: '日', text: '吾輩は猫である。名前はまだ無い。' },
+  { lang: 'ru', label: 'RU', text: 'Съешь ещё этих мягких французских булок.' },
+  { lang: 'el', label: 'EL', text: 'Ξεσκεπάζω τὴν ψυχοφθόρα βδελυγμία.' },
+  { lang: 'fr', label: 'FR', text: 'Portez ce vieux whisky au juge blond qui fume.' },
+  { lang: 'de', label: 'DE', text: 'Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.' },
+]
+
+const samplePageCount = computed(() => Math.max(1, Math.ceil(sampleLines.length / samplesPerPage)))
+const visibleSamples = computed(() => {
+  const start = samplePage.value * samplesPerPage
+  return sampleLines.slice(start, start + samplesPerPage)
+})
+
+watch(samplePageCount, (count) => {
+  if (samplePage.value >= count) samplePage.value = count - 1
+})
 
 const fontList = computed(() => {
   if (!props.value) return []
@@ -69,20 +111,70 @@ function openFontManager() {
 
 .preview-text {
   color: var(--vscode-foreground, #e0e0e0);
-  text-align: center;
+  text-align: left;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.45;
   transition: font-family 0.2s ease;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  width: 100%;
+  min-height: 138px;
 }
 
 .preview-line {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
   font-size: 14px;
   word-break: break-word;
   overflow-wrap: break-word;
   max-width: 100%;
+}
+
+.sample-lang {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground, #999);
+  font-family: var(--vscode-font-family, sans-serif);
+}
+
+.sample-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: auto;
+  font-family: var(--vscode-font-family, sans-serif);
+}
+
+.pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border: 1px solid var(--vscode-button-border, #444);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground, #e0e0e0);
+  cursor: pointer;
+}
+
+.pager-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.pager-btn:not(:disabled):hover {
+  background-color: var(--vscode-toolbar-hoverBackground, #333);
+}
+
+.pager-label {
+  min-width: 42px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #999);
 }
 
 .font-list {

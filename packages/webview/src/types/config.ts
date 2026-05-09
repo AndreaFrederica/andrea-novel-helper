@@ -5,6 +5,9 @@ export interface ConfigItem {
   description: string
   value: any
   defaultValue: any
+  valueSource?: 'workspace' | 'global' | 'default'
+  hasWorkspaceValue?: boolean
+  hasGlobalValue?: boolean
   enum?: string[]
   enumDescriptions?: string[]
   minimum?: number

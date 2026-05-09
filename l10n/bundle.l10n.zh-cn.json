@@ -292,5 +292,7 @@
   "walkthrough.anh.step.finish.title": "准备就绪",
   "walkthrough.anh.step.finish.description": "配置完成！你现在可以开始使用小说助手进行创作了。",
   "config.fileTracker.respectGitignore.description": "基础文件追踪是否遵循 .gitignore。默认开启；关闭后即使文件被 Git 忽略，只要属于写作资源类型仍会被追踪。",
-  "view.comments.manager.name": "批注总览"
+  "view.comments.manager.name": "批注总览",
+  "config.useVsCodeManagedDisabling.description": "只使用 VS Code 自带的扩展启用/禁用状态判断小说助手是否运行，忽略 ANH 自己的工作区禁用开关。",
+  "config.lookupKeys.useLlmRomanization.description": "允许罗马字查询键生成调用已配置的客户端 LLM 来补充转写候选。它独立于错别字检查的 LLM 启用开关，但会复用客户端 LLM 的 API Base、API Key 和模型设置。"
 }

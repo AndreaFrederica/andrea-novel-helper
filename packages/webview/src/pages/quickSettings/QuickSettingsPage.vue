@@ -25,16 +25,34 @@
             </button>
           </div>
           <div class="header-actions">
+            <button class="btn btn-secondary" @click="isWizardOpen = true">
+              设置向导
+            </button>
             <button class="btn btn-secondary" @click="openFullSettings">
               完整设置
             </button>
             <button v-if="changedCount > 0" class="btn btn-reset" @click="resetConfig">
               放弃更改（{{ changedCount }}）
             </button>
-            <button class="btn btn-save" @click="saveConfig">保存</button>
+            <button class="btn btn-save" :disabled="isSaving" @click="saveConfig">
+              {{ isSaving ? '保存中...' : '保存' }}
+            </button>
           </div>
         </div>
       </div>
+
+      <div v-if="statusMessage" class="status-message" :class="statusType">
+        {{ statusMessage }}
+      </div>
+
+      <SettingWizardModal
+        v-if="isWizardOpen"
+        :config-items="quickSettingsItems"
+        :current-scope="currentScope"
+        @close="isWizardOpen = false"
+        @apply="applyWizardSettings"
+        @save="saveWizardSettings"
+      />
 
       <!-- Content -->
       <div class="content">
@@ -48,7 +66,32 @@
           <div v-if="group.id === 'statusBar'" class="statusbar-group">
             <div class="statusbar-settings">
               <div v-for="item in group.items" :key="item.id" class="statusbar-setting-row">
-                <span class="setting-name">{{ getStatusBarDisplayName(item.id) }}</span>
+                <div class="statusbar-setting-label">
+                  <span class="setting-name">{{ getStatusBarDisplayName(item.id) }}</span>
+                  <span
+                    class="setting-source-badge"
+                    :class="`source-${getSettingSource(item)}`"
+                    :title="getSettingSourceTooltip(item)"
+                  >
+                    {{ getSettingSourceLabel(item) }}
+                  </span>
+                  <span
+                    v-if="item.type === 'boolean'"
+                    class="setting-boolean-badge"
+                    :class="item.value === true ? 'boolean-on' : 'boolean-off'"
+                    :title="getBooleanSettingTooltip(item)"
+                  >
+                    {{ getBooleanStateLabel(item) }}
+                  </span>
+                  <span
+                    v-if="item.type === 'boolean'"
+                    class="setting-explicit-badge"
+                    :class="`explicit-${getSettingSource(item)}`"
+                    :title="getSettingSourceTooltip(item)"
+                  >
+                    {{ getExplicitSettingLabel(item) }}
+                  </span>
+                </div>
                 <!-- Select -->
                 <select
                   v-if="item.enum"
@@ -65,7 +108,12 @@
                   </option>
                 </select>
                 <!-- Toggle -->
-                <label v-else-if="item.type === 'boolean'" class="toggle-switch">
+                <label
+                  v-else-if="item.type === 'boolean'"
+                  class="toggle-switch"
+                  :class="[`toggle-${getSettingSource(item)}`, { 'toggle-explicit': getSettingSource(item) !== 'default' }]"
+                  :title="getBooleanSettingTooltip(item)"
+                >
                   <input
                     type="checkbox"
                     :checked="item.value"
@@ -86,6 +134,96 @@
             </div>
           </div>
 
+          <!-- Paragraph group: preview cards + compact vertical controls -->
+          <div v-else-if="group.id === 'paragraph'" class="paragraph-group-layout">
+            <div class="paragraph-preview-items">
+              <SettingPreviewCard
+                v-for="item in getPreviewItems(group.items)"
+                :key="item.id"
+                :item="item"
+                :show-preview="true"
+                :config-values="configValueMap"
+                :llm-model-states="llmModelStates"
+                @update:value="updateConfigValue(item.id, $event)"
+                @reset="updateConfigValue(item.id, item.defaultValue)"
+                @fetch-llm-models="fetchLlmModels"
+              >
+                <component
+                  :is="getPreviewComponent(item.id)"
+                  v-bind="getPreviewProps(item.id)"
+                />
+              </SettingPreviewCard>
+            </div>
+
+            <div v-if="getPlainItems(group.items).length" class="paragraph-plain-stack">
+              <SettingPreviewCard
+                v-for="item in getPlainItems(group.items)"
+                :key="item.id"
+                :item="item"
+                :show-preview="false"
+                :config-values="configValueMap"
+                :llm-model-states="llmModelStates"
+                @update:value="updateConfigValue(item.id, $event)"
+                @reset="updateConfigValue(item.id, item.defaultValue)"
+                @fetch-llm-models="fetchLlmModels"
+              />
+            </div>
+          </div>
+
+          <!-- Role list group: doc roles and all roles use separated settings -->
+          <div v-else-if="group.id === 'roleLists'" class="role-list-group-layout">
+            <div class="role-list-section">
+              <div class="role-list-section__header">
+                <span>当前文章角色</span>
+                <span>{{ getRoleListItems(group.items, 'docRoles').length }}</span>
+              </div>
+              <RoleListPreview
+                scope="docRoles"
+                title="当前文章角色预览"
+                :settings="getRoleListPreviewSettings('docRoles')"
+              />
+              <div class="role-list-controls">
+                <SettingPreviewCard
+                  v-for="item in getRoleListItems(group.items, 'docRoles')"
+                  :key="item.id"
+                  :item="item"
+                  :show-preview="false"
+                  :config-values="configValueMap"
+                  :llm-model-states="llmModelStates"
+                  @update:value="updateConfigValue(item.id, $event)"
+                  @reset="updateConfigValue(item.id, item.defaultValue)"
+                  @fetch-llm-models="fetchLlmModels"
+                />
+              </div>
+            </div>
+
+            <div class="role-list-section">
+              <div class="role-list-section__header">
+                <span>全部角色</span>
+                <span>{{ getRoleListItems(group.items, 'allRoles').length }}</span>
+              </div>
+              <RoleListPreview
+                scope="allRoles"
+                title="全部角色预览"
+                :settings="getRoleListPreviewSettings('allRoles')"
+                :doc-settings="getRoleListPreviewSettings('docRoles')"
+              />
+              <div class="role-list-controls">
+                <SettingPreviewCard
+                  v-for="item in getRoleListItems(group.items, 'allRoles')"
+                  :key="item.id"
+                  :item="item"
+                  :show-preview="false"
+                  :config-values="configValueMap"
+                  :llm-model-states="llmModelStates"
+                  @update:value="updateConfigValue(item.id, $event)"
+                  @reset="updateConfigValue(item.id, item.defaultValue)"
+                  @fetch-llm-models="fetchLlmModels"
+                />
+              </div>
+            </div>
+          </div>
+
           <!-- Normal grid for other groups -->
           <div v-else class="group-items">
             <template v-for="item in group.items" :key="item.id">
@@ -93,8 +231,11 @@
                 v-if="getPreviewComponent(item.id)"
                 :item="item"
                 :show-preview="true"
+                :config-values="configValueMap"
+                :llm-model-states="llmModelStates"
                 @update:value="updateConfigValue(item.id, $event)"
                 @reset="updateConfigValue(item.id, item.defaultValue)"
+                @fetch-llm-models="fetchLlmModels"
               >
                 <component
                   :is="getPreviewComponent(item.id)"
@@ -106,8 +247,11 @@
                 v-else
                 :item="item"
                 :show-preview="false"
+                :config-values="configValueMap"
+                :llm-model-states="llmModelStates"
                 @update:value="updateConfigValue(item.id, $event)"
                 @reset="updateConfigValue(item.id, item.defaultValue)"
+                @fetch-llm-models="fetchLlmModels"
               />
             </template>
           </div>
@@ -131,9 +275,23 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue'
 import SettingPreviewCard from './components/SettingPreviewCard.vue'
+import SettingWizardModal from './components/SettingWizardModal.vue'
 import StatusBarPreview from './components/previews/StatusBarPreview.vue'
+import RoleListPreview from './components/previews/RoleListPreview.vue'
 import { useVsCodeApiStore } from '../../stores/vscode'
 import type { ConfigItem } from 'src/types/config'
+
+interface LlmModelOption {
+  id: string
+  label?: string
+}
+
+interface LlmModelState {
+  models: LlmModelOption[]
+  loading: boolean
+  error: string
+  requestId?: string
+}
 
 const vsCodeApiStore = useVsCodeApiStore()
 
@@ -141,6 +299,21 @@ const loading = ref(true)
 const currentScope = ref<'global' | 'workspace'>('workspace')
 const configItems = ref<ConfigItem[]>([])
 const originalSettings = ref<Record<string, any>>({})
+const isSaving = ref(false)
+const statusMessage = ref('')
+const statusType = ref<'info' | 'success' | 'error'>('info')
+const pendingSavedSettings = ref<Record<string, any>>({})
+const llmModelStates = ref<Record<string, LlmModelState>>({})
+const isWizardOpen = ref(false)
+const pendingWizardOpenScope = ref<'global' | 'workspace' | null>(null)
+
+const configValueMap = computed(() => {
+  const values: Record<string, any> = {}
+  for (const item of configItems.value) {
+    values[item.id] = item.value
+  }
+  return values
+})
 
 // Preview component map
 const previewComponents: Record<string, any> = {
@@ -204,13 +377,43 @@ const settingGroups = computed(() => {
       id: 'completion',
       name: '补全与查询键',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 6h10M4 12h16M4 18h7M17 4l3 3-3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      ids: ['AndreaNovelHelper.completion.triggerMode', 'AndreaNovelHelper.completion.symbolPrefixes', 'AndreaNovelHelper.completion.segmenterType', 'AndreaNovelHelper.lookupKeys.treatPinyinAsAlias', 'AndreaNovelHelper.lookupKeys.autoGeneratePinyin', 'AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias', 'AndreaNovelHelper.lookupKeys.autoGenerateRomanized', 'AndreaNovelHelper.defaultRoleLookupKeys', 'AndreaNovelHelper.extendedLookupKeyPrefixes', 'AndreaNovelHelper.debug.completionLog']
+      ids: ['AndreaNovelHelper.completion.triggerMode', 'AndreaNovelHelper.completion.symbolPrefixes', 'AndreaNovelHelper.completion.segmenterType', 'AndreaNovelHelper.lookupKeys.treatPinyinAsAlias', 'AndreaNovelHelper.lookupKeys.autoGeneratePinyin', 'AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias', 'AndreaNovelHelper.lookupKeys.autoGenerateRomanized', 'AndreaNovelHelper.lookupKeys.useLlmRomanization', 'AndreaNovelHelper.defaultRoleLookupKeys', 'AndreaNovelHelper.extendedLookupKeyPrefixes', 'AndreaNovelHelper.debug.completionLog']
     },
     {
       id: 'roleLists',
       name: '角色列表显示',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 7a4 4 0 118 0 4 4 0 01-8 0zM4 21a8 8 0 0116 0M3 4h3M3 9h3M18 4h3M18 9h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
       ids: ['AndreaNovelHelper.docRoles.groupBy', 'AndreaNovelHelper.docRoles.respectAffiliation', 'AndreaNovelHelper.docRoles.respectType', 'AndreaNovelHelper.docRoles.primaryGroup', 'AndreaNovelHelper.docRoles.useCustomGroups', 'AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent', 'AndreaNovelHelper.docRoles.display.colorizeRoleName', 'AndreaNovelHelper.docRoles.customGroups', 'AndreaNovelHelper.allRoles.syncWithDocRoles', 'AndreaNovelHelper.allRoles.groupBy', 'AndreaNovelHelper.allRoles.respectAffiliation', 'AndreaNovelHelper.allRoles.respectType', 'AndreaNovelHelper.allRoles.primaryGroup', 'AndreaNovelHelper.allRoles.useCustomGroups', 'AndreaNovelHelper.allRoles.display.colorizeRoleName', 'AndreaNovelHelper.allRoles.customGroups']
+    },
+    {
+      id: 'roleDetails',
+      name: '角色详情',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 7h8M8 12h8M8 17h5M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+      ids: ['AndreaNovelHelper.roles.details.enableRoleExpansion', 'AndreaNovelHelper.roles.details.alwaysExpandable', 'AndreaNovelHelper.roles.details.enableWrapping', 'AndreaNovelHelper.roles.details.wrapColumn']
+    },
+    {
+      id: 'packageManager',
+      name: '包管理器',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 7l9-4 9 4-9 4-9-4zM3 12l9 4 9-4M3 17l9 4 9-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      ids: ['AndreaNovelHelper.package.dragDefaultAction', 'AndreaNovelHelper.package.iconStyle', 'AndreaNovelHelper.package.roleNodes.display.useRoleSvgIfPresent', 'AndreaNovelHelper.package.roleNodes.display.colorizeRoleName', 'AndreaNovelHelper.package.roleNodes.details.showColorOnValue', 'AndreaNovelHelper.package.roleNodes.details.alwaysExpandable', 'AndreaNovelHelper.package.roleNodes.details.enableRoleExpansion', 'AndreaNovelHelper.package.roleNodes.details.enableWrapping', 'AndreaNovelHelper.package.roleNodes.details.wrapColumn']
+    },
+    {
+      id: 'typoSystem',
+      name: '错别字检查',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 5h16M4 12h10M4 19h8M17 14l2 2 4-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      ids: ['AndreaNovelHelper.typo.enabled', 'AndreaNovelHelper.typo.mode', 'AndreaNovelHelper.typo.service.baseUrl', 'AndreaNovelHelper.typo.autoIdentifyOnOpen', 'AndreaNovelHelper.typo.autoScanOnChange', 'AndreaNovelHelper.typo.suppressRolesMode', 'AndreaNovelHelper.typo.batchSize', 'AndreaNovelHelper.typo.docConcurrency', 'AndreaNovelHelper.typo.docGroupSize', 'AndreaNovelHelper.typo.timeoutMs', 'AndreaNovelHelper.typo.enableHighlight', 'AndreaNovelHelper.typo.highlightColor', 'AndreaNovelHelper.typo.warningLevel', 'AndreaNovelHelper.typo.applyPartialDecorationsImmediately', 'AndreaNovelHelper.typo.persistence.enabled', 'AndreaNovelHelper.typo.persistence.autoCleanup', 'AndreaNovelHelper.typo.persistence.maxAgeDays', 'AndreaNovelHelper.typo.keepCacheOnClose', 'AndreaNovelHelper.typo.maxDocs', 'AndreaNovelHelper.timeStats.typoDelay.enabled', 'AndreaNovelHelper.timeStats.typoDelay.windowMs']
+    },
+    {
+      id: 'typoAI',
+      name: 'AI 与 LLM',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.2 4.8L19 10l-4.8 2.2L12 17l-2.2-4.8L5 10l4.8-2.2L12 3zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15zM5 15l.9 2.1L8 18l-2.1.9L5 21l-.9-2.1L2 18l2.1-.9L5 15z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+      ids: ['AndreaNovelHelper.typo.clientLLM.enabled', 'AndreaNovelHelper.typo.clientLLM.apiBase', 'AndreaNovelHelper.typo.clientLLM.apiKey', 'AndreaNovelHelper.typo.clientLLM.model', 'AndreaNovelHelper.typo.clientLLM.temperature', 'AndreaNovelHelper.typo.clientLLM.enableThinking', 'AndreaNovelHelper.typo.clientLLM.thinkingProvider', 'AndreaNovelHelper.typo.clientLLM.customThinkingEnabled', 'AndreaNovelHelper.typo.clientLLM.customThinkingEnabledValue', 'AndreaNovelHelper.typo.clientLLM.customThinkingDisabledValue', 'AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod', 'AndreaNovelHelper.typo.clientLLM.geminiThinkingBudget', 'AndreaNovelHelper.typo.clientLLM.geminiApiFormat', 'AndreaNovelHelper.typo.llm.model', 'AndreaNovelHelper.typo.llm.apiBase', 'AndreaNovelHelper.typo.llm.apiKey', 'AndreaNovelHelper.typo.debug.llmTrace', 'AndreaNovelHelper.typo.debug.serverTrace', 'AndreaNovelHelper.typo.debug.compactTrace', 'AndreaNovelHelper.typo.debug.traceMaxLen']
+    },
+    {
+      id: 'translation',
+      name: 'AI 翻译',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 5h9M9 3v2m0 0c-.8 3-2.2 5.2-5 7m5-7c.8 2.3 2 4.1 4 5.5M13 21l5-11 5 11M15 17h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      ids: ['AndreaNovelHelper.translate.targets', 'AndreaNovelHelper.translate.defaultTarget', 'AndreaNovelHelper.translate.alwaysUseDefaultTarget', 'AndreaNovelHelper.translate.defaultAction', 'AndreaNovelHelper.translate.alwaysUseDefaultAction']
     },
     {
       id: 'statusBar',
@@ -234,6 +437,39 @@ const settingGroups = computed(() => {
 
 function getPreviewComponent(itemId: string) {
   return previewComponents[itemId] || null
+}
+
+function getPreviewItems(items: ConfigItem[]) {
+  return items.filter(item => Boolean(getPreviewComponent(item.id)))
+}
+
+function getPlainItems(items: ConfigItem[]) {
+  return items.filter(item => !getPreviewComponent(item.id))
+}
+
+function getRoleListItems(items: ConfigItem[], scope: 'docRoles' | 'allRoles') {
+  const prefix = `AndreaNovelHelper.${scope}.`
+  return items.filter(item => item.id.startsWith(prefix))
+}
+
+function getConfigValue<T>(id: string, fallback: T): T {
+  const item = configItems.value.find(i => i.id === id)
+  return (item?.value ?? fallback) as T
+}
+
+function getRoleListPreviewSettings(scope: 'docRoles' | 'allRoles') {
+  const base = `AndreaNovelHelper.${scope}`
+  return {
+    groupBy: getConfigValue(`${base}.groupBy`, 'affiliation'),
+    respectAffiliation: getConfigValue(`${base}.respectAffiliation`, true),
+    respectType: getConfigValue(`${base}.respectType`, true),
+    primaryGroup: getConfigValue(`${base}.primaryGroup`, 'affiliation'),
+    useCustomGroups: getConfigValue(`${base}.useCustomGroups`, false),
+    customGroups: getConfigValue(`${base}.customGroups`, []),
+    syncWithDocRoles: scope === 'allRoles'
+      ? getConfigValue('AndreaNovelHelper.allRoles.syncWithDocRoles', true)
+      : false,
+  }
 }
 
 function getPreviewProps(itemId: string) {
@@ -297,16 +533,90 @@ function getStatusBarDisplayName(itemId: string): string {
   return statusBarDisplayNames[itemId] || itemId
 }
 
+function getSettingSource(item: ConfigItem) {
+  return item.valueSource ?? 'default'
+}
+
+function getSettingSourceLabel(item: ConfigItem): string {
+  const source = getSettingSource(item)
+  if (source === 'workspace') return '工作区'
+  if (source === 'global') return '全局'
+  return '默认'
+}
+
+function getSettingSourceTooltip(item: ConfigItem): string {
+  const source = getSettingSource(item)
+  const sourceText = (() => {
+    if (source === 'workspace') {
+      return item.hasGlobalValue
+        ? '当前生效值来自工作区设置。工作区设置只影响当前工作区，并会覆盖已有的全局设置。'
+        : '当前生效值来自工作区设置。工作区设置只影响当前工作区。'
+    }
+    if (source === 'global') {
+      return '当前生效值来自全局设置。除非当前工作区单独覆盖，否则所有工作区都会使用这个值。'
+    }
+    return '当前生效值来自扩展或 VS Code 的默认值。当前工作区和全局设置都没有覆盖它。'
+  })()
+  return [
+    sourceText,
+    `当前实际值：${formatConfigValue(item.value)}`,
+    `默认值：${formatConfigValue(item.defaultValue)}`,
+    `显式设置状态：${getExplicitSettingLabel(item)}`,
+  ].join('\n')
+}
+
+function getExplicitSettingLabel(item: ConfigItem): string {
+  return getSettingSource(item) === 'default' ? '未设置' : '已设置'
+}
+
+function getBooleanStateLabel(item: ConfigItem): string {
+  return item.value === true ? '已启用' : '已停用'
+}
+
+function getBooleanSettingTooltip(item: ConfigItem): string {
+  return [
+    `当前开关状态：${getBooleanStateLabel(item)}`,
+    getSettingSource(item) === 'default'
+      ? '该值未在 VS Code 设置中显式写入，开关停在中间表示当前正在使用默认值；点击开关会写入当前选择的作用域。'
+      : '该值已经在 VS Code 设置中显式写入。',
+    getSettingSourceTooltip(item),
+  ].join('\n')
+}
+
+function formatConfigValue(value: any): string {
+  if (typeof value === 'boolean') return value ? '启用 / true' : '停用 / false'
+  if (value === undefined) return '未定义'
+  if (value === null) return 'null'
+  if (typeof value === 'string') return value.trim() ? value : '空字符串'
+  if (typeof value === 'number') return String(value)
+  if (Array.isArray(value)) return value.length ? `${value.length} 项：${JSON.stringify(value)}` : '空数组'
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
 function updateConfigValue(itemId: string, newValue: any) {
+  setLocalConfigValue(itemId, newValue)
+  if (vsCodeApiStore.vscode) {
+    vsCodeApiStore.vscode.postMessage({
+      command: 'updateSetting',
+      key: itemId,
+      value: newValue
+    })
+  }
+}
+
+function setLocalConfigValue(itemId: string, newValue: any) {
   const item = configItems.value.find(i => i.id === itemId)
   if (item) {
     item.value = newValue
-    if (vsCodeApiStore.vscode) {
-      vsCodeApiStore.vscode.postMessage({
-        command: 'updateSetting',
-        key: itemId,
-        value: newValue
-      })
+    item.valueSource = currentScope.value
+    if (currentScope.value === 'workspace') {
+      item.hasWorkspaceValue = true
+    } else {
+      item.hasGlobalValue = true
     }
   }
 }
@@ -321,6 +631,7 @@ function resetConfig() {
       updateConfigValue(item.id, originalSettings.value[item.id])
     }
   })
+  showStatus('已恢复到进入页面时的值', 'info')
 }
 
 function saveConfig() {
@@ -334,17 +645,106 @@ function saveConfig() {
     }
   })
 
-  if (!hasChanges) return
+  if (!hasChanges) {
+    showStatus('没有待保存的更改', 'info')
+    return
+  }
 
   if (vsCodeApiStore.vscode) {
+    isSaving.value = true
+    pendingSavedSettings.value = changedSettings
+    showStatus(`正在保存 ${Object.keys(changedSettings).length} 项设置...`, 'info')
     vsCodeApiStore.vscode.postMessage({
       command: 'saveSettings',
       settings: changedSettings
     })
+  }
+}
 
-    Object.keys(changedSettings).forEach(key => {
-      originalSettings.value[key] = changedSettings[key]
+function applyWizardSettings(settings: Record<string, any>) {
+  const entries = Object.entries(settings)
+  if (!entries.length) {
+    showStatus('向导没有需要应用的变更', 'info')
+    isWizardOpen.value = false
+    return
+  }
+
+  for (const [key, value] of entries) {
+    setLocalConfigValue(key, value)
+  }
+  isWizardOpen.value = false
+  showStatus(`设置向导已暂存 ${entries.length} 项变更，当前还没有写入 VS Code 设置；确认后请点击保存。`, 'info')
+}
+
+function saveWizardSettings(settings: Record<string, any>) {
+  const entries = Object.entries(settings)
+  if (!entries.length) {
+    showStatus('向导没有需要保存的变更', 'info')
+    isWizardOpen.value = false
+    return
+  }
+
+  for (const [key, value] of entries) {
+    setLocalConfigValue(key, value)
+  }
+
+  if (vsCodeApiStore.vscode) {
+    isSaving.value = true
+    pendingSavedSettings.value = settings
+    showStatus(`正在保存向导设置 ${entries.length} 项...`, 'info')
+    vsCodeApiStore.vscode.postMessage({
+      command: 'saveSettings',
+      settings
     })
+  }
+  isWizardOpen.value = false
+}
+
+function fetchLlmModels(itemId: string) {
+  const item = configItems.value.find(i => i.id === itemId)
+  if (!item) return
+
+  const prefix = itemId === 'AndreaNovelHelper.typo.clientLLM.model'
+    ? 'AndreaNovelHelper.typo.clientLLM'
+    : 'AndreaNovelHelper.typo.llm'
+  const apiBase = String(getConfigValue(`${prefix}.apiBase`, '') ?? '').trim()
+  const apiKey = String(getConfigValue(`${prefix}.apiKey`, '') ?? '').trim()
+
+  if (!apiBase) {
+    llmModelStates.value[itemId] = {
+      models: llmModelStates.value[itemId]?.models ?? [],
+      loading: false,
+      error: '请先填写 API Base',
+    }
+    return
+  }
+
+  const requestId = `${itemId}:${Date.now()}:${Math.random().toString(36).slice(2)}`
+  llmModelStates.value[itemId] = {
+    models: llmModelStates.value[itemId]?.models ?? [],
+    loading: true,
+    error: '',
+    requestId,
+  }
+
+  vsCodeApiStore.vscode?.postMessage({
+    command: 'fetchLlmModels',
+    requestId,
+    itemId,
+    apiBase,
+    apiKey,
+  })
+}
+
+function showStatus(message: string, type: 'info' | 'success' | 'error') {
+  statusMessage.value = message
+  statusType.value = type
+  if (type !== 'error') {
+    window.setTimeout(() => {
+      if (statusMessage.value === message) {
+        statusMessage.value = ''
+      }
+    }, 3000)
   }
 }
 
@@ -387,6 +787,11 @@ onMounted(() => {
           })
 
           loading.value = false
+
+          if (pendingWizardOpenScope.value && pendingWizardOpenScope.value === currentScope.value) {
+            pendingWizardOpenScope.value = null
+            isWizardOpen.value = true
+          }
         }
         break
 
@@ -394,9 +799,53 @@ onMounted(() => {
         break
 
       case 'settingsSaved':
+        Object.keys(pendingSavedSettings.value).forEach(key => {
+          originalSettings.value[key] = pendingSavedSettings.value[key]
+        })
+        pendingSavedSettings.value = {}
+        isSaving.value = false
+        showStatus(message.message || '设置已保存', 'success')
         break
 
+      case 'llmModelsFetched': {
+        const state = llmModelStates.value[message.itemId]
+        if (!state || state.requestId !== message.requestId) break
+        llmModelStates.value[message.itemId] = {
+          models: Array.isArray(message.models) ? message.models : [],
+          loading: false,
+          error: '',
+          requestId: message.requestId,
+        }
+        break
+      }
+
+      case 'llmModelsFetchFailed': {
+        const state = llmModelStates.value[message.itemId]
+        if (!state || state.requestId !== message.requestId) break
+        llmModelStates.value[message.itemId] = {
+          models: state.models,
+          loading: false,
+          error: message.message || '模型列表获取失败',
+          requestId: message.requestId,
+        }
+        break
+      }
+
+      case 'openSettingsWizard': {
+        const targetScope = message.scope === 'global' ? 'global' : 'workspace'
+        pendingWizardOpenScope.value = targetScope
+        if (currentScope.value !== targetScope) {
+          setScope(targetScope)
+        } else {
+          pendingWizardOpenScope.value = null
+          isWizardOpen.value = true
+        }
+        break
+      }
+
       case 'error':
+        isSaving.value = false
+        showStatus(message.message || '设置操作失败', 'error')
         console.error('Settings error:', message.message)
         break
     }
@@ -520,6 +969,11 @@ onMounted(() => {
   color: var(--vscode-button-secondaryForeground, #e0e0e0);
 }
 
+.btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .btn-reset:hover {
   background-color: var(--vscode-button-secondaryHoverBackground, #45494e);
 }
@@ -531,6 +985,24 @@ onMounted(() => {
 
 .btn-secondary:hover {
   background-color: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+.status-message {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border, #333);
+  font-size: 12px;
+  color: var(--vscode-foreground, #e0e0e0);
+  background-color: var(--vscode-inputValidation-infoBackground, rgba(55, 148, 255, 0.16));
+}
+
+.status-message.success {
+  background-color: rgba(46, 160, 67, 0.18);
+}
+
+.status-message.error {
+  background-color: var(--vscode-inputValidation-errorBackground, rgba(244, 135, 113, 0.18));
+  color: var(--vscode-errorForeground, #f48771);
 }
 
 .content {
@@ -579,6 +1051,63 @@ onMounted(() => {
   gap: 12px;
 }
 
+.paragraph-group-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 0.75fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.paragraph-preview-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.paragraph-plain-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.role-list-group-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.role-list-section {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--vscode-panel-border, #333);
+  border-radius: 8px;
+  background-color: var(--vscode-editor-background, #1e1e1e);
+}
+
+.role-list-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--vscode-font-size, 0.9rem);
+  font-weight: 600;
+}
+
+.role-list-section__header span:last-child {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--vscode-descriptionForeground, #999);
+}
+
+.role-list-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 8px;
+}
+
 .statusbar-group {
   display: flex;
   flex-direction: column;
@@ -602,11 +1131,75 @@ onMounted(() => {
   border-radius: 6px;
 }
 
+.statusbar-setting-label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
 .setting-name {
   font-size: var(--vscode-font-size, 0.85rem);
   font-weight: 500;
   white-space: nowrap;
-  flex-shrink: 0;
+}
+
+.setting-source-badge,
+.setting-boolean-badge,
+.setting-explicit-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--vscode-badge-background, #4d4d4d);
+  border-radius: 999px;
+  color: var(--vscode-descriptionForeground, #999);
+  background-color: rgba(127, 127, 127, 0.08);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.source-workspace {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  border-color: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 55%, transparent);
+}
+
+.source-global {
+  color: var(--vscode-charts-green, #89d185);
+  border-color: color-mix(in srgb, var(--vscode-charts-green, #89d185) 55%, transparent);
+}
+
+.source-default {
+  color: var(--vscode-descriptionForeground, #999);
+}
+
+.boolean-on {
+  color: var(--vscode-charts-green, #89d185);
+  border-color: color-mix(in srgb, var(--vscode-charts-green, #89d185) 55%, transparent);
+}
+
+.boolean-off {
+  color: var(--vscode-descriptionForeground, #999);
+  border-color: var(--vscode-panel-border, #333);
+}
+
+.explicit-workspace {
+  color: var(--vscode-textLink-foreground, #3794ff);
+  border-color: color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 55%, transparent);
+}
+
+.explicit-global {
+  color: var(--vscode-charts-green, #89d185);
+  border-color: color-mix(in srgb, var(--vscode-charts-green, #89d185) 55%, transparent);
+}
+
+.explicit-default {
+  color: var(--vscode-descriptionForeground, #999);
+  border-style: dashed;
 }
 
 .statusbar-setting-row .config-select {
@@ -681,6 +1274,25 @@ onMounted(() => {
   transform: translateX(21px);
 }
 
+.statusbar-setting-row .toggle-default .slider {
+  border-style: dashed;
+  background-color: var(--vscode-checkbox-background, #444);
+  border-color: var(--vscode-descriptionForeground, #999);
+}
+
+.statusbar-setting-row .toggle-default .slider::before,
+.statusbar-setting-row .toggle-default input:checked + .slider::before {
+  transform: translateX(10.5px);
+}
+
+.statusbar-setting-row .toggle-workspace .slider {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-textLink-foreground, #3794ff) 22%, transparent);
+}
+
+.statusbar-setting-row .toggle-global .slider {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vscode-charts-green, #89d185) 20%, transparent);
+}
+
 .statusbar-fullwidth-preview {
   background-color: var(--vscode-editor-background, #1e1e1e);
   border: 1px solid var(--vscode-panel-border, #333);
@@ -744,6 +1356,14 @@ onMounted(() => {
   }
 
   .group-items {
+    grid-template-columns: 1fr;
+  }
+
+  .paragraph-group-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .role-list-group-layout {
     grid-template-columns: 1fr;
   }
 }

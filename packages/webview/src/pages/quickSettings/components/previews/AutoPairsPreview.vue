@@ -5,8 +5,8 @@
       <div class="mock-content">
         <div class="mock-line">
           <span class="typed-text">{{ displayText }}</span>
-          <span class="closing-char" :class="{ visible: showClosing }">{{ closingChar }}</span>
           <span class="cursor" :class="{ visible: showCursor }">|</span>
+          <span class="closing-char" :class="{ visible: showClosing }">{{ closingChar }}</span>
         </div>
         <div v-if="secondLine" class="mock-line second-line">{{ secondLine }}</div>
         <div v-if="thirdLine" class="mock-line third-line">{{ thirdLine }}</div>
@@ -75,7 +75,7 @@ function runDemo() {
     }, 800)
 
     schedule(() => {
-      showCursor.value = false
+      showCursor.value = true
       stepLabel.value = '光标在括号之间'
     }, 1600)
 

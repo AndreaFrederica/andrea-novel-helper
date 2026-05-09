@@ -467,6 +467,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
             const wrapColumn = cfg.get<number>('roles.details.wrapColumn', 20) || 20;
             const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+            const enableWrapping = cfg.get<boolean>('roles.details.enableWrapping', true);
             const useRoleSvgIfPresent = cfg.get<boolean>('docRoles.display.useRoleSvgIfPresent', false);
             const colorizeRoleName = cfg.get<boolean>('docRoles.display.colorizeRoleName', false);
 
@@ -501,6 +502,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                     label: '$(word-wrap) 详情折行列数',
                     description: `当前：${wrapColumn} 列（5-200）`,
                     action: 'wrapColumn'
+                },
+                {
+                    label: `${enableWrapping ? '$(check)' : '$(circle-slash)'} 启用详情折行`,
+                    description: enableWrapping ? '开启：普通长文本按列宽折行，路径等字段仍保持单行' : '关闭：详情长文本保持单行',
+                    action: 'toggleWrapping'
                 },
                 {
                     label: `${enableRoleExpansion ? '$(check)' : '$(circle-slash)'} 允许角色展开详情`,
@@ -631,6 +637,12 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                         vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
                         break;
                     }
+                    case 'toggleWrapping': {
+                        await cfg.update('roles.details.enableWrapping', !enableWrapping, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`角色详情折行已${!enableWrapping ? '启用' : '禁用'}`);
+                        vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+                        break;
+                    }
                     case 'toggleUseRoleSvg': {
                         await cfg.update('docRoles.display.useRoleSvgIfPresent', !useRoleSvgIfPresent, vscode.ConfigurationTarget.Workspace);
                         vscode.window.showInformationMessage(`当前文章角色：使用角色 svg 图标已${!useRoleSvgIfPresent ? '启用' : '禁用'}`);
@@ -671,6 +683,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
             const useCustomGroups = cfg.get<boolean>(`${base}.useCustomGroups`, false);
             const wrapColumn = cfg.get<number>('roles.details.wrapColumn', 20) || 20;
             const enableRoleExpansion = cfg.get<boolean>('roles.details.enableRoleExpansion', true);
+            const enableWrapping = cfg.get<boolean>('roles.details.enableWrapping', true);
             const colorizeRoleName = cfg.get<boolean>(`${base}.display.colorizeRoleName`, false);
 
             const choices = [
@@ -685,6 +698,7 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                 { label: '$(list-tree) 第一级别分组', description: primaryGroup === 'affiliation' ? '当前：归属优先' : '当前：类型优先', action: 'primaryGroup' },
                 { label: `${useCustomGroups ? '$(check)' : '$(circle-slash)'} 自定义分组`, description: useCustomGroups ? '使用自定义规则' : '使用标准分组', action: 'useCustomGroups' },
                 { label: '$(word-wrap) 详情折行列数', description: `当前：${wrapColumn} 列（5-200）`, action: 'wrapColumn' },
+                { label: `${enableWrapping ? '$(check)' : '$(circle-slash)'} 启用详情折行`, description: enableWrapping ? '开启：普通长文本按列宽折行，路径等字段仍保持单行' : '关闭：详情长文本保持单行', action: 'toggleWrapping' },
                 { label: `${enableRoleExpansion ? '$(check)' : '$(circle-slash)'} 允许角色展开详情`, description: enableRoleExpansion ? '开启：角色节点可展开查看属性' : '关闭：角色节点不可展开', action: 'toggleRoleExpansion' },
                 { label: `${colorizeRoleName ? '$(check)' : '$(circle-slash)'} 用角色颜色标记名称`, description: colorizeRoleName ? '开启：名称前显示角色颜色方块' : '关闭：不显示颜色方块', action: 'toggleColorizeName' },
                 { label: '$(edit) 管理自定义分组规则', description: '添加、编辑或删除规则（针对 allRoles.* 或 docRoles.*，取决于同步开关）', action: 'manageCustomGroups' },
@@ -770,6 +784,11 @@ export function registerQuickSettings(context: vscode.ExtensionContext, onRefres
                     case 'toggleRoleExpansion': {
                         await cfg.update('roles.details.enableRoleExpansion', !enableRoleExpansion, vscode.ConfigurationTarget.Workspace);
                         vscode.window.showInformationMessage(`角色展开已${!enableRoleExpansion ? '启用' : '禁用'}`);
+                        break;
+                    }
+                    case 'toggleWrapping': {
+                        await cfg.update('roles.details.enableWrapping', !enableWrapping, vscode.ConfigurationTarget.Workspace);
+                        vscode.window.showInformationMessage(`角色详情折行已${!enableWrapping ? '启用' : '禁用'}`);
                         break;
                     }
                     case 'toggleColorizeName': {

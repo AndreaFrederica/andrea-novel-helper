@@ -134,6 +134,31 @@
       <!-- <q-page > -->
       <q-scroll-area class="fit editor-scroll-area">
         <div class="column q-gutter-y-md q-px-md q-py-md index-page-content">
+          <div class="editor-mode-toolbar row items-center justify-between q-gutter-sm">
+            <div class="row items-center q-gutter-sm">
+              <q-icon name="view_list" size="20px" />
+              <div class="text-subtitle2">角色编辑布局</div>
+            </div>
+            <q-btn-toggle
+              v-model="roleEditorUiMode"
+              dense
+              unelevated
+              toggle-color="primary"
+              :options="roleEditorUiModeOptions"
+            />
+          </div>
+
+          <random-role-generator
+            :cultures="nameGeneratorState.cultures"
+            :candidates="nameGeneratorState.candidates"
+            :loading-options="nameGeneratorState.loadingOptions"
+            :generating="nameGeneratorState.generating"
+            :error="nameGeneratorState.error"
+            @request-options="requestNameGeneratorOptions"
+            @generate="generateRandomRoleCandidates"
+            @add-role="addGeneratedRole"
+          />
+
           <!-- 每个角色卡放入可折叠容器，容器 header 包含删除按钮；默认展开 -->
           <q-expansion-item
             v-for="(r, idx) in roles"
@@ -153,7 +178,15 @@
             </template>
 
             <div :ref="(el) => setRoleRef(r.id, el as HTMLElement)">
+              <role-card-table
+                v-if="roleEditorUiMode === 'table'"
+                v-model="roles[idx]!"
+                @changed="(e) => onChanged(idx, e)"
+                @type-changed="(e) => onTypeChanged(idx, e)"
+                @request-lookup-candidates="(e) => onRequestLookupCandidates(idx, e)"
+              />
               <role-card
+                v-else
                 v-model="roles[idx]!"
                 @changed="(e) => onChanged(idx, e)"
                 @type-changed="(e) => onTypeChanged(idx, e)"
@@ -265,9 +298,12 @@ const $q = useQuasar();
 const isDark = computed(() => $q.dark.isActive);
 
 import RoleCard from '../components/RoleCard.vue';
+import RoleCardTable from '../components/RoleCardTable.vue';
+import RandomRoleGenerator from '../components/RandomRoleGenerator.vue';
 import type { RoleCardModel } from '../../types/role';
 
 type RoleWithId = RoleCardModel & { id: string };
+type RoleEditorUiMode = 'table' | 'classic';
 type LookupCandidateKind = 'pinyin' | 'romanized';
 type LookupKeyField = 'lookupKeys_pinyin' | 'lookupKeys_romanized';
 
@@ -288,7 +324,28 @@ interface LookupCandidateRequestPayload {
   snapshot: RoleCardModel;
 }
 
+interface NameGeneratorCulture {
+  code: string;
+  displayName: string;
+  supportedGenders: string[];
+  supportedStyles: string[];
+}
+
+type GeneratedRoleCandidate = RoleCardModel & { id: string };
+
 const drawerOpen = ref(true);
+const roleEditorUiModeStorageKey = 'andrea.roleCardEditor.uiMode';
+const roleEditorUiMode = ref<RoleEditorUiMode>(
+  window.localStorage.getItem(roleEditorUiModeStorageKey) === 'classic' ? 'classic' : 'table',
+);
+const roleEditorUiModeOptions = [
+  { label: '表格', value: 'table' },
+  { label: '经典', value: 'classic' },
+];
+
+watch(roleEditorUiMode, (value) => {
+  window.localStorage.setItem(roleEditorUiModeStorageKey, value);
+});
 
 // 是否已拿到 roleCards（视为就绪）
 const rolesReady = ref(false);
@@ -327,6 +384,15 @@ const lookupCandidateDialog = reactive({
   title: '',
   candidates: [] as LookupCandidateItem[],
   selectedValue: '',
+  error: '',
+});
+
+const nameGeneratorState = reactive({
+  cultures: [] as NameGeneratorCulture[],
+  candidates: [] as GeneratedRoleCandidate[],
+  loadingOptions: false,
+  generating: false,
+  requestId: '',
   error: '',
 });
 
@@ -539,6 +605,32 @@ window.addEventListener('message', (event: MessageEvent) => {
     }
     return;
   }
+
+  if (msg.type === 'nameGeneratorOptions') {
+    nameGeneratorState.loadingOptions = false;
+    nameGeneratorState.cultures = Array.isArray(msg.cultures)
+      ? (msg.cultures as unknown[]).filter((culture: unknown): culture is NameGeneratorCulture => {
+          return Boolean(
+            culture &&
+              typeof (culture as NameGeneratorCulture).code === 'string' &&
+              typeof (culture as NameGeneratorCulture).displayName === 'string' &&
+              Array.isArray((culture as NameGeneratorCulture).supportedStyles),
+          );
+        })
+      : [];
+    nameGeneratorState.error = '';
+    return;
+  }
+
+  if (msg.type === 'randomRoleCandidates' && typeof msg.requestId === 'string') {
+    if (msg.requestId !== nameGeneratorState.requestId) return;
+    nameGeneratorState.generating = false;
+    nameGeneratorState.error = typeof msg.error === 'string' ? msg.error : '';
+    nameGeneratorState.candidates = Array.isArray(msg.candidates)
+      ? (msg.candidates as GeneratedRoleCandidate[]).filter(candidate => Boolean(candidate?.base?.name))
+      : [];
+    return;
+  }
 });
 
 function buildLookupRequestId(): string {
@@ -626,6 +718,45 @@ function applySelectedLookupCandidate() {
   });
 }
 
+function requestNameGeneratorOptions() {
+  if (!vscodeApi?.postMessage) {
+    nameGeneratorState.error = '当前环境无法连接扩展后端。';
+    return;
+  }
+  nameGeneratorState.loadingOptions = true;
+  nameGeneratorState.error = '';
+  vscodeApi.postMessage({ type: 'requestNameGeneratorOptions' });
+}
+
+function generateRandomRoleCandidates(options: Record<string, unknown>) {
+  if (!vscodeApi?.postMessage) {
+    nameGeneratorState.error = '当前环境无法连接扩展后端。';
+    return;
+  }
+  nameGeneratorState.generating = true;
+  nameGeneratorState.error = '';
+  nameGeneratorState.requestId = `role-name-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  vscodeApi.postMessage({
+    type: 'generateRandomRoleCandidates',
+    requestId: nameGeneratorState.requestId,
+    options,
+  });
+}
+
+function addGeneratedRole(candidate: GeneratedRoleCandidate) {
+  const role: RoleWithId = {
+    ...JSON.parse(JSON.stringify(candidate)),
+    id: genId(),
+  };
+  role.base ??= { name: '', type: '配角' };
+  role.base.uuid ||= generateUUIDv7();
+  roles.value.push(role);
+  void nextTick(() => {
+    open(role.id);
+    scrollToRole(role.id);
+  });
+}
+
 function notifySave() {
   if (applyingRemote) return;
   try {
@@ -639,7 +770,10 @@ function notifySave() {
 }
 
 onMounted(() => {
-  if (vscodeApi?.postMessage) vscodeApi.postMessage({ type: 'requestRoleCards' });
+  if (vscodeApi?.postMessage) {
+    vscodeApi.postMessage({ type: 'requestRoleCards' });
+    requestNameGeneratorOptions();
+  }
 });
 
 // 深度监听 roles，去抖后发送保存
@@ -866,6 +1000,17 @@ onUnmounted(() => {
 /* 值预览区域等宽字体 + 截断 */
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+.editor-mode-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+  background: var(--vscode-editor-background, rgba(255, 255, 255, 0.94));
 }
 
 .lookup-candidate-card {

@@ -5,6 +5,7 @@ import { labelForRoleKey } from '../../utils/i18n';
 import { iconForRoleKey } from '../../utils/roleKeyIcons';
 import { Role } from '../../extension';
 import { getDocumentRolesModel } from './docRolesModel';
+import { roleDetailNeedsExpansion, splitRoleDetailLines } from './roleDetailWrapping';
 
 // ---- Persist expanded state per document for docRolesView ----
 const EXPAND_BY_DOC_KEY = 'docRolesView.expandedByDoc';
@@ -146,8 +147,7 @@ class DocRoleTreeItem extends vscode.TreeItem {
 			const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 			const always = cfg.get<boolean>('roles.details.alwaysExpandable', true);
 			if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
-			const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
-			const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
+			const needsExpand = roleDetailNeedsExpansion(dn.key, dn.full, cfg);
 			return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
 		}
 		if (n.kind === 'detailLine') { return vscode.TreeItemCollapsibleState.None; }
@@ -340,15 +340,7 @@ class DocRolesProvider implements vscode.TreeDataProvider<AnyNode> {
 	private buildDetailLines(dn: DetailNode): DetailLineNode[] {
 		const full = dn.full ?? dn.value;
 		const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-		const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
-		const lines: string[] = [];
-		const pushWrapped = (s: string) => {
-			const width = wrapCol;
-			if (s.length <= width) { lines.push(s); return; }
-			let i = 0;
-			while (i < s.length) { lines.push(s.slice(i, i + width)); i += width; }
-		};
-		if (full.includes('\n')) { for (const part of full.split(/\r?\n/)) { pushWrapped(part); } } else { pushWrapped(full); }
+		const lines = splitRoleDetailLines(dn.key, full, cfg);
 		// attach parent key so TreeItem can know field name when rendering
 		return lines.map((val, idx) => ({ kind:'detailLine', key: idx === 0 ? '…' : '  ', value: val, roleName: dn.roleName, parentKey: dn.key } as DetailLineNode & { parentKey?: string }));
 	}

@@ -112,8 +112,11 @@ export function buildHtml(webview: vscode.Webview, opts: { spaRoot: vscode.Uri; 
     
     // 如果指定了路由，注入路由信息
     if (opts.route) {
-        const routeScript = `<script>window.__vscode_initial_route__ = "${opts.route}";</script>`;
+        const routeScript = `<script>window.__vscode_initial_route__ = "${opts.route}"; window.__vscode_language__ = "${vscode.env.language}";</script>`;
         html = html.replace(/<head([^>]*)>/i, `<head$1>\n${routeScript}`);
+    } else {
+        const languageScript = `<script>window.__vscode_language__ = "${vscode.env.language}";</script>`;
+        html = html.replace(/<head([^>]*)>/i, `<head$1>\n${languageScript}`);
     }
     
     html = addBaseTag(html);

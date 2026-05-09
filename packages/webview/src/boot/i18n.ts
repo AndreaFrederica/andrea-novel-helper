@@ -22,8 +22,17 @@ declare module 'vue-i18n' {
 /* eslint-enable @typescript-eslint/no-empty-object-type */
 
 export default defineBoot(({ app }) => {
+  const rawLanguage = (
+    (window as unknown as { __vscode_language__?: string }).__vscode_language__ ||
+    document.documentElement.lang ||
+    navigator.language ||
+    'en-US'
+  ).toLowerCase();
+  const locale = rawLanguage.startsWith('zh') ? 'zh-CN' : 'en-US';
+
   const i18n = createI18n<{ message: MessageSchema }, MessageLanguages>({
-    locale: 'en-US',
+    locale,
+    fallbackLocale: 'en-US',
     legacy: false,
     messages,
   });

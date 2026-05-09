@@ -419,6 +419,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
         showColorOnValueConfigKey: 'package.roleNodes.details.showColorOnValue',
         enableRoleExpansionConfigKey: 'package.roleNodes.details.enableRoleExpansion',
         alwaysExpandableConfigKey: 'package.roleNodes.details.alwaysExpandable',
+        enableWrappingConfigKey: 'package.roleNodes.details.enableWrapping',
         wrapColumnConfigKey: 'package.roleNodes.details.wrapColumn'
     });
 

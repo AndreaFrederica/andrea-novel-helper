@@ -2,7 +2,7 @@
   "name": "andrea-novel-helper",
   "displayName": "Novel Helper 小说助手 (Andrea Novel Helper)",
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -1732,7 +1732,9 @@
             "‘’",
             "「」",
             "『』",
-            "《》"
+            "《》",
+            "〈〉",
+            "（）"
           ],
           "items": {
             "type": "string"
@@ -2084,7 +2086,8 @@
           "anhName": "完全使用 VSCode 托管的禁用系统",
           "type": "boolean",
           "default": false,
-          "description": "%config.useVsCodeManagedDisabling.description%"
+          "description": "%config.useVsCodeManagedDisabling.description%",
+          "markdownDescription": "开启后扩展不再读取 Andrea Novel Helper 自己的“禁用/工作区禁用”配置，只按 VS Code 扩展管理里的启用/禁用状态决定是否运行。适合希望完全通过 VS Code 内置禁用系统控制插件生效范围的场景。"
         },
         "AndreaNovelHelper.markdownToolbarEnabled": {
           "anhName": "启用Markdown工具栏",
@@ -2566,6 +2569,12 @@
           "default": false,
           "markdownDescription": "%config.lookupKeys.autoGenerateRomanized.description%"
         },
+        "AndreaNovelHelper.lookupKeys.useLlmRomanization": {
+          "anhName": "罗马字查询键使用 LLM",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.lookupKeys.useLlmRomanization.description%"
+        },
         "AndreaNovelHelper.defaultRoleLookupKeys": {
           "anhName": "默认角色索引键",
           "type": "array",
@@ -2609,6 +2618,12 @@
           "anhName": "总是可展开",
           "markdownDescription": "角色属性详情是否总是可展开；开启后所有属性行都能展开为多行显示。"
         },
+        "AndreaNovelHelper.roles.details.enableWrapping": {
+          "type": "boolean",
+          "default": true,
+          "anhName": "启用角色详情折行",
+          "markdownDescription": "是否在角色属性详情展开后按列宽进行软折行。关闭后长文本保持单行显示；路径、URI、UUID、正则、SVG/图标等字段始终不会按列宽硬折行。"
+        },
         "AndreaNovelHelper.roles.details.wrapColumn": {
           "type": "number",
           "default": 20,
@@ -2634,6 +2649,12 @@
           "default": true,
           "anhName": "包管理器角色详情总是可展开",
           "markdownDescription": "包管理器的文件子角色节点中，角色属性详情是否总是可展开。"
+        },
+        "AndreaNovelHelper.package.roleNodes.details.enableWrapping": {
+          "type": "boolean",
+          "default": true,
+          "anhName": "包管理器角色详情启用折行",
+          "markdownDescription": "是否在包管理器的角色详情展开后按列宽进行软折行。关闭后长文本保持单行显示；路径、URI、UUID、正则、SVG/图标等字段始终不会按列宽硬折行。"
         },
         "AndreaNovelHelper.package.roleNodes.details.wrapColumn": {
           "type": "number",

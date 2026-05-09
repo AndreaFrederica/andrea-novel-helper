@@ -271,7 +271,9 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
             const minimum = schema.minimum ;
             const maximum = schema.maximum ;
             const enumValues = schema.enum ;
-            const enumDescriptions = schema.enumDescriptions ;
+            const enumDescriptions = Array.isArray(schema.enumDescriptions)
+                ? schema.enumDescriptions.map((item: string) => this.getConfigl10n(item))
+                : schema.enumDescriptions ;
 
             // 构建配置项
             const configItem = {
@@ -345,7 +347,59 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
             'AndreaNovelHelper.timeStats.milestone.targets',
             'AndreaNovelHelper.timeStats.milestone.notificationType',
 
-            // 5. 角色显示配置 - 当前文章角色（docRoles）
+            // 5. AI 翻译配置
+            'AndreaNovelHelper.translate.targets',
+            'AndreaNovelHelper.translate.defaultTarget',
+            'AndreaNovelHelper.translate.alwaysUseDefaultTarget',
+            'AndreaNovelHelper.translate.defaultAction',
+            'AndreaNovelHelper.translate.alwaysUseDefaultAction',
+
+            // 6. 错别字检查配置
+            'AndreaNovelHelper.typo.enabled',
+            'AndreaNovelHelper.typo.mode',
+            'AndreaNovelHelper.typo.service.baseUrl',
+            'AndreaNovelHelper.typo.autoIdentifyOnOpen',
+            'AndreaNovelHelper.typo.autoScanOnChange',
+            'AndreaNovelHelper.typo.suppressRolesMode',
+            'AndreaNovelHelper.typo.batchSize',
+            'AndreaNovelHelper.typo.docConcurrency',
+            'AndreaNovelHelper.typo.docGroupSize',
+            'AndreaNovelHelper.typo.timeoutMs',
+            'AndreaNovelHelper.typo.enableHighlight',
+            'AndreaNovelHelper.typo.highlightColor',
+            'AndreaNovelHelper.typo.warningLevel',
+            'AndreaNovelHelper.typo.applyPartialDecorationsImmediately',
+            'AndreaNovelHelper.typo.persistence.enabled',
+            'AndreaNovelHelper.typo.persistence.autoCleanup',
+            'AndreaNovelHelper.typo.persistence.maxAgeDays',
+            'AndreaNovelHelper.typo.keepCacheOnClose',
+            'AndreaNovelHelper.typo.maxDocs',
+            'AndreaNovelHelper.timeStats.typoDelay.enabled',
+            'AndreaNovelHelper.timeStats.typoDelay.windowMs',
+
+            // 7. AI / LLM 错别字配置
+            'AndreaNovelHelper.typo.clientLLM.enabled',
+            'AndreaNovelHelper.typo.clientLLM.apiBase',
+            'AndreaNovelHelper.typo.clientLLM.apiKey',
+            'AndreaNovelHelper.typo.clientLLM.model',
+            'AndreaNovelHelper.typo.clientLLM.temperature',
+            'AndreaNovelHelper.typo.clientLLM.enableThinking',
+            'AndreaNovelHelper.typo.clientLLM.thinkingProvider',
+            'AndreaNovelHelper.typo.clientLLM.customThinkingEnabled',
+            'AndreaNovelHelper.typo.clientLLM.customThinkingEnabledValue',
+            'AndreaNovelHelper.typo.clientLLM.customThinkingDisabledValue',
+            'AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod',
+            'AndreaNovelHelper.typo.clientLLM.geminiThinkingBudget',
+            'AndreaNovelHelper.typo.clientLLM.geminiApiFormat',
+            'AndreaNovelHelper.typo.llm.model',
+            'AndreaNovelHelper.typo.llm.apiBase',
+            'AndreaNovelHelper.typo.llm.apiKey',
+            'AndreaNovelHelper.typo.debug.llmTrace',
+            'AndreaNovelHelper.typo.debug.serverTrace',
+            'AndreaNovelHelper.typo.debug.compactTrace',
+            'AndreaNovelHelper.typo.debug.traceMaxLen',
+
+            // 8. 角色显示配置 - 当前文章角色（docRoles）
             'AndreaNovelHelper.docRoles.groupBy',
             'AndreaNovelHelper.docRoles.respectAffiliation',
             'AndreaNovelHelper.docRoles.respectType',
@@ -355,7 +409,7 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
             'AndreaNovelHelper.docRoles.display.colorizeRoleName',
             'AndreaNovelHelper.docRoles.customGroups',
 
-            // 5. 角色显示配置 - 全部角色（allRoles）
+            // 9. 角色显示配置 - 全部角色（allRoles）
             'AndreaNovelHelper.allRoles.syncWithDocRoles',
             'AndreaNovelHelper.allRoles.groupBy',
             'AndreaNovelHelper.allRoles.respectAffiliation',
@@ -365,15 +419,29 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
             'AndreaNovelHelper.allRoles.display.colorizeRoleName',
             'AndreaNovelHelper.allRoles.customGroups',
 
-            // 5. 角色显示配置 - 角色详情显示
-            'roles.details.wrapColumn',
-            'roles.details.enableRoleExpansion',
+            // 10. 包管理器行为与角色节点显示
+            'AndreaNovelHelper.package.dragDefaultAction',
+            'AndreaNovelHelper.package.iconStyle',
+            'AndreaNovelHelper.package.roleNodes.display.useRoleSvgIfPresent',
+            'AndreaNovelHelper.package.roleNodes.display.colorizeRoleName',
+            'AndreaNovelHelper.package.roleNodes.details.showColorOnValue',
+            'AndreaNovelHelper.package.roleNodes.details.alwaysExpandable',
+            'AndreaNovelHelper.package.roleNodes.details.enableRoleExpansion',
+            'AndreaNovelHelper.package.roleNodes.details.enableWrapping',
+            'AndreaNovelHelper.package.roleNodes.details.wrapColumn',
 
-            // 6. 其他功能配置
+            // 11. 角色显示配置 - 角色详情显示
+            'AndreaNovelHelper.roles.details.alwaysExpandable',
+            'AndreaNovelHelper.roles.details.enableWrapping',
+            'AndreaNovelHelper.roles.details.wrapColumn',
+            'AndreaNovelHelper.roles.details.enableRoleExpansion',
+
+            // 12. 其他功能配置
+            'AndreaNovelHelper.useVsCodeManagedDisabling',
             'AndreaNovelHelper.smartTabGroupLock.enabled',
             'AndreaNovelHelper.autoGit.compactStatus',
 
-            // 7. 按键绑定相关 - 智能回车按键绑定配置
+            // 13. 按键绑定相关 - 智能回车按键绑定配置
             'markdown.extension.onEnterKey',
             'andrea.smartEnter'
         ];

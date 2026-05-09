@@ -4,4 +4,13 @@
 export default {
   failed: 'Action failed',
   success: 'Action was successful',
+  quickSettings: {
+    roleListPreview: {
+      allRoles: 'All Roles',
+      other: 'Other',
+      specialRoot: 'Special Types',
+      synced: 'Using document role settings',
+      ungrouped: 'Ungrouped',
+    },
+  },
 };

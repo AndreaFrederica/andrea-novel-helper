@@ -5,6 +5,7 @@ import { iconForRoleKey } from '../../utils/roleKeyIcons';
 import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
 import { buildRoleMarkdown } from '../hoverProvider';
+import { roleDetailNeedsExpansion, splitRoleDetailLines } from './roleDetailWrapping';
 
 // 与 docRolesModel 对齐的分组结构
 interface RoleHierarchyTypeGroup { type: string; roles: Role[]; }
@@ -36,6 +37,7 @@ export interface RoleTreeRenderOptions {
     showColorOnValueConfigKey?: string;
     enableRoleExpansionConfigKey?: string;
     alwaysExpandableConfigKey?: string;
+    enableWrappingConfigKey?: string;
     wrapColumnConfigKey?: string;
 }
 
@@ -239,10 +241,7 @@ export class RoleTreeItem extends vscode.TreeItem {
                 : cfg.get<boolean>('roles.details.alwaysExpandable', true);
             if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
 
-            const wrapCol = Math.max(5, Math.min(200, renderOptions.wrapColumnConfigKey
-                ? (cfg.get<number>(renderOptions.wrapColumnConfigKey, 20) || 20)
-                : (cfg.get<number>('roles.details.wrapColumn', 20) || 20)));
-            const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
+            const needsExpand = roleDetailNeedsExpansion(dn.key, dn.full, cfg, renderOptions);
             return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
         if (node.kind === 'detailLine') { return vscode.TreeItemCollapsibleState.None; }
@@ -270,10 +269,7 @@ export class RoleTreeItem extends vscode.TreeItem {
                 ? cfg.get<boolean>(this.renderOptions.alwaysExpandableConfigKey, true)
                 : cfg.get<boolean>('roles.details.alwaysExpandable', true);
             if (always) { return vscode.TreeItemCollapsibleState.Collapsed; }
-            const wrapCol = Math.max(5, Math.min(200, this.renderOptions.wrapColumnConfigKey
-                ? (cfg.get<number>(this.renderOptions.wrapColumnConfigKey, 20) || 20)
-                : (cfg.get<number>('roles.details.wrapColumn', 20) || 20)));
-            const needsExpand = !!dn.full && (dn.full.includes('\n') || dn.full.length > wrapCol);
+            const needsExpand = roleDetailNeedsExpansion(dn.key, dn.full, cfg, this.renderOptions);
             return needsExpand ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
         }
         if (node.kind === 'detailLine') { return vscode.TreeItemCollapsibleState.None; }
@@ -541,24 +537,9 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
     private buildDetailLines(dn: DetailNode): DetailLineNode[] {
         const full = dn.full ?? dn.value;
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const wrapCol = Math.max(5, Math.min(200, cfg.get<number>('roles.details.wrapColumn', 20) || 20));
-        const lines: string[] = [];
-        const pushWrapped = (s: string) => {
-            const width = wrapCol;
-            if (s.length <= width) { lines.push(s); return; }
-            let i = 0;
-            while (i < s.length) {
-                lines.push(s.slice(i, i + width));
-                i += width;
-            }
-        };
-        if (full.includes('\n')) {
-            for (const part of full.split(/\r?\n/)) { pushWrapped(part); }
-        } else {
-            pushWrapped(full);
-        }
-    // attach parent key so TreeItem can know field name when rendering
-    return lines.map((val, idx) => ({ kind:'detailLine', key: idx === 0 ? '…' : '  ', value: val, roleName: dn.roleName, parentKey: dn.key } as DetailLineNode & { parentKey?: string }));
+        const lines = splitRoleDetailLines(dn.key, full, cfg, this.renderOptions);
+        // attach parent key so TreeItem can know field name when rendering
+        return lines.map((val, idx) => ({ kind:'detailLine', key: idx === 0 ? '…' : '  ', value: val, roleName: dn.roleName, parentKey: dn.key } as DetailLineNode & { parentKey?: string }));
     }
 
     private buildHierarchy(): AnyNode[] {

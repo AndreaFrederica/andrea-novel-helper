@@ -6,68 +6,17 @@ export class QuickSettingsPanel {
     private static _instance: QuickSettingsPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
+    private readonly _context: vscode.ExtensionContext;
     private _disposables: vscode.Disposable[] = [];
     private _settingsProvider?: SettingsWebviewProvider;
+    private _wizardPromptInFlight = false;
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
         this._panel = panel;
         this._extensionUri = extensionUri;
+        this._context = context;
 
-        const mockContext: vscode.ExtensionContext = {
-            extensionUri,
-            subscriptions: [],
-            globalState: {
-                get: () => undefined,
-                update: () => Promise.resolve(),
-                keys: () => []
-            } as any,
-            workspaceState: {
-                get: () => undefined,
-                update: () => Promise.resolve(),
-                keys: () => []
-            } as any,
-            secrets: {
-                get: () => Promise.resolve(undefined),
-                store: () => Promise.resolve(),
-                delete: () => Promise.resolve(),
-                onDidChange: () => ({ dispose: () => {} })
-            } as any,
-            extensionPath: '',
-            storageUri: vscode.Uri.file(''),
-            globalStorageUri: vscode.Uri.file(''),
-            storagePath: '',
-            globalStoragePath: '',
-            logUri: vscode.Uri.file(''),
-            logPath: '',
-            environmentVariableCollection: {
-                persistent: true,
-                description: '',
-                replace: () => undefined,
-                append: () => undefined,
-                get: () => undefined,
-                getScoped: () => undefined,
-                prepend: () => undefined,
-                delete: () => undefined,
-                forEach: () => undefined,
-                clear: () => undefined,
-                [Symbol.iterator]: function*() {}
-            } as any,
-            extensionMode: vscode.ExtensionMode.Production,
-            extension: {
-                id: '',
-                extensionUri: vscode.Uri.file(''),
-                extensionPath: '',
-                isActive: true,
-                packageJSON: {},
-                extensionKind: vscode.ExtensionKind.UI,
-                exports: undefined,
-                activate: undefined as any
-            } as any,
-            asAbsolutePath: (relativePath: string) => relativePath,
-            languageModelAccessInformation: undefined as any
-        };
-
-        this._settingsProvider = new SettingsWebviewProvider(mockContext);
+        this._settingsProvider = new SettingsWebviewProvider(context);
         this._settingsProvider.setExternalWebview(this._panel.webview);
 
         this._update();
@@ -87,6 +36,11 @@ export class QuickSettingsPanel {
                 }
                 if (message.command === 'runCommand' && message.commandId) {
                     await vscode.commands.executeCommand(message.commandId);
+                    return;
+                }
+                if (message.command === 'getSettings' && this._settingsProvider) {
+                    await this._settingsProvider.processMessage(message);
+                    void this._maybePromptSettingsWizard();
                     return;
                 }
                 if (this._settingsProvider) {
@@ -110,7 +64,7 @@ export class QuickSettingsPanel {
         };
     }
 
-    public static createOrShow(extensionUri: vscode.Uri): QuickSettingsPanel {
+    public static createOrShow(context: vscode.ExtensionContext): QuickSettingsPanel {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
@@ -124,17 +78,17 @@ export class QuickSettingsPanel {
             'quickSettings',
             '图形化快速设置',
             column || vscode.ViewColumn.One,
-            QuickSettingsPanel.getWebviewOptions(extensionUri)
+            QuickSettingsPanel.getWebviewOptions(context.extensionUri)
         );
 
-        QuickSettingsPanel._instance = new QuickSettingsPanel(panel, extensionUri);
+        QuickSettingsPanel._instance = new QuickSettingsPanel(panel, context.extensionUri, context);
         return QuickSettingsPanel._instance;
     }
 
-    public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): QuickSettingsPanel {
-        panel.webview.options = QuickSettingsPanel.getWebviewOptions(extensionUri);
+    public static revive(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): QuickSettingsPanel {
+        panel.webview.options = QuickSettingsPanel.getWebviewOptions(context.extensionUri);
         panel.title = '图形化快速设置';
-        QuickSettingsPanel._instance = new QuickSettingsPanel(panel, extensionUri);
+        QuickSettingsPanel._instance = new QuickSettingsPanel(panel, context.extensionUri, context);
         return QuickSettingsPanel._instance;
     }
 
@@ -172,18 +126,66 @@ export class QuickSettingsPanel {
     public postMessage(message: any) {
         this._panel.webview.postMessage(message);
     }
+
+    private async _maybePromptSettingsWizard() {
+        if (this._wizardPromptInFlight) {
+            return;
+        }
+
+        const version = String(this._context.extension.packageJSON?.version ?? 'unknown');
+        const storageKey = `andrea.quickSettings.settingsWizardPrompted.${version}`;
+        if (this._context.globalState.get<boolean>(storageKey) === true) {
+            return;
+        }
+
+        this._wizardPromptInFlight = true;
+        await this._context.globalState.update(storageKey, true);
+
+        try {
+            const hasWorkspace = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
+            const scopeItems = hasWorkspace
+                ? ['项目设置', '全局设置', '暂不使用'] as const
+                : ['全局设置', '暂不使用'] as const;
+            const scopeChoice = await vscode.window.showInformationMessage(
+                '首次打开本版本的图形化快速设置。设置向导要先调整哪一类设置？',
+                ...scopeItems
+            );
+
+            if (!scopeChoice || scopeChoice === '暂不使用') {
+                return;
+            }
+
+            const wizardChoice = await vscode.window.showInformationMessage(
+                `${scopeChoice}已选择。是否现在打开设置向导？`,
+                '打开向导',
+                '不使用'
+            );
+
+            if (wizardChoice !== '打开向导') {
+                return;
+            }
+
+            const scope = scopeChoice === '全局设置' ? 'global' : 'workspace';
+            await this._panel.webview.postMessage({
+                command: 'openSettingsWizard',
+                scope
+            });
+        } finally {
+            this._wizardPromptInFlight = false;
+        }
+    }
 }
 
 export function registerQuickSettingsPage(context: vscode.ExtensionContext): vscode.Disposable {
     const command = vscode.commands.registerCommand('andrea.openGraphicalQuickSettings', async () => {
-        QuickSettingsPanel.createOrShow(context.extensionUri);
+        QuickSettingsPanel.createOrShow(context);
     });
 
     context.subscriptions.push(command);
 
     const serializer = vscode.window.registerWebviewPanelSerializer('quickSettings', {
         async deserializeWebviewPanel(panel: vscode.WebviewPanel, _state: unknown) {
-            QuickSettingsPanel.revive(panel, context.extensionUri);
+            QuickSettingsPanel.revive(panel, context);
         }
     });
     context.subscriptions.push(serializer);

@@ -9,6 +9,10 @@ import {
     getRequestedLookupKeyCandidates,
     type LookupKeyGenerationKind,
 } from '../../utils/roleLookupKeyGeneration';
+import { nameGeneratorService } from '../../services/nameGeneratorService';
+import type { GeneratedName, NameGenerationOptions } from '../../types/names';
+import { generateRoleNameHash } from '../../utils/uuidUtils';
+import { uniqueRoleKeys } from '../../utils/roleLookupKeys';
 
 /* =========================
    类型与模型（内置转换器用）
@@ -279,6 +283,7 @@ function roleCardModelToRoleFlat(model: RoleCardModelWithId, existing?: RoleFlat
     delete (out as any).underline;
 
     setIf('affiliation', base.affiliation);
+    setIf('uuid', base.uuid);
     setIf('aliases', toStringArray(base.aliases));
     setIf('lookupKeys_pinyin', toStringArray(base.lookupKeys_pinyin));
     setIf('lookupKeys_romanized', toStringArray(base.lookupKeys_romanized));
@@ -343,6 +348,69 @@ function cardModelsToRoles(list: RoleCardModelWithId[], existingById?: Map<strin
         const keep = m.id && existingById ? existingById.get(m.id) : undefined;
         return roleCardModelToRoleFlat(m, keep);
     });
+}
+
+function buildSpellingLookupVariants(values: Array<string | undefined | null>): string[] {
+    const variants: string[] = [];
+    for (const value of values) {
+        const trimmed = value?.trim();
+        if (!trimmed || !/[A-Za-z\u00C0-\u024F]/.test(trimmed)) continue;
+
+        const noDots = trimmed.replace(/[·・]/g, ' ');
+        const noDiacritics = noDots.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+        const collapsed = noDiacritics.replace(/[\s\-_'’]+/g, '');
+        const hyphenless = noDiacritics.replace(/[\-_'’]+/g, ' ');
+
+        variants.push(trimmed, noDots, noDiacritics, hyphenless, collapsed);
+        variants.push(trimmed.toLowerCase(), noDots.toLowerCase(), noDiacritics.toLowerCase(), hyphenless.toLowerCase(), collapsed.toLowerCase());
+    }
+    return uniqueRoleKeys(variants.filter(Boolean));
+}
+
+function shouldPopulatePinyinLookup(candidate: GeneratedName): boolean {
+    const signals = [
+        candidate.origin,
+        candidate.culture,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return /(chinese|china|mandarin|pinyin|zhong|han|zh_cn|zh_tw)/.test(signals);
+}
+
+function buildGeneratedRoleCard(candidate: GeneratedName, options: NameGenerationOptions & { roleType?: string; affiliation?: string; color?: string }): RoleCardModelWithId {
+    const aliases = uniqueRoleKeys([
+        candidate.translation,
+        candidate.alternativeFullName,
+        candidate.original,
+    ].filter((value): value is string => Boolean(value?.trim() && value.trim() !== candidate.fullName)));
+    const spellingLookupKeys = buildSpellingLookupVariants([
+        candidate.fullName,
+        candidate.translation,
+        candidate.alternativeFullName,
+        candidate.original,
+        ...aliases,
+    ]);
+    const base: BaseFieldsCommon = {
+        uuid: generateRoleNameHash(candidate.fullName),
+        name: candidate.fullName,
+        type: options.roleType || '配角',
+        description: `${candidate.fullName} - ${candidate.origin}`,
+        aliases: aliases.length ? aliases : undefined,
+        lookupKeys_spelling: spellingLookupKeys.length ? spellingLookupKeys : undefined,
+        lookupKeys_romanized: spellingLookupKeys.length ? spellingLookupKeys : undefined,
+        lookupKeys_pinyin: shouldPopulatePinyinLookup(candidate) && spellingLookupKeys.length ? spellingLookupKeys : undefined,
+        affiliation: options.affiliation || undefined,
+        color: options.color || undefined,
+    };
+    return {
+        id: `generated_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        base,
+        custom: {
+            origin: 'Andrea Novel Helper - 随机生成',
+            generation_culture: candidate.culture,
+            generation_gender: candidate.gender,
+            generation_style: candidate.style,
+            generation_origin: candidate.origin,
+        },
+    };
 }
 
 /* =========================
@@ -858,6 +926,38 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
             try {
                 if (msg.type === 'requestRoleCards') {
                     await updateWebview();
+                } else if (msg.type === 'requestNameGeneratorOptions') {
+                    const cultures = nameGeneratorService.getSupportedCultures().map(culture => ({
+                        code: culture.code,
+                        displayName: culture.displayName,
+                        supportedGenders: culture.supportedGenders,
+                        supportedStyles: culture.supportedStyles,
+                    }));
+                    panel.webview.postMessage({
+                        type: 'nameGeneratorOptions',
+                        cultures,
+                    });
+                } else if (msg.type === 'generateRandomRoleCandidates') {
+                    const requestId = typeof msg.requestId === 'string' ? msg.requestId : '';
+                    const raw = msg.options && typeof msg.options === 'object' ? msg.options : {};
+                    const count = Math.max(1, Math.min(20, Number(raw.count) || 5));
+                    const gender = ['male', 'female', 'neutral', 'any'].includes(raw.gender) ? raw.gender : 'any';
+                    const options: NameGenerationOptions & { roleType?: string; affiliation?: string; color?: string } = {
+                        culture: typeof raw.culture === 'string' ? raw.culture : 'zh_CN',
+                        gender,
+                        style: typeof raw.style === 'string' ? raw.style : 'modern',
+                        count,
+                        includeSurname: true,
+                        roleType: typeof raw.roleType === 'string' ? raw.roleType : '配角',
+                        affiliation: typeof raw.affiliation === 'string' ? raw.affiliation.trim() : '',
+                        color: typeof raw.color === 'string' ? raw.color.trim() : '',
+                    };
+                    const names = await nameGeneratorService.generateNames(options);
+                    panel.webview.postMessage({
+                        type: 'randomRoleCandidates',
+                        requestId,
+                        candidates: names.map(name => buildGeneratedRoleCard(name, options)),
+                    });
                 } else if (msg.type === 'requestLookupKeyCandidates') {
                     const requestId = typeof msg.requestId === 'string' ? msg.requestId : '';
                     const kind = msg.kind === 'pinyin' || msg.kind === 'romanized'
@@ -933,6 +1033,13 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
                         type: 'lookupKeyCandidates',
                         requestId: typeof msg.requestId === 'string' ? msg.requestId : '',
                         kind: msg.kind,
+                        candidates: [],
+                        error: String(e),
+                    });
+                } else if (msg.type === 'generateRandomRoleCandidates') {
+                    panel.webview.postMessage({
+                        type: 'randomRoleCandidates',
+                        requestId: typeof msg.requestId === 'string' ? msg.requestId : '',
                         candidates: [],
                         error: String(e),
                     });

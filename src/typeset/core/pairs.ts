@@ -36,7 +36,7 @@ export function getPairsFromConfig(): Pair[] {
     }
 
     if (pairs.length === 0) {
-        pairs = parseArrayPairs(["()", "[]", "{}", "“”", "‘’", "「」", "『』", "《》"]);
+        pairs = parseArrayPairs(["()", "[]", "{}", "“”", "‘’", "「」", "『』", "《》","〈〉","（）"]);
     }
 
     const map = new Map<string, Pair>();
