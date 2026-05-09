@@ -1,0 +1,48 @@
+<div class="doc-section beginner">
+<h4>AI 与 MCP 集成是什么</h4>
+<p>ANH 可以把你的小说项目上下文开放给本机 AI 工具使用。它不会把资料上传到 ANH 的远程服务器；默认通过本机回环地址 <code>127.0.0.1</code> 提供接口，由你已经安装并信任的 AI 客户端读取。</p>
+
+<h4>你能用它做什么</h4>
+<ul>
+    <li><b>让 AI 理解项目</b> — 读取角色库、当前文档、角色出场统计和批注汇总</li>
+    <li><b>释放 Copilot 文档</b> — 把内置的项目指令、Prompt 和 Skills 写入当前工作区</li>
+    <li><b>连接外部客户端</b> — 通过 MCP stdio 代理桥连接 Claude Desktop、Continue.dev 等只支持 stdio 的工具</li>
+    <li><b>保留本地控制</b> — 是否启用、释放哪些文件、把路径配置给哪个工具，都由你手动决定</li>
+</ul>
+
+<h4>从哪里打开</h4>
+<ol>
+    <li>打开 ANH 侧栏的“包管理器”</li>
+    <li>展开顶部的“常用功能”</li>
+    <li>点击“+ Copilot 文档释放”或“+ MCP stdio 代理桥”</li>
+</ol>
+</div>
+
+<div class="doc-section pro">
+<h4>MCP HTTP 服务器</h4>
+<p>ANH 内置 MCP HTTP 服务器，供本机 AI 工具读取项目上下文。VS Code Copilot Agent Mode、Cursor 等支持 MCP 的工具可以通过项目中的 MCP 配置发现它。</p>
+<ul>
+    <li><b>本机地址</b>：<code>http://127.0.0.1:13306/mcp</code></li>
+    <li><b>传输方式</b>：StreamableHTTP，无状态模式</li>
+    <li><b>资源快照</b>：全部角色、当前活跃文档</li>
+    <li><b>工具</b>：搜索角色、查找当前文档角色、获取批注、获取项目批注汇总、获取项目角色使用统计、获取文档着色结果、读取内置 Skill 文档</li>
+</ul>
+
+<h4>Copilot 文档释放</h4>
+<p>命令 <code>andrea.copilot.exportPromptsToWorkspace</code> 会把扩展内置的 Copilot 指令与 Skills 文档写入当前工作区。常见目标包括 <code>.github/copilot-instructions.md</code> 和相关 Prompt/Skill 文件。已有文件时会询问覆盖还是跳过。</p>
+<p>这些文档用于告诉 AI：ANH 项目结构、角色格式、关系表、脚本运行时、Typst 模板等约定。它们是普通项目文件，释放后可以手动编辑并纳入版本控制。</p>
+
+<h4>MCP stdio 代理桥</h4>
+<p>命令 <code>andrea.copilot.exportMcpStdioScript</code> 会导出 <code>.vscode/andrea-mcp-stdio.js</code>。这个脚本把 stdio 客户端转接到 ANH 的本地 MCP HTTP 服务器，适合 Claude Desktop、Continue.dev 等只接受 stdio MCP 配置的工具。</p>
+<p>导出后，把脚本路径填到对应 AI 客户端的 MCP 配置里即可。脚本本身不保存你的小说内容，只负责把请求转发给本机 ANH MCP 服务。</p>
+
+<h4>安全边界</h4>
+<ul>
+    <li>ANH MCP 服务默认只监听本机地址，不主动上传小说资料</li>
+    <li>AI 客户端读取到的内容取决于你启用的客户端和它发起的请求</li>
+    <li>释放到工作区的 Copilot 文档是普通文本文件，可审查、修改或删除</li>
+    <li>如果不使用 AI 辅助，可以不释放文档，也不配置 MCP 客户端；ANH 的角色、统计、预览、排版等核心功能不依赖 AI</li>
+</ul>
+
+<div class="doc-note">涉及第三方 AI 客户端时，请按你对该客户端的信任程度配置。ANH 提供的是本机项目上下文接口，不替你决定哪些外部工具可以读取这些上下文。</div>
+</div>

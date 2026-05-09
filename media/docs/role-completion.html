@@ -31,6 +31,7 @@
     <li>按 <kbd>Ctrl+Shift+P</kbd></li>
     <li>运行 <b>Andrea Novel Helper: 为当前角色文件生成查询键</b></li>
 </ol>
+<p>也可以从包管理器顶部“常用功能”点击“+ 为当前角色文件生成查询键”。如果正在使用角色卡编辑器，可以在查询键字段旁请求拼音 / 罗马字候选，多选后直接追加。</p>
 <p>命令会把生成结果写入 <code>lookupKeys_pinyin</code> / <code>lookupKeys_romanized</code>，以后补全就能用这些查询键匹配。</p>
 
 <h4>敏感词修复</h4>
@@ -88,6 +89,7 @@
     <li>运行 <b>Andrea Novel Helper: 为当前角色文件生成查询键</b></li>
 </ol>
 <p>命令会根据角色的 <code>name</code> 和 <code>aliases</code> 生成 <code>lookupKeys_pinyin</code> 与 <code>lookupKeys_romanized</code>，并与已有字段去重合并。Markdown 文件会插入或更新 <code>### 拼音查询键</code> / <code>### 罗马字查询键</code> 字段；JSON5/OJSON5 文件会写回数组字段。</p>
+<p>角色卡编辑器内的查询键候选功能不会立刻改写整个文件，而是把候选追加到当前编辑中的角色字段；保存时再随角色卡一起写回。</p>
 <div class="doc-note">JSON5/OJSON5 执行后会被重新格式化。Markdown 会尽量保留原有结构，只更新查询键字段。</div>
 <p>前缀提取使用分词器（<code>AndreaNovelHelper.completion.segmenterType</code>：auto/intl/jieba）将光标前的文本分词，生成由长到短的候选前缀（最长 48 字符 / 8 个分词段），选择最佳匹配。分词器会自动将角色名/别名加入自定义词典，确保它们作为原子分词单元。</p>
 

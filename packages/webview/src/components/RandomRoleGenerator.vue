@@ -2,11 +2,11 @@
   <div class="random-role-generator">
     <div class="random-role-generator__header">
       <div>
-        <div class="title">随机生成角色</div>
-        <div class="subtitle">使用扩展内置名字生成系统生成角色卡草稿</div>
+        <div class="title">{{ t('roleEditor.generator.title') }}</div>
+        <div class="subtitle">{{ t('roleEditor.generator.subtitle') }}</div>
       </div>
       <q-btn dense flat round icon="refresh" :loading="loadingOptions" @click="$emit('request-options')">
-        <q-tooltip>刷新可用文化和风格</q-tooltip>
+        <q-tooltip>{{ t('roleEditor.generator.refresh') }}</q-tooltip>
       </q-btn>
     </div>
 
@@ -17,7 +17,7 @@
         outlined
         emit-value
         map-options
-        label="文化背景"
+        :label="t('roleEditor.generator.culture')"
         :options="cultureOptions"
       />
       <q-select
@@ -26,7 +26,7 @@
         outlined
         emit-value
         map-options
-        label="性别"
+        :label="t('roleEditor.generator.gender')"
         :options="genderOptions"
       />
       <q-select
@@ -35,7 +35,7 @@
         outlined
         emit-value
         map-options
-        label="风格"
+        :label="t('roleEditor.generator.style')"
         :options="styleOptions"
       />
       <q-select
@@ -44,12 +44,12 @@
         outlined
         emit-value
         map-options
-        label="角色类型"
+        :label="t('roleEditor.generator.roleType')"
         :options="roleTypeOptions"
       />
-      <q-input v-model.number="form.count" dense outlined type="number" min="1" max="20" label="候选数" />
-      <q-input v-model="form.affiliation" dense outlined label="从属" />
-      <q-input v-model="form.color" dense outlined label="颜色" placeholder="#4ea1ff">
+      <q-input v-model.number="form.count" dense outlined type="number" min="1" max="20" :label="t('roleEditor.generator.count')" />
+      <q-input v-model="form.affiliation" dense outlined :label="t('roleEditor.generator.affiliation')" />
+      <q-input v-model="form.color" dense outlined :label="t('roleEditor.generator.color')" placeholder="#4ea1ff">
         <template #append>
           <div class="color-dot" :style="{ backgroundColor: form.color || '#cccccc' }" />
         </template>
@@ -58,7 +58,7 @@
         color="primary"
         dense
         icon="casino"
-        label="生成"
+        :label="t('roleEditor.generator.generate')"
         :loading="generating"
         :disable="!form.culture || !form.style"
         @click="generate"
@@ -74,12 +74,12 @@
           <div class="candidate-text">
             <div class="candidate-name">{{ candidate.base.name }}</div>
             <div class="candidate-meta">
-              {{ candidate.base.type }} · {{ candidate.base.affiliation || '未分组' }}
+              {{ candidate.base.type }} · {{ candidate.base.affiliation || t('roleEditor.generator.ungrouped') }}
               <span v-if="candidate.base.aliases?.length"> · {{ candidate.base.aliases.join(' / ') }}</span>
             </div>
           </div>
         </div>
-        <q-btn dense flat color="primary" icon="add" label="加入" @click="$emit('add-role', candidate)" />
+        <q-btn dense flat color="primary" icon="add" :label="t('roleEditor.generator.add')" @click="$emit('add-role', candidate)" />
       </div>
     </div>
   </div>
@@ -87,6 +87,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { RoleCardModel } from '../../types/role';
 
 interface NameCultureOption {
@@ -120,6 +121,8 @@ const emit = defineEmits<{
   (e: 'add-role', role: GeneratedRoleCandidate): void;
 }>();
 
+const { t } = useI18n();
+
 const form = reactive({
   culture: 'zh_CN',
   gender: 'any',
@@ -145,13 +148,17 @@ const styleOptions = computed(() => {
 });
 
 const genderOptions = [
-  { label: '随机', value: 'any' },
-  { label: '男性', value: 'male' },
-  { label: '女性', value: 'female' },
-  { label: '中性', value: 'neutral' },
+  { label: t('roleEditor.generator.genders.any'), value: 'any' },
+  { label: t('roleEditor.generator.genders.male'), value: 'male' },
+  { label: t('roleEditor.generator.genders.female'), value: 'female' },
+  { label: t('roleEditor.generator.genders.neutral'), value: 'neutral' },
 ];
 
-const roleTypeOptions = ['主角', '配角', '联动角色'].map(value => ({ label: value, value }));
+const roleTypeOptions = [
+  { label: t('roleEditor.generator.roleTypes.protagonist'), value: '主角' },
+  { label: t('roleEditor.generator.roleTypes.supporting'), value: '配角' },
+  { label: t('roleEditor.generator.roleTypes.crossover'), value: '联动角色' },
+];
 
 watch(
   () => props.cultures,
@@ -188,13 +195,13 @@ function generate() {
 
 function getStyleLabel(style: string): string {
   const labels: Record<string, string> = {
-    modern: '现代',
-    classic: '经典',
-    fantasy: '奇幻',
-    'sci-fi': '科幻',
-    historical: '历史',
-    'high-fantasy': '高等奇幻',
-    'dark-fantasy': '黑暗奇幻',
+    modern: t('roleEditor.generator.styles.modern'),
+    classic: t('roleEditor.generator.styles.classic'),
+    fantasy: t('roleEditor.generator.styles.fantasy'),
+    'sci-fi': t('roleEditor.generator.styles.sciFi'),
+    historical: t('roleEditor.generator.styles.historical'),
+    'high-fantasy': t('roleEditor.generator.styles.highFantasy'),
+    'dark-fantasy': t('roleEditor.generator.styles.darkFantasy'),
   };
   return labels[style] || style;
 }
@@ -204,11 +211,21 @@ function getStyleLabel(style: string): string {
 .random-role-generator {
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   gap: 10px;
+  align-self: stretch;
+  height: auto;
+  min-height: unset;
+  max-height: none;
   padding: 12px;
   border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
   border-radius: 8px;
-  background: var(--vscode-editor-background, transparent);
+  color: var(--vscode-editor-foreground, inherit);
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background, transparent));
+}
+
+.random-role-generator > * {
+  flex: 0 0 auto;
 }
 
 .random-role-generator__header {
@@ -253,6 +270,10 @@ function getStyleLabel(style: string): string {
 .candidate-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-auto-rows: min-content;
+  align-items: start;
+  align-content: start;
+  flex: 0 0 auto;
   gap: 8px;
 }
 
@@ -265,6 +286,7 @@ function getStyleLabel(style: string): string {
   padding: 8px;
   border: 1px solid var(--vscode-panel-border, rgba(127, 127, 127, 0.25));
   border-radius: 6px;
+  background: var(--vscode-editor-background, transparent);
 }
 
 .candidate-main {

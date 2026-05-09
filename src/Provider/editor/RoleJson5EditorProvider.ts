@@ -624,6 +624,11 @@ function applyCsp(html: string, webview: vscode.Webview, connectSrcExtra: string
 function addBaseTag(html: string): string {
     return html.replace(/<base\s+[^>]*>/gi, '');
 }
+function injectVscodeLanguage(html: string): string {
+    const language = JSON.stringify(vscode.env.language || 'en');
+    const script = `<script>window.__vscode_language__=${language};document.documentElement.lang=${language};</script>`;
+    return html.replace(/<head([^>]*)>/i, `<head$1>\n  ${script}`);
+}
 function buildHtml(webview: vscode.Webview, opts: { spaRoot: vscode.Uri; connectSrc?: string[]; resourceMapperScriptUri?: string }): string {
     const indexHtmlUri = vscode.Uri.joinPath(opts.spaRoot, 'index.html');
     const indexHtmlPath = indexHtmlUri.fsPath;
@@ -635,8 +640,28 @@ function buildHtml(webview: vscode.Webview, opts: { spaRoot: vscode.Uri; connect
     html = fixAllAssetUrls(html, webview, opts.spaRoot);
     html = injectResourceMapper(html, webview, opts.spaRoot, opts.resourceMapperScriptUri);
     html = addBaseTag(html);
+    html = injectVscodeLanguage(html);
     html = applyCsp(html, webview, opts.connectSrc ?? ['https:', 'http:']);
     return html;
+}
+
+const ROLE_EDITOR_LOCALIZED_KEY_LABELS = 'roleEditor.localizedKeyLabels';
+
+function getRoleEditorSettings(resource?: vscode.Uri) {
+    return {
+        type: 'roleEditorSettings',
+        localizedKeyLabels: vscode.workspace
+            .getConfiguration('AndreaNovelHelper', resource)
+            .get<boolean>(ROLE_EDITOR_LOCALIZED_KEY_LABELS, true),
+        displayLanguage: vscode.env.language || 'en',
+    };
+}
+
+async function updateRoleEditorSettings(msg: any, resource?: vscode.Uri): Promise<void> {
+    if (typeof msg?.localizedKeyLabels !== 'boolean') return;
+    await vscode.workspace
+        .getConfiguration('AndreaNovelHelper', resource)
+        .update(ROLE_EDITOR_LOCALIZED_KEY_LABELS, msg.localizedKeyLabels, vscode.ConfigurationTarget.Global);
 }
 
 /* =========================
@@ -836,6 +861,7 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
 
         const updateWebview = async () => {
             try {
+                panel.webview.postMessage(getRoleEditorSettings(document.uri));
                 const validation = validateRoleJson5Text(document.getText());
                 if (!validation.ok) {
                     this.existingById.clear();
@@ -926,6 +952,11 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
             try {
                 if (msg.type === 'requestRoleCards') {
                     await updateWebview();
+                } else if (msg.type === 'requestRoleEditorSettings') {
+                    panel.webview.postMessage(getRoleEditorSettings(document.uri));
+                } else if (msg.type === 'updateRoleEditorSettings') {
+                    await updateRoleEditorSettings(msg, document.uri);
+                    panel.webview.postMessage(getRoleEditorSettings(document.uri));
                 } else if (msg.type === 'requestNameGeneratorOptions') {
                     const cultures = nameGeneratorService.getSupportedCultures().map(culture => ({
                         code: culture.code,

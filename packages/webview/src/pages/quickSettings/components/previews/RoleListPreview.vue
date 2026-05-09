@@ -62,6 +62,7 @@ interface RoleListSettings {
   respectAffiliation: boolean
   respectType: boolean
   primaryGroup: string
+  typeOrder: string[]
   useCustomGroups: boolean
   customGroups: CustomGroupRule[]
   syncWithDocRoles?: boolean
@@ -128,6 +129,8 @@ const sampleRoles: SampleRole[] = [
   { name: '顾问先生', type: '联动角色', affiliation: '外部协作', color: '#f78fb3' },
 ]
 
+const defaultRoleTypeOrder = ['主角', '主要角色', '反派', '配角', '联动角色', '词汇', '敏感词', '正则表达式', 'unknown']
+
 const effectiveSynced = computed(() => {
   return props.scope === 'allRoles' && props.settings.syncWithDocRoles === true && props.docSettings
 })
@@ -150,6 +153,7 @@ function buildHierarchy(seen: Set<SampleRole>, settings: RoleListSettings): Hier
   } = settings
   const groupBy = normalizeGroupBy(settings.groupBy)
   const primaryGroup = normalizePrimaryGroup(settings.primaryGroup)
+  const typeOrder = normalizeTypeOrder(settings.typeOrder)
 
   if (groupBy === 'none') {
     const roles = sortRoles(Array.from(seen))
@@ -157,7 +161,7 @@ function buildHierarchy(seen: Set<SampleRole>, settings: RoleListSettings): Hier
   }
 
   if (useCustomGroups && customGroups.length > 0) {
-    return buildCustomGroups(seen, customGroups, respectAffiliation, respectType)
+    return buildCustomGroups(seen, customGroups, respectAffiliation, respectType, typeOrder)
   }
 
   const map = new Map<string, Map<string, SampleRole[]>>()
@@ -189,16 +193,20 @@ function buildHierarchy(seen: Set<SampleRole>, settings: RoleListSettings): Hier
     typeMap.get(secondKey)!.push(role)
   }
 
+  const firstLevelIsType = groupBy === 'type' || (!respectAffiliation && respectType) || (groupBy === 'affiliation' && respectAffiliation && primaryGroup === 'type')
+  const secondLevelIsType = !firstLevelIsType && respectType
   const groups: HierarchyGroup[] = []
   for (const [firstKey, typeMap] of map) {
     const types: HierarchyTypeGroup[] = []
     for (const [secondKey, roles] of typeMap) {
       types.push({ type: secondKey === '' ? '__FLAT__' : secondKey, roles: sortRoles(roles) })
     }
-    types.sort((a, b) => sortText(a.type, b.type))
+    types.sort((a, b) => secondLevelIsType ? sortRoleType(a.type, b.type, typeOrder) : sortText(a.type, b.type))
     groups.push({ affiliation: firstKey, types })
   }
-  groups.sort((a, b) => sortText(a.affiliation, b.affiliation))
+  groups.sort((a, b) => firstLevelIsType
+    ? sortRoleType(a.affiliation, b.affiliation, typeOrder)
+    : sortText(a.affiliation, b.affiliation))
   return groups
 }
 
@@ -207,6 +215,7 @@ function buildCustomGroups(
   customGroups: CustomGroupRule[],
   respectAffiliation: boolean,
   respectType: boolean,
+  typeOrder: string[],
 ): HierarchyGroup[] {
   const grouped = new Map<string, SampleRole[]>()
   const other: SampleRole[] = []
@@ -235,12 +244,12 @@ function buildCustomGroups(
   if (!respectAffiliation && hasAffBased) {
     const merged = Array.from(grouped.values()).flat()
     if (!merged.length) return []
-    return [{ affiliation: t('quickSettings.roleListPreview.allRoles'), types: buildTypeGroups(merged, respectType) }]
+    return [{ affiliation: t('quickSettings.roleListPreview.allRoles'), types: buildTypeGroups(merged, respectType, typeOrder) }]
   }
 
   const result: HierarchyGroup[] = []
   for (const [name, roles] of grouped) {
-    if (roles.length) result.push({ affiliation: name, types: buildTypeGroups(roles, respectType) })
+    if (roles.length) result.push({ affiliation: name, types: buildTypeGroups(roles, respectType, typeOrder) })
   }
 
   result.sort((a, b) => {
@@ -252,7 +261,7 @@ function buildCustomGroups(
   return result
 }
 
-function buildTypeGroups(roles: SampleRole[], respectType: boolean): HierarchyTypeGroup[] {
+function buildTypeGroups(roles: SampleRole[], respectType: boolean, typeOrder: string[]): HierarchyTypeGroup[] {
   const typeMap = new Map<string, SampleRole[]>()
   for (const role of roles) {
     const type = respectType ? role.type || 'unknown' : '__FLAT__'
@@ -261,11 +270,12 @@ function buildTypeGroups(roles: SampleRole[], respectType: boolean): HierarchyTy
   }
   return Array.from(typeMap.entries())
     .map(([type, groupRoles]) => ({ type, roles: sortRoles(groupRoles) }))
-    .sort((a, b) => sortText(a.type, b.type))
+    .sort((a, b) => sortRoleType(a.type, b.type, typeOrder))
 }
 
 function renderHierarchy(groups: HierarchyGroup[], useCustomGroups: boolean): TreeGroupNode[] {
   const specialTypes = new Set(['敏感词', '词汇', '正则表达式'])
+  const typeOrder = normalizeTypeOrder(effectiveSettings.value.typeOrder)
   const nodes: TreeGroupNode[] = []
   const specialMap = new Map<string, Map<string, SampleRole[]>>()
 
@@ -307,7 +317,7 @@ function renderHierarchy(groups: HierarchyGroup[], useCustomGroups: boolean): Tr
 
   if (!useCustomGroups && specialMap.size) {
     const specialChildren: TreeChildNode[] = []
-    for (const [type, affMap] of Array.from(specialMap.entries()).sort((a, b) => sortText(a[0], b[0]))) {
+    for (const [type, affMap] of Array.from(specialMap.entries()).sort((a, b) => sortRoleType(a[0], b[0], typeOrder))) {
       for (const [affiliation, roles] of Array.from(affMap.entries()).sort((a, b) => sortText(a[0], b[0]))) {
         specialChildren.push({
           id: `special:${type}:${affiliation}`,
@@ -362,6 +372,38 @@ function sortRoles(roles: SampleRole[]): SampleRole[] {
 
 function sortText(a: string, b: string): number {
   return a.localeCompare(b, 'zh-Hans', { numeric: true, sensitivity: 'base' })
+}
+
+function normalizeTypeOrder(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : defaultRoleTypeOrder
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of raw) {
+    const text = String(item ?? '').trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    result.push(text)
+  }
+  return result.length ? result : [...defaultRoleTypeOrder]
+}
+
+function sortRoleType(a: string, b: string, typeOrder: string[]): number {
+  const ar = roleTypeRank(a, typeOrder)
+  const br = roleTypeRank(b, typeOrder)
+  if (ar !== br) return ar - br
+  return sortText(a, b)
+}
+
+function roleTypeRank(value: string, typeOrder: string[]): number {
+  const text = String(value || '').trim()
+  const exact = typeOrder.indexOf(text)
+  if (exact >= 0) return exact
+  const lower = text.toLocaleLowerCase()
+  const partial = typeOrder.findIndex(item => {
+    const token = item.toLocaleLowerCase()
+    return Boolean(token && lower.includes(token))
+  })
+  return partial >= 0 ? partial : typeOrder.length
 }
 
 function normalizeGroupBy(value: string): 'affiliation' | 'type' | 'none' {

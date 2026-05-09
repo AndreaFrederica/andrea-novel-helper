@@ -113,7 +113,7 @@ import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintena
 import { registerSettingsView } from './Provider/view/settingView'
 import { registerProjectSettingsPage } from './Provider/view/projectSettingsPage'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
-import { registerQuickSettingsPage } from './Provider/view/quickSettingsView'
+import { maybePromptFirstUseSettingsWizard, registerQuickSettingsPage } from './Provider/view/quickSettingsView'
 import { registerDocViewerPage } from './guide/docViewerPage'
 import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { registerWritingDashboardPage } from './Provider/view/writingDashboardView'
@@ -215,8 +215,16 @@ export async function activate(context: vscode.ExtensionContext) {
         registerGuidePage(context);
         registerDocViewerPage(context);
         registerWhatsNewPage(context);
+        registerQuickSettingsPage(context);
         log('项目初始化/文档向导命令已注册');
     } catch (e) { log('注册 项目初始化/文档向导命令 失败', e); }
+
+    try {
+        await maybePromptFirstUseSettingsWizard(context);
+        log('首次设置向导提示检查完成');
+    } catch (e) {
+        log('首次设置向导提示检查失败', e);
+    }
 
     registerContextKeys(context);
 
@@ -677,7 +685,6 @@ export async function activate(context: vscode.ExtensionContext) {
         registerSettingsView(context);
         registerProjectSettingsPage(context);
         registerEditorSettingsPage(context);
-        registerQuickSettingsPage(context);
         registerWritingDashboardPage(context);
         registerRoleRelationshipGraphView(context);
 
@@ -1075,10 +1082,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // 监听配置变化动态更新排序参数
         context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-            if (!orderManager) return;
             let changed = false;
             const cfg = vscode.workspace.getConfiguration();
             const affects = (k: string) => e.affectsConfiguration(k);
+            if (affects('AndreaNovelHelper.wordCount.primaryUnit') || affects('AndreaNovelHelper.wordCount.displayFormat')) {
+                changed = true;
+            }
+            if (!orderManager) {
+                if (changed) {
+                    wordCountProvider.refresh();
+                }
+                return;
+            }
             if (affects('AndreaNovelHelper.wordCount.order.step') || affects('AndreaNovelHelper.wordCount.order.padWidth') || affects('AndreaNovelHelper.wordCount.order.autoResequence')) {
                 orderManager.setOptions({
                     step: cfg.get<number>('AndreaNovelHelper.wordCount.order.step', 10),

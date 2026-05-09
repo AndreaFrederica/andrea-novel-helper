@@ -55,6 +55,50 @@ function wcDebug(...args: any[]) {
     }
 }
 
+type WordCountPrimaryUnit = 'excludePunct' | 'includePunct' | 'nonWSNoPunct';
+
+function getPrimaryUnit(): WordCountPrimaryUnit {
+    const raw = vscode.workspace
+        .getConfiguration('AndreaNovelHelper.wordCount')
+        .get<string>('primaryUnit', 'excludePunct');
+    return raw === 'includePunct' || raw === 'nonWSNoPunct' ? raw : 'excludePunct';
+}
+
+function getPrimaryWordCount(stats: TextStats): number {
+    const unit = getPrimaryUnit();
+    if (unit === 'includePunct') {
+        return stats.nonWSChars || stats.total;
+    }
+    if (unit === 'nonWSNoPunct') {
+        return stats.nonWSNoPunct || stats.total;
+    }
+    return stats.total;
+}
+
+function getPrimaryUnitLabel(): string {
+    const unit = getPrimaryUnit();
+    if (unit === 'includePunct') return '含标点';
+    if (unit === 'nonWSNoPunct') return '不含标点';
+    return '词计';
+}
+
+function formatWordCountNumber(total: number): string {
+    const mode = vscode.workspace
+        .getConfiguration()
+        .get<string>('AndreaNovelHelper.wordCount.displayFormat', 'raw');
+    switch (mode) {
+        case 'wan':
+            return total >= 10000 ? (total / 10000).toFixed(3).replace(/\.0+$/, '') + '万' : String(total);
+        case 'k':
+            return total >= 1000 ? (total / 1000).toFixed(3).replace(/\.0+$/, '') + 'k' : String(total);
+        case 'qian':
+            return total >= 1000 ? (total / 1000).toFixed(3).replace(/\.0+$/, '') + '千' : String(total);
+        case 'raw':
+        default:
+            return String(total);
+    }
+}
+
 // 新建文章/文件夹的特殊节点
 class NewItemNode extends vscode.TreeItem {
     constructor(public readonly baseDir: string, public readonly nodeType: 'newFile' | 'newFolder') {
@@ -1758,7 +1802,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
     /** 获取文件的总字数 */
     public async getFileWordCount(filePath: string): Promise<number> {
         const stats = await this.getFileStats(filePath);
-        return stats ? stats.total : 0;
+        return stats ? getPrimaryWordCount(stats) : 0;
     }
     
     /** 获取工作区根目录的总字数统计 */
@@ -1802,7 +1846,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
                 }
             }
             
-            return total.total > 0 ? total : null;
+            return getPrimaryWordCount(total) > 0 ? total : null;
         } catch {
             return null;
         }
@@ -1814,39 +1858,7 @@ export class WordCountProvider implements vscode.TreeDataProvider<WordCountItem 
         
         const stats = this.getWorkspaceTotalStats();
         if (stats) {
-            // 根据配置格式化字数（与节点显示保持一致）
-            const cfg = vscode.workspace.getConfiguration();
-            const mode = cfg.get<string>('AndreaNovelHelper.wordCount.displayFormat', 'raw');
-            const total = stats.total;
-            let formatted: string;
-            
-            switch (mode) {
-                case 'wan':
-                    if (total >= 10000) {
-                        formatted = (total / 10000).toFixed(3).replace(/\.0+$/, '') + '万';
-                    } else {
-                        formatted = String(total);
-                    }
-                    break;
-                case 'k':
-                    if (total >= 1000) {
-                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/, '') + 'k';
-                    } else {
-                        formatted = String(total);
-                    }
-                    break;
-                case 'qian':
-                    if (total >= 1000) {
-                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/, '') + '千';
-                    } else {
-                        formatted = String(total);
-                    }
-                    break;
-                case 'raw':
-                default:
-                    formatted = String(total);
-            }
-            
+            const formatted = formatWordCountNumber(getPrimaryWordCount(stats));
             this.treeView.description = `(${formatted})`;
         } else {
             this.treeView.description = '(计算中...)';
@@ -2508,31 +2520,7 @@ export class WordCountItem extends vscode.TreeItem {
             // 参考文件：不显示字数统计
             this.description = '';
         } else {
-            // 根据配置格式化字数
-            const cfg = vscode.workspace.getConfiguration();
-            const mode = cfg.get<string>('AndreaNovelHelper.wordCount.displayFormat', 'raw');
-            const total = stats.total;
-            let formatted: string;
-            switch (mode) {
-                case 'wan':
-                    if (total >= 10000) {
-                        formatted = (total / 10000).toFixed(3).replace(/\.0+$/, '') + '万';
-                    } else formatted = String(total);
-                    break;
-                case 'k':
-                    if (total >= 1000) {
-                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/, '') + 'k';
-                    } else formatted = String(total);
-                    break;
-                case 'qian':
-                    if (total >= 1000) {
-                        formatted = (total / 1000).toFixed(3).replace(/\.0+$/, '') + '千';
-                    } else formatted = String(total);
-                    break;
-                case 'raw':
-                default:
-                    formatted = String(total);
-            }
+            const formatted = formatWordCountNumber(getPrimaryWordCount(stats));
             this.description = `(${formatted})`;
             if (isDirectory && this.isResourceFolder) {
                 this.description = `🔑 ${this.description}`;
@@ -2549,7 +2537,9 @@ export class WordCountItem extends vscode.TreeItem {
             tip.appendMarkdown(`\n\n英文单词数: **${stats.words}**`);
             tip.appendMarkdown(`\n\nASCII 字符数: **${stats.asciiChars}**`);
             tip.appendMarkdown(`\n\n非空白字符数: **${stats.nonWSChars}**`);
-            tip.appendMarkdown(`\n\n**总字数**: **${stats.total}**`);
+            tip.appendMarkdown(`\n\n不含标点（词计）: **${stats.total}**`);
+            tip.appendMarkdown(`\n\n不含标点（非空白且排除标点）: **${stats.nonWSNoPunct}**`);
+            tip.appendMarkdown(`\n\n**当前显示单位（${getPrimaryUnitLabel()}）**: **${getPrimaryWordCount(stats)}**`);
             if (isDirectory && this.isResourceFolder) {
                 tip.appendMarkdown(`\n\n🔑 **已识别为资源文件夹**`);
             }

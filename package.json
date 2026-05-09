@@ -1416,6 +1416,25 @@
           "anhName": "首要分组",
           "markdownDescription": "第一级别分组（归属优先/类型优先）"
         },
+        "AndreaNovelHelper.allRoles.typeOrder": {
+          "type": "array",
+          "default": [
+            "主角",
+            "主要角色",
+            "反派",
+            "配角",
+            "联动角色",
+            "词汇",
+            "敏感词",
+            "正则表达式",
+            "unknown"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "anhName": "角色类型排序",
+          "markdownDescription": "全部角色视图中的角色类型排序。列表靠前的类型会优先显示；未列出的类型会排在后面并继续按名称自然排序。开启“同步文档角色设置”时，全部角色会复用当前文章角色的排序。"
+        },
         "AndreaNovelHelper.allRoles.customGroups": {
           "anhName": "自定义分组规则",
           "type": "array",
@@ -1580,6 +1599,25 @@
           "default": "affiliation",
           "anhName": "首要分组",
           "markdownDescription": "第一级别分组依据：**affiliation** (归属) 或 **type** (类型)"
+        },
+        "AndreaNovelHelper.docRoles.typeOrder": {
+          "type": "array",
+          "default": [
+            "主角",
+            "主要角色",
+            "反派",
+            "配角",
+            "联动角色",
+            "词汇",
+            "敏感词",
+            "正则表达式",
+            "unknown"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "anhName": "角色类型排序",
+          "markdownDescription": "当前文章角色视图中的角色类型排序。列表靠前的类型会优先显示；未列出的类型会排在后面并继续按名称自然排序。默认让“主角”显示在“配角”之前。"
         },
         "AndreaNovelHelper.docRoles.customGroups": {
           "anhName": "自定义分组规则",
@@ -1888,6 +1926,12 @@
           "type": "boolean",
           "default": true,
           "description": "是否默认使用角色卡管理器打开 JSON5 角色文件"
+        },
+        "AndreaNovelHelper.roleEditor.localizedKeyLabels": {
+          "anhName": "角色编辑器字段显示名本地化",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.roleEditor.localizedKeyLabels.markdownDescription%"
         },
         "AndreaNovelHelper.sensitiveWordsFile": {
           "anhName": "敏感词文件路径",

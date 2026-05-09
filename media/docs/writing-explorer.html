@@ -12,6 +12,7 @@
 <ul>
     <li>按<b>所属</b>（组织/阵营）分组</li>
     <li>每个所属下按<b>角色类型</b>（主角、配角等）分组</li>
+    <li>角色类型顺序可自定义，例如让“主角”固定显示在“配角”上方</li>
     <li>点击角色可以跳转到角色的定义文件</li>
     <li>展开角色可以看到详细信息（描述、别名、颜色等）</li>
 </ul>
@@ -53,6 +54,7 @@
     <li><b>详情行节点</b>（五级）— 长文本内容的换行显示</li>
 </ul>
 <p>特殊分组："词汇 / 敏感词 / 正则表达式"会聚合所有相关类型的跨所属角色。</p>
+<p>当第一级或第二级分组实际代表角色类型时，排序会读取 <code>AndreaNovelHelper.docRoles.typeOrder</code>。当该层级代表从属/阵营时，仍按中文自然顺序排序，避免类型排序误影响从属分组。</p>
 
 <p><b>功能：</b></p>
 <ul>
@@ -66,6 +68,7 @@
 <p><b>配置项：</b></p>
 <ul>
     <li><code>docRoles.useCustomGroups</code> — 自定义分组模式</li>
+    <li><code>docRoles.typeOrder</code> — 角色类型显示顺序</li>
     <li><code>docRoles.display.useRoleSvgIfPresent</code> — 使用角色 SVG 图标</li>
     <li><code>docRoles.display.colorizeRoleName</code> — 角色名颜色化</li>
     <li><code>docRoles.inheritExpandedFromPrevious</code> — 切换文档时继承展开状态</li>
@@ -98,7 +101,7 @@
 
 <h4>三、所有角色视图</h4>
 <p>视图 ID：<code>docRolesView</code>，注册在 ANH 自定义侧栏面板中（活动栏 ANH 图标）。</p>
-<p>与"当前文章角色"功能基本相同，但显示的是项目中<b>所有已定义的角色</b>（不限于当前文档）。按类型分组显示。</p>
+<p>与"当前文章角色"功能基本相同，但显示的是项目中<b>所有已定义的角色</b>（不限于当前文档）。它可以同步 <code>docRoles.*</code> 设置，也可以关闭同步后使用 <code>AndreaNovelHelper.allRoles.*</code> 独立配置，包括 <code>allRoles.typeOrder</code>。</p>
 
 <h4>四、与 VS Code 原生功能的关系</h4>
 <ul>

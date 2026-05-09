@@ -21,6 +21,7 @@
     "config.minChars.description": "補完をトリガーするための最小プレフィックス文字数",
     "config.completion.triggerMode.description": "補完トリガーモード: loose=プレフィックスを含む名前、startsWith=プレフィックスで始まる名前/別名のみ、symbolLoose=設定記号の直後かつ名前にプレフィックスを含む場合、symbolStartsWith=設定記号の直後かつプレフィックスで始まる名前/別名のみ（旧値 symbolPrefix は symbolLoose と同義）。",
     "config.completion.symbolPrefixes.description": "symbolPrefix モードで補完をトリガーする記号リスト。",
+    "config.roleEditor.localizedKeyLabels.markdownDescription": "JSON5 ビジュアル役割エディターで、組み込みの役割カード key にローカライズされた表示名を表示します。表示だけに影響し、保存される JSON5 の実際の key は変更しません。対応表示言語: 中国語、英語、日本語。",
     "config.supportedFileTypes.description": "サポートされるファイル拡張子（ドットなし）",
     "config.lookupKeys.treatPinyinAsAlias.description": "lookupKeys_pinyin の値を補完一覧で別名レベルの候補として表示します。無効でも照合には使われ、この設定は補完一覧で別名のように見せるかだけを制御します。",
     "config.lookupKeys.autoGeneratePinyin.description": "拡張機能本体のバックエンドで、役名と別名から lookupKeys_pinyin を自動生成します。読み込まれたすべての役割ファイル形式と JSON5 ビジュアルエディターの表示・保存経路に反映されます。",

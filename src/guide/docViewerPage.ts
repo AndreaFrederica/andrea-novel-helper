@@ -69,6 +69,7 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
             'role-relationship-graph': '角色关系图谱',
             'timeline': '时间线',
             'script-runtime': '脚本运行时',
+            'ai-mcp': 'AI 与 MCP 集成',
             'webdav': 'WebDAV 同步',
         }
     }

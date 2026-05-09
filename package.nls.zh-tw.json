@@ -22,6 +22,7 @@
     "config.minChars.description": "觸發補全所需的最少前綴字符數",
     "config.completion.triggerMode.description": "補全觸發模式：loose=名稱包含前綴即可觸發，startsWith=僅當前綴在名稱/別名前綴時觸發，symbolLoose=僅當前綴前有指定符號且名稱包含前綴時觸發，symbolStartsWith=僅當前綴前有指定符號且名稱/別名以該前綴開頭時觸發（相容舊值 symbolPrefix，效果同 symbolLoose）。",
     "config.completion.symbolPrefixes.description": "symbolPrefix 模式下用於觸發補全的符號列表。",
+    "config.roleEditor.localizedKeyLabels.markdownDescription": "在 JSON5 視覺化角色編輯器中，為內建角色卡 key 顯示本地化友好名稱。此設定只影響顯示，不會修改保存到 JSON5 的真實 key。支援顯示語言：中文、英文、日文。",
     "config.supportedFileTypes.description": "支援的文件擴展名（不帶點）",
     "config.lookupKeys.treatPinyinAsAlias.description": "是否將 lookupKeys_pinyin 以別名層級顯示在補全清單中。關閉後仍會參與匹配，只是不會把拼音鍵當作別名候選顯示。",
     "config.lookupKeys.autoGeneratePinyin.description": "是否在擴充功能本體後端依據角色名與別名自動生成 lookupKeys_pinyin。此設定會影響所有已載入的角色格式，以及 JSON5 視覺化編輯器的顯示與保存流程。",

@@ -305,12 +305,13 @@ g
   }
 ]
 </code></pre>
-<p>角色卡编辑器界面会把字段分为三个层级，但保存到文件时仍是上面这种普通 JSON5 对象：</p>
+<p>角色卡编辑器会用表格化界面编辑这些字段，也可以切回经典界面或源码模式。无论用哪种界面，保存到文件时仍是上面这种普通 JSON5 对象：</p>
 <ul>
     <li><b>基础字段（base）</b>：name、type、color、aliases、description、affiliation、priority、fixes、style</li>
     <li><b>扩展字段（extended）</b>：age、gender、occupation、personality、appearance、background、skill、weakness、goal、motivation、fear、secret、quote、note、tag</li>
     <li><b>自定义字段（custom）</b>：任意用户定义的字段</li>
 </ul>
+<p>编辑器还支持字段显示名本地化（中文 / 英文 / 日文 / 原始 key）、查询键候选生成、随机角色生成器、UUID 复制反馈，以及前景色、背景色和文本样式的集中编辑。</p>
 <div class="doc-note"><code>.json5</code> 和 <code>.ojson5</code> 的数据结构相同；区别主要是打开方式和识别优先级。<code>.ojson</code> 是旧式标记扩展名，仍可作为外部资源标识识别，但新文件推荐用 <code>.ojson5</code>。</div>
 
 <h4>三、CSV 格式详解</h4>

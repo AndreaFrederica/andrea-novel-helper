@@ -294,5 +294,6 @@
   "config.fileTracker.respectGitignore.description": "基础文件追踪是否遵循 .gitignore。默认开启；关闭后即使文件被 Git 忽略，只要属于写作资源类型仍会被追踪。",
   "view.comments.manager.name": "批注总览",
   "config.useVsCodeManagedDisabling.description": "只使用 VS Code 自带的扩展启用/禁用状态判断小说助手是否运行，忽略 ANH 自己的工作区禁用开关。",
-  "config.lookupKeys.useLlmRomanization.description": "允许罗马字查询键生成调用已配置的客户端 LLM 来补充转写候选。它独立于错别字检查的 LLM 启用开关，但会复用客户端 LLM 的 API Base、API Key 和模型设置。"
+  "config.lookupKeys.useLlmRomanization.description": "允许罗马字查询键生成调用已配置的客户端 LLM 来补充转写候选。它独立于错别字检查的 LLM 启用开关，但会复用客户端 LLM 的 API Base、API Key 和模型设置。",
+  "config.roleEditor.localizedKeyLabels.markdownDescription": "在 JSON5 可视化角色编辑器中，为内置角色卡 key 显示本地化友好名称。该设置只影响显示，不会修改保存到 JSON5 的真实 key。支持显示语言：中文、英文、日文。"
 }

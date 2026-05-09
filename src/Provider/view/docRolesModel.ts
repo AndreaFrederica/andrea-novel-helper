@@ -5,6 +5,7 @@ import { getEffectiveCommentDocumentSync, onDidChangeActiveCommentPanel } from '
 import { getDocumentRoleOccurrences } from '../../context/documentRolesCache';
 import { onDidUpdateDecorations } from '../../events/updateDecorations';
 import { Role } from '../../extension';
+import { compareRoleType, getRoleTypeOrder } from './roleTypeOrder';
 
 
 const UNGROUPED = '(未分组)';
@@ -189,8 +190,11 @@ class DocumentRolesModel {
         const respectAffiliation = cfg.get<boolean>('docRoles.respectAffiliation', true);
         const respectType = cfg.get<boolean>('docRoles.respectType', true);
         const primaryGroup = cfg.get<string>('docRoles.primaryGroup', 'affiliation');
-    const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
-    const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
+        const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
+        const customGroups = cfg.get<any[]>('docRoles.customGroups', []);
+        const typeOrder = getRoleTypeOrder('docRoles');
+        const firstLevelIsType = groupBy === 'type' || (!respectAffiliation && respectType) || (groupBy === 'affiliation' && respectAffiliation && primaryGroup === 'type');
+        const secondLevelIsType = !firstLevelIsType && respectType;
 
         if (groupBy === 'none') {
             // 不分组：所有角色平铺显示
@@ -266,11 +270,15 @@ class DocumentRolesModel {
                     typeGroups.push({ type: '__FLAT__', roles: arr.slice() });
                 }
             }
-            typeGroups.sort((a, b) => a.type.localeCompare(b.type, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+            typeGroups.sort((a, b) => secondLevelIsType
+                ? compareRoleType(a.type, b.type, typeOrder)
+                : a.type.localeCompare(b.type, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
             affGroups.push({ affiliation: firstKey, types: typeGroups });
         }
         
-        affGroups.sort((a, b) => a.affiliation.localeCompare(b.affiliation, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+        affGroups.sort((a, b) => firstLevelIsType
+            ? compareRoleType(a.affiliation, b.affiliation, typeOrder)
+            : a.affiliation.localeCompare(b.affiliation, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
         return affGroups;
     }
 
@@ -282,6 +290,7 @@ class DocumentRolesModel {
     ): RoleHierarchyAffiliationGroup[] {
         const grouped = new Map<string, Role[]>();
         const ungrouped: Role[] = [];
+        const typeOrder = getRoleTypeOrder('docRoles');
 
         // 初始化自定义分组
         for (const group of customGroups) {
@@ -345,7 +354,7 @@ class DocumentRolesModel {
                 rs.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
                 tgs.push({ type: t, roles: rs });
             }
-            tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+            tgs.sort((a,b)=>compareRoleType(a.type, b.type, typeOrder));
             return [{ affiliation: '全部角色', types: tgs }];
         }
 
@@ -371,7 +380,7 @@ class DocumentRolesModel {
                 typeGroups.push({ type, roles: typeRoles });
             }
             
-            typeGroups.sort((a, b) => a.type.localeCompare(b.type, 'zh-Hans', { numeric: true, sensitivity: 'base' }));
+            typeGroups.sort((a, b) => compareRoleType(a.type, b.type, typeOrder));
             result.push({ affiliation: groupName, types: typeGroups });
         }
         

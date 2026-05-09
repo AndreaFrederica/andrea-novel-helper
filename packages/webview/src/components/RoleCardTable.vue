@@ -6,7 +6,7 @@
           :model-value="draft.base.name"
           dense
           outlined
-          label="名称"
+          :label="t('roleEditor.tableEditor.name')"
           :debounce="120"
           @update:model-value="(value) => updateBaseString('name', value)"
         />
@@ -22,7 +22,7 @@
           hide-selected
           fill-input
           input-debounce="0"
-          label="类型"
+          :label="t('roleEditor.tableEditor.type')"
           @new-value="onTypeNewValue"
           @update:model-value="applyType"
         />
@@ -34,7 +34,7 @@
           dense
           outlined
           type="number"
-          label="优先级"
+          :label="t('roleEditor.tableEditor.priority')"
           :debounce="120"
           @update:model-value="(value) => updatePriority(value)"
         />
@@ -45,7 +45,7 @@
           :model-value="draft.base.affiliation"
           dense
           outlined
-          label="从属"
+          :label="t('roleEditor.tableEditor.affiliation')"
           :debounce="120"
           @update:model-value="(value) => updateBaseString('affiliation', value)"
         />
@@ -54,10 +54,10 @@
 
     <div class="role-table-editor__meta row items-center q-gutter-sm">
       <q-chip dense square :style="chipStyle">
-        {{ draft.base.type || '未分类' }}
+        {{ draft.base.type || t('roleEditor.tableEditor.uncategorized') }}
       </q-chip>
       <q-chip dense outline>
-        UUID: {{ draft.base.uuid || '未设置' }}
+        UUID: {{ draft.base.uuid || t('roleEditor.tableEditor.unset') }}
         <q-btn
           v-if="draft.base.uuid"
           flat
@@ -68,13 +68,13 @@
           class="q-ml-xs"
           @click="copyUUID"
         >
-          <q-tooltip>复制 UUID</q-tooltip>
+          <q-tooltip>{{ t('roleEditor.tableEditor.copyUuid') }}</q-tooltip>
         </q-btn>
       </q-chip>
       <q-toggle
         :model-value="draft.base.wordSegmentFilter === true"
         dense
-        label="分词过滤"
+        :label="t('roleEditor.tableEditor.wordSegmentFilter')"
         @update:model-value="updateWordSegmentFilter"
       />
     </div>
@@ -82,15 +82,20 @@
     <q-markup-table flat bordered dense wrap-cells class="role-field-table">
       <thead>
         <tr>
-          <th class="field-name">字段</th>
-          <th>值</th>
-          <th class="field-type">类型</th>
-          <th class="field-actions">操作</th>
+          <th class="field-name">{{ t('roleEditor.tableEditor.field') }}</th>
+          <th>{{ t('roleEditor.tableEditor.value') }}</th>
+          <th class="field-type">{{ t('roleEditor.tableEditor.type') }}</th>
+          <th class="field-actions">{{ t('roleEditor.tableEditor.actions') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td class="field-name">description</td>
+          <td class="field-name">
+            <div class="field-label">
+              <span>{{ roleKeyLabel('description').primary }}</span>
+              <code v-if="roleKeyLabel('description').secondary">{{ roleKeyLabel('description').secondary }}</code>
+            </div>
+          </td>
           <td>
             <q-input
               :model-value="draft.base.description"
@@ -98,7 +103,7 @@
               outlined
               type="textarea"
               autogrow
-              placeholder="角色描述"
+              :placeholder="t('roleEditor.tableEditor.descriptionPlaceholder')"
               :debounce="120"
               @update:model-value="(value) => updateBaseString('description', value)"
             />
@@ -108,34 +113,34 @@
         </tr>
 
         <tr>
-          <td class="field-name">color</td>
-          <td>
-            <div class="row items-center no-wrap q-gutter-sm">
-              <div class="color-dot" :style="{ backgroundColor: draft.base.color || '#cccccc' }" />
-              <q-input
-                :model-value="draft.base.color"
-                dense
-                outlined
-                class="table-input"
-                placeholder="#RRGGBB"
-                :debounce="120"
-                @update:model-value="(value) => updateBaseString('color', value)"
-              />
+          <td class="field-name">
+            <div class="field-label">
+              <span>{{ roleKeyLabel('style').primary }}</span>
+              <code v-if="roleKeyLabel('style').secondary">{{ roleKeyLabel('style').secondary }}</code>
             </div>
           </td>
-          <td class="field-type">color</td>
-          <td class="field-actions">
-            <q-btn dense flat round icon="palette" @click="openColorPicker('color')">
-              <q-tooltip>选择前景色</q-tooltip>
-            </q-btn>
-          </td>
-        </tr>
-
-        <tr>
-          <td class="field-name">style</td>
           <td>
             <div class="style-row">
-              <div class="row items-center q-gutter-xs">
+              <div class="style-controls">
+                <div class="style-color-control">
+                  <div class="color-dot" :style="{ backgroundColor: draft.base.color || '#cccccc' }" />
+                  <q-input
+                    :model-value="draft.base.color"
+                    dense
+                    outlined
+                    class="style-color-input"
+                    placeholder="#RRGGBB"
+                    :aria-label="t('roleEditor.tableEditor.foregroundColor')"
+                    :debounce="120"
+                    @update:model-value="(value) => updateBaseString('color', value)"
+                  >
+                    <template #append>
+                      <q-btn dense flat round icon="palette" @click="openColorPicker('color')">
+                        <q-tooltip>{{ t('roleEditor.tableEditor.foregroundColor') }}</q-tooltip>
+                      </q-btn>
+                    </template>
+                  </q-input>
+                </div>
                 <q-btn
                   dense
                   flat
@@ -144,7 +149,7 @@
                   :color="draft.base.style?.bold ? 'primary' : undefined"
                   @click="toggleStyle('bold')"
                 >
-                  <q-tooltip>粗体</q-tooltip>
+                  <q-tooltip>{{ t('roleEditor.tableEditor.bold') }}</q-tooltip>
                 </q-btn>
                 <q-btn
                   dense
@@ -154,7 +159,7 @@
                   :color="draft.base.style?.italic ? 'primary' : undefined"
                   @click="toggleStyle('italic')"
                 >
-                  <q-tooltip>斜体</q-tooltip>
+                  <q-tooltip>{{ t('roleEditor.tableEditor.italic') }}</q-tooltip>
                 </q-btn>
                 <q-btn
                   dense
@@ -164,7 +169,7 @@
                   :color="draft.base.style?.strikethrough ? 'primary' : undefined"
                   @click="toggleStyle('strikethrough')"
                 >
-                  <q-tooltip>删除线</q-tooltip>
+                  <q-tooltip>{{ t('roleEditor.tableEditor.strikethrough') }}</q-tooltip>
                 </q-btn>
                 <q-btn
                   dense
@@ -174,29 +179,34 @@
                   :color="draft.base.style?.underline ? 'primary' : undefined"
                   @click="toggleStyle('underline')"
                 >
-                  <q-tooltip>下划线</q-tooltip>
+                  <q-tooltip>{{ t('roleEditor.tableEditor.underline') }}</q-tooltip>
                 </q-btn>
                 <q-separator vertical inset />
                 <div class="color-dot" :style="{ backgroundColor: backgroundColor || '#cccccc' }" />
                 <q-btn dense flat round icon="format_color_fill" @click="openColorPicker('background')">
-                  <q-tooltip>选择背景色</q-tooltip>
+                  <q-tooltip>{{ t('roleEditor.tableEditor.backgroundColor') }}</q-tooltip>
                 </q-btn>
               </div>
               <div class="style-preview" :style="previewStyle">
-                {{ draft.base.name || '预览文本' }}
+                {{ draft.base.name || t('roleEditor.tableEditor.previewText') }}
               </div>
             </div>
           </td>
           <td class="field-type">object</td>
           <td class="field-actions">
             <q-btn dense flat round icon="restart_alt" @click="resetStyle">
-              <q-tooltip>清空样式</q-tooltip>
+              <q-tooltip>{{ t('roleEditor.tableEditor.resetStyle') }}</q-tooltip>
             </q-btn>
           </td>
         </tr>
 
         <tr v-for="row in visibleArrayRows" :key="row.field">
-          <td class="field-name">{{ row.field }}</td>
+          <td class="field-name">
+            <div class="field-label">
+              <span>{{ roleKeyLabel(row.field).primary }}</span>
+              <code v-if="roleKeyLabel(row.field).secondary">{{ roleKeyLabel(row.field).secondary }}</code>
+            </div>
+          </td>
           <td>
             <q-select
               :model-value="getStringList(row.field)"
@@ -221,19 +231,24 @@
               icon="manage_search"
               @click="requestLookupCandidates(row.lookupKind)"
             >
-              <q-tooltip>从后端候选项追加</q-tooltip>
+              <q-tooltip>{{ t('roleEditor.tableEditor.appendCandidates') }}</q-tooltip>
             </q-btn>
           </td>
         </tr>
 
         <tr v-if="draft.base.type === '正则表达式'">
-          <td class="field-name">regex</td>
+          <td class="field-name">
+            <div class="field-label">
+              <span>{{ roleKeyLabel('regex').primary }}</span>
+              <code v-if="roleKeyLabel('regex').secondary">{{ roleKeyLabel('regex').secondary }}</code>
+            </div>
+          </td>
           <td>
             <q-input
               :model-value="draft.base.regex"
               dense
               outlined
-              placeholder="正则表达式"
+              :placeholder="t('roleEditor.tableEditor.regexPlaceholder')"
               :debounce="120"
               @update:model-value="(value) => updateBaseString('regex', value)"
             />
@@ -243,7 +258,12 @@
         </tr>
 
         <tr v-if="draft.base.type === '正则表达式'">
-          <td class="field-name">regexFlags</td>
+          <td class="field-name">
+            <div class="field-label">
+              <span>{{ roleKeyLabel('regexFlags').primary }}</span>
+              <code v-if="roleKeyLabel('regexFlags').secondary">{{ roleKeyLabel('regexFlags').secondary }}</code>
+            </div>
+          </td>
           <td>
             <q-input
               :model-value="draft.base.regexFlags"
@@ -260,21 +280,18 @@
 
         <tr v-for="row in extraRows" :key="`${row.bucket}.${row.key}`">
           <td class="field-name">
-            <div class="row items-center no-wrap q-gutter-xs">
-              <q-chip
-                dense
-                square
-                size="sm"
-                :color="row.bucket === 'extended' ? 'teal' : 'orange'"
-                text-color="white"
-              >
-                {{ row.bucket }}
-              </q-chip>
+            <div class="field-label extra-key-cell">
+              <div class="extra-key-cell__title">
+                <span>{{ roleKeyLabel(row.key).primary }}</span>
+                <span :class="['extra-key-cell__bucket', `extra-key-cell__bucket--${row.bucket}`]">
+                  {{ row.bucket }}
+                </span>
+              </div>
               <q-input
                 :model-value="row.key"
                 dense
                 borderless
-                class="key-input"
+                class="key-input extra-key-cell__input"
                 @change="renameExtra(row, $event)"
               />
             </div>
@@ -321,7 +338,7 @@
           <td class="field-type">{{ row.valueType }}</td>
           <td class="field-actions">
             <q-btn dense flat round icon="delete" color="negative" @click="removeExtra(row)">
-              <q-tooltip>删除字段</q-tooltip>
+              <q-tooltip>{{ t('roleEditor.tableEditor.deleteField') }}</q-tooltip>
             </q-btn>
           </td>
         </tr>
@@ -329,10 +346,10 @@
     </q-markup-table>
 
     <div class="row items-center justify-between q-mt-sm">
-      <div class="text-caption text-grey-7">
-        基础字段固定展示，扩展字段和自定义字段可在表格中直接编辑。
+      <div class="text-caption role-table-summary">
+        {{ t('roleEditor.tableEditor.summary') }}
       </div>
-      <q-btn dense color="primary" icon="add" label="新增字段" @click="openAddExtra" />
+      <q-btn dense color="primary" icon="add" :label="t('roleEditor.tableEditor.addField')" @click="openAddExtra" />
     </div>
 
     <q-dialog v-model="colorDialog.open">
@@ -342,15 +359,15 @@
           <q-color v-model="colorDialog.value" format-model="hex" no-header default-view="palette" />
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat label="取消" v-close-popup />
-          <q-btn color="primary" label="应用" @click="applyColorPicker" v-close-popup />
+          <q-btn flat :label="t('roleEditor.tableEditor.cancel')" v-close-popup />
+          <q-btn color="primary" :label="t('roleEditor.tableEditor.apply')" @click="applyColorPicker" v-close-popup />
         </q-card-actions>
       </q-card>
     </q-dialog>
 
     <q-dialog v-model="addDialog.open">
       <q-card class="role-table-dialog">
-        <q-card-section class="text-subtitle1">新增字段</q-card-section>
+        <q-card-section class="text-subtitle1">{{ t('roleEditor.tableEditor.addField') }}</q-card-section>
         <q-card-section class="q-gutter-md">
           <q-select
             v-model="addDialog.bucket"
@@ -359,9 +376,24 @@
             outlined
             emit-value
             map-options
-            label="分组"
+            :label="t('roleEditor.tableEditor.bucket')"
           />
-          <q-input v-model="addDialog.key" dense outlined label="字段名" />
+          <q-select
+            v-if="addDialog.bucket === 'extended'"
+            v-model="addDialog.key"
+            :options="extendedKeyOptions"
+            dense
+            outlined
+            use-input
+            fill-input
+            hide-selected
+            input-debounce="0"
+            emit-value
+            map-options
+            new-value-mode="add-unique"
+            :label="t('roleEditor.tableEditor.fieldName')"
+          />
+          <q-input v-else v-model="addDialog.key" dense outlined :label="t('roleEditor.tableEditor.fieldName')" />
           <q-select
             v-model="addDialog.valueType"
             :options="valueTypeOptions"
@@ -369,7 +401,7 @@
             outlined
             emit-value
             map-options
-            label="类型"
+            :label="t('roleEditor.tableEditor.valueType')"
           />
           <q-input
             v-if="addDialog.valueType === 'string'"
@@ -378,7 +410,7 @@
             outlined
             type="textarea"
             autogrow
-            label="初始值"
+            :label="t('roleEditor.tableEditor.initialValue')"
           />
           <q-input
             v-else-if="addDialog.valueType === 'number'"
@@ -386,13 +418,13 @@
             dense
             outlined
             type="number"
-            label="初始值"
+            :label="t('roleEditor.tableEditor.initialValue')"
           />
           <q-toggle
             v-else-if="addDialog.valueType === 'boolean'"
             v-model="addDialog.valueBool"
             dense
-            label="初始值"
+            :label="t('roleEditor.tableEditor.initialValue')"
           />
           <q-select
             v-else
@@ -403,12 +435,12 @@
             new-value-mode="add-unique"
             dense
             outlined
-            label="初始值"
+            :label="t('roleEditor.tableEditor.initialValue')"
           />
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat label="取消" v-close-popup />
-          <q-btn color="primary" label="添加" :disable="!addDialog.key.trim()" @click="appendExtra" />
+          <q-btn flat :label="t('roleEditor.tableEditor.cancel')" v-close-popup />
+          <q-btn color="primary" :label="t('roleEditor.tableEditor.add')" :disable="!addDialog.key.trim()" @click="appendExtra" />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -419,6 +451,13 @@
 import type { BuiltinType, JsonValue, RoleCardModel, RoleType, TextStyleOptions } from 'app/types/role';
 import { computed, reactive, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
+import { useI18n } from 'vue-i18n';
+import {
+  EXTENDED_ROLE_KEY_LIST,
+  formatRoleKeyInline,
+  formatRoleKeyLabel,
+  type RoleKeyLabel,
+} from '../utils/roleKeyLabels';
 
 type LookupCandidateKind = 'pinyin' | 'romanized';
 type ArrayBaseFieldKey =
@@ -445,7 +484,14 @@ interface ExtraRow {
   valueType: ValueType;
 }
 
-const props = defineProps<{ modelValue: RoleCardModel }>();
+const props = withDefaults(defineProps<{
+  modelValue: RoleCardModel;
+  localizedKeyLabels?: boolean;
+  displayLanguage?: string;
+}>(), {
+  localizedKeyLabels: true,
+  displayLanguage: '',
+});
 const emit = defineEmits<{
   (e: 'update:modelValue', v: RoleCardModel): void;
   (e: 'changed', payload: { changedPaths: string[]; snapshot: RoleCardModel }): void;
@@ -454,6 +500,7 @@ const emit = defineEmits<{
 }>();
 
 const $q = useQuasar();
+const { t } = useI18n();
 const draft = reactive<RoleCardModel>(cloneRole(props.modelValue));
 
 watch(
@@ -480,26 +527,33 @@ const arrayRows: Array<{
   placeholder: string;
   lookupKind?: LookupCandidateKind;
 }> = [
-  { field: 'aliases', placeholder: '输入别名后回车' },
-  { field: 'lookupKeys_pinyin', placeholder: '输入拼音查询键后回车', lookupKind: 'pinyin' },
-  { field: 'lookupKeys_romanized', placeholder: '输入罗马字查询键后回车', lookupKind: 'romanized' },
-  { field: 'lookupKeys_spelling', placeholder: '输入拼写查询键后回车' },
-  { field: 'fixes', placeholder: '输入敏感词修复项后回车' },
+  { field: 'aliases', placeholder: t('roleEditor.tableEditor.placeholders.aliases') },
+  { field: 'lookupKeys_pinyin', placeholder: t('roleEditor.tableEditor.placeholders.pinyin'), lookupKind: 'pinyin' },
+  { field: 'lookupKeys_romanized', placeholder: t('roleEditor.tableEditor.placeholders.romanized'), lookupKind: 'romanized' },
+  { field: 'lookupKeys_spelling', placeholder: t('roleEditor.tableEditor.placeholders.spelling') },
+  { field: 'fixes', placeholder: t('roleEditor.tableEditor.placeholders.fixes') },
 ];
 const visibleArrayRows = computed(() =>
   arrayRows.filter((row) => row.field !== 'fixes' || draft.base.type === '敏感词'),
 );
 
-const bucketOptions = [
-  { label: '扩展字段', value: 'extended' },
-  { label: '自定义字段', value: 'custom' },
-];
-const valueTypeOptions = [
-  { label: '字符串', value: 'string' },
-  { label: '数字', value: 'number' },
-  { label: '布尔', value: 'boolean' },
-  { label: '字符串数组', value: 'string[]' },
-];
+const bucketOptions = computed(() => [
+  { label: t('roleEditor.tableEditor.buckets.extended'), value: 'extended' },
+  { label: t('roleEditor.tableEditor.buckets.custom'), value: 'custom' },
+]);
+const valueTypeOptions = computed(() => [
+  { label: t('roleEditor.tableEditor.valueTypes.string'), value: 'string' },
+  { label: t('roleEditor.tableEditor.valueTypes.number'), value: 'number' },
+  { label: t('roleEditor.tableEditor.valueTypes.boolean'), value: 'boolean' },
+  { label: t('roleEditor.tableEditor.valueTypes.stringArray'), value: 'string[]' },
+]);
+
+const extendedKeyOptions = computed(() =>
+  EXTENDED_ROLE_KEY_LIST.map((key) => ({
+    label: formatRoleKeyInline(key, props.localizedKeyLabels, props.displayLanguage),
+    value: key,
+  })),
+);
 
 const colorDialog = reactive({
   open: false,
@@ -545,6 +599,10 @@ const extraRows = computed<ExtraRow[]>(() => {
   pushExtraRows(rows, draft.custom, 'custom');
   return rows;
 });
+
+function roleKeyLabel(key: string): RoleKeyLabel {
+  return formatRoleKeyLabel(key, props.localizedKeyLabels, props.displayLanguage);
+}
 
 function updateBaseString(key: EditableBaseStringKey, value: unknown) {
   const clean = toInputString(value);
@@ -612,7 +670,9 @@ function setStringList(field: ArrayBaseFieldKey, value: unknown) {
 
 function openColorPicker(target: 'color' | 'background') {
   colorDialog.target = target;
-  colorDialog.title = target === 'color' ? '选择前景色' : '选择背景色';
+  colorDialog.title = target === 'color'
+    ? t('roleEditor.tableEditor.foregroundColor')
+    : t('roleEditor.tableEditor.backgroundColor');
   colorDialog.value = target === 'color' ? draft.base.color || '#ffffff' : backgroundColor.value || '#ffffff';
   colorDialog.open = true;
 }
@@ -639,7 +699,8 @@ function toggleStyle(flag: StyleFlag) {
 
 function resetStyle() {
   delete draft.base.style;
-  commit(['base.style']);
+  delete draft.base.color;
+  commit(['base.style', 'base.color']);
 }
 
 function requestLookupCandidates(kind: LookupCandidateKind) {
@@ -797,10 +858,10 @@ function copyUUID() {
   navigator.clipboard
     .writeText(draft.base.uuid)
     .then(() => {
-      $q.notify({ message: 'UUID 已复制', type: 'positive', position: 'top' });
+      $q.notify({ message: t('roleEditor.tableEditor.uuidCopied'), type: 'positive', position: 'top' });
     })
     .catch(() => {
-      $q.notify({ message: '复制失败', type: 'negative', position: 'top' });
+      $q.notify({ message: t('roleEditor.tableEditor.copyFailed'), type: 'negative', position: 'top' });
     });
 }
 </script>
@@ -812,7 +873,8 @@ function copyUUID() {
   padding: 12px;
   border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
   border-radius: 8px;
-  background: var(--vscode-editor-background, transparent);
+  color: var(--vscode-editor-foreground, inherit);
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background, transparent));
 }
 
 .role-table-editor__toolbar,
@@ -824,20 +886,132 @@ function copyUUID() {
   margin: 10px 0 12px;
 }
 
+.role-table-editor :deep(.q-field--outlined .q-field__control),
+.role-table-editor :deep(.q-field--filled .q-field__control) {
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground, inherit));
+  background: var(--vscode-input-background, rgba(127, 127, 127, 0.12));
+  border-color: var(--vscode-input-border, var(--vscode-widget-border, rgba(127, 127, 127, 0.35)));
+}
+
+.role-table-editor :deep(.q-field__native),
+.role-table-editor :deep(.q-field__input),
+.role-table-editor :deep(.q-field__label),
+.role-table-editor :deep(.q-toggle__label),
+.role-table-editor :deep(.q-item),
+.role-table-editor :deep(.q-item__label) {
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground, inherit));
+}
+
+.role-table-editor :deep(.q-field__label) {
+  color: var(--vscode-descriptionForeground, rgba(127, 127, 127, 0.85));
+}
+
 .role-field-table {
   width: 100%;
   table-layout: fixed;
+  color: var(--vscode-editor-foreground, inherit);
+  background: var(--vscode-editor-background, transparent);
+  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
 }
 
 .role-field-table :deep(th),
 .role-field-table :deep(td) {
   vertical-align: top;
+  color: var(--vscode-editor-foreground, inherit);
+  background: transparent;
+  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.22));
+}
+
+.role-field-table :deep(thead th) {
+  background: var(--vscode-sideBarSectionHeader-background, rgba(127, 127, 127, 0.1));
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-editor-foreground, inherit));
+}
+
+.role-table-summary {
+  color: var(--vscode-descriptionForeground, rgba(127, 127, 127, 0.85));
 }
 
 .field-name {
   width: 190px;
   max-width: 190px;
   word-break: break-word;
+}
+
+.field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.field-label code,
+.field-label__hint {
+  color: var(--vscode-descriptionForeground, rgba(127, 127, 127, 0.8));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.extra-key-cell {
+  min-width: 0;
+}
+
+.extra-key-cell__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.extra-key-cell__title > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.extra-key-cell__bucket {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--vscode-badge-foreground, #fff);
+  background: var(--vscode-badge-background, rgba(127, 127, 127, 0.55));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.extra-key-cell__bucket--extended {
+  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-textLink-foreground, #3794ff);
+}
+
+.extra-key-cell__bucket--custom {
+  color: var(--vscode-button-foreground, #fff);
+  background: var(--vscode-charts-orange, #d18616);
+}
+
+.extra-key-cell__input {
+  width: 100%;
+  max-width: 100%;
+}
+
+.extra-key-cell__input :deep(.q-field__control) {
+  min-height: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--vscode-input-background, rgba(127, 127, 127, 0.15));
+}
+
+.extra-key-cell__input :deep(.q-field__native) {
+  min-height: 26px;
+  padding: 0;
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground, inherit));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
 }
 
 .field-type {
@@ -868,15 +1042,40 @@ function copyUUID() {
 
 .style-row {
   display: grid;
-  grid-template-columns: minmax(220px, max-content) minmax(160px, 1fr);
+  grid-template-columns: minmax(360px, max-content) minmax(160px, 1fr);
   gap: 8px;
   align-items: center;
+}
+
+.style-controls,
+.style-color-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.style-controls {
+  flex-wrap: wrap;
+}
+
+.style-color-control {
+  width: 176px;
+}
+
+.style-color-input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.style-color-input :deep(.q-field__append) {
+  padding-left: 2px;
 }
 
 .style-preview {
   min-height: 32px;
   padding: 5px 8px;
-  border: 1px solid rgba(127, 127, 127, 0.35);
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
@@ -884,6 +1083,9 @@ function copyUUID() {
 .role-table-dialog {
   min-width: 420px;
   max-width: 92vw;
+  color: var(--vscode-editorWidget-foreground, var(--vscode-editor-foreground, inherit));
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background, inherit));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
 }
 
 @media (max-width: 720px) {

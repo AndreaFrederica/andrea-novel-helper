@@ -41,6 +41,7 @@
     "config.lookupKeys.treatRomanizedAsAlias.description": "是否把 lookupKeys_romanized 按别名级别显示到补全列表。关闭时仍参与匹配，只是不把罗马字键作为别名候选展示。",
     "config.lookupKeys.autoGenerateRomanized.description": "是否在扩展本体后端根据角色名和别名自动生成 lookupKeys_romanized。该设置会影响所有已加载的角色格式，以及 JSON5 可视化编辑器的显示与保存链路。",
     "config.lookupKeys.useLlmRomanization.description": "允许罗马字查询键生成调用已配置的客户端 LLM 来补充转写候选。它独立于错别字检查的 LLM 启用开关，但会复用客户端 LLM 的 API Base、API Key 和模型设置。",
+    "config.roleEditor.localizedKeyLabels.markdownDescription": "在 JSON5 可视化角色编辑器中，为内置角色卡 key 显示本地化友好名称。该设置只影响显示，不会修改保存到 JSON5 的真实 key。支持显示语言：中文、英文、日文。",
     "config.supportedFileTypes.description": "支持的文件扩展名（不带点）",
     "config.customCharacterFileKeywords.description": "附加的角色文件名关键词。会与 anhproject.md 和 project-config.json5 中声明的关键词合并。",
     "config.customSensitiveWordsFileKeywords.description": "附加的敏感词文件名关键词。会与 anhproject.md 和 project-config.json5 中声明的关键词合并。",

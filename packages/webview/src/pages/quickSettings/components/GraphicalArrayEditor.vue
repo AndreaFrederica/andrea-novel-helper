@@ -104,6 +104,66 @@
 
       <MarkdownDescription :content="description" />
     </template>
+
+    <template v-else-if="kind === 'roleTypeOrder'">
+      <div class="preset-list">
+        <button
+          v-for="preset in roleTypePresets"
+          :key="preset"
+          class="preset-btn role-type-preset"
+          :class="{ active: hasStringItem(preset) }"
+          @click="toggleStringPreset(preset)"
+        >
+          {{ preset }}
+        </button>
+      </div>
+
+      <div class="editor-table">
+        <div class="editor-table__head string-grid">
+          <span>类型名称</span>
+          <span>排序</span>
+          <span></span>
+        </div>
+        <div v-for="(item, index) in stringItems" :key="`${item}-${index}`" class="editor-row string-grid">
+          <input
+            type="text"
+            class="string-input"
+            :value="item"
+            placeholder="角色类型"
+            @input="updateStringItem(index, ($event.target as HTMLInputElement).value)"
+          />
+          <div class="order-actions">
+            <button class="icon-btn" title="上移" :disabled="index === 0" @click="moveStringItem(index, -1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M12 5l-7 7M12 5l7 7M12 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="icon-btn" title="下移" :disabled="index === stringItems.length - 1" @click="moveStringItem(index, 1)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M12 19l-7-7M12 19l7-7M12 19V5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <button class="icon-btn danger" title="删除类型" @click="removeStringItem(index)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M3 6h18M8 6V4h8v2M9 10v8M15 10v8M5 6l1 15h12l1-15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="editor-actions">
+        <button class="add-rule-btn" @click="addStringItem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          添加类型
+        </button>
+        <button class="secondary-action-btn" @click="emitStrings(defaultStringItems)">恢复默认</button>
+      </div>
+
+      <MarkdownDescription :content="description" />
+    </template>
   </div>
 </template>
 
@@ -111,7 +171,7 @@
 import { computed } from 'vue'
 import MarkdownDescription from './MarkdownDescription.vue'
 
-type EditorKind = 'autoPairs' | 'numberList'
+type EditorKind = 'autoPairs' | 'numberList' | 'roleTypeOrder'
 
 interface AutoPairRule {
   open: string
@@ -144,6 +204,7 @@ const autoPairPresets = [
 ]
 
 const milestonePresets = [1000, 2000, 5000, 10000, 20000, 50000, 100000]
+const roleTypePresets = ['主角', '主要角色', '反派', '配角', '联动角色', '词汇', '敏感词', '正则表达式', 'unknown']
 
 const autoPairs = computed<AutoPairRule[]>(() => parseAutoPairValue(props.modelValue))
 const autoPairError = computed(() => {
@@ -155,6 +216,11 @@ const numberItems = computed(() => parseNumberList(props.modelValue))
 const defaultNumberItems = computed(() => {
   const parsed = parseNumberList(props.defaultValue)
   return parsed.length ? parsed : milestonePresets
+})
+const stringItems = computed(() => parseStringList(props.modelValue))
+const defaultStringItems = computed(() => {
+  const parsed = parseStringList(props.defaultValue)
+  return parsed.length ? parsed : roleTypePresets
 })
 
 function emitValue(value: any) {
@@ -293,6 +359,76 @@ function toggleNumberPreset(value: number) {
   emitNumbers(values)
 }
 
+function parseStringList(value: any): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of value) {
+    const text = String(item ?? '').trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    result.push(text)
+  }
+  return result
+}
+
+function emitStrings(values: string[]) {
+  const seen = new Set<string>()
+  const next: string[] = []
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    next.push(text)
+  }
+  emitValue(next)
+}
+
+function updateStringItem(index: number, value: string) {
+  const values = [...stringItems.value]
+  if (index < 0 || index >= values.length) return
+  values[index] = value
+  emitStrings(values)
+}
+
+function addStringItem() {
+  const values = [...stringItems.value]
+  const preset = roleTypePresets.find(item => !values.includes(item)) ?? `自定义类型 ${values.length + 1}`
+  values.push(preset)
+  emitStrings(values)
+}
+
+function removeStringItem(index: number) {
+  const values = [...stringItems.value]
+  values.splice(index, 1)
+  emitStrings(values)
+}
+
+function moveStringItem(index: number, delta: -1 | 1) {
+  const values = [...stringItems.value]
+  const target = index + delta
+  if (target < 0 || target >= values.length) return
+  const [item] = values.splice(index, 1)
+  if (item === undefined) return
+  values.splice(target, 0, item)
+  emitStrings(values)
+}
+
+function hasStringItem(value: string) {
+  return stringItems.value.includes(value)
+}
+
+function toggleStringPreset(value: string) {
+  const values = [...stringItems.value]
+  const index = values.indexOf(value)
+  if (index >= 0) {
+    values.splice(index, 1)
+  } else {
+    values.push(value)
+  }
+  emitStrings(values)
+}
+
 function firstChar(value: string) {
   return Array.from(value.trim())[0] ?? ''
 }
@@ -369,13 +505,18 @@ function formatNumber(value: number) {
   grid-template-columns: minmax(120px, 1fr) 28px;
 }
 
+.string-grid {
+  grid-template-columns: minmax(120px, 1fr) 64px 28px;
+}
+
 .editor-table__head {
   color: var(--vscode-descriptionForeground, #999);
   font-size: 11px;
 }
 
 .symbol-input,
-.number-input {
+.number-input,
+.string-input {
   width: 100%;
   min-width: 0;
   height: 30px;
@@ -394,13 +535,24 @@ function formatNumber(value: number) {
   text-align: center;
 }
 
-.number-input {
+.number-input,
+.string-input {
   font-size: var(--vscode-font-size, 0.85rem);
 }
 
 .symbol-input:focus,
-.number-input:focus {
+.number-input:focus,
+.string-input:focus {
   border-color: var(--vscode-focusBorder, #007acc);
+}
+
+.role-type-preset {
+  min-width: auto;
+}
+
+.order-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .icon-btn {
@@ -424,6 +576,17 @@ function formatNumber(value: number) {
 
 .icon-btn.danger:hover {
   color: var(--vscode-errorForeground, #f48771);
+}
+
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.icon-btn:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--vscode-descriptionForeground, #999);
 }
 
 .editor-actions {

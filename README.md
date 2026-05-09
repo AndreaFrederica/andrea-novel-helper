@@ -8,6 +8,11 @@
 > 独立组件（生成式AI组件） Anh Chat(小说助手 聊天组件)已经发布! [GitHub](https://github.com/AndreaFrederica/Roo-Code-Chat) [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.anh-cline?label=VS%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.anh-cline) [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/anh-cline?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/anh-cline)
 > 如果您需要生成式AI相关功能（AI生成设定集或者润色，或者与AI聊天（聊天功能尤其强化）），请安装 Anh Chat 组件。
 
+**由于GitHub账户出现问题 我们的GitHub仓库无法访问 请使用我们的GitLab镜像访问仓库**
+- [GitLab](https://gitlab.com/andreafrederica/andreanovelhelper)
+- [Codeberg](https://codeberg.org/AndreaFrederica/AndreaNovelHelper)(可能更新不及时)
+- 更多消息请关注QQ群 977737943
+
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black)
@@ -64,9 +69,10 @@
 
 ## 💬 反馈和交流
 
-- [GitHub Issues](https://github.com/AndreaFrederica/andrea-novel-helper/issues)
+- [GitHub Issues](https://github.com/AndreaFrederica/andrea-novel-helper/issues) （失效）
 - [QQ群【小说助手用户反馈和交流】](https://qm.qq.com/q/SG5A3XLoSQ)
 - [Discord](https://discord.gg/YeVAXeKX)
+- [GitLab](https://gitlab.com/andreafrederica/andreanovelhelper)
 
 ### 📥 Issue标签说明
 

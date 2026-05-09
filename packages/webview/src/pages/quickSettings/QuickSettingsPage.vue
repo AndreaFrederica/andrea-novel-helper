@@ -383,7 +383,7 @@ const settingGroups = computed(() => {
       id: 'roleLists',
       name: '角色列表显示',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 7a4 4 0 118 0 4 4 0 01-8 0zM4 21a8 8 0 0116 0M3 4h3M3 9h3M18 4h3M18 9h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
-      ids: ['AndreaNovelHelper.docRoles.groupBy', 'AndreaNovelHelper.docRoles.respectAffiliation', 'AndreaNovelHelper.docRoles.respectType', 'AndreaNovelHelper.docRoles.primaryGroup', 'AndreaNovelHelper.docRoles.useCustomGroups', 'AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent', 'AndreaNovelHelper.docRoles.display.colorizeRoleName', 'AndreaNovelHelper.docRoles.customGroups', 'AndreaNovelHelper.allRoles.syncWithDocRoles', 'AndreaNovelHelper.allRoles.groupBy', 'AndreaNovelHelper.allRoles.respectAffiliation', 'AndreaNovelHelper.allRoles.respectType', 'AndreaNovelHelper.allRoles.primaryGroup', 'AndreaNovelHelper.allRoles.useCustomGroups', 'AndreaNovelHelper.allRoles.display.colorizeRoleName', 'AndreaNovelHelper.allRoles.customGroups']
+      ids: ['AndreaNovelHelper.docRoles.groupBy', 'AndreaNovelHelper.docRoles.respectAffiliation', 'AndreaNovelHelper.docRoles.respectType', 'AndreaNovelHelper.docRoles.primaryGroup', 'AndreaNovelHelper.docRoles.typeOrder', 'AndreaNovelHelper.docRoles.useCustomGroups', 'AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent', 'AndreaNovelHelper.docRoles.display.colorizeRoleName', 'AndreaNovelHelper.docRoles.customGroups', 'AndreaNovelHelper.allRoles.syncWithDocRoles', 'AndreaNovelHelper.allRoles.groupBy', 'AndreaNovelHelper.allRoles.respectAffiliation', 'AndreaNovelHelper.allRoles.respectType', 'AndreaNovelHelper.allRoles.primaryGroup', 'AndreaNovelHelper.allRoles.typeOrder', 'AndreaNovelHelper.allRoles.useCustomGroups', 'AndreaNovelHelper.allRoles.display.colorizeRoleName', 'AndreaNovelHelper.allRoles.customGroups']
     },
     {
       id: 'roleDetails',
@@ -464,6 +464,7 @@ function getRoleListPreviewSettings(scope: 'docRoles' | 'allRoles') {
     respectAffiliation: getConfigValue(`${base}.respectAffiliation`, true),
     respectType: getConfigValue(`${base}.respectType`, true),
     primaryGroup: getConfigValue(`${base}.primaryGroup`, 'affiliation'),
+    typeOrder: getConfigValue(`${base}.typeOrder`, []),
     useCustomGroups: getConfigValue(`${base}.useCustomGroups`, false),
     customGroups: getConfigValue(`${base}.customGroups`, []),
     syncWithDocRoles: scope === 'allRoles'

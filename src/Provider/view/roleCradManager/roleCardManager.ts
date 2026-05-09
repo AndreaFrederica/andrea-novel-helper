@@ -41,6 +41,25 @@ export const DEFAULT_OPTIONS = (ctx: vscode.ExtensionContext): RoleCardPanelOpti
     title: '角色卡管理器',
 });
 
+const ROLE_EDITOR_LOCALIZED_KEY_LABELS = 'roleEditor.localizedKeyLabels';
+
+function getRoleEditorSettings() {
+    return {
+        type: 'roleEditorSettings',
+        localizedKeyLabels: vscode.workspace
+            .getConfiguration('AndreaNovelHelper')
+            .get<boolean>(ROLE_EDITOR_LOCALIZED_KEY_LABELS, true),
+        displayLanguage: vscode.env.language || 'en',
+    };
+}
+
+async function updateRoleEditorSettings(msg: any): Promise<void> {
+    if (typeof msg?.localizedKeyLabels !== 'boolean') return;
+    await vscode.workspace
+        .getConfiguration('AndreaNovelHelper')
+        .update(ROLE_EDITOR_LOCALIZED_KEY_LABELS, msg.localizedKeyLabels, vscode.ConfigurationTarget.Global);
+}
+
 export class RoleCardPanel {
     private static current?: vscode.WebviewPanel;
 
@@ -98,7 +117,10 @@ export class RoleCardPanel {
                 ];
 
                 const sendStoredRoleCards = () => {
-                        try { panel.webview.postMessage({ type: 'roleCards', list: TEST_ROLECARDS }); } catch (_) { /* ignore */ }
+                        try {
+                            panel.webview.postMessage(getRoleEditorSettings());
+                            panel.webview.postMessage({ type: 'roleCards', list: TEST_ROLECARDS });
+                        } catch (_) { /* ignore */ }
                 };
 
         const isValidRoleCards = (v: any): v is RoleCardModel[] => {
@@ -115,6 +137,11 @@ export class RoleCardPanel {
             try {
                 if (msg.type === 'requestRoleCards') {
                     sendStoredRoleCards();
+                } else if (msg.type === 'requestRoleEditorSettings') {
+                    panel.webview.postMessage(getRoleEditorSettings());
+                } else if (msg.type === 'updateRoleEditorSettings') {
+                    await updateRoleEditorSettings(msg);
+                    panel.webview.postMessage(getRoleEditorSettings());
                 } else if (msg.type === 'saveRoleCards') {
                     const list = msg.list;
                     if (!isValidRoleCards(list)) {
@@ -301,10 +328,18 @@ function buildHtml(webview: vscode.Webview, opts: RoleCardPanelOptions): string 
     // 添加 base 标签作为备用方案
     html = addBaseTag(html, webview, opts.spaRoot);
 
+    html = injectVscodeLanguage(html);
+
     // 应用 CSP
     html = applyCsp(html, webview, opts.connectSrc);
 
     return html;
+}
+
+function injectVscodeLanguage(html: string): string {
+    const language = JSON.stringify(vscode.env.language || 'en');
+    const script = `<script>window.__vscode_language__=${language};document.documentElement.lang=${language};</script>`;
+    return html.replace(/<head([^>]*)>/i, `<head$1>\n  ${script}`);
 }
 
 /** 不再注入 base；若原文件有 base，直接移除 */

@@ -28,7 +28,11 @@ export default defineBoot(({ app }) => {
     navigator.language ||
     'en-US'
   ).toLowerCase();
-  const locale = rawLanguage.startsWith('zh') ? 'zh-CN' : 'en-US';
+  const locale = rawLanguage.startsWith('zh')
+    ? 'zh-CN'
+    : rawLanguage.startsWith('ja')
+      ? 'ja-JP'
+      : 'en-US';
 
   const i18n = createI18n<{ message: MessageSchema }, MessageLanguages>({
     locale,

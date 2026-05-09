@@ -15,10 +15,11 @@
     <li><b>基础设置</b> — 插件的核心行为</li>
     <li><b>排版设置</b> — 自动空行、首行缩进等</li>
     <li><b>字数统计</b> — 统计方式和显示格式</li>
-    <li><b>角色显示</b> — 左侧角色面板的分组方式</li>
+    <li><b>角色显示</b> — 左侧角色面板的分组方式、角色类型排序、详情展开和颜色显示</li>
     <li><b>拼写检查</b> — 校对功能的开关和模式</li>
     <li><b>翻译设置</b> — 目标语言和默认行为</li>
     <li><b>自动补全</b> — 角色提示的触发方式</li>
+    <li><b>AI 与错字系统</b> — 客户端直连 LLM、模型名称、自动扫描和调试输出</li>
 </ul>
 
 <h4>工作区设置 vs 全局设置</h4>
@@ -31,6 +32,7 @@
 <ul>
     <li><b>设置侧边栏</b>（<code>andrea.settingsView</code>）— 基于 Quasar SPA 的完整设置界面，在左侧活动栏"ANH 设置"中打开。自动读取 package.json 中所有 contributes.configuration 定义，按分类分组渲染</li>
     <li><b>编辑器设置增强版</b>（<code>andrea.openEditorSettingsEnhanced</code>）— 独立的 Webview 面板，专注于编辑器相关配置，支持更丰富的交互组件</li>
+    <li><b>图形化快速设置</b>（<code>andrea.openGraphicalQuickSettings</code>）— 面向高频写作设置的独立 Webview，带设置向导、实时预览、当前值来源和数组/对象类配置的可视化编辑器</li>
 </ul>
 
 <h4>设置分类</h4>
@@ -40,7 +42,7 @@
     <li><b>排版设置</b>（andrea.typeset）— 段间空行、首行缩进、去尾空格、智能引号、智能回车、跳出括号</li>
     <li><b>字数统计</b>（AndreaNovelHelper.wordCount）— 统计模式、状态栏显示、速度单位、紧凑模式</li>
     <li><b>时间统计</b>（AndreaNovelHelper.timeStats）— 里程碑、通知方式、是否统计粘贴内容</li>
-    <li><b>角色显示</b>（AndreaNovelHelper.docRoles/allRoles）— 分组方式、颜色、自定义分组、显示选项</li>
+    <li><b>角色显示</b>（AndreaNovelHelper.docRoles/allRoles）— 分组方式、角色类型排序、颜色、自定义分组、显示选项</li>
     <li><b>拼写检查</b>（AndreaNovelHelper.typo）— 校对模式、API 端点、自动扫描、LLM 供应商选择</li>
     <li><b>翻译设置</b>（AndreaNovelHelper.translate）— 目标语言、默认处理方式</li>
     <li><b>批注设置</b>（AndreaNovelHelper.comments）— 批注面板行为</li>

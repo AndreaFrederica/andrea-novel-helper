@@ -6,6 +6,7 @@ import { getDocumentRolesModel } from './docRolesModel';
 import { labelForRoleKey } from '../../utils/i18n';
 import { iconForRoleKey } from '../../utils/roleKeyIcons';
 import { roleDetailNeedsExpansion, splitRoleDetailLines } from './roleDetailWrapping';
+import { compareRoleType, getRoleTypeOrder } from './roleTypeOrder';
 
 // ---- Persist expanded state per document for the Explorer doc roles view ----
 const EXPAND_BY_DOC_KEY = 'docRolesExplorerView.expandedByDoc';
@@ -341,6 +342,7 @@ class DocRolesExplorerProvider implements vscode.TreeDataProvider<AnyNode> {
         // 检查是否启用了自定义分组
         const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
         const useCustomGroups = cfg.get<boolean>('docRoles.useCustomGroups', false);
+        const typeOrder = getRoleTypeOrder('docRoles');
         
         if (useCustomGroups) {
             // 使用自定义分组时，直接使用 model 返回的分组结构
@@ -426,7 +428,7 @@ class DocRolesExplorerProvider implements vscode.TreeDataProvider<AnyNode> {
             affChildren.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
             specialTypeNodes.push({ kind:'specialType', key: type, roleType: type, children: affChildren });
         }
-        specialTypeNodes.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
+        specialTypeNodes.sort((a,b)=>compareRoleType(a.key, b.key, typeOrder));
         const specialRoot: SpecialRootNode | undefined = specialTypeNodes.length ? { kind:'specialRoot', key:'__EXPL_DOC_SPECIAL__', children: specialTypeNodes, count: specialCount } : undefined;
         return specialRoot ? [...affiliationNodes, specialRoot] : affiliationNodes;
     }

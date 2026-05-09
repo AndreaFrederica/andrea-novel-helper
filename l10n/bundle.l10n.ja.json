@@ -164,5 +164,6 @@
   "config.defaultRoleLookupKeys.description": "新規役割作成時に自動的に補完するルックアップキーフィールド。project-config.json5 の defaultRoleLookupKeys とマージされます（プロジェクト設定が優先）。'pinyin'、'romanized'、'jp' などの接尾辞、または 'lookupKeys_en' のような完全なフィールド名が指定可能です。",
   "config.extendedLookupKeyPrefixes.description": "ルックアップキー家族として認識する追加の接頭辞リスト（例：refkeys、tagkeys）。これらの接頭辞で始まるフィールドは、組み込みのルックアップキーと同様にマッチング、補完、エディタ表示に参加します。",
   "config.fileTracker.respectGitignore.description": "Whether base file tracking respects .gitignore. Enabled by default; disable it to track writing-resource files even when Git ignores them.",
-  "view.comments.manager.name": "コメント概要"
+  "view.comments.manager.name": "コメント概要",
+  "config.roleEditor.localizedKeyLabels.markdownDescription": "JSON5 ビジュアル役割エディターで、組み込みの役割カード key にローカライズされた表示名を表示します。表示だけに影響し、保存される JSON5 の実際の key は変更しません。対応表示言語: 中国語、英語、日本語。"
 }

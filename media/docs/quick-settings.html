@@ -9,7 +9,15 @@
     <li><b>键盘方式</b>：按 <kbd>Ctrl+Alt+I</kbd>。屏幕上方会弹出一个列表，这就是命令式快速设置</li>
     <li><b>从命令面板打开</b>：按 <kbd>Ctrl+Shift+P</kbd>，输入“快速设置”，然后选择 ANH 的快速设置命令</li>
     <li><b>从功能引导打开</b>：打开 ANH 功能引导，点击“快速设置”卡片</li>
-    <li><b>图形化方式</b>：打开 ANH 设置页面，左侧选择“快速设置”。那里是表单式界面，适合慢慢看说明、下拉选择、切换开关</li>
+    <li><b>图形化方式</b>：从命令面板运行“打开图形化快速设置”，或在包管理器的“常用功能”里点击“+ 图形化快速设置”。那里是表单式界面，适合慢慢看说明、下拉选择、切换开关</li>
+</ul>
+
+<h4>图形化快速设置有什么新能力</h4>
+<ul>
+    <li><b>设置向导</b> — 首次打开当前版本时可选择写入工作区或全局，并按写作场景套用“通用写作 / 专注起草 / 角色密集 / AI 校对”等预设</li>
+    <li><b>实时预览</b> — 字体、换行、段落排版、智能编辑、状态栏和角色列表设置都有对应预览</li>
+    <li><b>复杂设置可视化</b> — 自动补齐括号对、里程碑目标、角色类型排序、角色自定义分组等不需要手写 JSON</li>
+    <li><b>当前值来源</b> — 每个设置项会标明来自默认值、全局设置还是工作区设置</li>
 </ul>
 
 <h4>状态栏入口在哪里</h4>
@@ -55,13 +63,15 @@
     <li><b>统计计入粘贴</b> — 控制粘贴进来的文字是否算进速度和新增字数。严肃记录写作速度时建议关闭；整理旧稿时可按需要开启</li>
     <li><b>.wcignore</b> — 管理哪些文件或文件夹不进入写作资源和字数统计。例如素材、备份、导出文件、临时文件</li>
     <li><b>里程碑提醒</b> — 设置达到多少字时提醒你，例如 1000、5000、10000 字。适合用来做每日目标或章节目标</li>
+    <li><b>角色类型排序</b> — 控制角色树中“主角、配角、反派、词汇”等类型的显示顺序。想让主角显示在配角上方，就把“主角”排在“配角”前面</li>
+    <li><b>LLM 模型选择</b> — 在 AI/错字相关设置中可以从兼容 API 拉取模型列表，也可以手动输入自定义模型名</li>
     <li><b>错别字识别快速设置</b> — 进入错别字识别的单独菜单，可以开关自动识别、手动扫描当前文档、调整识别模式</li>
 </ul>
 
 <h4>命令式和图形化有什么区别</h4>
 <ul>
     <li><b>命令式快速设置</b>：按 <kbd>Ctrl+Alt+I</kbd> 打开，像菜单一样一项一项点，适合写作中快速改</li>
-    <li><b>图形化快速设置</b>：在 ANH 设置页面里打开，像表单一样显示开关、输入框和下拉框，适合新手慢慢看说明</li>
+    <li><b>图形化快速设置</b>：通过“打开图形化快速设置”命令或包管理器常用功能打开，像表单一样显示开关、输入框、下拉框和可视化编辑器，适合新手慢慢看说明</li>
     <li>两种入口改的是同一批设置。比如你在命令式快速设置里改了“折行缩进”，图形化快速设置里看到的值也会跟着变</li>
 </ul>
 
@@ -165,7 +175,7 @@
 
 <h4>角色显示</h4>
 <ul>
-    <li><b>配置：当前文章角色显示</b> — 配置资源管理器里的“当前文章角色”视图。可设置分组、展开详情、颜色显示、SVG 图标和自定义分组</li>
+    <li><b>配置：当前文章角色显示</b> — 配置资源管理器里的“当前文章角色”视图。可设置分组、角色类型排序、展开详情、颜色显示、SVG 图标和自定义分组</li>
     <li><b>配置：全部角色显示</b> — 配置 ANH 侧栏里的“角色”视图。默认同步当前文章角色显示；关闭同步后使用 <code>AndreaNovelHelper.allRoles.*</code> 独立配置</li>
 </ul>
 
@@ -175,6 +185,7 @@
     <li><b>遵循归属</b> — 写入 <code>AndreaNovelHelper.docRoles.respectAffiliation</code>。关闭后忽略角色 <code>affiliation</code> 字段</li>
     <li><b>遵循类型</b> — 写入 <code>AndreaNovelHelper.docRoles.respectType</code>。关闭后忽略角色 <code>type</code> 字段</li>
     <li><b>第一级别分组</b> — 写入 <code>AndreaNovelHelper.docRoles.primaryGroup</code>，可选归属优先或类型优先</li>
+    <li><b>角色类型排序</b> — 写入 <code>AndreaNovelHelper.docRoles.typeOrder</code>。列表越靠前的类型越先显示；未列出的类型会排在后面并按名称自然排序</li>
     <li><b>自定义分组</b> — 写入 <code>AndreaNovelHelper.docRoles.useCustomGroups</code>，启用后按自定义规则分组</li>
     <li><b>详情折行列数</b> — 写入 <code>AndreaNovelHelper.roles.details.wrapColumn</code>，范围 5-200</li>
     <li><b>允许角色展开详情</b> — 写入 <code>AndreaNovelHelper.roles.details.enableRoleExpansion</code></li>
@@ -190,6 +201,7 @@
     <li><b>遵循归属</b> — 写入 <code>AndreaNovelHelper.allRoles.respectAffiliation</code></li>
     <li><b>遵循类型</b> — 写入 <code>AndreaNovelHelper.allRoles.respectType</code></li>
     <li><b>第一级别分组</b> — 写入 <code>AndreaNovelHelper.allRoles.primaryGroup</code></li>
+    <li><b>角色类型排序</b> — 写入 <code>AndreaNovelHelper.allRoles.typeOrder</code>。开启同步时会复用 <code>docRoles.typeOrder</code></li>
     <li><b>自定义分组</b> — 写入 <code>AndreaNovelHelper.allRoles.useCustomGroups</code></li>
     <li><b>详情折行列数</b> / <b>允许角色展开详情</b> — 与当前文章角色共用 <code>roles.details.*</code></li>
     <li><b>用角色颜色标记名称</b> — 写入 <code>AndreaNovelHelper.allRoles.display.colorizeRoleName</code></li>
@@ -231,8 +243,19 @@
 </ul>
 
 <h4>快速设置与完整设置页的区别</h4>
-<p>快速设置只覆盖高频项。ANH 里有两种入口：<b>命令式快速设置</b>是 <kbd>Ctrl+Alt+I</kbd> 打开的 VS Code QuickPick 菜单；<b>图形化快速设置</b>在设置 Webview 的“快速设置”分组里。两者都会操作同一批高频键，例如 <code>editor.wordWrap</code>、<code>editor.wrappingIndent</code>、<code>editor.fontSize</code> 和 ANH 自己的写作设置。</p>
+<p>快速设置只覆盖高频项。ANH 里有两种入口：<b>命令式快速设置</b>是 <kbd>Ctrl+Alt+I</kbd> 打开的 VS Code QuickPick 菜单；<b>图形化快速设置</b>是独立 Webview 面板，命令 ID 为 <code>andrea.openGraphicalQuickSettings</code>。两者都会操作同一批高频键，例如 <code>editor.wordWrap</code>、<code>editor.wrappingIndent</code>、<code>editor.fontSize</code> 和 ANH 自己的写作设置。</p>
 <p>完整配置仍在“插件设置”“编辑器设置增强版”和 VS Code 设置里。对于不在快速设置里的低频参数，例如补全触发细节、WebDAV 同步策略、数据库后端、脚本运行时等，应使用完整设置页。</p>
+
+<h4>图形化快速设置覆盖范围</h4>
+<ul>
+    <li><b>设置向导</b> — 可按写作场景批量套用预设；暂存只更新页面，保存才写入 VS Code 设置</li>
+    <li><b>编辑器显示</b> — 字体、字号、小地图、自动换行、折行缩进、缩进宽度</li>
+    <li><b>智能编辑</b> — 括号补齐、跳出、智能回车、自动补齐括号对的可视化编辑</li>
+    <li><b>补全与查询键</b> — 查询键自动生成、扩展索引键、当前角色文件查询键生成入口</li>
+    <li><b>角色列表</b> — 当前文章角色和全部角色的分组、首要分组、角色类型排序、详情展开、颜色、SVG、自定义分组和实时预览</li>
+    <li><b>AI 与错字系统</b> — 校对模式、客户端直连 LLM、模型选择器、自动扫描策略和调试开关</li>
+    <li><b>状态栏</b> — 字数、排版、同步、错字状态等显示方式</li>
+</ul>
 
 <div class="doc-note">快速设置中的大多数项写入工作区设置；折行缩进会额外同步 Markdown/plaintext 的语言级工作区设置；字体大小写入全局用户设置；Enter 注入会修改用户 keybindings.json。涉及全局或按键绑定的项目，文档中已单独标出。</div>
 </div>

@@ -1,14 +1,19 @@
 <template>
-  <div class="role-graph-page">
-    <aside class="graph-sidebar">
+  <div class="role-graph-page" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <aside class="graph-sidebar" :aria-hidden="sidebarCollapsed">
       <header class="sidebar-header">
         <div>
           <div class="sidebar-title">角色关系图谱</div>
           <div class="sidebar-subtitle">{{ graphData.nodes.length }} 个角色 / {{ filteredEdges.length }} 条关系</div>
         </div>
-        <q-btn dense round flat icon="refresh" @click="requestGraphData">
-          <q-tooltip>刷新图谱</q-tooltip>
-        </q-btn>
+        <div class="sidebar-header-actions">
+          <q-btn dense round flat icon="refresh" @click="requestGraphData">
+            <q-tooltip>刷新图谱</q-tooltip>
+          </q-btn>
+          <q-btn dense round flat icon="chevron_left" @click="toggleSidebar">
+            <q-tooltip>收起设置</q-tooltip>
+          </q-btn>
+        </div>
       </header>
 
       <q-input
@@ -189,6 +194,17 @@
     </aside>
 
     <main class="graph-main">
+      <q-btn
+        v-if="sidebarCollapsed"
+        dense
+        round
+        flat
+        icon="tune"
+        class="sidebar-expand-btn"
+        @click="toggleSidebar"
+      >
+        <q-tooltip>展开设置</q-tooltip>
+      </q-btn>
       <div ref="graphContainer" class="sigma-container"></div>
       <div class="graph-hud">
         <span>滚轮缩放</span>
@@ -252,6 +268,7 @@ type LayoutStrategy = 'force' | 'circle' | 'concentric' | 'typeBands' | 'selecte
 type EdgeDisplayStrategy = 'smartFocus' | 'all' | 'highlightOnly' | 'selectedOnly' | 'hideReference';
 
 const HOVER_SCROLL_MODIFIER_STORAGE_KEY = 'anh-role-graph-hover-scroll-modifier';
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'anh-role-graph-sidebar-collapsed';
 const vscode = typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : undefined;
 const graphContainer = ref<HTMLDivElement>();
 const graphData = ref<RoleRelationshipGraphData>({ nodes: [], edges: [], stats: { roleCount: 0, edgeCount: 0, referenceEdgeCount: 0, markedEdgeCount: 0, relationshipEdgeCount: 0 } });
@@ -275,6 +292,7 @@ const hoveredNodeId = ref<string | null>(null);
 const errorMessage = ref('');
 const layoutRunning = ref(false);
 const layoutStrategy = ref<LayoutStrategy>('force');
+const sidebarCollapsed = ref(loadSidebarCollapsed());
 
 let sigma: Sigma<GraphNodeAttributes, GraphEdgeAttributes> | null = null;
 let graph: Graph<GraphNodeAttributes, GraphEdgeAttributes> | null = null;
@@ -422,6 +440,35 @@ const hoverScrollHint = computed(() => {
 function requestGraphData() {
   errorMessage.value = '';
   vscode?.postMessage({ command: 'roleRelationshipGraph.refresh' });
+}
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value;
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed.value ? '1' : '0');
+  } catch {
+    // 忽略 webview 存储不可用的情况。
+  }
+  refreshGraphSizeAfterSidebarTransition();
+}
+
+function loadSidebarCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function refreshGraphSizeAfterSidebarTransition() {
+  void nextTick(() => {
+    for (const delay of [40, 180, 280]) {
+      window.setTimeout(() => {
+        (sigma as unknown as { resize?: () => void } | null)?.resize?.();
+        sigma?.refresh();
+      }, delay);
+    }
+  });
 }
 
 function openSource(sourcePath: string) {
@@ -1184,6 +1231,11 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
+  transition: grid-template-columns 220ms ease;
+}
+
+.role-graph-page.sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .graph-sidebar {
@@ -1191,6 +1243,24 @@ onBeforeUnmount(() => {
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
   overflow: auto;
   padding: 14px;
+  min-width: 0;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 180ms ease,
+    padding 220ms ease,
+    transform 220ms ease,
+    border-color 220ms ease;
+}
+
+.sidebar-collapsed .graph-sidebar {
+  border-right-color: transparent;
+  opacity: 0;
+  overflow: hidden;
+  padding-left: 0;
+  padding-right: 0;
+  pointer-events: none;
+  transform: translateX(-18px);
 }
 
 .sidebar-header {
@@ -1199,6 +1269,12 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
 }
 
 .sidebar-title {
@@ -1371,6 +1447,17 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.sidebar-expand-btn {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  background: color-mix(in srgb, var(--vscode-editor-background) 88%, transparent);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  animation: sidebar-toggle-in 180ms ease both;
+}
+
 .sigma-container {
   position: absolute;
   inset: 0;
@@ -1388,16 +1475,39 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
+@keyframes sidebar-toggle-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @media (max-width: 760px) {
   .role-graph-page {
     grid-template-columns: 1fr;
     grid-template-rows: 42vh 58vh;
   }
 
+  .role-graph-page.sidebar-collapsed {
+    grid-template-columns: 1fr;
+    grid-template-rows: 0 1fr;
+  }
+
   .graph-sidebar {
     grid-row: 2;
     border-right: 0;
     border-top: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
+  }
+
+  .sidebar-collapsed .graph-sidebar {
+    border-top-color: transparent;
+    padding-top: 0;
+    padding-bottom: 0;
+    transform: translateY(18px);
   }
 
   .graph-main {

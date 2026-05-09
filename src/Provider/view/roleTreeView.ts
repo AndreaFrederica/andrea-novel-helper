@@ -6,6 +6,7 @@ import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
 import { buildRoleMarkdown } from '../hoverProvider';
 import { roleDetailNeedsExpansion, splitRoleDetailLines } from './roleDetailWrapping';
+import { compareRoleType, getRoleTypeOrder } from './roleTypeOrder';
 
 // 与 docRolesModel 对齐的分组结构
 interface RoleHierarchyTypeGroup { type: string; roles: Role[]; }
@@ -553,6 +554,7 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
     const primaryGroup = cfg.get<string>(`${base}.primaryGroup`, 'affiliation');
     const useCustomGroups = cfg.get<boolean>(`${base}.useCustomGroups`, false);
     const customGroups = cfg.get<any[]>(`${base}.customGroups`, []);
+    const typeOrder = getRoleTypeOrder('allRoles');
 
         // 将全局 roles 视为“可见集合”
         const seen = new Set<Role>(roles);
@@ -600,7 +602,7 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                 }
                 const tgs: RoleHierarchyTypeGroup[] = [];
                 for (const [t, rs] of typeMap) { rs.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'})); tgs.push({ type: t, roles: rs }); }
-                tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                tgs.sort((a,b)=>compareRoleType(a.type, b.type, typeOrder));
                 return [{ affiliation: '全部角色', types: tgs }];
             }
             const out: RoleHierarchyAffiliationGroup[] = [];
@@ -615,7 +617,7 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                 }
                 const tgs: RoleHierarchyTypeGroup[] = [];
                 for (const [t, rs] of typeMap) { rs.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'})); tgs.push({ type: t, roles: rs }); }
-                tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                tgs.sort((a,b)=>compareRoleType(a.type, b.type, typeOrder));
                 out.push({ affiliation: name, types: tgs });
             }
             out.sort((a,b)=>{
@@ -660,6 +662,8 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                 const tm = map.get(firstKey)!; if (!tm.has(secondKey)) { tm.set(secondKey, []); }
                 tm.get(secondKey)!.push(r);
             }
+            const firstLevelIsType = groupBy === 'type' || (!respectAffiliation && respectType) || (groupBy === 'affiliation' && respectAffiliation && primaryGroup === 'type');
+            const secondLevelIsType = !firstLevelIsType && respectType;
             const res: RoleHierarchyAffiliationGroup[] = [];
             for (const [fk, tm] of map) {
                 const tgs: RoleHierarchyTypeGroup[] = [];
@@ -667,10 +671,14 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                     arr.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hans',{numeric:true,sensitivity:'base'}));
                     tgs.push({ type: sk === '' ? '__FLAT__' : sk, roles: arr.slice() });
                 }
-                tgs.sort((a,b)=>a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
+                tgs.sort((a,b)=>secondLevelIsType
+                    ? compareRoleType(a.type, b.type, typeOrder)
+                    : a.type.localeCompare(b.type,'zh-Hans',{numeric:true,sensitivity:'base'}));
                 res.push({ affiliation: fk, types: tgs });
             }
-            res.sort((a,b)=>a.affiliation.localeCompare(b.affiliation,'zh-Hans',{numeric:true,sensitivity:'base'}));
+            res.sort((a,b)=>firstLevelIsType
+                ? compareRoleType(a.affiliation, b.affiliation, typeOrder)
+                : a.affiliation.localeCompare(b.affiliation,'zh-Hans',{numeric:true,sensitivity:'base'}));
             groupsOut = res;
         }
 
@@ -718,7 +726,7 @@ export class RoleTreeDataProvider implements vscode.TreeDataProvider<AnyNode> {
                 affChildren.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
                 specialTypeNodes.push({ kind:'specialType', key: type, roleType: type, children: affChildren });
             }
-            specialTypeNodes.sort((a,b)=>a.key.localeCompare(b.key,'zh-Hans',{numeric:true,sensitivity:'base'}));
+            specialTypeNodes.sort((a,b)=>compareRoleType(a.key, b.key, typeOrder));
             const specialRoot: SpecialRootNode | undefined = specialTypeNodes.length ? { kind:'specialRoot', key:'__SPECIAL__', children: specialTypeNodes, count: specialCount } : undefined;
             if (specialRoot) { roots = [...affiliationNodes, specialRoot]; }
         }

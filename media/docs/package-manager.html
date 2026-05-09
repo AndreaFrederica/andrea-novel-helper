@@ -59,6 +59,9 @@
     <li><b>+ 角色关系图谱</b> — 查看角色引用和关系表生成的网络图谱</li>
     <li><b>+ 引用维护和热力图</b> — 打开角色出场分析和引用索引维护</li>
     <li><b>+ 外部资源目录管理</b> — 管理挂载的外部目录</li>
+    <li><b>+ Copilot 文档释放</b> — 将内置 Copilot 指令、Prompt 和 Skills 文档写入当前项目</li>
+    <li><b>+ MCP stdio 代理桥</b> — 将 Claude Desktop / Continue.dev 等工具可用的 stdio 代理脚本写入 <code>.vscode/</code></li>
+    <li><b>+ 为当前角色文件生成查询键</b> — 为当前打开的角色库生成拼音 / 罗马字查询键</li>
     <li><b>+ 功能引导</b> — 打开功能引导页</li>
     <li><b>+ 文档中心</b> — 打开文档中心</li>
     <li><b>+ 图形化快速设置</b> — 可视化调整写作环境，带实时预览</li>
@@ -153,6 +156,9 @@
     <li><b>+ 角色关系图谱</b> — 聚合角色文件引用、<code>relations</code> 标记和关系表，查看全局角色网络</li>
     <li><b>+ 引用维护和热力图</b> — 管理角色引用索引、查看出场可视化</li>
     <li><b>+ 外部资源目录管理</b> — 扫描、添加、移除外部资源目录</li>
+    <li><b>+ Copilot 文档释放</b> — 导出内置 <code>.github/copilot-instructions.md</code>、Agent Skills 和 Prompt 文档，供 VS Code Copilot / Cursor 等工具读取项目约定</li>
+    <li><b>+ MCP stdio 代理桥</b> — 导出 <code>.vscode/andrea-mcp-stdio.js</code>，用于把只支持 stdio 的 AI 客户端连接到 ANH 本地 MCP HTTP 服务器</li>
+    <li><b>+ 为当前角色文件生成查询键</b> — 对当前打开的 Markdown / JSON5 / OJSON5 角色文件生成 <code>lookupKeys_pinyin</code> 和 <code>lookupKeys_romanized</code></li>
     <li><b>+ 功能引导</b> — 打开功能引导页</li>
     <li><b>+ 文档中心</b> — 打开文档中心</li>
     <li><b>+ 图形化快速设置</b> — 可视化调整写作环境，带实时预览</li>
@@ -197,5 +203,5 @@
     <li><code>AndreaNovelHelper.package.mdLibraryNameRecognition</code> — Markdown 库名识别开关</li>
 </ul>
 
-<div class="doc-note">包管理器支持 JSON5、Markdown、TXT、CSV 四种文件格式。Markdown 可读性最好，JSON5 字段最完整且支持角色卡管理器，CSV 适合批量导入，TXT 适合快速列表。</div>
+<div class="doc-note">包管理器支持 Markdown、JSON5/OJSON5、CSV、TXT 等角色资源格式，并识别 RJSON5/TJSON5 这类专用编辑器格式。Markdown 可读性最好，JSON5 字段最完整且支持角色卡管理器，CSV 适合批量导入，TXT 适合快速列表。</div>
 </div>

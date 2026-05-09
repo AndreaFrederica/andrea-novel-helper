@@ -2,6 +2,15 @@ import * as vscode from 'vscode';
 import { buildHtml } from '../utils/html-builder';
 import { SettingsWebviewProvider } from './settingView';
 
+type SettingsWizardScope = 'workspace' | 'global';
+
+interface QuickSettingsPanelOptions {
+    openWizardScope?: SettingsWizardScope;
+    suppressVersionPrompt?: boolean;
+}
+
+const FIRST_USE_WIZARD_PROMPT_KEY = 'andrea.settingsWizard.firstUsePrompted';
+
 export class QuickSettingsPanel {
     private static _instance: QuickSettingsPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
@@ -10,11 +19,16 @@ export class QuickSettingsPanel {
     private _disposables: vscode.Disposable[] = [];
     private _settingsProvider?: SettingsWebviewProvider;
     private _wizardPromptInFlight = false;
+    private _settingsReady = false;
+    private _pendingWizardScope?: SettingsWizardScope;
+    private _suppressVersionPrompt = false;
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, context: vscode.ExtensionContext, options: QuickSettingsPanelOptions = {}) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._context = context;
+        this._pendingWizardScope = options.openWizardScope;
+        this._suppressVersionPrompt = options.suppressVersionPrompt === true;
 
         this._settingsProvider = new SettingsWebviewProvider(context);
         this._settingsProvider.setExternalWebview(this._panel.webview);
@@ -40,7 +54,12 @@ export class QuickSettingsPanel {
                 }
                 if (message.command === 'getSettings' && this._settingsProvider) {
                     await this._settingsProvider.processMessage(message);
-                    void this._maybePromptSettingsWizard();
+                    this._settingsReady = true;
+                    if (this._pendingWizardScope) {
+                        void this._postOpenSettingsWizard(this._pendingWizardScope);
+                    } else if (!this._suppressVersionPrompt) {
+                        void this._maybePromptSettingsWizard();
+                    }
                     return;
                 }
                 if (this._settingsProvider) {
@@ -64,13 +83,14 @@ export class QuickSettingsPanel {
         };
     }
 
-    public static createOrShow(context: vscode.ExtensionContext): QuickSettingsPanel {
+    public static createOrShow(context: vscode.ExtensionContext, options: QuickSettingsPanelOptions = {}): QuickSettingsPanel {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
         if (QuickSettingsPanel._instance) {
             QuickSettingsPanel._instance._panel.reveal(column);
+            QuickSettingsPanel._instance.applyOptions(options);
             return QuickSettingsPanel._instance;
         }
 
@@ -81,7 +101,7 @@ export class QuickSettingsPanel {
             QuickSettingsPanel.getWebviewOptions(context.extensionUri)
         );
 
-        QuickSettingsPanel._instance = new QuickSettingsPanel(panel, context.extensionUri, context);
+        QuickSettingsPanel._instance = new QuickSettingsPanel(panel, context.extensionUri, context, options);
         return QuickSettingsPanel._instance;
     }
 
@@ -127,53 +147,123 @@ export class QuickSettingsPanel {
         this._panel.webview.postMessage(message);
     }
 
+    public applyOptions(options: QuickSettingsPanelOptions) {
+        if (options.suppressVersionPrompt === true) {
+            this._suppressVersionPrompt = true;
+        }
+        if (options.openWizardScope) {
+            this._pendingWizardScope = options.openWizardScope;
+            if (this._settingsReady) {
+                void this._postOpenSettingsWizard(options.openWizardScope);
+            }
+        }
+    }
+
     private async _maybePromptSettingsWizard() {
         if (this._wizardPromptInFlight) {
             return;
         }
 
-        const version = String(this._context.extension.packageJSON?.version ?? 'unknown');
-        const storageKey = `andrea.quickSettings.settingsWizardPrompted.${version}`;
-        if (this._context.globalState.get<boolean>(storageKey) === true) {
+        if (this._context.globalState.get<boolean>(getVersionPromptKey(this._context)) === true) {
             return;
         }
 
         this._wizardPromptInFlight = true;
-        await this._context.globalState.update(storageKey, true);
+        await markSettingsWizardPrompted(this._context);
 
         try {
-            const hasWorkspace = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0;
-            const scopeItems = hasWorkspace
-                ? ['项目设置', '全局设置', '暂不使用'] as const
-                : ['全局设置', '暂不使用'] as const;
-            const scopeChoice = await vscode.window.showInformationMessage(
-                '首次打开本版本的图形化快速设置。设置向导要先调整哪一类设置？',
-                ...scopeItems
-            );
-
-            if (!scopeChoice || scopeChoice === '暂不使用') {
+            const scope = await pickSettingsWizardScope('首次打开本版本的图形化快速设置。设置向导要先调整哪一类设置？');
+            if (!scope) {
                 return;
             }
 
             const wizardChoice = await vscode.window.showInformationMessage(
-                `${scopeChoice}已选择。是否现在打开设置向导？`,
+                '是否现在打开设置向导？向导第一页即可取消退出，不会自动保存任何设置。',
+                { modal: true },
                 '打开向导',
-                '不使用'
+                '暂不使用'
             );
-
-            if (wizardChoice !== '打开向导') {
-                return;
+            if (wizardChoice === '打开向导') {
+                await this._postOpenSettingsWizard(scope);
             }
-
-            const scope = scopeChoice === '全局设置' ? 'global' : 'workspace';
-            await this._panel.webview.postMessage({
-                command: 'openSettingsWizard',
-                scope
-            });
         } finally {
             this._wizardPromptInFlight = false;
         }
     }
+
+    private async _postOpenSettingsWizard(scope: SettingsWizardScope) {
+        this._pendingWizardScope = undefined;
+        await this._panel.webview.postMessage({
+            command: 'openSettingsWizard',
+            scope
+        });
+    }
+}
+
+function getVersionPromptKey(context: vscode.ExtensionContext): string {
+    const version = String(context.extension.packageJSON?.version ?? 'unknown');
+    return `andrea.quickSettings.settingsWizardPrompted.${version}`;
+}
+
+async function markSettingsWizardPrompted(context: vscode.ExtensionContext) {
+    await context.globalState.update(getVersionPromptKey(context), true);
+}
+
+async function pickSettingsWizardScope(message: string): Promise<SettingsWizardScope | undefined> {
+    const hasWorkspace = Boolean(vscode.workspace.workspaceFolders?.length);
+    if (!hasWorkspace) {
+        const choice = await vscode.window.showInformationMessage(
+            `${message}当前没有打开工作区，只能写入全局设置。`,
+            { modal: true },
+            '全局设置',
+            '暂不使用'
+        );
+        return choice === '全局设置' ? 'global' : undefined;
+    }
+
+    const choice = await vscode.window.showInformationMessage(
+        message,
+        { modal: true },
+        '项目设置',
+        '全局设置',
+        '暂不使用'
+    );
+    if (choice === '项目设置') {
+        return 'workspace';
+    }
+    if (choice === '全局设置') {
+        return 'global';
+    }
+    return undefined;
+}
+
+export async function maybePromptFirstUseSettingsWizard(context: vscode.ExtensionContext): Promise<void> {
+    if (context.globalState.get<boolean>(FIRST_USE_WIZARD_PROMPT_KEY) === true) {
+        return;
+    }
+
+    await context.globalState.update(FIRST_USE_WIZARD_PROMPT_KEY, true);
+    await markSettingsWizardPrompted(context);
+
+    const scope = await pickSettingsWizardScope('首次使用 Andrea Novel Helper。设置向导要先调整哪一类设置？');
+    if (!scope) {
+        return;
+    }
+
+    const wizardChoice = await vscode.window.showInformationMessage(
+        '是否现在打开设置向导？向导第一页即可取消退出，不会自动保存任何设置。',
+        { modal: true },
+        '打开向导',
+        '暂不使用'
+    );
+    if (wizardChoice !== '打开向导') {
+        return;
+    }
+
+    QuickSettingsPanel.createOrShow(context, {
+        openWizardScope: scope,
+        suppressVersionPrompt: true
+    });
 }
 
 export function registerQuickSettingsPage(context: vscode.ExtensionContext): vscode.Disposable {

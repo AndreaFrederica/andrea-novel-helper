@@ -185,6 +185,16 @@
         @update:model-value="emit('update:value', $event)"
       />
 
+      <!-- Role type order editor -->
+      <GraphicalArrayEditor
+        v-else-if="isRoleTypeOrderSetting"
+        kind="roleTypeOrder"
+        :model-value="item.value"
+        :default-value="item.defaultValue"
+        :description="item.description"
+        @update:model-value="emit('update:value', $event)"
+      />
+
       <!-- LLM model selector -->
       <div v-else-if="isLlmModelSetting" class="text-row">
         <LlmModelSelector
@@ -271,6 +281,7 @@ const isCustomGroupsSetting = computed(() => props.item.id.endsWith('.customGrou
 const isSecretSetting = computed(() => /apiKey|token|secret|password/i.test(props.item.id))
 const isAutoPairsSetting = computed(() => props.item.id === 'andrea.typeset.pairs')
 const isMilestoneTargetsSetting = computed(() => props.item.id === 'AndreaNovelHelper.timeStats.milestone.targets')
+const isRoleTypeOrderSetting = computed(() => props.item.id === 'AndreaNovelHelper.docRoles.typeOrder' || props.item.id === 'AndreaNovelHelper.allRoles.typeOrder')
 const isLlmModelSetting = computed(() => [
   'AndreaNovelHelper.typo.clientLLM.model',
   'AndreaNovelHelper.typo.llm.model',
@@ -402,6 +413,10 @@ function getArrayEditMode(): 'string' | 'number' | 'json' {
 
   if (props.item.id === 'AndreaNovelHelper.timeStats.milestone.targets') {
     return 'number'
+  }
+
+  if (props.item.id === 'AndreaNovelHelper.docRoles.typeOrder' || props.item.id === 'AndreaNovelHelper.allRoles.typeOrder') {
+    return 'string'
   }
 
   return 'json'

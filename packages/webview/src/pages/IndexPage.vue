@@ -7,7 +7,7 @@
       icon="menu"
       class="drawer-toggle br"
       @click="drawerOpen = !drawerOpen"
-      :aria-label="drawerOpen ? '关闭角色列表' : '打开角色列表'"
+      :aria-label="drawerOpen ? t('roleEditor.closeRoleList') : t('roleEditor.openRoleList')"
     />
 
     <!-- 左侧边栏（由 q-layout 管理，框架将自动挤压主内容） -->
@@ -16,13 +16,13 @@
       side="left"
       bordered
       :breakpoint="0"
-      :class="[isDark ? 'bg-grey-10' : 'bg-grey-1', 'drawer-fullheight']"
+      class="drawer-fullheight role-editor-drawer"
       style="height: 100vh"
     >
       <q-scroll-area class="fit">
         <div class="q-pa-md">
           <div class="row items-center justify-between q-mb-sm">
-            <div class="text-subtitle1">角色（{{ roles.length }}）</div>
+            <div class="text-subtitle1">{{ t('roleEditor.rolesCount', { count: roles.length }) }}</div>
             <!-- <q-btn dense flat icon="unfold_less" @click="collapseAll" class="q-ml-sm" />
             <q-btn dense flat icon="unfold_more" @click="expandAll" /> -->
           </div>
@@ -32,18 +32,22 @@
             <q-expansion-item
               v-for="(r, idx) in roles"
               :key="r.id"
-              :label="r.base?.name || `未命名角色 ${idx + 1}`"
               expand-separator
-              :header-class="isDark ? 'bg-grey-9' : 'bg-grey-2'"
+              header-class="role-sidebar-item__header"
               :default-opened="opened.has(r.id)"
               @show="open(r.id)"
               @hide="close(r.id)"
             >
-              <!-- 快速跳转到该角色卡 -->
-              <q-item clickable @click="scrollToRole(r.id)">
-                <q-item-section avatar><q-icon name="my_location" /></q-item-section>
-                <q-item-section>跳转到卡片</q-item-section>
-              </q-item>
+              <template #header>
+                <q-item-section>
+                  <q-item-label class="ellipsis">{{ roleTitle(r, idx) }}</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                  <q-btn dense flat round icon="my_location" @click.stop.prevent="scrollToRole(r.id)">
+                    <q-tooltip>{{ t('roleEditor.jumpToCard') }}</q-tooltip>
+                  </q-btn>
+                </q-item-section>
+              </template>
 
               <!-- 删除角色（停止冒泡，避免触发折叠/跳转） -->
               <q-item clickable @click.stop="removeRole(r.id)">
@@ -51,7 +55,7 @@
                   <q-icon name="delete" color="negative" />
                 </q-item-section>
                 <q-item-section>
-                  <div class="text-subtitle2 text-negative">删除角色</div>
+                  <div class="text-subtitle2 text-negative">{{ t('roleEditor.deleteRole') }}</div>
                 </q-item-section>
               </q-item>
 
@@ -73,8 +77,8 @@
                     </q-chip>
                     <q-badge
                       outline
-                      :color="isDark ? 'grey-4' : 'grey-7'"
-                      :label="countKeys(r, bucket as any) + ' 项'"
+                      color="primary"
+                      :label="t('roleEditor.itemsCount', { count: countKeys(r, bucket as any) })"
                     />
                   </div>
 
@@ -88,14 +92,9 @@
                     >
                       <q-item-section>
                         <div class="row items-start justify-between">
-                          <div class="text-weight-medium ellipsis">{{ entry.key }}</div>
+                          <div class="text-weight-medium ellipsis">{{ entry.label }}</div>
                           <div
-                            :class="[
-                              isDark ? 'text-grey-4' : 'text-grey-7',
-                              'q-ml-sm',
-                              'mono',
-                              'value-preview',
-                            ]"
+                            class="q-ml-sm mono value-preview"
                           >
                             {{ entry.preview }}
                           </div>
@@ -104,9 +103,9 @@
                     </q-item>
                     <div
                       v-if="bucketEntries(r, bucket as any).length === 0"
-                      :class="[isDark ? 'text-grey-5' : 'text-grey-6', 'q-pa-sm']"
+                      class="role-sidebar-empty q-pa-sm"
                     >
-                      （空）
+                      {{ t('roleEditor.empty') }}
                     </div>
                   </q-list>
                 </div>
@@ -121,7 +120,7 @@
                 <q-icon name="add" color="primary" />
               </q-item-section>
               <q-item-section>
-                <div class="text-subtitle2">添加角色</div>
+                <div class="text-subtitle2">{{ t('roleEditor.addRole') }}</div>
               </q-item-section>
             </q-item>
           </div>
@@ -133,22 +132,35 @@
     <q-page-container class="editor-page-container" style="height: 100vh; overflow: hidden">
       <!-- <q-page > -->
       <q-scroll-area class="fit editor-scroll-area">
-        <div class="column q-gutter-y-md q-px-md q-py-md index-page-content">
-          <div class="editor-mode-toolbar row items-center justify-between q-gutter-sm">
+        <div class="column no-wrap q-gutter-y-md q-px-md q-py-md index-page-content">
+          <div class="editor-mode-toolbar">
             <div class="row items-center q-gutter-sm">
               <q-icon name="view_list" size="20px" />
-              <div class="text-subtitle2">角色编辑布局</div>
+              <div class="text-subtitle2">{{ t('roleEditor.layout') }}</div>
             </div>
-            <q-btn-toggle
-              v-model="roleEditorUiMode"
-              dense
-              unelevated
-              toggle-color="primary"
-              :options="roleEditorUiModeOptions"
-            />
+            <div class="role-editor-toolbar__actions">
+              <q-btn-toggle
+                v-model="roleEditorUiMode"
+                dense
+                unelevated
+                toggle-color="primary"
+                :options="roleEditorUiModeOptions"
+              />
+              <q-toggle
+                :model-value="roleEditorSettings.localizedKeyLabels"
+                dense
+                checked-icon="translate"
+                unchecked-icon="code"
+                :label="t('roleEditor.localizedKeyLabels')"
+                @update:model-value="updateLocalizedKeyLabels"
+              >
+                <q-tooltip>{{ t('roleEditor.localizedKeyLabelsTip') }}</q-tooltip>
+              </q-toggle>
+            </div>
           </div>
 
           <random-role-generator
+            class="role-generator-panel"
             :cultures="nameGeneratorState.cultures"
             :candidates="nameGeneratorState.candidates"
             :loading-options="nameGeneratorState.loadingOptions"
@@ -159,41 +171,55 @@
             @add-role="addGeneratedRole"
           />
 
-          <!-- 每个角色卡放入可折叠容器，容器 header 包含删除按钮；默认展开 -->
-          <q-expansion-item
+          <div
             v-for="(r, idx) in roles"
             :key="r.id"
-            class="role-panel q-mb-sm"
-            expand-separator
-            :model-value="mainOpened[r.id] ?? true"
-            @update:model-value="(val: boolean | null) => (mainOpened[r.id] = !!val)"
+            :ref="(el) => setRoleRef(r.id, el as HTMLElement)"
+            class="role-panel-anchor"
           >
-            <template #header>
-              <div class="row items-center justify-between" style="width: 100%">
-                <div class="text-subtitle1">{{ r.base?.name || `未命名角色 ${idx + 1}` }}</div>
-                <div>
-                  <q-btn dense flat color="negative" icon="delete" @click.stop="removeRole(r.id)" />
+            <!-- 每个角色卡放入可折叠容器，容器 header 包含删除按钮；默认展开 -->
+            <q-expansion-item
+              class="role-panel q-mb-sm"
+              expand-separator
+              :model-value="mainOpened[r.id] ?? true"
+              @update:model-value="(val: boolean | null) => (mainOpened[r.id] = !!val)"
+            >
+              <template #header>
+                <div class="role-panel-header">
+                  <div class="text-subtitle1 ellipsis">{{ roleTitle(r, idx) }}</div>
+                  <div class="role-panel-header__actions">
+                    <q-btn dense flat round icon="my_location" @click.stop="scrollToRole(r.id)">
+                      <q-tooltip>{{ t('roleEditor.jumpToCard') }}</q-tooltip>
+                    </q-btn>
+                    <q-btn dense flat round color="negative" icon="delete" @click.stop="removeRole(r.id)">
+                      <q-tooltip>{{ t('roleEditor.deleteRole') }}</q-tooltip>
+                    </q-btn>
+                  </div>
                 </div>
-              </div>
-            </template>
+              </template>
 
-            <div :ref="(el) => setRoleRef(r.id, el as HTMLElement)">
-              <role-card-table
-                v-if="roleEditorUiMode === 'table'"
-                v-model="roles[idx]!"
-                @changed="(e) => onChanged(idx, e)"
-                @type-changed="(e) => onTypeChanged(idx, e)"
-                @request-lookup-candidates="(e) => onRequestLookupCandidates(idx, e)"
-              />
-              <role-card
-                v-else
-                v-model="roles[idx]!"
-                @changed="(e) => onChanged(idx, e)"
-                @type-changed="(e) => onTypeChanged(idx, e)"
-                @request-lookup-candidates="(e) => onRequestLookupCandidates(idx, e)"
-              />
-            </div>
-          </q-expansion-item>
+              <div>
+                <role-card-table
+                  v-if="roleEditorUiMode === 'table'"
+                  v-model="roles[idx]!"
+                  :localized-key-labels="roleEditorSettings.localizedKeyLabels"
+                  :display-language="roleEditorSettings.displayLanguage"
+                  @changed="(e) => onChanged(idx, e)"
+                  @type-changed="(e) => onTypeChanged(idx, e)"
+                  @request-lookup-candidates="(e) => onRequestLookupCandidates(idx, e)"
+                />
+                <role-card
+                  v-else
+                  v-model="roles[idx]!"
+                  :localized-key-labels="roleEditorSettings.localizedKeyLabels"
+                  :display-language="roleEditorSettings.displayLanguage"
+                  @changed="(e) => onChanged(idx, e)"
+                  @type-changed="(e) => onTypeChanged(idx, e)"
+                  @request-lookup-candidates="(e) => onRequestLookupCandidates(idx, e)"
+                />
+              </div>
+            </q-expansion-item>
+          </div>
 
           <!-- 列表风格的“添加角色”项，和上方条目样式保持一致 -->
           <div class="q-pa-sm">
@@ -202,14 +228,14 @@
                 <q-icon name="add" color="primary" />
               </q-item-section>
               <q-item-section>
-                <div class="text-subtitle2">添加角色</div>
+                <div class="text-subtitle2">{{ t('roleEditor.addRole') }}</div>
               </q-item-section>
             </q-item>
           </div>
 
           <q-separator class="q-my-md" />
 
-          <q-expansion-item label="当前数据快照" icon="visibility" expand-separator>
+          <q-expansion-item :label="t('roleEditor.dataSnapshot')" icon="visibility" expand-separator>
             <q-card flat bordered>
               <q-card-section>
                 <pre style="white-space: pre-wrap">{{ roles }}</pre>
@@ -224,7 +250,7 @@
           <q-card-section class="lookup-candidate-card__header row items-center justify-between q-pb-sm">
             <div class="lookup-candidate-card__title-block">
               <div class="text-h6 lookup-candidate-card__title">{{ lookupCandidateDialog.title }}</div>
-              <div class="lookup-candidate-card__hint">候选项由扩展本体后端返回，选择一个后会追加到当前字段。</div>
+              <div class="lookup-candidate-card__hint">{{ t('roleEditor.lookup.hint') }}</div>
             </div>
             <q-btn flat round dense icon="close" v-close-popup />
           </q-card-section>
@@ -232,7 +258,7 @@
           <q-card-section class="lookup-candidate-card__body">
             <div v-if="lookupCandidateDialog.loading" class="row items-center q-gutter-sm">
               <q-spinner color="primary" size="24px" />
-              <div>正在向后端请求候选项…</div>
+              <div>{{ t('roleEditor.lookup.loading') }}</div>
             </div>
 
             <div v-else-if="lookupCandidateDialog.error" class="lookup-candidate-card__error text-negative">
@@ -240,7 +266,7 @@
             </div>
 
             <div v-else-if="lookupCandidateDialog.candidates.length === 0" class="lookup-candidate-card__empty">
-              后端没有返回可用候选项。请先确认当前角色名称或别名中存在可生成的内容。
+              {{ t('roleEditor.lookup.empty') }}
             </div>
 
             <q-list v-else bordered class="rounded-borders overflow-hidden lookup-candidate-list">
@@ -252,15 +278,15 @@
                   :key="`${group.key}-${candidate.value}`"
                   class="lookup-candidate-item"
                   clickable
-                  :active="lookupCandidateDialog.selectedValue === candidate.value"
+                  :active="lookupCandidateDialog.selectedValues.includes(candidate.value)"
                   active-class="lookup-candidate-item--active"
-                  @click="lookupCandidateDialog.selectedValue = candidate.value"
+                  @click="toggleLookupCandidate(candidate.value)"
                 >
                   <q-item-section avatar>
-                    <q-radio
-                      :model-value="lookupCandidateDialog.selectedValue"
+                    <q-checkbox
+                      :model-value="lookupCandidateDialog.selectedValues"
                       :val="candidate.value"
-                      @update:model-value="(value) => (lookupCandidateDialog.selectedValue = String(value || ''))"
+                      @update:model-value="(value) => (lookupCandidateDialog.selectedValues = normalizeSelectedValues(value))"
                     />
                   </q-item-section>
                   <q-item-section class="lookup-candidate-item__content">
@@ -274,11 +300,11 @@
           </q-card-section>
 
           <q-card-actions align="right">
-            <q-btn flat label="取消" v-close-popup />
+            <q-btn flat :label="t('roleEditor.lookup.cancel')" v-close-popup />
             <q-btn
               color="primary"
-              label="应用候选"
-              :disable="lookupCandidateDialog.loading || !lookupCandidateDialog.selectedValue"
+              :label="t('roleEditor.lookup.apply')"
+              :disable="lookupCandidateDialog.loading || lookupCandidateDialog.selectedValues.length === 0"
               @click="applySelectedLookupCandidate"
             />
           </q-card-actions>
@@ -292,15 +318,17 @@
 <script setup lang="ts">
 import { ref, nextTick, computed, onMounted, watch, reactive, onUnmounted } from 'vue';
 import { useQuasar } from 'quasar';
+import { useI18n } from 'vue-i18n';
 import { generateUUIDv7 } from '../utils/uuid';
 
 const $q = useQuasar();
-const isDark = computed(() => $q.dark.isActive);
+const { t } = useI18n();
 
 import RoleCard from '../components/RoleCard.vue';
 import RoleCardTable from '../components/RoleCardTable.vue';
 import RandomRoleGenerator from '../components/RandomRoleGenerator.vue';
 import type { RoleCardModel } from '../../types/role';
+import { formatRoleKeyInline, getCurrentRoleKeyLanguage } from '../utils/roleKeyLabels';
 
 type RoleWithId = RoleCardModel & { id: string };
 type RoleEditorUiMode = 'table' | 'classic';
@@ -338,10 +366,10 @@ const roleEditorUiModeStorageKey = 'andrea.roleCardEditor.uiMode';
 const roleEditorUiMode = ref<RoleEditorUiMode>(
   window.localStorage.getItem(roleEditorUiModeStorageKey) === 'classic' ? 'classic' : 'table',
 );
-const roleEditorUiModeOptions = [
-  { label: '表格', value: 'table' },
-  { label: '经典', value: 'classic' },
-];
+const roleEditorUiModeOptions = computed(() => [
+  { label: t('roleEditor.table'), value: 'table' },
+  { label: t('roleEditor.classic'), value: 'classic' },
+]);
 
 watch(roleEditorUiMode, (value) => {
   window.localStorage.setItem(roleEditorUiModeStorageKey, value);
@@ -383,7 +411,7 @@ const lookupCandidateDialog = reactive({
   field: 'lookupKeys_pinyin' as LookupKeyField,
   title: '',
   candidates: [] as LookupCandidateItem[],
-  selectedValue: '',
+  selectedValues: [] as string[],
   error: '',
 });
 
@@ -396,10 +424,15 @@ const nameGeneratorState = reactive({
   error: '',
 });
 
+const roleEditorSettings = reactive({
+  localizedKeyLabels: true,
+  displayLanguage: getCurrentRoleKeyLanguage(),
+});
+
 const lookupCandidateGroups = computed<LookupCandidateGroup[]>(() => {
   const groups = new Map<string, LookupCandidateItem[]>();
   for (const candidate of lookupCandidateDialog.candidates) {
-    const key = candidate.group || '其它候选';
+    const key = candidate.group || t('roleEditor.lookup.otherGroup');
     const existing = groups.get(key);
     if (existing) {
       existing.push(candidate);
@@ -594,7 +627,9 @@ window.addEventListener('message', (event: MessageEvent) => {
           );
         })
       : [];
-    lookupCandidateDialog.selectedValue = lookupCandidateDialog.candidates[0]?.value ?? '';
+    lookupCandidateDialog.selectedValues = lookupCandidateDialog.candidates[0]?.value
+      ? [lookupCandidateDialog.candidates[0].value]
+      : [];
 
     if (lookupCandidateDialog.error) {
       $q.notify({
@@ -622,6 +657,14 @@ window.addEventListener('message', (event: MessageEvent) => {
     return;
   }
 
+  if (msg.type === 'roleEditorSettings') {
+    roleEditorSettings.localizedKeyLabels = msg.localizedKeyLabels !== false;
+    roleEditorSettings.displayLanguage = typeof msg.displayLanguage === 'string'
+      ? msg.displayLanguage
+      : getCurrentRoleKeyLanguage();
+    return;
+  }
+
   if (msg.type === 'randomRoleCandidates' && typeof msg.requestId === 'string') {
     if (msg.requestId !== nameGeneratorState.requestId) return;
     nameGeneratorState.generating = false;
@@ -642,7 +685,9 @@ function getLookupKeyField(kind: LookupCandidateKind): LookupKeyField {
 }
 
 function getLookupDialogTitle(kind: LookupCandidateKind): string {
-  return kind === 'pinyin' ? '选择拼音查询键候选' : '选择罗马字查询键候选';
+  return kind === 'pinyin'
+    ? t('roleEditor.lookup.pinyinTitle')
+    : t('roleEditor.lookup.romanizedTitle');
 }
 
 function onRequestLookupCandidates(index: number, payload: LookupCandidateRequestPayload) {
@@ -653,7 +698,7 @@ function onRequestLookupCandidates(index: number, payload: LookupCandidateReques
 
   if (sources.length === 0) {
     $q.notify({
-      message: '请先填写角色名称或别名，再请求候选项。',
+      message: t('roleEditor.lookup.missingSource'),
       type: 'warning',
       position: 'top',
     });
@@ -662,7 +707,7 @@ function onRequestLookupCandidates(index: number, payload: LookupCandidateReques
 
   if (!vscodeApi?.postMessage) {
     $q.notify({
-      message: '当前环境无法连接扩展后端。',
+      message: t('roleEditor.lookup.backendUnavailable'),
       type: 'negative',
       position: 'top',
     });
@@ -677,7 +722,7 @@ function onRequestLookupCandidates(index: number, payload: LookupCandidateReques
   lookupCandidateDialog.field = getLookupKeyField(payload.kind);
   lookupCandidateDialog.title = getLookupDialogTitle(payload.kind);
   lookupCandidateDialog.candidates = [];
-  lookupCandidateDialog.selectedValue = '';
+  lookupCandidateDialog.selectedValues = [];
   lookupCandidateDialog.error = '';
 
   vscodeApi.postMessage({
@@ -689,19 +734,20 @@ function onRequestLookupCandidates(index: number, payload: LookupCandidateReques
 }
 
 function applySelectedLookupCandidate() {
-  const selectedValue = lookupCandidateDialog.selectedValue.trim();
+  const selectedValues = lookupCandidateDialog.selectedValues.map((value) => value.trim()).filter(Boolean);
   const role = roles.value[lookupCandidateDialog.roleIndex];
 
-  if (!selectedValue || !role) {
+  if (selectedValues.length === 0 || !role) {
     lookupCandidateDialog.open = false;
     return;
   }
 
   const field = lookupCandidateDialog.field;
   const existing = Array.isArray(role.base[field]) ? [...role.base[field]!] : [];
-  if (existing.includes(selectedValue)) {
+  const additions = selectedValues.filter((value) => !existing.includes(value));
+  if (additions.length === 0) {
     $q.notify({
-      message: '该候选项已经存在，无需重复添加。',
+      message: t('roleEditor.lookup.duplicate'),
       type: 'info',
       position: 'top',
     });
@@ -709,18 +755,32 @@ function applySelectedLookupCandidate() {
     return;
   }
 
-  role.base[field] = [...existing, selectedValue];
+  role.base[field] = [...existing, ...additions];
   lookupCandidateDialog.open = false;
   $q.notify({
-    message: '已将候选项追加到当前字段。',
+    message: t('roleEditor.lookup.appended', { count: additions.length }),
     type: 'positive',
     position: 'top',
   });
 }
 
+function normalizeSelectedValues(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item || '')).filter(Boolean) : [];
+}
+
+function toggleLookupCandidate(value: string) {
+  const set = new Set(lookupCandidateDialog.selectedValues);
+  if (set.has(value)) {
+    set.delete(value);
+  } else {
+    set.add(value);
+  }
+  lookupCandidateDialog.selectedValues = Array.from(set);
+}
+
 function requestNameGeneratorOptions() {
   if (!vscodeApi?.postMessage) {
-    nameGeneratorState.error = '当前环境无法连接扩展后端。';
+    nameGeneratorState.error = t('roleEditor.lookup.backendUnavailable');
     return;
   }
   nameGeneratorState.loadingOptions = true;
@@ -730,7 +790,7 @@ function requestNameGeneratorOptions() {
 
 function generateRandomRoleCandidates(options: Record<string, unknown>) {
   if (!vscodeApi?.postMessage) {
-    nameGeneratorState.error = '当前环境无法连接扩展后端。';
+    nameGeneratorState.error = t('roleEditor.lookup.backendUnavailable');
     return;
   }
   nameGeneratorState.generating = true;
@@ -740,6 +800,14 @@ function generateRandomRoleCandidates(options: Record<string, unknown>) {
     type: 'generateRandomRoleCandidates',
     requestId: nameGeneratorState.requestId,
     options,
+  });
+}
+
+function updateLocalizedKeyLabels(value: boolean) {
+  roleEditorSettings.localizedKeyLabels = value;
+  vscodeApi?.postMessage?.({
+    type: 'updateRoleEditorSettings',
+    localizedKeyLabels: value,
   });
 }
 
@@ -771,6 +839,7 @@ function notifySave() {
 
 onMounted(() => {
   if (vscodeApi?.postMessage) {
+    vscodeApi.postMessage({ type: 'requestRoleEditorSettings' });
     vscodeApi.postMessage({ type: 'requestRoleCards' });
     requestNameGeneratorOptions();
   }
@@ -860,7 +929,7 @@ function addRole() {
     id: genId(),
     base: {
       uuid: generateUUIDv7(), // 自动添加 UUIDv7 作为基础字段
-      name: `新角色 ${roles.value.length + 1}`,
+      name: t('roleEditor.newRole', { index: roles.value.length + 1 }),
       type: '主角',
       color: '#e0e0e0',
       priority: 100 + roles.value.length,
@@ -889,8 +958,16 @@ function bucketEntries(r: RoleWithId, bucket: 'base' | 'extended' | 'custom') {
   const rec = obj as Record<string, unknown>;
   return Object.keys(rec).map((k) => {
     const v = rec[k];
-    return { key: k, preview: toPreview(v, k) };
+    return { key: k, label: fieldLabel(k), preview: toPreview(v, k) };
   });
+}
+
+function fieldLabel(key: string): string {
+  return formatRoleKeyInline(key, roleEditorSettings.localizedKeyLabels, roleEditorSettings.displayLanguage);
+}
+
+function roleTitle(role: RoleWithId, index: number): string {
+  return role.base?.name || t('roleEditor.unnamedRole', { index: index + 1 });
 }
 function toPreview(v: unknown, key?: string): string {
   if (key === 'style' && v && typeof v === 'object' && !Array.isArray(v)) {
@@ -958,7 +1035,7 @@ function flashRoleCard(id: string) {
 function focusRoleByName(name: string) {
   const id = findRoleIdByName(name);
   if (!id) {
-    $q.notify({ type: 'warning', message: `未找到角色：${name}` });
+    $q.notify({ type: 'warning', message: t('roleEditor.roleNotFound', { name }) });
     return;
   }
   drawerOpen.value = true; // 打开左侧列表
@@ -1002,15 +1079,117 @@ onUnmounted(() => {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
 }
 
+.role-editor-drawer {
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background, transparent));
+  color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground, inherit));
+  border-color: var(--vscode-sideBar-border, var(--vscode-panel-border, rgba(127, 127, 127, 0.25)));
+}
+
+.role-editor-drawer :deep(.q-drawer),
+.role-editor-drawer :deep(.q-drawer__content),
+.role-editor-drawer :deep(.q-scrollarea),
+.role-editor-drawer :deep(.q-scrollarea__container),
+.role-editor-drawer :deep(.q-scrollarea__content) {
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background, transparent));
+  color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground, inherit));
+}
+
+.role-editor-drawer :deep(.q-item),
+.role-editor-drawer :deep(.q-expansion-item),
+.role-editor-drawer :deep(.q-expansion-item__container),
+.role-editor-drawer :deep(.q-list) {
+  background: transparent;
+  color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground, inherit));
+}
+
+.role-editor-drawer :deep(.role-sidebar-item__header) {
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background, transparent));
+  color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground, inherit));
+  border-bottom: 1px solid var(--vscode-sideBar-border, var(--vscode-panel-border, rgba(127, 127, 127, 0.18)));
+}
+
+.role-editor-drawer :deep(.q-item:hover),
+.role-editor-drawer :deep(.role-sidebar-item__header:hover) {
+  background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.16));
+  color: var(--vscode-list-hoverForeground, var(--vscode-sideBar-foreground, inherit));
+}
+
+.role-editor-drawer :deep(.q-expansion-item--expanded > .q-expansion-item__container > .role-sidebar-item__header) {
+  background: var(--vscode-list-inactiveSelectionBackground, var(--vscode-sideBarSectionHeader-background, rgba(127, 127, 127, 0.14)));
+  color: var(--vscode-list-inactiveSelectionForeground, var(--vscode-sideBar-foreground, inherit));
+}
+
+.role-editor-drawer :deep(.q-icon),
+.role-editor-drawer :deep(.q-btn) {
+  color: var(--vscode-icon-foreground, var(--vscode-sideBar-foreground, inherit));
+}
+
+.role-editor-drawer :deep(.q-list--bordered),
+.role-editor-drawer :deep(.q-separator) {
+  border-color: var(--vscode-sideBar-border, var(--vscode-panel-border, rgba(127, 127, 127, 0.2)));
+  background: transparent;
+}
+
+.role-sidebar-empty,
+.value-preview {
+  color: var(--vscode-descriptionForeground, rgba(127, 127, 127, 0.88));
+}
+
 .editor-mode-toolbar {
   position: sticky;
   top: 0;
   z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
   border-radius: 8px;
-  background: var(--vscode-editor-background, rgba(255, 255, 255, 0.94));
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background, rgba(255, 255, 255, 0.94)));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-editor-foreground, inherit));
+}
+
+.role-editor-toolbar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.role-generator-panel {
+  align-self: stretch;
+  flex: 0 0 auto !important;
+  height: auto;
+  min-height: unset;
+  max-height: none;
+}
+
+.role-panel-anchor {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  scroll-margin-top: 68px;
+}
+
+.role-panel-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.role-panel-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
 }
 
 .lookup-candidate-card {
@@ -1155,9 +1334,10 @@ onUnmounted(() => {
   box-sizing: border-box;
   border-radius: 10px;
   overflow: visible; /* 允许内部阴影/溢出效果 */
-  background: var(--q-card-bg, rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 4px 5px rgba(16, 24, 40, 0.04);
+  color: var(--vscode-editor-foreground, inherit);
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background, rgba(255, 255, 255, 0.02)));
+  border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.22));
+  box-shadow: 0 4px 5px rgba(0, 0, 0, 0.16);
 }
 
 /* 缩小堆叠卡片之间的垂直间距，覆盖 q-mb-sm 提供的较大外边距 */
@@ -1181,12 +1361,14 @@ onUnmounted(() => {
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
+  background: var(--vscode-sideBarSectionHeader-background, rgba(127, 127, 127, 0.1));
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-editor-foreground, inherit));
 }
 
 /* Dark mode tweaks */
 .q-dark .role-panel {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: var(--vscode-editorWidget-background, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.08));
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6);
 }
 
@@ -1228,6 +1410,10 @@ onUnmounted(() => {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.index-page-content {
+  flex-wrap: nowrap;
 }
 
 :deep(.editor-scroll-area .q-scrollarea__container),

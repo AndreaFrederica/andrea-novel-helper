@@ -6,7 +6,7 @@
         <div class="col-12 col-md-6">
           <q-input
             v-model="draft.base.name"
-            label="名称 (name)"
+            :label="fieldLabel('name')"
             dense
             filled
             :debounce="150"
@@ -18,7 +18,7 @@
           <q-select
             v-model="typeSelect"
             :options="typeOptions"
-            label="类型 (type)"
+            :label="fieldLabel('type')"
             dense
             filled
             emit-value
@@ -32,7 +32,7 @@
             v-model="draft.base.description"
             type="textarea"
             autogrow
-            label="描述 (description)"
+            :label="fieldLabel('description')"
             dense
             filled
             :debounce="150"
@@ -43,7 +43,7 @@
         <div class="col-12 col-md-6">
           <q-input
             v-model="draft.base.affiliation"
-            label="从属 (affiliation)"
+            :label="fieldLabel('affiliation')"
             dense
             filled
             :debounce="150"
@@ -54,7 +54,7 @@
         <div v-if="typeSelect === '__custom__'" class="col-12 col-md-6">
           <q-input
             v-model="customType"
-            label="自定义类型"
+            :label="t('roleEditor.classicEditor.customType')"
             dense
             filled
             :debounce="150"
@@ -66,7 +66,7 @@
           <q-input
             v-model.number="draft.base.priority"
             type="number"
-            label="优先级 (priority)"
+            :label="fieldLabel('priority')"
             dense
             filled
             :debounce="150"
@@ -76,7 +76,7 @@
 
         <div class="col-12 col-md-6">
           <q-toggle
-            label="是否受到分词器过滤影响 (wordSegmentFilter)"
+            :label="fieldLabel('wordSegmentFilter')"
             color="pink"
             false-value="Disagreed"
             true-value="Agreed"
@@ -89,7 +89,7 @@
         <div class="col-12 col-md-6">
           <q-input
             v-model="draft.base.uuid"
-            label="UUID (uuid)"
+            :label="fieldLabel('uuid')"
             dense
             filled
             readonly
@@ -102,12 +102,15 @@
           </q-input>
         </div>
 
-        <div class="col-12 col-md-6">
-          <div class="row items-center q-col-gutter-sm">
-            <div class="col">
+        <!-- 文本样式选项 -->
+        <div class="col-12">
+          <div class="text-subtitle2 q-mb-sm">{{ t('roleEditor.classicEditor.textStyle') }}</div>
+          <div class="role-style-panel q-mb-sm">
+            <div class="role-style-color-field">
+              <div class="color-dot" :style="{ backgroundColor: draft.base.color || '#ccc' }" />
               <q-input
                 v-model="draft.base.color"
-                label="前景色 (color)"
+                :label="fieldLabel('color')"
                 dense
                 filled
                 :debounce="150"
@@ -118,36 +121,11 @@
                 </template>
               </q-input>
             </div>
-            <div class="col-auto">
-              <div class="color-dot" :style="{ backgroundColor: draft.base.color || '#ccc' }" />
-            </div>
-          </div>
-          <q-dialog v-model="openColor">
-            <q-card>
-              <q-card-section class="text-subtitle1">选择前景色</q-card-section>
-              <q-card-section>
-                <q-color
-                  v-model="colorPicker"
-                  format-model="hex"
-                  no-header
-                  default-view="palette"
-                />
-              </q-card-section>
-              <q-card-actions align="right">
-                <q-btn flat label="取消" v-close-popup />
-                <q-btn color="primary" label="应用" @click="applyColor()" v-close-popup />
-              </q-card-actions>
-            </q-card>
-          </q-dialog>
-        </div>
-
-        <!-- 背景色 -->
-        <div class="col-12 col-md-6">
-          <div class="row items-center q-col-gutter-sm">
-            <div class="col">
+            <div class="role-style-color-field">
+              <div class="color-dot" :style="{ backgroundColor: backgroundColor || '#ccc' }" />
               <q-input
                 v-model="backgroundColor"
-                label="背景色 (backgroundColor)"
+                :label="`${t('roleEditor.classicEditor.backgroundColorField')} (backgroundColor)`"
                 dense
                 filled
                 :debounce="150"
@@ -157,13 +135,65 @@
                 </template>
               </q-input>
             </div>
+          </div>
+          <div class="row q-col-gutter-md">
             <div class="col-auto">
-              <div class="color-dot" :style="{ backgroundColor: backgroundColor || '#ccc' }" />
+              <q-toggle
+                v-model="bold"
+                :label="t('roleEditor.classicEditor.bold')"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
+            </div>
+            <div class="col-auto">
+              <q-toggle
+                v-model="italic"
+                :label="t('roleEditor.classicEditor.italic')"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
+            </div>
+            <div class="col-auto">
+              <q-toggle
+                v-model="strikethrough"
+                :label="t('roleEditor.classicEditor.strikethrough')"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
+            </div>
+            <div class="col-auto">
+              <q-toggle
+                v-model="underline"
+                :label="t('roleEditor.classicEditor.underline')"
+                color="primary"
+                @update:model-value="commit(['base.style'])"
+              />
             </div>
           </div>
+          <!-- 样式预览 -->
+          <div class="q-mt-sm q-pa-sm rounded-borders" :style="previewStyle">
+            <span>{{ draft.base.name || t('roleEditor.classicEditor.previewText') }}</span>
+          </div>
+          <q-dialog v-model="openColor">
+            <q-card>
+              <q-card-section class="text-subtitle1">{{ t('roleEditor.classicEditor.foregroundColorTitle') }}</q-card-section>
+              <q-card-section>
+                <q-color
+                  v-model="colorPicker"
+                  format-model="hex"
+                  no-header
+                  default-view="palette"
+                />
+              </q-card-section>
+              <q-card-actions align="right">
+                <q-btn flat :label="t('roleEditor.classicEditor.cancel')" v-close-popup />
+                <q-btn color="primary" :label="t('roleEditor.classicEditor.apply')" @click="applyColor()" v-close-popup />
+              </q-card-actions>
+            </q-card>
+          </q-dialog>
           <q-dialog v-model="openBackgroundColor">
             <q-card>
-              <q-card-section class="text-subtitle1">选择背景色</q-card-section>
+              <q-card-section class="text-subtitle1">{{ t('roleEditor.classicEditor.backgroundColorTitle') }}</q-card-section>
               <q-card-section>
                 <q-color
                   v-model="backgroundColorPicker"
@@ -173,60 +203,17 @@
                 />
               </q-card-section>
               <q-card-actions align="right">
-                <q-btn flat label="取消" v-close-popup />
-                <q-btn color="primary" label="应用" @click="applyBackgroundColor()" v-close-popup />
+                <q-btn flat :label="t('roleEditor.classicEditor.cancel')" v-close-popup />
+                <q-btn color="primary" :label="t('roleEditor.classicEditor.apply')" @click="applyBackgroundColor()" v-close-popup />
               </q-card-actions>
             </q-card>
           </q-dialog>
         </div>
 
-        <!-- 文本样式选项 -->
-        <div class="col-12">
-          <div class="text-subtitle2 q-mb-sm">文本样式</div>
-          <div class="row q-col-gutter-md">
-            <div class="col-auto">
-              <q-toggle
-                v-model="bold"
-                label="粗体"
-                color="primary"
-                @update:model-value="commit(['base.style'])"
-              />
-            </div>
-            <div class="col-auto">
-              <q-toggle
-                v-model="italic"
-                label="斜体"
-                color="primary"
-                @update:model-value="commit(['base.style'])"
-              />
-            </div>
-            <div class="col-auto">
-              <q-toggle
-                v-model="strikethrough"
-                label="删除线"
-                color="primary"
-                @update:model-value="commit(['base.style'])"
-              />
-            </div>
-            <div class="col-auto">
-              <q-toggle
-                v-model="underline"
-                label="下划线"
-                color="primary"
-                @update:model-value="commit(['base.style'])"
-              />
-            </div>
-          </div>
-          <!-- 样式预览 -->
-          <div class="q-mt-sm q-pa-sm rounded-borders" :style="previewStyle">
-            <span>{{ draft.base.name || '预览文本' }}</span>
-          </div>
-        </div>
-
         <!-- 别名：逐行编辑，每行一个，最后保留空行用于添加 -->
         <div class="col-12">
           <div class="row items-center q-mb-xs">
-            <div class="text-subtitle2">别名（基础字段）</div>
+            <div class="text-subtitle2">{{ fieldLabel('aliases') }}（{{ t('roleEditor.classicEditor.baseField') }}）</div>
             <q-badge class="q-ml-sm" color="primary" outline>aliases</q-badge>
           </div>
           <div class="q-pa-sm aliases-list">
@@ -240,7 +227,7 @@
                   :model-value="i < aliasesField.model.value.length ? aliasesField.model.value[i] : aliasesField.draftInput.value"
                   dense
                   filled
-                  placeholder="输入别名，回车/离焦以添加"
+                  :placeholder="t('roleEditor.tableEditor.placeholders.aliases')"
                   @update:model-value="(val) => aliasesField.onInput(i, String(val || ''))"
                   @keyup.enter="() => aliasesField.onConfirm(i)"
                   @blur="() => aliasesField.onConfirm(i)"
@@ -263,7 +250,7 @@
         <div class="col-12">
           <div class="row items-center justify-between q-mb-xs lookup-key-toolbar">
             <div class="row items-center q-gutter-x-sm">
-              <div class="text-subtitle2">拼音查询键</div>
+              <div class="text-subtitle2">{{ fieldLabel('lookupKeys_pinyin') }}</div>
               <q-badge color="teal" outline>lookupKeys_pinyin</q-badge>
             </div>
             <q-btn
@@ -271,11 +258,11 @@
               dense
               size="sm"
               icon="auto_awesome"
-              label="请求候选"
+              :label="t('roleEditor.classicEditor.requestCandidates')"
               @click="requestLookupCandidates('pinyin')"
             />
           </div>
-          <div class="text-caption q-mb-xs">用于中文拼音检索；是否按别名展示由扩展设置控制。</div>
+          <div class="text-caption q-mb-xs">{{ t('roleEditor.classicEditor.pinyinHint') }}</div>
           <div class="q-pa-sm aliases-list">
             <div
               v-for="i in pinyinLookupField.ui.value"
@@ -287,7 +274,7 @@
                   :model-value="i < pinyinLookupField.model.value.length ? pinyinLookupField.model.value[i] : pinyinLookupField.draftInput.value"
                   dense
                   filled
-                  placeholder="输入拼音查询键，回车/离焦以添加"
+                  :placeholder="t('roleEditor.tableEditor.placeholders.pinyin')"
                   @update:model-value="(val) => pinyinLookupField.onInput(i, String(val || ''))"
                   @keyup.enter="() => pinyinLookupField.onConfirm(i)"
                   @blur="() => pinyinLookupField.onConfirm(i)"
@@ -310,7 +297,7 @@
         <div class="col-12">
           <div class="row items-center justify-between q-mb-xs lookup-key-toolbar">
             <div class="row items-center q-gutter-x-sm">
-              <div class="text-subtitle2">罗马字查询键</div>
+              <div class="text-subtitle2">{{ fieldLabel('lookupKeys_romanized') }}</div>
               <q-badge color="deep-orange" outline>lookupKeys_romanized</q-badge>
             </div>
             <q-btn
@@ -318,11 +305,11 @@
               dense
               size="sm"
               icon="auto_awesome"
-              label="请求候选"
+              :label="t('roleEditor.classicEditor.requestCandidates')"
               @click="requestLookupCandidates('romanized')"
             />
           </div>
-          <div class="text-caption q-mb-xs">用于罗马字、romaji、transliteration 等检索形式。</div>
+          <div class="text-caption q-mb-xs">{{ t('roleEditor.classicEditor.romanizedHint') }}</div>
           <div class="q-pa-sm aliases-list">
             <div
               v-for="i in romanizedLookupField.ui.value"
@@ -334,7 +321,7 @@
                   :model-value="i < romanizedLookupField.model.value.length ? romanizedLookupField.model.value[i] : romanizedLookupField.draftInput.value"
                   dense
                   filled
-                  placeholder="输入罗马字查询键，回车/离焦以添加"
+                  :placeholder="t('roleEditor.tableEditor.placeholders.romanized')"
                   @update:model-value="(val) => romanizedLookupField.onInput(i, String(val || ''))"
                   @keyup.enter="() => romanizedLookupField.onConfirm(i)"
                   @blur="() => romanizedLookupField.onConfirm(i)"
@@ -356,10 +343,10 @@
 
         <div class="col-12">
           <div class="row items-center q-mb-xs">
-            <div class="text-subtitle2">拼写查询键</div>
+            <div class="text-subtitle2">{{ fieldLabel('lookupKeys_spelling') }}</div>
             <q-badge class="q-ml-sm" color="purple" outline>lookupKeys_spelling</q-badge>
           </div>
-          <div class="text-caption q-mb-xs">用于去音调、去分隔符、折叠空格后的拼写变体检索。</div>
+          <div class="text-caption q-mb-xs">{{ t('roleEditor.classicEditor.spellingHint') }}</div>
           <div class="q-pa-sm aliases-list">
             <div
               v-for="i in spellingLookupField.ui.value"
@@ -371,7 +358,7 @@
                   :model-value="i < spellingLookupField.model.value.length ? spellingLookupField.model.value[i] : spellingLookupField.draftInput.value"
                   dense
                   filled
-                  placeholder="输入拼写查询键，回车/离焦以添加"
+                  :placeholder="t('roleEditor.tableEditor.placeholders.spelling')"
                   @update:model-value="(val) => spellingLookupField.onInput(i, String(val || ''))"
                   @keyup.enter="() => spellingLookupField.onConfirm(i)"
                   @blur="() => spellingLookupField.onConfirm(i)"
@@ -396,7 +383,7 @@
           <div class="col-12 col-md-8">
             <q-input
               v-model="draft.base.regex"
-              label="正则模式 (regex)"
+              :label="fieldLabel('regex')"
               dense
               filled
               :debounce="150"
@@ -406,7 +393,7 @@
           <div class="col-12 col-md-4">
             <q-input
               v-model="draft.base.regexFlags"
-              label="标志 (regexFlags，例如 gmi)"
+              :label="`${fieldLabel('regexFlags')}, ${t('roleEditor.classicEditor.regexFlagsExample')}`"
               dense
               filled
               :debounce="150"
@@ -419,7 +406,7 @@
         <template v-if="draft.base.type === '敏感词'">
           <div class="col-12">
             <div class="row items-center q-mb-xs">
-              <div class="text-subtitle2">修复词（敏感词专用）</div>
+              <div class="text-subtitle2">{{ fieldLabel('fixes') }}（{{ t('roleEditor.classicEditor.sensitiveOnly') }}）</div>
               <q-badge class="q-ml-sm" color="primary" outline>fixes</q-badge>
             </div>
             <div class="q-pa-sm fixes-list">
@@ -433,7 +420,7 @@
                     :model-value="i < fixesField.model.value.length ? fixesField.model.value[i] : fixesField.draftInput.value"
                     dense
                     filled
-                    placeholder="输入修复词，回车/离焦以添加"
+                    :placeholder="t('roleEditor.tableEditor.placeholders.fixes')"
                     @update:model-value="(val) => fixesField.onInput(i, String(val || ''))"
                     @keyup.enter="() => fixesField.onConfirm(i)"
                     @blur="() => fixesField.onConfirm(i)"
@@ -461,12 +448,12 @@
     <!-- ===== 扩展 & 自定义 字段（统一列表）===== -->
     <q-card-section>
         <div class="row items-center justify-between q-mb-sm">
-        <div class="text-subtitle2">扩展 / 自定义字段</div>
-        <q-btn dense color="primary" icon="add" label="新增字段" @click="onOpenAdd" />
+        <div class="text-subtitle2">{{ t('roleEditor.classicEditor.extraFields') }}</div>
+        <q-btn dense color="primary" icon="add" :label="t('roleEditor.classicEditor.addField')" @click="onOpenAdd" />
       </div>
 
-      <div v-if="mergedEntries.length === 0" :class="[isDark ? 'text-grey-5' : 'text-grey-6']">
-        暂无字段。你可以点击「新增字段」添加（默认归入自定义）。
+      <div v-if="mergedEntries.length === 0" class="role-card-empty">
+        {{ t('roleEditor.classicEditor.emptyExtra') }}
       </div>
 
       <q-list v-else bordered class="rounded-borders">
@@ -476,9 +463,9 @@
           expand-separator
           icon="notes"
           :label="displayLabel(item)"
-          :caption="item.bucket === 'extended' ? '扩展字段' : '自定义字段'"
+          :caption="item.bucket === 'extended' ? t('roleEditor.tableEditor.buckets.extended') : t('roleEditor.tableEditor.buckets.custom')"
           default-opened
-          :header-class="[(isDark ? 'bg-grey-9' : 'bg-grey-1'), 'expansion-header-wrap']"
+          header-class="role-card-extra-header expansion-header-wrap"
         >
           <div class="q-pa-sm q-gutter-sm">
             <div class="row q-col-gutter-md">
@@ -487,7 +474,7 @@
                   v-model="item.key"
                   dense
                   filled
-                  label="字段 key"
+                  :label="t('roleEditor.classicEditor.fieldKey')"
                   :debounce="150"
                   @update:model-value="onExtraEditKey(idx)"
                 />
@@ -498,7 +485,7 @@
                   :options="valueTypeOptions"
                   dense
                   filled
-                  label="值类型"
+                  :label="t('roleEditor.classicEditor.valueType')"
                   :disable="item.locked"
                   emit-value
                   map-options
@@ -511,7 +498,7 @@
                   :options="bucketOptions"
                   dense
                   filled
-                  label="类别（扩展/自定义）"
+                  :label="t('roleEditor.classicEditor.bucket')"
                   emit-value
                   map-options
                   @update:model-value="onExtraBucketChange(idx)"
@@ -526,17 +513,17 @@
                   autogrow
                   dense
                   filled
-                  label="值（字符串 / Markdown）"
+                  :label="t('roleEditor.classicEditor.stringMarkdownValue')"
                   :debounce="150"
                   @update:model-value="onExtraValueChange(idx)"
                 />
                 <q-expansion-item
                   dense
                   icon="visibility"
-                  label="预览"
-                  :header-class="isDark ? 'bg-grey-9' : 'bg-grey-2'"
+                  :label="t('roleEditor.classicEditor.preview')"
+                  header-class="role-card-extra-header expansion-header-wrap"
                 >
-                  <q-markdown :src="item.valueStr || '（空）'" />
+                  <q-markdown :src="item.valueStr || t('roleEditor.empty')" />
                 </q-expansion-item>
               </div>
 
@@ -546,7 +533,7 @@
                   type="number"
                   dense
                   filled
-                  label="值（数字）"
+                  :label="t('roleEditor.classicEditor.numberValue')"
                   :debounce="150"
                   @update:model-value="onExtraValueChange(idx)"
                 />
@@ -555,7 +542,7 @@
               <div class="col-12" v-else-if="item.valueType === 'boolean'">
                 <q-toggle
                   v-model="item.valueBool"
-                  label="布尔值"
+                  :label="t('roleEditor.classicEditor.booleanValue')"
                   @update:model-value="onExtraValueChange(idx)"
                 />
               </div>
@@ -569,7 +556,7 @@
                   input-debounce="0"
                   dense
                   filled
-                  label="字符串数组；回车添加"
+                  :label="t('roleEditor.classicEditor.stringArrayValue')"
                   @update:model-value="onExtraValueChange(idx)"
                 />
               </div>
@@ -580,7 +567,7 @@
                     flat
                     dense
                     icon="arrow_upward"
-                    label="上移"
+                    :label="t('roleEditor.classicEditor.moveUp')"
                     :disable="idx === 0"
                     @click="moveExtra(idx, -1)"
                   />
@@ -588,7 +575,7 @@
                     flat
                     dense
                     icon="arrow_downward"
-                    label="下移"
+                    :label="t('roleEditor.classicEditor.moveDown')"
                     :disable="idx === mergedEntries.length - 1"
                     @click="moveExtra(idx, 1)"
                   />
@@ -599,7 +586,7 @@
                     dense
                     color="negative"
                     icon="delete"
-                    label="删除"
+                    :label="t('roleEditor.classicEditor.delete')"
                     @click="removeExtra(idx)"
                   />
                 </div>
@@ -613,13 +600,13 @@
     <!-- 新增字段对话框 -->
     <q-dialog v-model="openAdd">
       <q-card style="min-width: 540px; max-width: 90vw">
-        <q-card-section class="text-h6">新增字段</q-card-section>
+        <q-card-section class="text-h6">{{ t('roleEditor.classicEditor.addField') }}</q-card-section>
         <q-card-section class="q-gutter-md">
           <div v-if="addForm.bucket === 'extended'">
-            <q-select v-model="addForm.key" :options="EXTENDED_KEY_OPTIONS" label="字段 key（扩展字段：从列表选择）" dense filled emit-value map-options />
+            <q-select v-model="addForm.key" :options="EXTENDED_KEY_OPTIONS" :label="t('roleEditor.classicEditor.extendedFieldKey')" dense filled emit-value map-options />
           </div>
           <div v-else>
-            <q-input v-model="addForm.key" label="字段 key" dense filled />
+            <q-input v-model="addForm.key" :label="t('roleEditor.classicEditor.fieldKey')" dense filled />
           </div>
           <q-select
             v-model="addForm.valueType"
@@ -629,7 +616,7 @@
             map-options
             dense
             filled
-            label="值类型"
+            :label="t('roleEditor.classicEditor.valueType')"
           />
           <q-select
             v-model="addForm.bucket"
@@ -638,7 +625,7 @@
             map-options
             dense
             filled
-            label="类别（扩展/自定义）"
+            :label="t('roleEditor.classicEditor.bucket')"
           />
           <q-input
             v-if="addForm.valueType === 'string'"
@@ -647,7 +634,7 @@
             autogrow
             dense
             filled
-            label="值（字符串/Markdown）"
+            :label="t('roleEditor.classicEditor.stringMarkdownValue')"
           />
           <q-input
             v-else-if="addForm.valueType === 'number'"
@@ -655,12 +642,12 @@
             type="number"
             dense
             filled
-            label="值（数字）"
+            :label="t('roleEditor.classicEditor.numberValue')"
           />
           <q-toggle
             v-else-if="addForm.valueType === 'boolean'"
             v-model="addForm.valueBool"
-            label="布尔值"
+            :label="t('roleEditor.classicEditor.booleanValue')"
           />
           <q-select
             v-else-if="addForm.valueType === 'string[]'"
@@ -671,14 +658,14 @@
             input-debounce="0"
             dense
             filled
-            label="字符串数组；回车添加"
+            :label="t('roleEditor.classicEditor.stringArrayValue')"
           />
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat label="取消" v-close-popup />
+          <q-btn flat :label="t('roleEditor.classicEditor.cancel')" v-close-popup />
           <q-btn
             color="primary"
-            label="添加"
+            :label="t('roleEditor.classicEditor.add')"
             :disable="!addForm.key"
             @click="appendExtra"
             v-close-popup
@@ -693,15 +680,24 @@
 import type { BuiltinType, JsonValue, RoleCardModel, RoleType } from 'app/types/role';
 import { computed, reactive, watch, ref } from 'vue';
 import { useQuasar } from 'quasar';
+import { useI18n } from 'vue-i18n';
+import { EXTENDED_ROLE_KEY_LIST, formatRoleKeyInline } from '../utils/roleKeyLabels';
 
 // 是否在「新增字段」对话框打开时，强制把值类型锁定为字符串（只读）
 // NOTE: 将来应由扩展（extension 主体）通过配置或消息提供此开关，本地先用常量占位以便测试。
 const DEFAULT_LOCK_NEW_FIELD_TYPE = true;
 
 const $q = useQuasar();
-const isDark = computed(() => $q.dark.isActive);
+const { t } = useI18n();
 
-const props = defineProps<{ modelValue: RoleCardModel }>();
+const props = withDefaults(defineProps<{
+  modelValue: RoleCardModel;
+  localizedKeyLabels?: boolean;
+  displayLanguage?: string;
+}>(), {
+  localizedKeyLabels: true,
+  displayLanguage: '',
+});
 type LookupCandidateKind = 'pinyin' | 'romanized';
 const emit = defineEmits<{
   (e: 'update:modelValue', v: RoleCardModel): void;
@@ -722,7 +718,7 @@ watch(
 const builtinTypes: BuiltinType[] = ['主角', '配角', '联动角色', '敏感词', '词汇', '正则表达式'];
 const typeOptions = computed(() => [
   ...builtinTypes.map((t) => ({ label: t, value: t })),
-  { label: '自定义…', value: '__custom__' },
+  { label: t('roleEditor.classicEditor.customType'), value: '__custom__' },
 ]);
 const typeSelect = ref<string>(
   builtinTypes.includes(draft.base.type as BuiltinType)
@@ -1050,29 +1046,27 @@ function requestLookupCandidates(kind: LookupCandidateKind) {
   emit('request-lookup-candidates', { kind, snapshot: cloneRole(draft) });
 }
 
+function fieldLabel(key: string): string {
+  return formatRoleKeyInline(key, props.localizedKeyLabels, props.displayLanguage);
+}
+
 /** ====== 扩展 & 自定义（统一列表） ====== */
 type ValueType = 'string' | 'number' | 'boolean' | 'string[]';
 type ArrayBaseFieldKey = 'aliases' | 'fixes' | 'lookupKeys_pinyin' | 'lookupKeys_romanized' | 'lookupKeys_spelling';
-const valueTypeOptions = [
-  { label: '字符串/Markdown', value: 'string' },
-  { label: '数字', value: 'number' },
-  { label: '布尔', value: 'boolean' },
-  { label: '字符串数组', value: 'string[]' },
-];
-const bucketOptions = [
-  { label: '扩展字段', value: 'extended' },
-  { label: '自定义字段', value: 'custom' },
-];
+const valueTypeOptions = computed(() => [
+  { label: t('roleEditor.classicEditor.valueTypes.stringMarkdown'), value: 'string' },
+  { label: t('roleEditor.classicEditor.valueTypes.number'), value: 'number' },
+  { label: t('roleEditor.classicEditor.valueTypes.boolean'), value: 'boolean' },
+  { label: t('roleEditor.classicEditor.valueTypes.stringArray'), value: 'string[]' },
+]);
+const bucketOptions = computed(() => [
+  { label: t('roleEditor.tableEditor.buckets.extended'), value: 'extended' },
+  { label: t('roleEditor.tableEditor.buckets.custom'), value: 'custom' },
+]);
 
-// 扩展字段可选 key 列表（只能从中选择）
-const EXTENDED_KEY_LIST = [
-  'age', '年龄', 'gender', '性别', 'occupation', '职业', 'personality', '性格', 'appearance', '外貌', 'background', '背景',
-  'relationship', 'relationships', '关系', 'skill', 'skills', '技能', 'weakness', 'weaknesses', '弱点',
-  'goal', 'goals', '目标', 'motivation', '动机', 'fear', 'fears', '恐惧', 'secret', 'secrets', '秘密',
-  'quote', 'quotes', '台词', 'note', 'notes', '备注', 'tag', 'tags', '标签', 'category', '分类', 'level', '等级',
-  'status', '状态', 'location', '位置', 'origin', '出身', 'family', '家庭', 'education', '教育', 'hobby', 'hobbies', '爱好'
-];
-const EXTENDED_KEY_OPTIONS = EXTENDED_KEY_LIST.map((k) => ({ label: k, value: k }));
+const EXTENDED_KEY_OPTIONS = computed(() =>
+  EXTENDED_ROLE_KEY_LIST.map((key) => ({ label: fieldLabel(key), value: key })),
+);
 
 /** 归并为一个可编辑数组，保持“类型锁定” */
 interface ExtraEntry {
@@ -1127,14 +1121,14 @@ watch(() => [draft.extended, draft.custom], reloadExtras, { deep: true });
 /** 展示名：key（类型锁定徽标） */
 function displayLabel(e: ExtraEntry) {
   const lock = e.locked ? '🔒' : '🆕';
-  return `${e.key} ${lock} · ${e.valueType}`;
+  return `${fieldLabel(e.key)} ${lock} · ${e.valueType}`;
 }
 
 /** 编辑交互：键、类型、归属、值 */
 function onExtraEditKey(idx: number) {
   if (mergedEntries[idx] === undefined) return;
   mergedEntries[idx].key =
-    prompt('Enter new key:', mergedEntries[idx].key) ?? mergedEntries[idx].key;
+    prompt(t('roleEditor.classicEditor.enterNewKey'), mergedEntries[idx].key) ?? mergedEntries[idx].key;
   syncExtrasToDraft();
   commit([mergedEntries[idx].bucket + '.' + mergedEntries[idx].key]);
 }
@@ -1256,13 +1250,13 @@ function copyUUID() {
   if (draft.base.uuid) {
     navigator.clipboard.writeText(draft.base.uuid).then(() => {
       $q.notify({
-        message: 'UUID已复制到剪贴板',
+        message: t('roleEditor.classicEditor.uuidCopied'),
         type: 'positive',
         position: 'top'
       });
     }).catch(() => {
       $q.notify({
-        message: '复制失败',
+        message: t('roleEditor.classicEditor.copyFailed'),
         type: 'negative',
         position: 'top'
       });
@@ -1277,6 +1271,9 @@ function copyUUID() {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  color: var(--vscode-editor-foreground, inherit);
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background, transparent));
+  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
 }
 
 .role-card :deep(.q-card__section),
@@ -1296,14 +1293,70 @@ function copyUUID() {
   box-sizing: border-box;
 }
 
+.role-card :deep(.q-field--filled .q-field__control),
+.role-card :deep(.q-field--outlined .q-field__control),
+.role-card :deep(.q-select__dialog) {
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground, inherit));
+  background: var(--vscode-input-background, rgba(127, 127, 127, 0.12));
+  border-color: var(--vscode-input-border, var(--vscode-widget-border, rgba(127, 127, 127, 0.35)));
+}
+
+.role-card :deep(.q-field__native),
+.role-card :deep(.q-field__input),
+.role-card :deep(.q-field__label),
+.role-card :deep(.q-toggle__label),
+.role-card :deep(.q-item),
+.role-card :deep(.q-item__label) {
+  color: var(--vscode-input-foreground, var(--vscode-editor-foreground, inherit));
+}
+
+.role-card :deep(.q-field__label),
+.role-card :deep(.text-caption) {
+  color: var(--vscode-descriptionForeground, rgba(127, 127, 127, 0.85));
+}
+
+.role-card :deep(.q-list--bordered),
+.role-card :deep(.q-card--bordered),
+.role-card :deep(.q-separator) {
+  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+}
+
+.role-card :deep(.q-expansion-item__container),
+.role-card :deep(.q-list),
+.role-card :deep(.q-card) {
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background, transparent));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-editor-foreground, inherit));
+}
+
+.role-card-empty {
+  color: var(--vscode-descriptionForeground, rgba(127, 127, 127, 0.85));
+}
+
 .rounded-borders {
   border-radius: 8px;
+  border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
 }
 .color-dot {
   width: 20px;
   height: 20px;
+  flex: 0 0 20px;
   border-radius: 4px;
   border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.role-style-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.role-style-color-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 /* Allow long field labels in expansion header to wrap instead of truncating */
@@ -1312,6 +1365,8 @@ function copyUUID() {
   white-space: normal !important;
   word-break: break-word; /* break long words if needed */
   overflow-wrap: anywhere; /* modern fallback */
+  background: var(--vscode-sideBarSectionHeader-background, rgba(127, 127, 127, 0.1));
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-editor-foreground, inherit));
 }
 
 /* Make sure the label and caption inside the header can wrap */
@@ -1346,5 +1401,11 @@ function copyUUID() {
 .lookup-key-toolbar {
   gap: 8px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .role-style-panel {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

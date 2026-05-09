@@ -9,16 +9,17 @@
     <li><b>统一的编辑器</b> — 用同一个可视化编辑器管理所有资料</li>
 </ul>
 
-<h4>六种内置类型</h4>
+<h4>常用类型</h4>
 <ul>
     <li><b>主角</b> — 主要角色，用于角色名高亮、补全、引用统计</li>
+    <li><b>主要角色</b> / <b>反派</b> — 常用人物分类，能力与主角、配角一致</li>
     <li><b>配角</b> — 次要角色，与主角享有相同能力</li>
     <li><b>联动角色</b> — 跨作品/联动角色，用于引用其他作品的角色</li>
     <li><b>敏感词</b> — 需要标记或替换的词汇，附带修复建议</li>
     <li><b>词汇</b> — 世界观术语和专业名词</li>
     <li><b>正则表达式</b> — 自定义着色规则，用正则匹配文本并着色</li>
 </ul>
-<p>除以上六种内置类型外，你还可以自定义任意类型名称。</p>
+<p>除以上常用类型外，你还可以自定义任意类型名称，并在角色列表设置里调整类型显示顺序。</p>
 
 <h4>共享的能力</h4>
 <p>不管哪种类型，都享有以下能力：</p>
@@ -72,13 +73,15 @@ style: { color: "#E60033", backgroundColor: "#FFF0F0", bold: true }
 </code></pre>
 
 <h4>查询键系统</h4>
-<p>以下查询键由 <code>roleLookupKeyGeneration.ts</code> 自动生成，不是用户直接在 Role 接口中定义的字段：</p>
+<p>查询键是角色、词汇等条目的额外检索名。它们可以手动写在角色文件中，也可以由 <code>roleLookupKeyGeneration.ts</code> 自动生成：</p>
 <ul>
-    <li><code>lookupKeys_pinyin</code> — 自动生成的拼音查询键</li>
-    <li><code>lookupKeys_romanized</code> — 自动生成的罗马字查询键</li>
-    <li><code>lookupKeys_spelling</code> — 自动生成的拼写查询键</li>
+    <li><code>lookupKeys</code> / <code>searchKeys</code> / <code>queryKeys</code> / <code>keywords</code> / <code>检索键</code> / <code>索引键</code> — 通用查询键字段</li>
+    <li><code>lookupKeys_pinyin</code> — 拼音查询键，可自动生成</li>
+    <li><code>lookupKeys_romanized</code> — 罗马字查询键，可自动生成</li>
+    <li><code>lookupKeys_spelling</code> — 拼写查询键</li>
+    <li>通过项目配置声明的扩展索引键前缀，例如 <code>refkeys</code>、<code>tagkeys</code></li>
 </ul>
-<p>可通过 <code>AndreaNovelHelper.lookupKeys.autoGeneratePinyin</code> / <code>autoGenerateRomanized</code> / <code>treatPinyinAsAlias</code> / <code>treatRomanizedAsAlias</code> 控制生成行为。</p>
+<p>可通过 <code>AndreaNovelHelper.lookupKeys.autoGeneratePinyin</code> / <code>autoGenerateRomanized</code> / <code>treatPinyinAsAlias</code> / <code>treatRomanizedAsAlias</code> 控制生成和显示行为。包管理器“常用功能”也提供“为当前角色文件生成查询键”，适合只对某个角色库手动生成一次。</p>
 
 <h4>共享能力</h4>
 <p>无论哪种 type，所有"角色"都享有同一套能力：</p>

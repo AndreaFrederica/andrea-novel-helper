@@ -295,5 +295,6 @@
   "config.fileTracker.respectGitignore.description": "Whether base file tracking respects .gitignore. Enabled by default; disable it to track writing-resource files even when Git ignores them.",
   "view.comments.manager.name": "Comments Overview",
   "config.useVsCodeManagedDisabling.description": "Use only VS Code's built-in extension enable/disable state to decide whether Andrea Novel Helper runs, ignoring ANH's own workspace disable switch.",
-  "config.lookupKeys.useLlmRomanization.description": "Allow romanized lookup-key generation to call the configured client LLM for extra romanization candidates. This is independent from the typo-checking LLM enable switch, but it reuses the client LLM API Base, API Key, and model settings."
+  "config.lookupKeys.useLlmRomanization.description": "Allow romanized lookup-key generation to call the configured client LLM for extra romanization candidates. This is independent from the typo-checking LLM enable switch, but it reuses the client LLM API Base, API Key, and model settings.",
+  "config.roleEditor.localizedKeyLabels.markdownDescription": "Show localized, user-friendly labels for built-in role card keys in the visual JSON5 role editor. This only affects display; saved JSON5 keys stay unchanged. Supported display languages: Chinese, English, Japanese."
 }
