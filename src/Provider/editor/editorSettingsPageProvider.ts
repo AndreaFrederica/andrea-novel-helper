@@ -35,8 +35,9 @@ export class EditorSettingsPanel {
                 get: () => Promise.resolve(undefined),
                 store: () => Promise.resolve(),
                 delete: () => Promise.resolve(),
+                keys: () => Promise.resolve([]),
                 onDidChange: () => ({ dispose: () => {} })
-            },
+            } as any,
             extensionPath: '',
             storageUri: vscode.Uri.file(''),
             globalStorageUri: vscode.Uri.file(''),
