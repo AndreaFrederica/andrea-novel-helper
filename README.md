@@ -12,6 +12,7 @@
 - [GitLab](https://gitlab.com/andreafrederica/andreanovelhelper)
 - [Codeberg](https://codeberg.org/AndreaFrederica/AndreaNovelHelper)(可能更新不及时)
 - 更多消息请关注QQ群 977737943
+- [由MALossov提供的构建镜像](https://github.com/MALossov/andreanovelhelper/actions)
 
 [![License: MPL-2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://www.mozilla.org/MPL/2.0/)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
