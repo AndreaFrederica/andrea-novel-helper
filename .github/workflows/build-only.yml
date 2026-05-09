@@ -174,9 +174,16 @@ jobs:
             build_target: arm-unknown-linux-gnueabihf
             linker_env: CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER
             linker_value: arm-linux-gnueabihf-gcc
+
     runs-on: ubuntu-latest
+
     container:
-      image: debian:buster
+      image: debian:bookworm
+
+    defaults:
+      run:
+        shell: bash
+
     env:
       EV: ${{ inputs.electron_version || '30.0.9' }}
 
@@ -184,11 +191,10 @@ jobs:
       - name: Install OS deps
         run: |
           set -e
-          echo 'deb http://archive.debian.org/debian buster main' > /etc/apt/sources.list
-          echo 'deb http://archive.debian.org/debian-security buster/updates main' >> /etc/apt/sources.list
-          echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99disable-check-valid-until
-          apt-get -o Acquire::AllowInsecureRepositories=true update
-          apt-get install -y --no-install-recommends git curl python3 make g++ ca-certificates pkg-config
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl python3 make g++ ca-certificates pkg-config bash
+
           if [ '${{ matrix.arch }}' = 'arm64' ]; then
             apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
           elif [ '${{ matrix.arch }}' = 'arm' ]; then
@@ -210,9 +216,9 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             packages/enigo-keyboard/target
-          key: linux-buster-${{ matrix.target }}-cargo-${{ hashFiles('packages/enigo-keyboard/Cargo.lock') }}
+          key: linux-bookworm-${{ matrix.target }}-cargo-${{ hashFiles('packages/enigo-keyboard/Cargo.lock') }}
           restore-keys: |
-            linux-buster-${{ matrix.target }}-cargo-
+            linux-bookworm-${{ matrix.target }}-cargo-
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -222,7 +228,12 @@ jobs:
         run: rustup target add '${{ matrix.build_target }}'
 
       - name: Install deps
-        run: npm ci
+        run: |
+          set -e
+          python3 --version
+          node -v
+          npm -v
+          npm_config_python="$(command -v python3)" npm ci
 
       - name: Download webview dist
         uses: actions/download-artifact@v4
@@ -251,6 +262,7 @@ jobs:
             --arch='${{ matrix.arch }}'
 
       - name: Package STD variant
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
