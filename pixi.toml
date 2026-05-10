@@ -127,5 +127,4 @@ build_all_with_enigo = { depends-on = ["build_all", "build_enigo"] }
 [dependencies]
 python = ">=3.13.5,<3.14"
 rust = ">=1.91.1,<1.92"
-nodejs = "22.*"
-
+nodejs = ">=22.22,<23"
