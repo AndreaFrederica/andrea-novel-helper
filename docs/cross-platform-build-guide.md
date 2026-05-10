@@ -83,6 +83,42 @@ pixi run build_enigo_cross_docker
 pixi run build_enigo_cross_docker_linux_x64
 ```
 
+### 4. Intel macOS 虚拟机本地打包 darwin-x64
+
+当 GitHub Actions 的 Intel macOS runner 不可用，且没有 Linux 容器环境时，可以在 Intel macOS 虚拟机中直接拉仓库并打包：
+
+```bash
+git clone <repo-url>
+cd andrea-novel-helper
+bash scripts/macos-vm-build.sh
+```
+
+脚本会使用 `pixi` 创建/复用本地环境，安装 npm 依赖，构建 webview 与 `@anh/enigo-keyboard` 原生模块，重建 `@vscode/sqlite3` 的 Electron 版本，并输出：
+
+```text
+dist/anh-std-darwin-x64.vsix
+dist/anh-exp-darwin-x64.vsix
+```
+
+常用参数：
+
+```bash
+# 只打标准版
+bash scripts/macos-vm-build.sh --variant std
+
+# 指定 VS Code Electron headers 版本
+bash scripts/macos-vm-build.sh --electron-version 30.0.9
+
+# 复用已有 node_modules
+bash scripts/macos-vm-build.sh --skip-npm-ci
+```
+
+首次运行前如果缺少 Xcode Command Line Tools，先执行：
+
+```bash
+xcode-select --install
+```
+
 ## 构建输出
 
 构建成功后，生成的文件位于：

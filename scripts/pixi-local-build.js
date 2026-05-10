@@ -1,20 +1,129 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
-const fs=require('fs');
-const cp=require('child_process');
-function run(cmd,args,env){const r=cp.spawnSync(cmd,args,{stdio:'inherit',env:{...process.env,...(env||{})}});if(r.status!==0)process.exit(r.status);} 
-const pkgPath='package.json';
-const original=fs.readFileSync(pkgPath,'utf8');
-function modify(variant){const pkg=JSON.parse(original);const ev=new Set(pkg.activationEvents||[]);if(variant==='std'){ev.delete('onStartupFinished');}else{ev.add('onStartupFinished');const p=pkg.version.split('.').map(Number);p[2]+=1;pkg.version=p.join('.');}pkg.activationEvents=[...ev];if(pkg.scripts&&pkg.scripts['vscode:prepublish'])pkg.scripts['vscode:prepublish']='npm run compile';fs.writeFileSync(pkgPath,JSON.stringify(pkg,null,2));}
-function restore(){fs.writeFileSync(pkgPath,original);} 
-const variant=process.argv[2]||'std';
-const ev=process.env.ELECTRON_VERSION||'30.0.9';
-function mapTarget(){const p=process.platform;const a=process.arch;const platform=p==='win32'?'win32':p==='darwin'?'darwin':'linux';let arch='x64';if(a==='ia32')arch='ia32';else if(a==='arm64')arch='arm64';else if(a==='arm')arch='armhf';return `${platform}-${arch}`;}
-const targetArg=process.argv[3]||mapTarget();
-const [platform,arch]=targetArg.split('-');
-if(process.env.SKIP_WEBVIEW!=='1'){run('npm',['--workspace=packages/webview','run','build']);}
-run('npm',['run','compile']);
-run('npm',['rebuild','@vscode/sqlite3','--runtime=electron',`--target=${ev}`,'--dist-url=https://electronjs.org/headers',`--platform=${platform}`,`--arch=${arch}`]);
-modify(variant);
-fs.mkdirSync('dist',{recursive:true});
-if(variant==='std'){const out=`dist/anh-std-${targetArg}.vsix`;run('npx',['vsce','package','--target',targetArg,'--out',out]);restore();}
-else{const out=`dist/anh-exp-${targetArg}.vsix`;run('npx',['vsce','package','--target',targetArg,'--pre-release','--out',out]);restore();}
+const fs = require('fs');
+const cp = require('child_process');
+
+const pkgPath = 'package.json';
+const original = fs.readFileSync(pkgPath, 'utf8');
+
+function run(cmd, args, env) {
+  const result = cp.spawnSync(cmd, args, {
+    stdio: 'inherit',
+    env: { ...process.env, ...(env || {}) },
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    const suffix = result.signal ? ` signal ${result.signal}` : ` exit ${result.status}`;
+    throw new Error(`${cmd} ${args.join(' ')} failed with${suffix}`);
+  }
+}
+
+function restore() {
+  fs.writeFileSync(pkgPath, original);
+}
+
+function readPackage() {
+  return JSON.parse(original);
+}
+
+function modify(variant) {
+  const pkg = readPackage();
+  const ev = new Set(pkg.activationEvents || []);
+
+  if (variant === 'std') {
+    ev.delete('onStartupFinished');
+  } else {
+    ev.add('onStartupFinished');
+    const parts = pkg.version.split('.').map(Number);
+    if (parts.length !== 3 || parts.some(Number.isNaN)) {
+      throw new Error(`Invalid semver: ${pkg.version}`);
+    }
+    parts[2] += 1;
+    pkg.version = parts.join('.');
+  }
+
+  pkg.activationEvents = [...ev];
+  if (pkg.scripts && pkg.scripts['vscode:prepublish']) {
+    pkg.scripts['vscode:prepublish'] = 'npm run compile';
+  }
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
+}
+
+function mapTarget() {
+  const platform = process.platform === 'win32'
+    ? 'win32'
+    : process.platform === 'darwin'
+      ? 'darwin'
+      : 'linux';
+  let arch = 'x64';
+  if (process.arch === 'ia32') arch = 'ia32';
+  else if (process.arch === 'arm64') arch = 'arm64';
+  else if (process.arch === 'arm') arch = 'armhf';
+  return `${platform}-${arch}`;
+}
+
+function parseTarget(targetArg) {
+  const [platform, arch] = targetArg.split('-');
+  if (!platform || !arch) {
+    throw new Error(`Invalid target: ${targetArg}`);
+  }
+  return { platform, arch };
+}
+
+function packageVariant(variant, targetArg) {
+  const out = `dist/anh-${variant}-${targetArg}.vsix`;
+  const args = ['vsce', 'package', '--target', targetArg];
+  if (variant === 'exp') args.push('--pre-release');
+  args.push('--out', out);
+
+  modify(variant);
+  try {
+    run('npx', args);
+  } finally {
+    restore();
+  }
+}
+
+function main() {
+  const variantArg = process.argv[2] || 'std';
+  const targetArg = process.argv[3] || mapTarget();
+  const variants = variantArg === 'both' ? ['std', 'exp'] : [variantArg];
+  const ev = process.env.ELECTRON_VERSION || '30.0.9';
+  const { platform, arch } = parseTarget(targetArg);
+
+  for (const variant of variants) {
+    if (variant !== 'std' && variant !== 'exp') {
+      throw new Error(`Invalid variant: ${variant}. Expected std, exp, or both.`);
+    }
+  }
+
+  if (process.env.SKIP_WEBVIEW !== '1') {
+    run('npm', ['--workspace=packages/webview', 'run', 'build']);
+  }
+
+  run('npm', ['run', 'compile']);
+  run('npm', [
+    'rebuild',
+    '@vscode/sqlite3',
+    '--runtime=electron',
+    `--target=${ev}`,
+    '--dist-url=https://electronjs.org/headers',
+    `--platform=${platform}`,
+    `--arch=${arch}`,
+  ]);
+
+  fs.mkdirSync('dist', { recursive: true });
+  for (const variant of variants) {
+    packageVariant(variant, targetArg);
+  }
+}
+
+try {
+  main();
+} catch (error) {
+  restore();
+  console.error(error && error.stack ? error.stack : error);
+  process.exit(1);
+}
