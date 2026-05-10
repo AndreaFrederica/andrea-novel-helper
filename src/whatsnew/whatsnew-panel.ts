@@ -30,7 +30,7 @@ export class WhatsNewPanel {
                     const data = getWhatsNewData(this._extensionPath, this._currentVersion);
                     this._panel.webview.postMessage({
                         command: 'initData',
-                        currentVersion: this._currentVersion,
+                        currentVersion: data?.version ?? this._currentVersion,
                         versions: this._allVersions,
                         data
                     });
@@ -84,7 +84,7 @@ export class WhatsNewPanel {
             const data = getWhatsNewData(extensionPath, currentVersion);
             WhatsNewPanel._instance._panel.webview.postMessage({
                 command: 'initData',
-                currentVersion,
+                currentVersion: data?.version ?? currentVersion,
                 versions: WhatsNewPanel._instance._allVersions,
                 data
             });
@@ -142,9 +142,7 @@ export class WhatsNewPanel {
 
 export function registerWhatsNewPage(context: vscode.ExtensionContext): vscode.Disposable {
     const command = vscode.commands.registerCommand('andrea.openWhatsNew', async () => {
-        const { getWhatsNewData } = await import('./whatsnew-data.js');
-        const { getExtensionVersion } = await import('./version-check.js');
-        const version = getExtensionVersion(context);
+        const version = String(context.extension.packageJSON?.version ?? 'unknown');
         const data = getWhatsNewData(context.extensionPath, version);
         if (data) {
             WhatsNewPanel.createOrShow(context.extensionUri, version, context.extensionPath);

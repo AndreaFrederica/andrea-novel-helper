@@ -2505,6 +2505,11 @@ export class FileTrackingDataManager {
         return true;
     }
 
+    public async repairWritingProjectSummary(reason = 'manual-repair'): Promise<WritingProjectSummary | null> {
+        await this.rebuildWritingProjectSummary(reason);
+        return this.writingProjectSummaryCache ?? await this.getWritingProjectSummaryAsync(true);
+    }
+
     private async rebuildWritingProjectSummary(reason: string): Promise<void> {
         if (!this.backend || !this.backendInitialized) {
             return;

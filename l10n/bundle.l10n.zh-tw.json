@@ -165,5 +165,7 @@
   "config.extendedLookupKeyPrefixes.description": "額外的前綴列表，使系統將其開頭的欄位也識別為索引鍵家族成員（如 refkeys、tagkeys）。這些欄位將像內建索引鍵一樣參與匹配、補全和編輯器展示。",
   "config.fileTracker.respectGitignore.description": "基礎文件追蹤是否遵循 .gitignore。預設開啟；關閉後即使文件被 Git 忽略，只要屬於寫作資源類型仍會被追蹤。",
   "view.comments.manager.name": "批注總覽",
-  "config.roleEditor.localizedKeyLabels.markdownDescription": "在 JSON5 視覺化角色編輯器中，為內建角色卡 key 顯示本地化友好名稱。此設定只影響顯示，不會修改保存到 JSON5 的真實 key。支援顯示語言：中文、英文、日文。"
+  "config.roleEditor.localizedKeyLabels.markdownDescription": "在 JSON5 視覺化角色編輯器中，為內建角色卡 key 顯示本地化友好名稱。此設定只影響顯示，不會修改保存到 JSON5 的真實 key。支援顯示語言：中文、英文、日文。",
+  "command.timeStats.repairSummary.title": "修復寫作統計彙總",
+  "command.andrea.openSettingsWizard.title": "打開設定向導"
 }

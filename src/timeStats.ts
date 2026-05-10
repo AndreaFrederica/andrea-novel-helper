@@ -1355,6 +1355,20 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
 
         // 准备数据：当前文件 + 跨文件（若可）
         const { bucketSizeMs } = getConfig();
+        const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const msDay = 24 * 60 * 60 * 1000;
+        const todayStart = startOfDay(new Date());
+        const todayEnd = todayStart + msDay;
+        const getActiveSessionOverlay = () => {
+            if (!currentDocPath || currentSessionStart <= 0 || isIdle || isFileIgnoredForTimeStats(currentDocPath)) {
+                return { totalMillis: 0, todayMillis: 0 };
+            }
+
+            const activeEnd = now();
+            const totalMillis = Math.max(0, activeEnd - currentSessionStart);
+            const todayMillis = Math.max(0, Math.min(activeEnd, todayEnd) - Math.max(currentSessionStart, todayStart));
+            return { totalMillis, todayMillis };
+        };
         const buildEmptyTodayHourly = () => {
             const hourly: Record<number, number> = {};
             for (let hour = 0; hour < 24; hour++) {
@@ -1433,14 +1447,16 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
         }
 
         if (projectSummary) {
+            const activeOverlay = getActiveSessionOverlay();
+            const todayMillis = projectSummary.today.millis + activeOverlay.todayMillis;
             const result = {
                 type: 'time-stats-data',
                 supportsGlobal: globalCapable,
                 perFileLine,
-                totalMillisAll: projectSummary.totalMillisAll,
+                totalMillisAll: projectSummary.totalMillisAll + activeOverlay.totalMillis,
                 today: {
-                    millis: projectSummary.today.millis,
-                    avgCPM: projectSummary.today.avgCPM,
+                    millis: todayMillis,
+                    avgCPM: todayMillis > 0 ? Math.round(projectSummary.today.chars / (todayMillis / 60000)) : 0,
                     peakCPM: projectSummary.today.peakCPM,
                     hourly: { ...projectSummary.today.hourly },
                     quarterHourly: { ...projectSummary.today.quarterHourly },
@@ -1454,6 +1470,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
                 globalCapable,
                 perFileLineLength: perFileLine.length,
                 totalMillisAll: projectSummary.totalMillisAll,
+                activeOverlay,
                 todayChars: projectSummary.today.chars,
                 heatmapDaysCount: Object.keys(projectSummary.heatmap).length,
             });
@@ -1462,14 +1479,15 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
         }
 
         if (projectOverview) {
+            const activeOverlay = getActiveSessionOverlay();
             const result = {
                 type: 'time-stats-data',
                 supportsGlobal: true,
                 approximateGlobal: !!projectOverview.approximate,
                 perFileLine,
-                totalMillisAll: projectOverview.totalMillisAll,
+                totalMillisAll: projectOverview.totalMillisAll + activeOverlay.totalMillis,
                 today: {
-                    millis: 0,
+                    millis: activeOverlay.todayMillis,
                     avgCPM: 0,
                     peakCPM: 0,
                     hourly: buildEmptyTodayHourly(),
@@ -1486,6 +1504,7 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
                 source: projectOverview.source,
                 perFileLineLength: perFileLine.length,
                 totalMillisAll: projectOverview.totalMillisAll,
+                activeOverlay,
                 filesWithWritingStats: projectOverview.filesWithWritingStats,
             });
 
@@ -1509,12 +1528,10 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
         }
 
         // 计算：全文件累计时长、今日时长/平均/峰值、热力图（日粒度）、今日按小时柱状图
-        const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-        const msDay = 24 * 60 * 60 * 1000;
-        const todayStart = startOfDay(new Date());
+        const activeOverlay = getActiveSessionOverlay();
 
         // 累计时长（全文件）
-        const totalMillisAll = allStats.reduce((s, it) => s + (it.totalMillis || 0), 0);
+        const totalMillisAll = allStats.reduce((s, it) => s + (it.totalMillis || 0), 0) + activeOverlay.totalMillis;
 
         // 今日：从 sessions 聚合（有 sessions 用 sessions，没有则从 buckets 近似）
         let todayMillis = 0;
@@ -1572,12 +1589,13 @@ async function setupDashboardPanel(panel: vscode.WebviewPanel, context: vscode.E
             for (const s of sessions) {
                 // 累加与今天交集
                 const st = Math.max(s.start, todayStart);
-                const en = Math.min(s.end, todayStart + msDay);
+                const en = Math.min(s.end, todayEnd);
                 if (en > st) {
                     todayMillis += (en - st);
                 }
             }
         }
+        todayMillis += activeOverlay.todayMillis;
         const todayMinutes = todayMillis / 60000;
         const todayAvgCPM = todayMinutes > 0 ? Math.round(todayChars / todayMinutes) : 0;
 

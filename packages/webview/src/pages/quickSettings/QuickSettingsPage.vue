@@ -49,7 +49,7 @@
         v-if="isWizardOpen"
         :config-items="quickSettingsItems"
         :current-scope="currentScope"
-        @close="isWizardOpen = false"
+        @close="closeSettingsWizard"
         @apply="applyWizardSettings"
         @save="saveWizardSettings"
       />
@@ -662,11 +662,24 @@ function saveConfig() {
   }
 }
 
+function notifySettingsWizardHandled(reason: 'close' | 'apply' | 'save') {
+  vsCodeApiStore.vscode?.postMessage({
+    command: 'settingsWizardHandled',
+    reason,
+  })
+}
+
+function closeSettingsWizard() {
+  isWizardOpen.value = false
+  notifySettingsWizardHandled('close')
+}
+
 function applyWizardSettings(settings: Record<string, any>) {
   const entries = Object.entries(settings)
   if (!entries.length) {
     showStatus('向导没有需要应用的变更', 'info')
     isWizardOpen.value = false
+    notifySettingsWizardHandled('apply')
     return
   }
 
@@ -674,6 +687,7 @@ function applyWizardSettings(settings: Record<string, any>) {
     setLocalConfigValue(key, value)
   }
   isWizardOpen.value = false
+  notifySettingsWizardHandled('apply')
   showStatus(`设置向导已暂存 ${entries.length} 项变更，当前还没有写入 VS Code 设置；确认后请点击保存。`, 'info')
 }
 
@@ -682,6 +696,7 @@ function saveWizardSettings(settings: Record<string, any>) {
   if (!entries.length) {
     showStatus('向导没有需要保存的变更', 'info')
     isWizardOpen.value = false
+    notifySettingsWizardHandled('save')
     return
   }
 
@@ -699,6 +714,7 @@ function saveWizardSettings(settings: Record<string, any>) {
     })
   }
   isWizardOpen.value = false
+  notifySettingsWizardHandled('save')
 }
 
 function fetchLlmModels(itemId: string) {

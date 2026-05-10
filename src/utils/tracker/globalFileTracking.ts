@@ -270,6 +270,20 @@ export async function repairDirtyPathKeys(): Promise<{
     return await dataManager.repairPathMappings();
 }
 
+export async function repairWritingStatsSummary(): Promise<WritingProjectSummary | null> {
+    const tracker = getFileTracker();
+    if (!tracker) {
+        return null;
+    }
+
+    const dataManager = tracker.getDataManager() as any;
+    if (typeof dataManager.repairWritingProjectSummary !== 'function') {
+        return null;
+    }
+
+    return await dataManager.repairWritingProjectSummary('manual-command');
+}
+
 /**
  * 获取所有文件的元数据
  */

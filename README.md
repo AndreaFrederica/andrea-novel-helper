@@ -2,9 +2,9 @@
 
 > 说明：预发布版本实际上是跟随 VS Code 自动启动的版本；启用 VS Code 的预发布渠道后，本扩展会随 Code 自动加载，而不是需要触发才加载，但是如果您使用了那个版本,Code的插件禁用功能将不生效，您需要使用ANH自己的禁用功能。
 
-> **最新版本：0.5.0 (2026-05-07)**
-> 🔗 **最新更新：创作工作台、角色关系图谱、MCP/Copilot 本地 AI 集成、图形化向导与文档中心全面上线**  
-> 📝 0.5.0 是一次大版本升级，重构了文件追踪、写作统计摘要、预览角色着色、包管理器入口和新用户引导。升级后可通过命令面板打开 "Andrea Novel Helper: 打开 What's New" 查看完整说明。   
+> **最新版本：0.5.4 (2026-05-10)**
+> 🔗 **最新更新：写作统计实时汇总、统计摘要修复、设置向导状态修复、JSON5 角色卡跳转稳定性与 Intel Mac 虚拟机构建流程**  
+> 📝 0.5.4 是 0.5.x 的稳定性补丁，重点修复写作统计、设置向导和角色可视化编辑器跳转问题。升级后可通过命令面板打开 "Andrea Novel Helper: 打开 What's New" 查看完整说明。   
 > 独立组件（生成式AI组件） Anh Chat(小说助手 聊天组件)已经发布! [GitHub](https://github.com/AndreaFrederica/Roo-Code-Chat) [![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/andreafrederica.anh-cline?label=VS%20Marketplace&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=andreafrederica.anh-cline) [![Open VSX Version](https://img.shields.io/open-vsx/v/andreafrederica/anh-cline?label=Open%20VSX)](https://open-vsx.org/extension/andreafrederica/anh-cline)
 > 如果您需要生成式AI相关功能（AI生成设定集或者润色，或者与AI聊天（聊天功能尤其强化）），请安装 Anh Chat 组件。
 

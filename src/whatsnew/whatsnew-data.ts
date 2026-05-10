@@ -66,9 +66,22 @@ export function getAllWhatsNewVersions(extensionPath: string): WhatsNewVersionIn
  */
 export function getWhatsNewData(extensionPath: string, targetVersion: string): WhatsNewData | null {
     const normalizedTarget = targetVersion.replace(/^v/, '').trim();
+    const exactData = loadWhatsNewDataForExactVersion(extensionPath, normalizedTarget);
+    if (exactData) {
+        return exactData;
+    }
 
+    const fallbackVersion = findPreviousAvailableVersion(extensionPath, normalizedTarget);
+    if (fallbackVersion && normalizeVersionLabel(fallbackVersion) !== normalizeVersionLabel(normalizedTarget)) {
+        return loadWhatsNewDataForExactVersion(extensionPath, fallbackVersion);
+    }
+
+    return null;
+}
+
+function loadWhatsNewDataForExactVersion(extensionPath: string, targetVersion: string): WhatsNewData | null {
     // 1. 先尝试读取手动编写的内容
-    const manualData = loadManualWhatsNew(extensionPath, normalizedTarget);
+    const manualData = loadManualWhatsNew(extensionPath, targetVersion);
     if (manualData) {
         return manualData;
     }
@@ -77,13 +90,28 @@ export function getWhatsNewData(extensionPath: string, targetVersion: string): W
     const changelogPath = path.join(extensionPath, 'CHANGELOG.md');
     if (fs.existsSync(changelogPath)) {
         const content = fs.readFileSync(changelogPath, 'utf-8');
-        const changelogData = parseChangelogContent(content, normalizedTarget);
+        const changelogData = parseChangelogContent(content, targetVersion);
         if (changelogData) {
             return { ...changelogData, source: 'changelog' };
         }
     }
 
     return null;
+}
+
+function findPreviousAvailableVersion(extensionPath: string, targetVersion: string): string | null {
+    const versions = getAllWhatsNewVersions(extensionPath);
+    if (!versions.length) {
+        return null;
+    }
+
+    const targetParts = parseVersionParts(targetVersion);
+    if (!targetParts.length) {
+        return versions[0].version;
+    }
+
+    const sameOrPrevious = versions.find(info => compareVersionAsc(info.version, targetVersion) <= 0);
+    return sameOrPrevious?.version ?? versions[0].version;
 }
 
 /**
@@ -330,17 +358,37 @@ function parseChangelogContent(content: string, targetVersion: string): WhatsNew
  * 返回正值表示 a 排在 b 前面（a 版本更新）
  */
 function compareVersionDesc(a: string, b: string): number {
-    const normalize = (v: string) => v.replace(/^v/, '').replace(/\s*\(.+\)/, '').trim().split('.').map(Number);
-    const aParts = normalize(a);
-    const bParts = normalize(b);
+    return -compareVersionAsc(a, b);
+}
+
+function compareVersionAsc(a: string, b: string): number {
+    const aParts = parseVersionParts(a);
+    const bParts = parseVersionParts(b);
     const maxLen = Math.max(aParts.length, bParts.length);
 
     for (let i = 0; i < maxLen; i++) {
         const aNum = aParts[i] || 0;
         const bNum = bParts[i] || 0;
         if (aNum !== bNum) {
-            return bNum - aNum; // 降序
+            return aNum - bNum;
         }
     }
     return 0;
+}
+
+function normalizeVersionLabel(version: string): string {
+    return version.replace(/^v/, '').replace(/\s*\(.+\)/, '').trim();
+}
+
+function parseVersionParts(version: string): number[] {
+    const normalized = normalizeVersionLabel(version);
+    const match = normalized.match(/\d+(?:\.\d+)*/);
+    if (!match) {
+        return [];
+    }
+
+    return match[0].split('.').map(part => {
+        const num = Number(part);
+        return Number.isFinite(num) ? num : 0;
+    });
 }

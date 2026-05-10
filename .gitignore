@@ -3,6 +3,8 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+.env.publish.local
+release_artifacts/
 target/
 # 添加 npm 特定忽略
 # package-lock.json

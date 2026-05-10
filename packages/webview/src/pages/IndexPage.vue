@@ -880,24 +880,64 @@ function findScrollContainer(el: HTMLElement | null): HTMLElement | null {
   return document.scrollingElement as HTMLElement | null;
 }
 
-function scrollToRole(id: string) {
-  const el = roleRefs.get(id) ?? null;
+interface ScrollToRoleOptions {
+  attempts?: number;
+  behavior?: ScrollBehavior;
+  flash?: boolean;
+}
+
+function waitAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
+function scrollToRole(id: string, options: ScrollToRoleOptions = {}) {
   // 保持侧栏开启，先展开再滚动（等待布局稳定）
   drawerOpen.value = true;
   // 确保主视图对应的面板展开
   mainOpened[id] = true;
-  if (!el) return;
-  void nextTick(() => {
+  void scrollToRoleAfterLayout(id, options);
+}
+
+async function scrollToRoleAfterLayout(id: string, options: ScrollToRoleOptions) {
+  const attempts = Math.max(1, options.attempts ?? 4);
+  const behavior = options.behavior ?? 'smooth';
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await nextTick();
+    await waitAnimationFrame();
+
+    const el = roleRefs.get(id) ?? null;
+    if (!el) continue;
+
     const container = findScrollContainer(el);
     if (container) {
       const elRect = el.getBoundingClientRect();
       const contRect = container.getBoundingClientRect();
+      const hasStableLayout =
+        (elRect.width > 0 || elRect.height > 0) &&
+        (contRect.width > 0 || contRect.height > 0);
+
+      if (!hasStableLayout && attempt < attempts - 1) {
+        continue;
+      }
+
       const offset = elRect.top - contRect.top + container.scrollTop;
-      container.scrollTo({ top: offset, behavior: 'smooth' });
+      container.scrollTo({ top: Math.max(0, offset), behavior });
     } else if ((el as any).scrollIntoView) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.scrollIntoView({ behavior, block: 'start' });
     }
-  });
+
+    if (options.flash) {
+      flashRoleCard(id);
+    }
+    return;
+  }
+
+  if (options.flash) {
+    window.setTimeout(() => flashRoleCard(id), 120);
+  }
 }
 
 // 展开/收起单个（用克隆触发更新）
@@ -1040,8 +1080,7 @@ function focusRoleByName(name: string) {
   }
   drawerOpen.value = true; // 打开左侧列表
   mainOpened[id] = true; // 确保右侧该卡片展开
-  scrollToRole(id); // 滚过去
-  void nextTick(() => flashRoleCard(id)); // 闪烁高亮
+  scrollToRole(id, { attempts: 8, flash: true }); // 滚过去并闪烁高亮
 }
 
 function flushPendingDefs() {

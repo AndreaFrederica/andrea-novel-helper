@@ -9,7 +9,7 @@ interface QuickSettingsPanelOptions {
     suppressVersionPrompt?: boolean;
 }
 
-const FIRST_USE_WIZARD_PROMPT_KEY = 'andrea.settingsWizard.firstUsePrompted';
+const FIRST_USE_WIZARD_HANDLED_KEY = 'andrea.settingsWizard.firstUseHandled.v2';
 
 export class QuickSettingsPanel {
     private static _instance: QuickSettingsPanel | undefined;
@@ -50,6 +50,10 @@ export class QuickSettingsPanel {
                 }
                 if (message.command === 'runCommand' && message.commandId) {
                     await vscode.commands.executeCommand(message.commandId);
+                    return;
+                }
+                if (message.command === 'settingsWizardHandled') {
+                    await markSettingsWizardHandled(this._context);
                     return;
                 }
                 if (message.command === 'getSettings' && this._settingsProvider) {
@@ -164,16 +168,15 @@ export class QuickSettingsPanel {
             return;
         }
 
-        if (this._context.globalState.get<boolean>(getVersionPromptKey(this._context)) === true) {
+        if (this._context.globalState.get<boolean>(getVersionHandledKey(this._context)) === true) {
             return;
         }
 
         this._wizardPromptInFlight = true;
-        await markSettingsWizardPrompted(this._context);
-
         try {
             const scope = await pickSettingsWizardScope('首次打开本版本的图形化快速设置。设置向导要先调整哪一类设置？');
             if (!scope) {
+                await markSettingsWizardHandled(this._context);
                 return;
             }
 
@@ -185,6 +188,8 @@ export class QuickSettingsPanel {
             );
             if (wizardChoice === '打开向导') {
                 await this._postOpenSettingsWizard(scope);
+            } else {
+                await markSettingsWizardHandled(this._context);
             }
         } finally {
             this._wizardPromptInFlight = false;
@@ -200,13 +205,14 @@ export class QuickSettingsPanel {
     }
 }
 
-function getVersionPromptKey(context: vscode.ExtensionContext): string {
+function getVersionHandledKey(context: vscode.ExtensionContext): string {
     const version = String(context.extension.packageJSON?.version ?? 'unknown');
-    return `andrea.quickSettings.settingsWizardPrompted.${version}`;
+    return `andrea.quickSettings.settingsWizardHandled.v2.${version}`;
 }
 
-async function markSettingsWizardPrompted(context: vscode.ExtensionContext) {
-    await context.globalState.update(getVersionPromptKey(context), true);
+async function markSettingsWizardHandled(context: vscode.ExtensionContext) {
+    await context.globalState.update(getVersionHandledKey(context), true);
+    await context.globalState.update(FIRST_USE_WIZARD_HANDLED_KEY, true);
 }
 
 async function pickSettingsWizardScope(message: string): Promise<SettingsWizardScope | undefined> {
@@ -238,15 +244,13 @@ async function pickSettingsWizardScope(message: string): Promise<SettingsWizardS
 }
 
 export async function maybePromptFirstUseSettingsWizard(context: vscode.ExtensionContext): Promise<void> {
-    if (context.globalState.get<boolean>(FIRST_USE_WIZARD_PROMPT_KEY) === true) {
+    if (context.globalState.get<boolean>(FIRST_USE_WIZARD_HANDLED_KEY) === true) {
         return;
     }
 
-    await context.globalState.update(FIRST_USE_WIZARD_PROMPT_KEY, true);
-    await markSettingsWizardPrompted(context);
-
     const scope = await pickSettingsWizardScope('首次使用 Andrea Novel Helper。设置向导要先调整哪一类设置？');
     if (!scope) {
+        await markSettingsWizardHandled(context);
         return;
     }
 
@@ -257,6 +261,7 @@ export async function maybePromptFirstUseSettingsWizard(context: vscode.Extensio
         '暂不使用'
     );
     if (wizardChoice !== '打开向导') {
+        await markSettingsWizardHandled(context);
         return;
     }
 
@@ -271,7 +276,18 @@ export function registerQuickSettingsPage(context: vscode.ExtensionContext): vsc
         QuickSettingsPanel.createOrShow(context);
     });
 
-    context.subscriptions.push(command);
+    const wizardCommand = vscode.commands.registerCommand('andrea.openSettingsWizard', async () => {
+        const scope = await pickSettingsWizardScope('设置向导要调整哪一类设置？');
+        if (!scope) {
+            return;
+        }
+        QuickSettingsPanel.createOrShow(context, {
+            openWizardScope: scope,
+            suppressVersionPrompt: true
+        });
+    });
+
+    context.subscriptions.push(command, wizardCommand);
 
     const serializer = vscode.window.registerWebviewPanelSerializer('quickSettings', {
         async deserializeWebviewPanel(panel: vscode.WebviewPanel, _state: unknown) {
