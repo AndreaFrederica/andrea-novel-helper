@@ -84,7 +84,7 @@ export const addSensitiveCmd_obj = async () => {
         return;
     }
 
-    // 刷新全局角色列表（包括特殊角色）
-    loadRoles();
+    // 刷新刚写入的敏感词文件，避免全量重扫导致高亮短暂丢失
+    loadRoles(false, [fullPath]);
     updateDecorations();
 };

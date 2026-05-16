@@ -4218,6 +4218,7 @@
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
+    "test:role-load-refresh": "npm run compile && mocha --ui tdd --require ./scripts/register-node-unit-test-env.js \"out/test/roleLoadRefresh.unit.test.js\"",
     "publish:artifacts": "node scripts/publish-artifacts.js",
     "mcp:test": "ts-node scripts/mcp-test.ts",
     "mcp:run": "ts-node scripts/mcp-run.ts",
@@ -4234,6 +4235,7 @@
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.25.9",
     "eslint": "^9.25.1",
+    "mocha": "^11.7.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },

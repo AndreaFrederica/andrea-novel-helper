@@ -21,6 +21,7 @@ import { SmartRoleAdder } from './roleMerger';
 import { isLikelyDelimitedRoleFileContent, parseDelimitedRoleFile } from './delimitedRoleFile';
 import { getProjectKeywordConfig, mergeProjectKeywordConfigs, type ProjectKeywordConfig } from '../projectConfig/projectKeywordConfig';
 import { applyGeneratedLookupKeys } from './roleLookupKeyGeneration';
+import { shouldIncrementalRoleLoad } from './roleLoadMode';
 
 // 创建全局的角色管理器
 export let roleManager: SmartRoleAdder | null = null;
@@ -574,15 +575,19 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	const externalRoleFolders = scanResult.externalFolders;
 	console.log(`loadRoles: 找到 ${externalRoleFolders.length} 个外部角色文件夹:`, externalRoleFolders);
 
-	// 如果强制刷新，清空缓存
-	if (forceRefresh) {
-		globalFileCache.clear();
+	const changedRoleFiles = changedFiles ?? [];
+	const shouldIncrementalUpdate = shouldIncrementalRoleLoad(forceRefresh, changedRoleFiles);
+
+	// 全量扫描会清空 roles，因此必须同步重建 SmartRoleAdder 的索引。
+	if (!shouldIncrementalUpdate) {
+		if (forceRefresh) {
+			globalFileCache.clear();
+		}
 		cleanRoles();
 		sensitiveSourceFiles.clear();
-		// 重新初始化角色管理器
 		roleManager = new SmartRoleAdder(roles);
 	} else if (!roleManager) {
-		// 首次加载时初始化角色管理器
+		// 首次增量加载时初始化角色管理器
 		roleManager = new SmartRoleAdder(roles);
 	}
 	roleManager?.setExternalFolders(externalRoleFolders);
@@ -591,17 +596,17 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	if (!fs.existsSync(novelHelperRoot)) {
 		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot}`);
 		// 仍然尝试加载传统方式的文件（向后兼容）
-		loadTraditionalRoles(forceRefresh, changedFiles);
+		loadTraditionalRoles(forceRefresh, shouldIncrementalUpdate ? changedRoleFiles : undefined);
 		return;
 	}
 
 	// 增量文件更新仍同步处理（避免复杂化调用点）
-	if (changedFiles && changedFiles.length > 0) {
-		console.log(`loadRoles: 增量更新 ${changedFiles.length} 个文件`);
-		performIncrementalUpdate(changedFiles, novelHelperRoot);
+	if (shouldIncrementalUpdate) {
+		console.log(`loadRoles: 增量更新 ${changedRoleFiles.length} 个文件`);
+		performIncrementalUpdate(changedRoleFiles, novelHelperRoot);
 		
 		// 增量更新关系表
-		updateRelationships(changedFiles, novelHelperRoot).then(() => {
+		updateRelationships(changedRoleFiles, novelHelperRoot).then(() => {
 			// 关系表更新完成后，先清理所有角色的旧关系属性
 			clearRelationshipProperties(roles);
 			// 然后为所有角色添加新的关系属性
@@ -610,7 +615,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 
 			// 仅在由文件变动触发的增量更新时显示通知（初次全量加载不弹）
 			try {
-				const relFiles = (changedFiles || []).filter(f => {
+				const relFiles = changedRoleFiles.filter(f => {
 					const n = f.toLowerCase();
 					return n.endsWith('.rjson5') || n.endsWith('.json5') && /relationship|relation|connections|links|关系|关联|连接|联系/.test(path.basename(n));
 				});
@@ -634,7 +639,6 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	}
 
 	// 全量异步扫描：分批读取目录，避免阻塞主线程
-	if (!forceRefresh) { cleanRoles(); }
 
 	// 支持目录断点续扫：若一个目录在批次末尾被截断，记录下一个起始索引与缓存的 entries
 	let pendingDirs: { abs: string; rel: string; entries?: fs.Dirent[]; index?: number }[] = [];
@@ -1398,12 +1402,14 @@ function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: strin
 	if (roleManager) {
 		for (const filePath of changedFiles) {
 			roleManager.removeRolesByFile(filePath);
+			try { sensitiveSourceFiles.delete(path.resolve(filePath).toLowerCase()); } catch { /* ignore */ }
 			// 刷新文件缓存
 			globalFileCache.refreshFile(filePath);
 		}
 	} else {
 		// 如果 roleManager 未初始化，使用旧的删除方式
 		for (const filePath of changedFiles) {
+			try { sensitiveSourceFiles.delete(path.resolve(filePath).toLowerCase()); } catch { /* ignore */ }
 			// 移除该文件的所有角色
 			for (let i = roles.length - 1; i >= 0; i--) {
 				if (roles[i].sourcePath === filePath) {

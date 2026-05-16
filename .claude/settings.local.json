@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run compile:*)"
+      "Bash(npm run compile:*)",
+      "Bash(node scripts/publish-artifacts.js --dry-run --yes --std-only)",
+      "Bash(node scripts/publish-artifacts.js --dry-run --yes --marketplace-only)",
+      "Bash(node scripts/publish-artifacts.js --yes)",
+      "Bash(node scripts/publish-artifacts.js --dry-run --yes)",
+      "Bash(node scripts/publish-artifacts.js --target darwin-arm64 --std-only --yes)"
     ],
     "deny": [],
     "ask": []

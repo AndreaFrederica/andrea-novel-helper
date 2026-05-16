@@ -85,7 +85,7 @@ export const addRoleFromSelection = async () => {
         return;
     }
 
-    // 刷新
-    loadRoles();
+    // 刷新刚写入的角色文件，避免全量重扫导致高亮短暂丢失
+    loadRoles(false, [fullPath]);
     updateDecorations();
 };

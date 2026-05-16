@@ -81,6 +81,7 @@ export const addVocabulary = async () => {
         return;
     }
 
-    loadRoles();
+    // 刷新刚写入的词汇文件，避免全量重扫导致高亮短暂丢失
+    loadRoles(false, [fullPath]);
     updateDecorations();
 };
