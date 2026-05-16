@@ -95,6 +95,9 @@
             case 'openWorkspace':
                 vscode.postMessage({ command: 'openWorkspace' });
                 break;
+            case 'openAnhSettings':
+                vscode.postMessage({ command: 'openAnhSettings' });
+                break;
             case 'openRecentList':
                 vscode.postMessage({ command: 'openRecentList' });
                 break;

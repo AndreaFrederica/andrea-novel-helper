@@ -277,7 +277,7 @@
                     <div class="start-list">
                         <button class="action-link" data-action="createWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-add.svg" alt=""></span><span data-i18n="createWorkspace">新建写作工作区...</span></button>
                         <button class="action-link" data-action="openWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-open.svg" alt=""></span><span data-i18n="openWorkspace">打开工作区...</span></button>
-                        <button class="action-link" data-cmd="workbench.action.openSettings" data-arg="@ext:AndreaFrederica.andrea-novel-helper"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span data-i18n="openSettings">打开 ANH 设置...</span></button>
+                        <button class="action-link" data-action="openAnhSettings"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span data-i18n="openSettings">打开 ANH 设置...</span></button>
                         <button class="action-link" data-action="showGuide"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/guide.svg" alt=""></span><span data-i18n="openGuide">打开完整功能引导</span></button>
                     </div>
                 </section>
@@ -403,6 +403,28 @@
                         <div id="extensions" class="extensions"></div>
                     </div>
                 </details>
+
+                <section class="column-section" aria-labelledby="faqTitle">
+                    <h2 class="section-title" id="faqTitle" data-i18n="faqTitle">常见疑问</h2>
+                    <div class="walkthrough-list">
+                        <button class="welcome-card" data-cmd="workbench.action.quickOpen">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/guide.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqCommandPalette">命令面板是什么？</span><span class="card-desc" data-i18n="faqCommandPaletteDesc">它是 VS Code 的总入口，可以搜索并执行所有命令；不会写代码也能用。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="workbench.view.explorer">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/files.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqExplorer">左侧资源管理器是干什么的？</span><span class="card-desc" data-i18n="faqExplorerDesc">这里显示项目文件夹、章节文件和资料文件，像普通文件管理器一样打开和整理。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="workbench.action.openSettings">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqSettings">设置在哪里改？</span><span class="card-desc" data-i18n="faqSettingsDesc">VS Code 和 ANH 的选项都在设置页，搜索关键词就能找到对应开关。</span></span>
+                        </button>
+                        <button class="welcome-card" data-doc="vscode-settings">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/book.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqWorkspace">工作区和文件夹有什么区别？</span><span class="card-desc" data-i18n="faqWorkspaceDesc">工作区就是当前打开的项目根目录，ANH 会围绕它管理章节、设定和统计。</span></span>
+                        </button>
+                    </div>
+                </section>
             </div>
         </div>
 

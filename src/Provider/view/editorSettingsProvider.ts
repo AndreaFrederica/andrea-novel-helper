@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { buildHtml } from '../utils/html-builder';
 import { log } from 'console';
 import { getTranslation } from '../../utils/i18n';
+import { formatSettingsSectionName } from '../utils/settingsSectionNames';
 
 export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'andrea.editorSettingsView';
@@ -629,40 +630,7 @@ export class EditorSettingsWebviewProvider implements vscode.WebviewViewProvider
     }
 
     private formatSectionName(sectionId: string): string {
-        // 将sectionId转换为中文名称
-        const sectionNames: { [key: string]: string } = {
-            'AndreaNovelHelper': '基础设置',
-            'AndreaNovelHelper.docRoles': '文档角色',
-            'AndreaNovelHelper.typo': '拼写检查',
-            'AndreaNovelHelper.translate': '翻译设置',
-            'AndreaNovelHelper.comments': '批注设置',
-            'AndreaNovelHelper.allRoles': '全部角色',
-            'AndreaNovelHelper.wordCount': '字数统计',
-            'AndreaNovelHelper.roles': '角色设置',
-            'andrea.typeset': '排版设置',
-            'AndreaNovelHelper.wordSegment': '分词设置',
-            'andrea.roleJson5': '角色JSON5',
-            'AndreaNovelHelper.outline': '大纲设置',
-            'AndreaNovelHelper.timeStats': '时间统计',
-            'AndreaNovelHelper.hugeFile': '大文件处理',
-            'AndreaNovelHelper.fileTracker': '文件追踪',
-            'AndreaNovelHelper.debug': '调试设置',
-            'AndreaNovelHelper.completion': '自动补全',
-            'AndreaNovelHelper.decorations': '装饰设置',
-            'AndreaNovelHelper.externalFolder': '外部文件夹',
-            'AndreaNovelHelper.sensitiveWords': '敏感词设置',
-            'AndreaNovelHelper.webdav': 'WebDAV',
-            'AndreaNovelHelper.autoGit': '自动Git',
-            'AndreaNovelHelper.smartTabGroupLock': '智能标签组锁定',
-            'AndreaNovelHelper.database': '数据库设置',
-            'AndreaNovelHelper.startupSnapshot': '启动快照',
-            'andrea.typst': 'Typst设置',
-            'AndreaNovelHelper.scripts': '脚本设置',
-            'editor': 'VS Code 编辑器',
-            'other': '其它设置'
-        };
-
-        return sectionNames[sectionId] || sectionId;
+        return formatSettingsSectionName(sectionId);
     }
 
     public setExternalWebview(webview: vscode.Webview) {

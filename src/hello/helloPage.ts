@@ -189,6 +189,9 @@ function setupHelloPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
                 case 'openWorkspace':
                     await openWorkspace(context);
                     break;
+                case 'openAnhSettings':
+                    await openAnhSettingsPicker();
+                    break;
                 case 'openRecentWorkspace':
                     if (typeof message.path === 'string') {
                         await openWorkspacePath(context, message.path);
@@ -508,6 +511,32 @@ async function openWorkspacePath(context: vscode.ExtensionContext, workspacePath
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(normalized), false);
 }
 
+async function openAnhSettingsPicker(): Promise<void> {
+    const choice = await vscode.window.showQuickPick([
+        {
+            label: '完整扩展设置编辑器',
+            description: 'ANH 自定义设置编辑器窗口',
+            command: 'andrea.openEditorSettingsEnhanced'
+        },
+        {
+            label: '图形化快速设置',
+            description: '常用设置、排版与写作体验快速入口',
+            command: 'andrea.openGraphicalQuickSettings'
+        },
+        {
+            label: 'VS Code 设置页',
+            description: '使用 @ext 过滤显示 ANH 配置项',
+            command: 'workbench.action.openSettings',
+            arg: '@ext:AndreaFrederica.andrea-novel-helper'
+        }
+    ], {
+        title: '选择打开 ANH 设置的方式',
+        placeHolder: '选择一个设置界面'
+    });
+    if (!choice) return;
+    await vscode.commands.executeCommand(choice.command, choice.arg);
+}
+
 async function updateRecentWorkspaces(context: vscode.ExtensionContext, workspacePath: string): Promise<void> {
     const normalized = path.resolve(workspacePath);
     const existing = getRecentWorkspaces(context).filter(item => path.resolve(item.path) !== normalized);
@@ -648,6 +677,15 @@ const HELLO_I18N_ZH_CN: Record<string, string> = {
     exportDesc: '使用 Typst 模板导出 PDF、图片或整理后的文本。',
     recommendedExtensions: '推荐扩展',
     noExtensions: '推荐目录暂时为空。',
+    faqTitle: '常见疑问',
+    faqCommandPalette: '命令面板是什么？',
+    faqCommandPaletteDesc: '它是 VS Code 的总入口，可以搜索并执行所有命令；不会写代码也能用。',
+    faqExplorer: '左侧资源管理器是干什么的？',
+    faqExplorerDesc: '这里显示项目文件夹、章节文件和资料文件，像普通文件管理器一样打开和整理。',
+    faqSettings: '设置在哪里改？',
+    faqSettingsDesc: 'VS Code 和 ANH 的选项都在设置页，搜索关键词就能找到对应开关。',
+    faqWorkspace: '工作区和文件夹有什么区别？',
+    faqWorkspaceDesc: '工作区就是当前打开的项目根目录，ANH 会围绕它管理章节、设定和统计。',
     workspaceEnabled: '工作区启用',
     workspaceDisabled: '工作区禁用',
     followsVsCode: '跟随 VS Code 扩展开关',
@@ -729,6 +767,15 @@ const HELLO_I18N_EN: Record<string, string> = {
     exportDesc: 'Export PDFs, images, or cleaned text with Typst templates.',
     recommendedExtensions: 'Recommended Extensions',
     noExtensions: 'No recommendations yet.',
+    faqTitle: 'FAQ',
+    faqCommandPalette: 'What is the Command Palette?',
+    faqCommandPaletteDesc: 'It is the main VS Code launcher for searching and running commands, even if you do not write code.',
+    faqExplorer: 'What is the left Explorer for?',
+    faqExplorerDesc: 'It shows project folders, chapter files, and reference files, like a regular file manager.',
+    faqSettings: 'Where do I change settings?',
+    faqSettingsDesc: 'VS Code and ANH options are both in Settings. Search by keyword to find the switch you need.',
+    faqWorkspace: 'What is a workspace?',
+    faqWorkspaceDesc: 'A workspace is the project folder currently open. ANH manages chapters, lore, and stats around it.',
     workspaceEnabled: 'Workspace enabled',
     workspaceDisabled: 'Workspace disabled',
     followsVsCode: 'Following VS Code extension state',
@@ -762,7 +809,8 @@ const HELLO_I18N_JA: Record<string, string> = {
     recent: '最近',
     walkthrough: 'チュートリアル',
     docs: 'ドキュメント',
-    recommendedExtensions: 'おすすめ拡張機能'
+    recommendedExtensions: 'おすすめ拡張機能',
+    faqTitle: 'よくある質問'
 };
 
 function generateNonce(): string {
