@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import JSON5 from 'json5';
 import { v4 as uuidv4 } from 'uuid';
 import { ProjectConfig, ProjectConfigManager } from '../../projectConfig/projectConfigManager';
+import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
 import {
     PROJECT_KEYWORD_CONFIG_DEFINITIONS,
     PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME,
@@ -69,6 +70,7 @@ export function registerProjectSettingsPage(context: vscode.ExtensionContext): v
         );
 
         currentPanel = panel;
+        setWebviewPanelIcon(panel, context.extensionPath, 'settings');
         panel.webview.html = getProjectSettingsHtml(panel.webview);
         panel.onDidDispose(() => { currentPanel = undefined; }, undefined, context.subscriptions);
         panel.webview.onDidReceiveMessage(async message => {

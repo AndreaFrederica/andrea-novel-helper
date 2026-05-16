@@ -9,6 +9,8 @@ import { setActivePreview } from '../../context/previewRedirect';
 import { getRoleLookupKeys } from '../../utils/roleLookupKeys';
 import { collectRoleUsageRanges } from '../../utils/roleUsageCollector';
 import { ahoCorasickManager } from '../../utils/AhoCorasick/ahoCorasickManager';
+import { renderPlainTextWithProcessor, scriptExtensionRegistry } from '../../mcp/scriptExtensions';
+import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
 
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
 const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
@@ -567,13 +569,27 @@ export class PreviewManager {
     async exportTxtOfActiveEditor() {
         const doc = vscode.window.activeTextEditor?.document;
         if (!doc) { return; }
-        const { text } = this.renderToPlainText(doc);
+        const processorId = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('scripts.defaultPlainTextProcessor', 'internal');
+        await scriptExtensionRegistry.emit('beforePlainTextExport', {
+            uri: doc.uri.toString(),
+            fileName: doc.fileName,
+            processorId,
+        });
+        const rendered = this.renderToPlainText(doc);
+        const text = await renderPlainTextWithProcessor(doc, rendered.text, processorId);
         const uri = await vscode.window.showSaveDialog({
             defaultUri: doc.uri.with({ path: doc.uri.path.replace(/\.[^/\\.]+$/, '') + '.txt' }),
             filters: { Text: ['txt'] },
         });
         if (!uri) { return; }
         await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(text));
+        await scriptExtensionRegistry.emit('afterPlainTextExport', {
+            uri: doc.uri.toString(),
+            fileName: doc.fileName,
+            output: uri.toString(),
+            outputPath: uri.fsPath,
+            processorId,
+        });
         vscode.window.showInformationMessage(`导出完成：${uri.fsPath}`);
     }
 
@@ -625,6 +641,7 @@ export class PreviewManager {
                 ],
             }
         );
+        setWebviewPanelIcon(panel, this.context.extensionPath, 'book');
 
 
         this.attachPanelToDoc(panel, doc);

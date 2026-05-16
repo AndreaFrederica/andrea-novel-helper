@@ -50,7 +50,9 @@ export async function openTypstPreview(typstFS: TypstMemoryProvider | undefined,
         // 让用户选择模板
         let selectedTemplate = defaultTemplate;
         const templates = templateRegistry.list();
-        if (templates.length > 1) {
+        const defaultRenderer = cfg.get<string>('defaultRenderer') || 'internal';
+        const useInternalRenderer = defaultRenderer === 'internal' || defaultRenderer === 'liquid';
+        if (useInternalRenderer && templates.length > 1) {
             const picks = templates.map(t => ({
                 label: t.name,
                 description: t.root,
@@ -62,7 +64,7 @@ export async function openTypstPreview(typstFS: TypstMemoryProvider | undefined,
             });
             if (!selected) { return; } // 用户取消了选择
             selectedTemplate = selected.value;
-        } else if (templates.length === 1) {
+        } else if (useInternalRenderer && templates.length === 1) {
             selectedTemplate = templates[0].name;
         }
         
@@ -295,6 +297,11 @@ export async function changeTypstTemplate(typstFS: TypstMemoryProvider | undefin
 
     try {
         const templates = templateRegistry.list();
+        const renderer = vscode.workspace.getConfiguration('andrea.typst').get<string>('defaultRenderer', 'internal');
+        if (renderer && renderer !== 'internal' && renderer !== 'liquid') {
+            vscode.window.showInformationMessage('当前使用脚本 Typst 渲染器；请在脚本面板中切换默认 Typst 渲染器。');
+            return;
+        }
         if (templates.length === 0) {
             vscode.window.showErrorMessage('没有可用的模板');
             return;

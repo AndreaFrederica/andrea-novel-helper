@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import JSON5 from 'json5';
 import { buildHtml } from '../utils/html-builder';
+import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
 import { roles } from '../../activate';
 import { getAllWhatsNewVersions, getWhatsNewData } from '../../whatsnew/whatsnew-data';
 import {
@@ -173,6 +174,7 @@ export class WritingDashboardPanel {
             column,
             WritingDashboardPanel.getWebviewOptions(extensionUri)
         );
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'dashboard');
 
         WritingDashboardPanel.dashboardInstance = new WritingDashboardPanel(
             panel,
@@ -200,6 +202,7 @@ export class WritingDashboardPanel {
             column,
             WritingDashboardPanel.getWebviewOptions(extensionUri)
         );
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'dashboard');
 
         const route = `/writing-dashboard-widget/${encodeURIComponent(normalizedId)}`;
         const instance = new WritingDashboardPanel(panel, extensionUri, route, instanceKey);
@@ -210,6 +213,7 @@ export class WritingDashboardPanel {
     public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): WritingDashboardPanel {
         panel.webview.options = WritingDashboardPanel.getWebviewOptions(extensionUri);
         panel.title = '创作工作台';
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'dashboard');
         WritingDashboardPanel.dashboardInstance = new WritingDashboardPanel(
             panel,
             extensionUri,
@@ -224,6 +228,7 @@ export class WritingDashboardPanel {
         const instanceKey = `widget:${normalizedId}`;
         panel.webview.options = WritingDashboardPanel.getWebviewOptions(extensionUri);
         panel.title = widgetTitles[normalizedId];
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'dashboard');
         const route = `/writing-dashboard-widget/${encodeURIComponent(normalizedId)}`;
         const instance = new WritingDashboardPanel(panel, extensionUri, route, instanceKey);
         WritingDashboardPanel.widgetInstances.set(instanceKey, instance);

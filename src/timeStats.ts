@@ -17,6 +17,7 @@ import { getIgnoredWritingStatsManager } from './utils/WritingCount/ignoredWriti
 import { CombinedIgnoreParser } from './utils/Parser/gitignoreParser';
 import { getEffectiveDocumentSync, onDidChangeEffectiveDocument, setActivePreview } from './context/previewRedirect';
 import { isAnyCommentPanelActive } from './context/commentRedirect';
+import { setWebviewPanelIcon } from './Provider/utils/webviewPanelIcon';
 
 // -------------------- 数据结构 --------------------
 interface Bucket {
@@ -1687,6 +1688,7 @@ async function openDashboard(context: vscode.ExtensionContext) {
         { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
         { enableScripts: true }
     );
+    setWebviewPanelIcon(dashboardPanel, context.extensionPath, 'dashboard');
 
     await setupDashboardPanel(dashboardPanel, context);
 }

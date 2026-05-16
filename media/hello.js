@@ -5,6 +5,7 @@
     const vscode = acquireVsCodeApi();
     const workspaceName = document.getElementById('workspaceName');
     const workspacePath = document.getElementById('workspacePath');
+    const recentWorkspaces = document.getElementById('recentWorkspaces');
     const statusRow = document.getElementById('statusRow');
     const helloEnabled = document.getElementById('helloEnabled');
     const forceManaged = document.getElementById('forceManaged');
@@ -18,6 +19,9 @@
     const gitDownloadBtn = document.getElementById('gitDownloadBtn');
 
     let currentState = undefined;
+    let i18n = window.__HELLO_I18N__ || {};
+
+    applyI18n();
 
     document.body.addEventListener('click', event => {
         const button = event.target.closest('button');
@@ -49,6 +53,12 @@
                 extensionId,
                 marketplaceUrl: button.getAttribute('data-marketplace-url') || undefined
             });
+            return;
+        }
+
+        const recentPath = button.getAttribute('data-recent-path');
+        if (recentPath) {
+            vscode.postMessage({ command: 'openRecentWorkspace', path: recentPath });
         }
     });
 
@@ -68,6 +78,8 @@
         const message = event.data || {};
         if (message.command === 'state') {
             currentState = message.data;
+            i18n = message.data?.i18n || i18n;
+            applyI18n();
             render(message.data);
             hideNotice();
         } else if (message.command === 'error') {
@@ -82,6 +94,9 @@
                 break;
             case 'openWorkspace':
                 vscode.postMessage({ command: 'openWorkspace' });
+                break;
+            case 'openRecentList':
+                vscode.postMessage({ command: 'openRecentList' });
                 break;
             case 'dismiss':
                 vscode.postMessage({ command: 'dismiss' });
@@ -122,6 +137,7 @@
 
     function render(state) {
         renderWorkspace(state);
+        renderRecentWorkspaces(state.recentWorkspaces || []);
         renderConfig(state);
         renderGit(state.git || {});
         renderExtensions(state.recommendations || []);
@@ -134,19 +150,33 @@
             workspaceName.classList.remove('muted');
             workspacePath.textContent = workspace.path || '';
         } else {
-            workspaceName.textContent = '尚未打开工作区';
+            workspaceName.textContent = t('noWorkspace');
             workspaceName.classList.add('muted');
-            workspacePath.textContent = '可以先创建一个新项目文件夹，或打开已有小说项目。';
+            workspacePath.textContent = t('noWorkspaceDesc');
         }
 
         const cfg = state.config || {};
         const badges = [];
-        badges.push({ text: cfg.workspaceDisabled ? '工作区禁用' : '工作区启用', kind: cfg.workspaceDisabled ? 'warn' : 'ok' });
-        badges.push({ text: cfg.effectiveVsCodeManagedDisabling ? '跟随 VS Code 扩展开关' : '使用 ANH 工作区开关', kind: cfg.effectiveVsCodeManagedDisabling ? 'ok' : '' });
+        badges.push({ text: cfg.workspaceDisabled ? t('workspaceDisabled') : t('workspaceEnabled'), kind: cfg.workspaceDisabled ? 'warn' : 'ok' });
+        badges.push({ text: cfg.effectiveVsCodeManagedDisabling ? t('followsVsCode') : t('usesAnhSwitch'), kind: cfg.effectiveVsCodeManagedDisabling ? 'ok' : '' });
         if (cfg.forceVsCodeManagedDisabling && !cfg.originalVsCodeManagedDisabling) {
-            badges.push({ text: '托管模式由 Hello 临时生效', kind: 'ok' });
+            badges.push({ text: t('helloManagedTemporary'), kind: 'ok' });
         }
         statusRow.innerHTML = badges.map(badge => `<span class="badge ${badge.kind || ''}">${escapeHtml(badge.text)}</span>`).join('');
+    }
+
+    function renderRecentWorkspaces(items) {
+        if (!recentWorkspaces) return;
+        if (!items.length) {
+            recentWorkspaces.innerHTML = `<div class="path">${escapeHtml(t('noRecent'))}</div>`;
+            return;
+        }
+        recentWorkspaces.innerHTML = items.map(item => `
+            <button class="recent-item" data-recent-path="${escapeAttribute(item.path)}">
+                <span class="workspace-name">${escapeHtml(item.name || basename(item.path))}</span>
+                <span class="path">${escapeHtml(item.path || '')}</span>
+            </button>
+        `).join('');
     }
 
     function renderConfig(state) {
@@ -158,7 +188,7 @@
     function renderGit(git) {
         if (!gitSummary || !gitScope || !gitName || !gitEmail || !initRepoBtn || !gitDownloadBtn) return;
         if (!git.installed) {
-            gitSummary.textContent = '未检测到 Git。仍可创建和打开工作区；需要版本备份时请先安装 Git。';
+            gitSummary.textContent = t('gitNotInstalled');
             gitName.value = '';
             gitEmail.value = '';
             gitName.disabled = true;
@@ -188,31 +218,32 @@
         gitEmail.value = usingLocal ? (git.localEmail || '') : (git.globalEmail || '');
 
         const repoText = !git.hasWorkspace
-            ? '未打开工作区，只能配置全局身份。'
+            ? t('gitNoWorkspace')
             : git.hasRepo
-                ? '当前工作区已是 Git 仓库，可配置全局或本仓库身份。'
-                : '当前工作区还不是 Git 仓库，可先初始化仓库或只配置全局身份。';
+                ? t('gitRepoReady')
+                : t('gitRepoMissing');
         const globalText = git.globalName && git.globalEmail
-            ? `全局：${git.globalName} <${git.globalEmail}>`
-            : '全局身份未配置';
+            ? `${t('globalIdentity')}：${git.globalName} <${git.globalEmail}>`
+            : t('globalIdentityMissing');
         const localText = git.localName && git.localEmail
-            ? `本仓库：${git.localName} <${git.localEmail}>`
-            : '本仓库身份未配置';
+            ? `${t('localIdentity')}：${git.localName} <${git.localEmail}>`
+            : t('localIdentityMissing');
         gitSummary.textContent = `${git.version || 'Git 已安装'}。${repoText} ${globalText}；${localText}`;
     }
 
     function renderExtensions(items) {
         if (!extensions) return;
         if (!items.length) {
-            extensions.innerHTML = '<div class="muted">推荐目录暂时为空。</div>';
+            extensions.innerHTML = `<div class="muted">${escapeHtml(t('noExtensions'))}</div>`;
             return;
         }
         extensions.innerHTML = items.map(item => {
-            const status = item.installed ? (item.active ? '已安装并启用' : '已安装') : '未安装';
+            const status = item.installed ? (item.active ? t('extensionInstalledActive') : t('extensionInstalled')) : t('extensionMissing');
             const statusKind = item.installed ? 'ok' : 'warn';
-            const author = item.author || item.publisher || '未知作者';
-            const category = item.category || '推荐';
+            const author = item.author || item.publisher || t('unknownAuthor');
+            const category = item.category || t('recommendation');
             const marketplace = item.marketplaceUrl || '';
+            const actionLabel = item.installed ? t('viewExtension') : t('openMarketplace');
             return `
                 <article class="extension-card">
                     <div class="extension-head">
@@ -223,13 +254,33 @@
                         <span class="badge ${statusKind}">${escapeHtml(status)}</span>
                     </div>
                     <p class="extension-reason">${escapeHtml(item.description || '')}</p>
-                    <p class="extension-reason">推荐原因：${escapeHtml(item.reason || '适合 ANH 写作工作流。')}</p>
+                    <p class="extension-reason">${escapeHtml(t('recommendedReason'))}：${escapeHtml(item.reason || t('defaultReason'))}</p>
                     <div class="tile-actions">
-                        <button class="primary" data-extension-id="${escapeAttribute(item.id)}" data-marketplace-url="${escapeAttribute(marketplace)}">${item.installed ? '查看扩展' : '打开商店'}</button>
+                        <button class="primary" data-extension-id="${escapeAttribute(item.id)}" data-marketplace-url="${escapeAttribute(marketplace)}">${escapeHtml(actionLabel)}</button>
                     </div>
                 </article>
             `;
         }).join('');
+    }
+
+    function applyI18n() {
+        document.querySelectorAll('[data-i18n]').forEach(node => {
+            const key = node.getAttribute('data-i18n');
+            if (key && i18n[key]) node.textContent = i18n[key];
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(node => {
+            const key = node.getAttribute('data-i18n-placeholder');
+            if (key && i18n[key]) node.setAttribute('placeholder', i18n[key]);
+        });
+    }
+
+    function t(key) {
+        return i18n[key] || key;
+    }
+
+    function basename(value) {
+        const parts = String(value || '').split(/[\\/]/).filter(Boolean);
+        return parts[parts.length - 1] || value || '';
     }
 
     function showNotice(message) {

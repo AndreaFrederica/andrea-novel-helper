@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
 
 let currentPanel: vscode.WebviewPanel | undefined;
 let extensionPath: string = '';
@@ -124,6 +125,7 @@ async function showDocViewer(docId?: string): Promise<void> {
 function setupDocViewerPanel(panel: vscode.WebviewPanel, docId?: string): void {
     currentPanel = panel;
     panel.title = 'ANH 文档';
+    setWebviewPanelIcon(panel, extensionPath, 'docs');
     panel.webview.options = {
         enableScripts: true,
         localResourceRoots: [

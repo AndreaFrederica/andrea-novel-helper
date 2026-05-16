@@ -29,6 +29,7 @@
     <li>批量重命名</li>
     <li>导出数据</li>
     <li>调用 AI 工具（通过 MCP）</li>
+    <li>注册生命周期 hooks 和自定义纯文本处理器</li>
 </ul>
 
 <h4>安全提示</h4>
@@ -77,7 +78,45 @@ export default async function(ctx, args) {
     <li><code>ctx.path</code> — Node.js <code>path</code> 模块</li>
     <li><code>ctx.env</code> — 环境变量对象</li>
     <li><code>ctx.output</code> — ANH 输出通道，结构为 <code>{ clear, append, appendLine, show }</code>：<br><code>console.log</code> 自动重定向到此通道</li>
+    <li><code>ctx.hooks</code> — 注册生命周期回调：<code>ctx.hooks.on(name, handler)</code></li>
+    <li><code>ctx.processors</code> — 注册外挂处理器：<code>ctx.processors.registerPlainText(meta, handler)</code>、<code>ctx.processors.registerTypst(meta, handler)</code></li>
+    <li><code>ctx.renderers</code> — 注册独立渲染器：<code>ctx.renderers.registerTypst(meta, handler)</code></li>
 </ul>
+
+<h4>Hooks 与处理器扩展</h4>
+<p>脚本如果导出 <code>activate(ctx)</code> 或 <code>register(ctx)</code>，ANH 会在脚本扩展加载时调用它。可用 hooks 包括 <code>extensionActivated</code>、<code>documentSaved</code>、<code>beforePlainTextExport</code>、<code>afterPlainTextExport</code>、<code>beforeTypstRender</code>、<code>afterTypstRender</code>。</p>
+<pre><code>export function activate(ctx) {
+    ctx.hooks.on('documentSaved', async (event, runtime) => {
+        runtime.output.appendLine(`保存了: ${event.fileName}`);
+    });
+
+    ctx.processors.registerPlainText({
+        id: 'chapter-header',
+        label: '章节标题增强',
+        description: '导出 TXT 时给每章标题加分隔线'
+    }, async (input) => {
+        return input.fallbackText.replace(/^第(.+?)章(.+)$/gm, '==== 第$1章$2 ====');
+    });
+
+    ctx.renderers.registerTypst({
+        id: 'simple-typst',
+        label: '简单 Typst 渲染器',
+        description: '不使用 Liquid 模板，直接把解析后的 blocks 生成为 Typst'
+    }, async (input) => {
+        const lines = ['#set page(margin: 2cm)'];
+        for (const block of input.renderContext.blocks || []) {
+            if (block.type === 'heading') {
+                lines.push(`#heading(level: ${block.level}, [${block.text}])`);
+            } else if (block.text) {
+                lines.push(block.text);
+            }
+            lines.push('');
+        }
+        return lines.join('\n');
+    });
+}
+</code></pre>
+<p>在脚本面板可以执行“选择默认纯文本处理器”和“选择默认 Typst 渲染器”。当 Typst 渲染器不是 <code>internal</code> / <code>liquid</code> 时，Typst 导出和预览会直接调用脚本渲染器，不再要求选择 Liquid 模板。</p>
 
 <h4>MCP 服务器集成</h4>
 <p>MCP（Model Context Protocol）允许脚本调用外部工具：</p>

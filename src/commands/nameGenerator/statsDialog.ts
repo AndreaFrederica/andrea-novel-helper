@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { setWebviewPanelIcon } from '../../Provider/utils/webviewPanelIcon';
 
 /**
  * 显示统计对话框
@@ -10,6 +11,7 @@ export async function showStatsDialog(stats: any): Promise<void> {
 		vscode.ViewColumn.One,
 		{}
 	);
+	setWebviewPanelIcon(panel, '', 'settings');
 
 	const html = `
 	<!DOCTYPE html>

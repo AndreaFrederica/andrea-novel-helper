@@ -35,11 +35,27 @@
             padding: 70px 28px 28px;
         }
         .brand h1 {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 10px;
             margin: 0;
             font-size: 34px;
             line-height: 1.18;
             font-weight: 400;
             letter-spacing: 0;
+        }
+        .brand sup {
+            display: inline-flex;
+            align-items: center;
+            min-height: 18px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            color: var(--vscode-badge-foreground);
+            background: var(--vscode-badge-background);
+            font-size: 11px;
+            line-height: 1;
+            font-weight: 600;
         }
         .brand p {
             margin: 3px 0 0;
@@ -119,6 +135,13 @@
         }
         .recent-item:hover { background: var(--vscode-list-hoverBackground); }
         .workspace-name { font-size: 13px; color: var(--vscode-textLink-foreground); }
+        .recent-list {
+            display: grid;
+            gap: 2px;
+        }
+        .recent-more {
+            margin-top: 4px;
+        }
         .path {
             overflow-wrap: anywhere;
             color: var(--vscode-descriptionForeground);
@@ -243,133 +266,139 @@
 <body>
     <main class="page">
         <div class="brand">
-            <h1>Andrea Novel Helper</h1>
-            <p>小说写作工作台</p>
+            <h1>Andrea Novel Helper <sup data-i18n="withVsCode">With VS Code</sup></h1>
+            <p data-i18n="subtitle">小说写作工作台</p>
         </div>
 
         <div class="welcome-grid">
             <div class="start-column">
                 <section class="column-section" aria-labelledby="startTitle">
-                    <h2 class="section-title" id="startTitle">启动</h2>
+                    <h2 class="section-title" id="startTitle" data-i18n="start">启动</h2>
                     <div class="start-list">
-                        <button class="action-link" data-action="createWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-add.svg" alt=""></span>新建写作工作区...</button>
-                        <button class="action-link" data-action="openWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-open.svg" alt=""></span>打开工作区...</button>
-                        <button class="action-link" data-cmd="workbench.action.openSettings" data-arg="@ext:AndreaFrederica.andrea-novel-helper"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span>打开 ANH 设置...</button>
-                        <button class="action-link" data-action="showGuide"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/guide.svg" alt=""></span>打开完整功能引导</button>
+                        <button class="action-link" data-action="createWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-add.svg" alt=""></span><span data-i18n="createWorkspace">新建写作工作区...</span></button>
+                        <button class="action-link" data-action="openWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-open.svg" alt=""></span><span data-i18n="openWorkspace">打开工作区...</span></button>
+                        <button class="action-link" data-cmd="workbench.action.openSettings" data-arg="@ext:AndreaFrederica.andrea-novel-helper"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span data-i18n="openSettings">打开 ANH 设置...</span></button>
+                        <button class="action-link" data-action="showGuide"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/guide.svg" alt=""></span><span data-i18n="openGuide">打开完整功能引导</span></button>
                     </div>
                 </section>
 
                 <section class="column-section" aria-labelledby="recentTitle">
-                    <h2 class="section-title" id="recentTitle">当前</h2>
+                    <h2 class="section-title" id="recentTitle" data-i18n="current">当前</h2>
                     <button class="recent-item" data-action="openWorkspace">
                         <span id="workspaceName" class="workspace-name muted">尚未打开工作区</span>
                         <span id="workspacePath" class="path">可以先创建一个新项目文件夹，或打开已有小说项目。</span>
                     </button>
                     <div class="status-row" id="statusRow"></div>
                     <div class="simple-list" style="margin-top: 8px;">
-                        <button class="action-link" data-action="enableWorkspace">启用当前工作区</button>
-                        <button class="action-link" data-action="enableManagedMode">启用首页推荐模式</button>
+                        <button class="action-link" data-action="enableWorkspace" data-i18n="enableWorkspace">启用当前工作区</button>
+                        <button class="action-link" data-action="enableManagedMode" data-i18n="enableManagedMode">启用首页推荐模式</button>
                     </div>
                 </section>
 
+                <section class="column-section" aria-labelledby="recentProjectsTitle">
+                    <h2 class="section-title" id="recentProjectsTitle" data-i18n="recent">最近</h2>
+                    <div class="recent-list" id="recentWorkspaces"></div>
+                    <button class="action-link recent-more" data-action="openRecentList" data-i18n="moreRecent">更多...</button>
+                </section>
+
                 <details class="collapsible" id="gitDetails">
-                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/git.svg" alt=""></span><span class="section-title">Git 身份</span></summary>
+                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/git.svg" alt=""></span><span class="section-title" data-i18n="gitIdentity">Git 身份</span></summary>
                     <div class="collapsible-body">
                         <div id="gitSummary" class="path">正在检测 Git...</div>
                         <div class="form-grid" style="margin-top: 10px;">
                         <div class="field">
-                            <label for="gitScope">保存位置</label>
+                            <label for="gitScope" data-i18n="gitScope">保存位置</label>
                             <select id="gitScope">
-                                <option value="global">全局 Git 配置</option>
-                                <option value="local">当前工作区仓库</option>
+                                <option value="global" data-i18n="gitGlobal">全局 Git 配置</option>
+                                <option value="local" data-i18n="gitLocal">当前工作区仓库</option>
                             </select>
                         </div>
                         <div class="field">
-                            <label for="gitName">用户名</label>
-                            <input id="gitName" type="text" autocomplete="off" placeholder="例如 Andrea Frederica">
+                            <label for="gitName" data-i18n="gitName">用户名</label>
+                            <input id="gitName" type="text" autocomplete="off" placeholder="例如 Andrea Frederica" data-i18n-placeholder="gitNamePlaceholder">
                         </div>
                         <div class="field">
-                            <label for="gitEmail">邮箱</label>
-                            <input id="gitEmail" type="email" autocomplete="off" placeholder="name@example.com">
+                            <label for="gitEmail" data-i18n="gitEmail">邮箱</label>
+                            <input id="gitEmail" type="email" autocomplete="off" placeholder="name@example.com" data-i18n-placeholder="gitEmailPlaceholder">
                         </div>
                         <div class="inline-actions">
-                            <button class="action-link" data-action="saveGitUser">保存 Git 身份</button>
-                            <button id="initRepoBtn" class="action-link" data-action="initGitRepo">初始化仓库</button>
-                            <button id="gitDownloadBtn" class="action-link" data-action="openGitDownload">安装 Git</button>
+                            <button class="action-link" data-action="saveGitUser" data-i18n="saveGit">保存 Git 身份</button>
+                            <button id="initRepoBtn" class="action-link" data-action="initGitRepo" data-i18n="initRepo">初始化仓库</button>
+                            <button id="gitDownloadBtn" class="action-link" data-action="openGitDownload" data-i18n="installGit">安装 Git</button>
                         </div>
                     </div>
                     </div>
                 </details>
 
                 <section class="column-section" aria-labelledby="docTitle">
-                    <h2 class="section-title" id="docTitle"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/book.svg" alt=""></span>文档</h2>
+                    <h2 class="section-title" id="docTitle"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/book.svg" alt=""></span><span data-i18n="docs">文档</span></h2>
                     <div class="simple-list">
-                        <button class="action-link" data-doc="hello-world">5 分钟快速上手</button>
-                        <button class="action-link" data-doc="vscode-settings">VS Code 基础</button>
-                        <button class="action-link" data-doc="everything-is-role">一切皆角色</button>
-                        <button class="action-link" data-doc="package-manager">包管理器</button>
-                        <button class="action-link" data-doc="markdown-format-guide">文件格式指南</button>
-                        <button class="action-link" data-doc="ai-mcp">AI 与 MCP</button>
-                        <button class="action-link" data-action="openWiki">在线 Wiki</button>
+                        <button class="action-link" data-doc="hello-world" data-i18n="quickStart">5 分钟快速上手</button>
+                        <button class="action-link" data-doc="vscode-settings" data-i18n="vscodeBasics">VS Code 基础</button>
+                        <button class="action-link" data-doc="everything-is-role" data-i18n="roleConcept">一切皆角色</button>
+                        <button class="action-link" data-doc="package-manager" data-i18n="packageManager">包管理器</button>
+                        <button class="action-link" data-doc="markdown-format-guide" data-i18n="formatGuide">文件格式指南</button>
+                        <button class="action-link" data-doc="ai-mcp" data-i18n="aiMcp">AI 与 MCP</button>
+                        <button class="action-link" data-action="openWiki" data-i18n="onlineWiki">在线 Wiki</button>
                     </div>
                 </section>
 
                 <details class="collapsible" id="helloConfigDetails">
-                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span class="section-title">首页设置</span></summary>
+                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span class="section-title" data-i18n="homeSettings">首页设置</span></summary>
                     <div class="collapsible-body">
                         <label class="toggle-row">
                             <input id="helloEnabled" type="checkbox">
                             <span>
-                                <span class="toggle-title">启动时显示 ANH Hello</span>
-                                <span class="toggle-desc">也可以从命令面板手动打开。</span>
+                                <span class="toggle-title" data-i18n="showHello">启动时显示 ANH Hello</span>
+                                <span class="toggle-desc" data-i18n="showHelloDesc">也可以从命令面板手动打开。</span>
                             </span>
                         </label>
                         <label class="toggle-row">
                             <input id="forceManaged" type="checkbox">
                             <span>
-                                <span class="toggle-title">只跟随 VS Code 扩展开关</span>
-                                <span class="toggle-desc">运行时绕过旧工作区禁用判断，不改写原托管设置。</span>
+                                <span class="toggle-title" data-i18n="followVsCode">只跟随 VS Code 扩展开关</span>
+                                <span class="toggle-desc" data-i18n="followVsCodeDesc">运行时绕过旧工作区禁用判断，不改写原托管设置。</span>
                             </span>
                         </label>
-                        <button class="action-link" style="margin-top: 8px;" data-action="dismiss">下次不自动显示</button>
+                        <button class="action-link" style="margin-top: 8px;" data-action="dismiss" data-i18n="dismiss">下次不自动显示</button>
                     </div>
                 </details>
             </div>
 
             <div class="walkthrough-column">
                 <section class="column-section" aria-labelledby="walkthroughTitle">
-                    <h2 class="section-title" id="walkthroughTitle">演练</h2>
+                    <h2 class="section-title" id="walkthroughTitle" data-i18n="walkthrough">演练</h2>
                     <div class="walkthrough-list">
                         <button class="welcome-card" data-cmd="AndreaNovelHelper.projectInitWizard.graphical">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/rocket.svg" alt=""></span>
-                            <span><span class="card-title">初始化小说项目</span><span class="card-desc">生成项目配置、角色库、敏感词、词汇、正则和基础目录。</span></span>
-                            <span class="badge card-status">开始</span>
+                            <span><span class="card-title" data-i18n="initProject">初始化小说项目</span><span class="card-desc" data-i18n="initProjectDesc">生成项目配置、角色库、敏感词、词汇、正则和基础目录。</span></span>
+                            <span class="badge card-status" data-i18n="startButton">开始</span>
                         </button>
                         <button class="welcome-card" data-cmd="workbench.view.extension.AndreaNovelHelperSidebar">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/files.svg" alt=""></span>
-                            <span><span class="card-title">管理角色和资料</span><span class="card-desc">进入 ANH 资源视图，创建角色、词汇、敏感词和外部资源包。</span></span>
+                            <span><span class="card-title" data-i18n="manageResources">管理角色和资料</span><span class="card-desc" data-i18n="manageResourcesDesc">进入 ANH 资源视图，创建角色、词汇、敏感词和外部资源包。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="andrea.openWritingDashboard">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/dashboard.svg" alt=""></span>
-                            <span><span class="card-title">打开创作工作台</span><span class="card-desc">查看字数、写作时间、计划、热力图和当前创作状态。</span></span>
+                            <span><span class="card-title" data-i18n="dashboard">打开创作工作台</span><span class="card-desc" data-i18n="dashboardDesc">查看字数、写作时间、计划、热力图和当前创作状态。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="andrea.comments.open">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/comment.svg" alt=""></span>
-                            <span><span class="card-title">批注与校对</span><span class="card-desc">添加批注，管理修改意见，并进入错别字和翻译相关功能。</span></span>
+                            <span><span class="card-title" data-i18n="comments">批注与校对</span><span class="card-desc" data-i18n="commentsDesc">添加批注，管理修改意见，并进入错别字和翻译相关功能。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="andrea.openRoleRelationshipGraph">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/graph.svg" alt=""></span>
-                            <span><span class="card-title">关系图和时间线</span><span class="card-desc">查看角色关系图谱、关系文件和事件时间线。</span></span>
+                            <span><span class="card-title" data-i18n="graph">关系图和时间线</span><span class="card-desc" data-i18n="graphDesc">查看角色关系图谱、关系文件和事件时间线。</span></span>
                         </button>
                         <button class="welcome-card" data-doc="export">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/export.svg" alt=""></span>
-                            <span><span class="card-title">导出与发布</span><span class="card-desc">使用 Typst 模板导出 PDF、图片或整理后的文本。</span></span>
+                            <span><span class="card-title" data-i18n="export">导出与发布</span><span class="card-desc" data-i18n="exportDesc">使用 Typst 模板导出 PDF、图片或整理后的文本。</span></span>
                         </button>
                     </div>
                 </section>
 
                 <details class="collapsible" id="extensionDetails">
-                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/extension.svg" alt=""></span><span class="section-title">推荐扩展</span></summary>
+                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/extension.svg" alt=""></span><span class="section-title" data-i18n="recommendedExtensions">推荐扩展</span></summary>
                     <div class="collapsible-body">
                         <div id="extensions" class="extensions"></div>
                     </div>
@@ -379,6 +408,7 @@
 
         <div id="notice" class="notice"></div>
     </main>
+    <script nonce="__NONCE__">window.__HELLO_I18N__ = __I18N_JSON__;</script>
     <script nonce="__NONCE__" src="__SCRIPT_URI__"></script>
 </body>
 

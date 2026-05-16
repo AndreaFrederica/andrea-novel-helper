@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { roles } from '../../activate';
 import { createRoleRelationshipGraphDataProvider } from '../../data/roleRelationshipGraphDataProvider';
 import { buildHtml } from '../utils/html-builder';
+import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
 
 const viewType = 'andrea.roleRelationshipGraph';
 
@@ -49,6 +50,7 @@ export class RoleRelationshipGraphPanel {
             column,
             RoleRelationshipGraphPanel.getWebviewOptions(extensionUri),
         );
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'graph');
 
         RoleRelationshipGraphPanel.instance = new RoleRelationshipGraphPanel(panel, extensionUri);
         return RoleRelationshipGraphPanel.instance;
@@ -57,6 +59,7 @@ export class RoleRelationshipGraphPanel {
     public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): RoleRelationshipGraphPanel {
         panel.webview.options = RoleRelationshipGraphPanel.getWebviewOptions(extensionUri);
         panel.title = '角色关系图谱';
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'graph');
         RoleRelationshipGraphPanel.instance = new RoleRelationshipGraphPanel(panel, extensionUri);
         return RoleRelationshipGraphPanel.instance;
     }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { buildHtml } from '../Provider/utils/html-builder';
 import { getWhatsNewData, getAllWhatsNewVersions } from './whatsnew-data';
 import type { WhatsNewData, WhatsNewVersionInfo } from './whatsnew-data';
+import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
 
 export class WhatsNewPanel {
     private static _instance: WhatsNewPanel | undefined;
@@ -17,6 +18,7 @@ export class WhatsNewPanel {
         this._extensionUri = extensionUri;
         this._extensionPath = extensionPath;
         this._currentVersion = currentVersion;
+        setWebviewPanelIcon(this._panel, this._extensionPath, 'extension');
 
         this._update();
 
@@ -105,6 +107,7 @@ export class WhatsNewPanel {
     public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, extensionPath: string): WhatsNewPanel {
         panel.webview.options = WhatsNewPanel.getWebviewOptions(extensionUri);
         panel.title = "What's New";
+        setWebviewPanelIcon(panel, extensionPath, 'extension');
         const currentVersion = 'unknown';
         WhatsNewPanel._instance = new WhatsNewPanel(panel, extensionUri, extensionPath, currentVersion);
         return WhatsNewPanel._instance;

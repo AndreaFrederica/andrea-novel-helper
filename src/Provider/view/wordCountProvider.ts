@@ -15,6 +15,7 @@ import { mdToPlainText } from '../../utils/md_plain';
 import { getFileByPath, updateFileWritingStats, getFileUuid, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
 import { getCutClipboard } from '../../utils/WordCount/wordCountCutHelper';
 import { WordCountOrderManager } from '../../utils/Order/wordCountOrder';
+import { pickPlainTextProcessor, renderPlainTextWithProcessor, scriptExtensionRegistry } from '../../mcp/scriptExtensions';
 
 // 特殊文件（无扩展名但需要显示）
 function isSpecialVisibleFile(name: string): boolean {
@@ -2671,12 +2672,23 @@ export function registerWordCountPlainTextCommands(context: vscode.ExtensionCont
                 } catch {
                     text = mdToPlainText(doc.getText()).text;
                 }
+                text = await renderPlainTextWithProcessor(doc, text);
 
                 await vscode.env.clipboard.writeText(text);
                 vscode.window.setStatusBarMessage('已复制纯文本（全文）', 1200);
             } catch (e) { /* ignore */ }
         }),
         vscode.commands.registerCommand('WordCount.exportTxt', async (node?: any) => {
+            await exportTxtWithProcessor(node, undefined);
+        }),
+        vscode.commands.registerCommand('WordCount.exportTxtWithProcessor', async (node?: any) => {
+            const id = await pickPlainTextProcessor(true);
+            if (!id) return;
+            await exportTxtWithProcessor(node, id);
+        })
+    );
+
+    async function exportTxtWithProcessor(node?: any, processorId?: string) {
             try {
                 // console.log('[exportTxt] argIsItem=', !!node, 'type=', node?.constructor?.name, 'uri=', node?.resourceUri?.fsPath);
                 const resolveUri = (n: any): vscode.Uri | undefined => {
@@ -2706,6 +2718,12 @@ export function registerWordCountPlainTextCommands(context: vscode.ExtensionCont
                 } catch {
                     text = mdToPlainText(doc.getText()).text;
                 }
+                await scriptExtensionRegistry.emit('beforePlainTextExport', {
+                    uri: doc.uri.toString(),
+                    fileName: doc.fileName,
+                    processorId: processorId || vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('scripts.defaultPlainTextProcessor', 'internal')
+                });
+                text = await renderPlainTextWithProcessor(doc, text, processorId);
 
                 const saveUri = await vscode.window.showSaveDialog({
                     defaultUri: uri.with({ path: uri.path.replace(/\.[^/\\.]+$/, '') + '.txt' }),
@@ -2713,10 +2731,16 @@ export function registerWordCountPlainTextCommands(context: vscode.ExtensionCont
                 });
                 if (!saveUri) return;
                 await vscode.workspace.fs.writeFile(saveUri, new TextEncoder().encode(text));
+                await scriptExtensionRegistry.emit('afterPlainTextExport', {
+                    uri: doc.uri.toString(),
+                    fileName: doc.fileName,
+                    output: saveUri.toString(),
+                    outputPath: saveUri.fsPath,
+                    processorId: processorId || vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('scripts.defaultPlainTextProcessor', 'internal')
+                });
                 vscode.window.showInformationMessage(`导出完成：${saveUri.fsPath}`);
             } catch (e) { /* ignore */ }
-        })
-    );
+    }
 }
 
 // —— 在 activate.ts 里调用 registerWordCountOpenWith(context) —__

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
 
 let currentPanel: vscode.WebviewPanel | undefined;
 let extensionPath: string = '';
@@ -39,6 +40,7 @@ export function registerGuidePage(context: vscode.ExtensionContext): void {
 function setupGuidePanel(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
     currentPanel = panel;
     panel.title = '功能引导';
+    setWebviewPanelIcon(panel, extensionPath, 'guide');
     panel.webview.options = {
         enableScripts: true,
         localResourceRoots: [

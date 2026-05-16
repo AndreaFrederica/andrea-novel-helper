@@ -4,6 +4,9 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { runScriptWithContext, getScriptOutputChannel } from '../../mcp/runtimeEnhanced'
 import { getClientOptionsFromConfig, getClientOptionsByName, openMcpConfig, listServerStatuses, setServersEnabled, getEnabledServerNames, getConfigChangeEmitter, readMcpConfig, getMcpConfigPath } from '../../mcp/config'
+import { loadScriptExtensions, pickPlainTextProcessor, pickTypstRenderer, renderPlainTextWithProcessor, scriptExtensionRegistry } from '../../mcp/scriptExtensions'
+import { mdToPlainText } from '../../utils/md_plain'
+import { txtToPlainText } from '../../utils/txt_plain'
 
 class ScriptItem extends vscode.TreeItem {
   constructor(public fullPath: string, label: string, collapsibleState: vscode.TreeItemCollapsibleState) {
@@ -106,6 +109,7 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
   const provider = new ScriptTreeProvider(abs)
   const view = vscode.window.createTreeView('andrea.scriptsView', { treeDataProvider: provider, showCollapseAll: true })
   context.subscriptions.push(view)
+  void loadScriptExtensions(abs)
 
   // 监听 MCP 配置变更并刷新树视图
   const configChangeEmitter = getConfigChangeEmitter()
@@ -117,7 +121,13 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
   )
 
   let t: NodeJS.Timeout | undefined
-  const schedule = () => { if (t) clearTimeout(t); t = setTimeout(() => provider.refresh(), 200) }
+  const schedule = () => {
+    if (t) clearTimeout(t)
+    t = setTimeout(() => {
+      provider.refresh()
+      void loadScriptExtensions(abs)
+    }, 200)
+  }
   const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(abs, '**/*'))
   context.subscriptions.push(
     watcher.onDidCreate(schedule),
@@ -126,8 +136,49 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
     watcher
   )
 
+  context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(doc => {
+    void scriptExtensionRegistry.emit('documentSaved', {
+      uri: doc.uri.toString(),
+      fileName: doc.fileName,
+      languageId: doc.languageId,
+      text: doc.getText()
+    })
+  }))
+
   context.subscriptions.push(
     vscode.commands.registerCommand('andrea.scripts.refresh', () => provider.refresh()),
+    vscode.commands.registerCommand('andrea.scripts.reloadExtensions', async () => {
+      await loadScriptExtensions(abs)
+      provider.refresh()
+      vscode.window.showInformationMessage('脚本扩展已重新加载')
+    }),
+    vscode.commands.registerCommand('andrea.scripts.selectPlainTextProcessor', async () => {
+      const id = await pickPlainTextProcessor(true)
+      if (!id) return
+      await vscode.workspace.getConfiguration('AndreaNovelHelper').update('scripts.defaultPlainTextProcessor', id, vscode.ConfigurationTarget.Workspace)
+      vscode.window.showInformationMessage(`默认纯文本处理器已设为：${id}`)
+    }),
+    vscode.commands.registerCommand('andrea.scripts.selectTypstRenderer', async () => {
+      const id = await pickTypstRenderer(true)
+      if (!id) return
+      await vscode.workspace.getConfiguration('andrea.typst').update('defaultRenderer', id, vscode.ConfigurationTarget.Workspace)
+      vscode.window.showInformationMessage(`默认 Typst 渲染器已设为：${id}`)
+    }),
+    vscode.commands.registerCommand('andrea.scripts.runPlainTextProcessor', async () => {
+      const ed = vscode.window.activeTextEditor
+      if (!ed) return
+      const id = await pickPlainTextProcessor(true)
+      if (!id) return
+      const raw = ed.document.getText()
+      const fallback = ed.document.languageId === 'markdown' || /\.md(i|own)?$/i.test(ed.document.fileName)
+        ? mdToPlainText(raw).text
+        : ed.document.languageId === 'plaintext'
+          ? txtToPlainText(raw).text
+          : raw
+      const text = await renderPlainTextWithProcessor(ed.document, fallback, id)
+      const doc = await vscode.workspace.openTextDocument({ content: text, language: 'plaintext' })
+      await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside)
+    }),
     vscode.commands.registerCommand('andrea.scripts.debugMcpServers', async () => {
       const statuses = listServerStatuses()
       const msg = statuses.length === 0 

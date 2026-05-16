@@ -65,6 +65,8 @@ function getConfig() {
 }
 
 async function pickTemplate(defaultTemplate: string): Promise<string> {
+    const renderer = vscode.workspace.getConfiguration('andrea.typst').get<string>('defaultRenderer', 'internal')
+    if (renderer && renderer !== 'internal' && renderer !== 'liquid') return defaultTemplate
     const templates = templateRegistry.list()
     if (templates.length === 0) {
         return defaultTemplate

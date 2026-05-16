@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { buildHtml } from '../utils/html-builder';
 import { SettingsWebviewProvider } from './settingView';
+import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
 
 type SettingsWizardScope = 'workspace' | 'global';
 
@@ -104,6 +105,7 @@ export class QuickSettingsPanel {
             column || vscode.ViewColumn.One,
             QuickSettingsPanel.getWebviewOptions(context.extensionUri)
         );
+        setWebviewPanelIcon(panel, context.extensionPath, 'quick');
 
         QuickSettingsPanel._instance = new QuickSettingsPanel(panel, context.extensionUri, context, options);
         return QuickSettingsPanel._instance;
@@ -112,6 +114,7 @@ export class QuickSettingsPanel {
     public static revive(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): QuickSettingsPanel {
         panel.webview.options = QuickSettingsPanel.getWebviewOptions(context.extensionUri);
         panel.title = '图形化快速设置';
+        setWebviewPanelIcon(panel, context.extensionPath, 'quick');
         QuickSettingsPanel._instance = new QuickSettingsPanel(panel, context.extensionUri, context);
         return QuickSettingsPanel._instance;
     }

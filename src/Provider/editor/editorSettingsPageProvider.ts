@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { buildHtml } from '../utils/html-builder';
+import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
 import { EditorSettingsWebviewProvider } from '../view/editorSettingsProvider';
 
 export class EditorSettingsPanel {
@@ -135,6 +136,7 @@ export class EditorSettingsPanel {
             column || vscode.ViewColumn.One,
             EditorSettingsPanel.getWebviewOptions(extensionUri)
         );
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'settings');
 
         EditorSettingsPanel._instance = new EditorSettingsPanel(panel, extensionUri);
         return EditorSettingsPanel._instance;
@@ -143,6 +145,7 @@ export class EditorSettingsPanel {
     public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): EditorSettingsPanel {
         panel.webview.options = EditorSettingsPanel.getWebviewOptions(extensionUri);
         panel.title = '编辑器设置';
+        setWebviewPanelIcon(panel, extensionUri.fsPath, 'settings');
         EditorSettingsPanel._instance = new EditorSettingsPanel(panel, extensionUri);
         return EditorSettingsPanel._instance;
     }

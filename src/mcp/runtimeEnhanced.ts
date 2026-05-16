@@ -171,6 +171,10 @@ export async function runScriptWithContext(scriptPath: string, args?: any, opts?
     const mod = await import(pathToDataUrl(scriptPath))
     const fn = (mod && (mod.default || mod.run)) as ((c: any, a?: any) => Promise<any> | any)
     if (typeof fn !== 'function') throw new Error('script must export default or run(context, args)')
+    try {
+      const ext = await import('./scriptExtensions.js')
+      Object.assign(ctx, ext.createScriptExtensionApi(scriptPath))
+    } catch { /* optional extension API */ }
     const result = await als.run({ label: opts?.label, ch }, async () => {
       return await fn(ctx, args || {})
     })

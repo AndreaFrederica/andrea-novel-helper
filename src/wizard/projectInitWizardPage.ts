@@ -8,6 +8,7 @@ import { generateMarkdownRoleTemplate } from '../templates/templateGenerators';
 import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
 import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME, clearAllProjectConfigCaches } from '../projectConfig/projectKeywordConfig';
 import { setProjectInitWizardRunning } from './projectInitWizard';
+import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
 
 interface GitState {
     installed: boolean;
@@ -67,6 +68,7 @@ export function registerGraphicalProjectInitWizard(context: vscode.ExtensionCont
             { enableScripts: true, retainContextWhenHidden: true }
         );
         currentPanel = panel;
+        setWebviewPanelIcon(panel, extensionPath, 'wizard');
         panel.webview.html = getWizardHtml(panel.webview);
         panel.onDidDispose(() => { currentPanel = undefined; }, undefined, context.subscriptions);
         panel.webview.onDidReceiveMessage(async message => {

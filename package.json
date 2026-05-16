@@ -532,6 +532,30 @@
         "category": "Andrea Novel Helper"
       },
       {
+        "command": "andrea.scripts.reloadExtensions",
+        "title": "重新加载脚本扩展",
+        "icon": "$(refresh)",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.scripts.selectPlainTextProcessor",
+        "title": "选择默认纯文本处理器",
+        "icon": "$(settings-gear)",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.scripts.selectTypstRenderer",
+        "title": "选择默认 Typst 渲染器",
+        "icon": "$(symbol-method)",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.scripts.runPlainTextProcessor",
+        "title": "使用脚本处理器处理当前文档",
+        "icon": "$(symbol-method)",
+        "category": "Andrea Novel Helper"
+      },
+      {
         "command": "andrea.scripts.runWithServers",
         "title": "选择服务器运行",
         "icon": "$(play)"
@@ -539,6 +563,10 @@
       {
         "command": "WordCount.exportTxt",
         "title": "%command.wordCount.exportTxt.title%"
+      },
+      {
+        "command": "WordCount.exportTxtWithProcessor",
+        "title": "导出为 TXT（选择处理器）"
       },
       {
         "command": "WordCount.copyPlainText",
@@ -3468,6 +3496,12 @@
           "default": "sample",
           "description": "默认模板包名称"
         },
+        "andrea.typst.defaultRenderer": {
+          "anhName": "默认 Typst 渲染器",
+          "type": "string",
+          "default": "internal",
+          "markdownDescription": "Typst 内容生成器。`internal` 使用 ANH 内置 Liquid 模板渲染；脚本可通过 `ctx.renderers.registerTypst` 或 `ctx.processors.registerTypst` 注册新的渲染器 ID。"
+        },
         "andrea.typst.output.format": {
           "anhName": "导出格式",
           "type": "string",
@@ -3527,6 +3561,12 @@
           "type": "string",
           "default": "novel-helper/scripts",
           "markdownDescription": "脚本运行侧栏的根目录"
+        },
+        "AndreaNovelHelper.scripts.defaultPlainTextProcessor": {
+          "anhName": "默认纯文本处理器",
+          "type": "string",
+          "default": "internal",
+          "markdownDescription": "复制纯文本和导出 TXT 时使用的处理器。`internal` 使用 ANH 内置 Markdown/TXT 转纯文本逻辑；脚本可通过 `ctx.processors.registerPlainText` 注册新的处理器 ID。"
         },
         "AndreaNovelHelper.autoScroll.enabled": {
           "anhName": "启用自动滚动",
@@ -3614,6 +3654,18 @@
           "when": "view == andrea.scriptsView",
           "group": "navigation@4",
           "icon": "$(server-process)"
+        },
+        {
+          "command": "andrea.scripts.selectPlainTextProcessor",
+          "when": "view == andrea.scriptsView",
+          "group": "navigation@4.5",
+          "icon": "$(settings-gear)"
+        },
+        {
+          "command": "andrea.scripts.selectTypstRenderer",
+          "when": "view == andrea.scriptsView",
+          "group": "navigation@4.6",
+          "icon": "$(symbol-method)"
         },
         {
           "command": "andrea.scripts.newScript",
@@ -3867,6 +3919,11 @@
           "when": "view == wordCountExplorer && viewItem == wordCountFile",
           "command": "WordCount.exportTxt",
           "group": "5_clip@5"
+        },
+        {
+          "when": "view == wordCountExplorer && viewItem == wordCountFile",
+          "command": "WordCount.exportTxtWithProcessor",
+          "group": "5_clip@5.5"
         },
         {
           "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",

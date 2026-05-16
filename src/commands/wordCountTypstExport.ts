@@ -48,7 +48,11 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
   const packs = templateRegistry.list()
   const cfg = vscode.workspace.getConfiguration('andrea.typst')
   const defTpl = cfg.get<string>('defaultTemplate','sample')
-  const pick = await vscode.window.showQuickPick(packs.map(p => ({ label: p.name, description: p.root })), { placeHolder: '选择Typst模板', canPickMany: false })
+  const renderer = cfg.get<string>('defaultRenderer', 'internal')
+  const useInternalRenderer = !renderer || renderer === 'internal' || renderer === 'liquid'
+  const pick = useInternalRenderer && packs.length > 0
+    ? await vscode.window.showQuickPick(packs.map(p => ({ label: p.name, description: p.root })), { placeHolder: '选择Typst模板', canPickMany: false })
+    : undefined
   const tplName = pick?.label || defTpl
   const where = await vscode.window.showQuickPick([{ label: '导出到源目录' },{ label: '选择导出目录' }], { placeHolder: '选择导出位置' })
   let outDir: string | undefined

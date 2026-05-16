@@ -37,8 +37,10 @@ export async function exportFromExplorer(uri?: vscode.Uri, uris?: vscode.Uri[]) 
   const templatesDir = cfg.get<string>('templatesDir') || (vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ? path.join(vscode.workspace.workspaceFolders![0]!.uri.fsPath, 'templates','typst') : '')
   const cleanupTemp = cfg.get<boolean>('cleanupTemp') ?? false
   const inputs: string[] = []
-  const picks = templateRegistry.list().map(p => ({ label: p.name, description: p.root }))
-  const tplPick = await vscode.window.showQuickPick(picks, { placeHolder: '选择Typst模板', canPickMany: false })
+  const renderer = cfg.get<string>('defaultRenderer', 'internal')
+  const useInternalRenderer = !renderer || renderer === 'internal' || renderer === 'liquid'
+  const picks = useInternalRenderer ? templateRegistry.list().map(p => ({ label: p.name, description: p.root })) : []
+  const tplPick = picks.length > 0 ? await vscode.window.showQuickPick(picks, { placeHolder: '选择Typst模板', canPickMany: false }) : undefined
   const tplName = tplPick?.label || defTpl
   const formatPick = await vscode.window.showQuickPick([{ label: 'PDF', value: 'pdf' as const },{ label: 'PNG', value: 'png' as const },{ label: 'SVG', value: 'svg' as const },{ label: 'HTML', value: 'html' as const }], { placeHolder: '选择导出格式' })
   const format = (formatPick?.value || cfg.get<'pdf'|'png'|'svg'>('output.format','pdf')) as 'pdf'|'png'|'svg'|'html'

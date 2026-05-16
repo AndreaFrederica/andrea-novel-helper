@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { buildHtml } from '../Provider/utils/html-builder';
+import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
 
 // 导入 Circle Packing 数据提供器类型
 import type { CirclePackingDataProvider } from '../data/circlePackingDataProvider';
@@ -84,6 +85,7 @@ export class HeatmapProvider {
                 ]
             }
         );
+        setWebviewPanelIcon(panel, this.context.extensionPath, 'heatmap');
 
         // 设置 resourceMapperScriptUri
         let resourceMapperScriptUri: string | undefined;

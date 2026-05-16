@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { setWebviewPanelIcon } from '../../Provider/utils/webviewPanelIcon';
 import { nameGeneratorService } from '../../services/nameGeneratorService';
 import { NameGenerationOptions, GeneratedName } from '../../types/names';
 import { translateTextWithLLM, generateRomanizedName } from './translationUtils';
@@ -333,6 +334,7 @@ async function showNameDetails(names: any[]): Promise<void> {
 		vscode.ViewColumn.One,
 		{}
 	);
+	setWebviewPanelIcon(panel, '', 'settings');
 
 	const html = `
 	<!DOCTYPE html>
