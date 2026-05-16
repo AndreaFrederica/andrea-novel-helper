@@ -53,6 +53,7 @@
     "onCommand:andrea.openWritingDashboard",
     "onCommand:andrea.openWritingDashboardWidget",
     "onCommand:andrea.openRoleRelationshipGraph",
+    "onCommand:AndreaNovelHelper.openHello",
     "onView:andrea.commentsExplorer",
     "onView:andrea.commentsPanelView",
     "onView:andrea.commentsManagerView",
@@ -71,6 +72,7 @@
     "onWebviewPanel:andrea.roleRelationshipGraph",
     "onWebviewPanel:andrea.guide",
     "onWebviewPanel:andrea.guideDoc",
+    "onWebviewPanel:andrea.hello",
     "onCommand:andrea.openWhatsNew",
     "onWebviewPanel:whatsNew",
     "onStartupFinished"
@@ -865,6 +867,12 @@
         "title": "打开功能引导",
         "category": "Andrea Novel Helper",
         "icon": "$(book)"
+      },
+      {
+        "command": "AndreaNovelHelper.openHello",
+        "title": "打开 ANH Hello 首页",
+        "category": "Andrea Novel Helper",
+        "icon": "$(home)"
       },
       {
         "command": "AndreaNovelHelper.showGuideDoc",
@@ -2135,6 +2143,18 @@
           "type": "boolean",
           "default": false,
           "description": "%config.workspaceDisabled.description%"
+        },
+        "AndreaNovelHelper.hello.enabled": {
+          "anhName": "启用 ANH Hello 首页",
+          "type": "boolean",
+          "default": true,
+          "description": "启动时显示 Andrea Novel Helper 的独立新手首页，也可通过命令面板手动打开。"
+        },
+        "AndreaNovelHelper.hello.forceVsCodeManagedDisabling": {
+          "anhName": "Hello 模式只跟随 VS Code 扩展开关",
+          "type": "boolean",
+          "default": true,
+          "description": "启用 Hello 首页时，在运行时绕过 ANH 自己的工作区禁用判断，改为只跟随 VS Code 扩展管理里的启用/禁用状态；不会改写 AndreaNovelHelper.useVsCodeManagedDisabling 原设置。"
         },
         "AndreaNovelHelper.useVsCodeManagedDisabling": {
           "anhName": "完全使用 VSCode 托管的禁用系统",

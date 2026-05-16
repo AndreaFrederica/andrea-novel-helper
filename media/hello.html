@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline' __CSP_SOURCE__; script-src __CSP_SOURCE__ 'nonce-__NONCE__'; img-src __CSP_SOURCE__ data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Andrea Novel Helper Hello</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: var(--vscode-editor-foreground);
+            background: var(--vscode-editor-background);
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size);
+            line-height: 1.5;
+        }
+        button {
+            border: 0;
+            border-radius: 4px;
+            color: inherit;
+            background: transparent;
+            font: inherit;
+            cursor: pointer;
+        }
+        button:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: 2px;
+        }
+        .page {
+            width: min(980px, 100%);
+            margin: 0 auto;
+            padding: 70px 28px 28px;
+        }
+        .brand h1 {
+            margin: 0;
+            font-size: 34px;
+            line-height: 1.18;
+            font-weight: 400;
+            letter-spacing: 0;
+        }
+        .brand p {
+            margin: 3px 0 0;
+            font-size: 17px;
+            color: var(--vscode-descriptionForeground);
+        }
+        .welcome-grid {
+            display: grid;
+            grid-template-columns: minmax(260px, 330px) minmax(360px, 1fr);
+            gap: 74px;
+            align-items: start;
+            margin-top: 36px;
+        }
+        .column-section { margin-top: 28px; }
+        .column-section:first-child { margin-top: 0; }
+        .section-title {
+            margin: 0 0 9px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+        }
+        details.collapsible {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+        details.collapsible > summary {
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-height: 24px;
+            color: var(--vscode-foreground);
+            cursor: pointer;
+            user-select: none;
+        }
+        details.collapsible > summary::-webkit-details-marker { display: none; }
+        details.collapsible > summary::before {
+            content: '>';
+            width: 12px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 11px;
+        }
+        details.collapsible[open] > summary::before { content: 'v'; }
+        details.collapsible > summary:hover { color: var(--vscode-textLink-activeForeground); }
+        .collapsible-body { margin-top: 8px; }
+        .muted { color: var(--vscode-descriptionForeground); }
+        .start-list, .simple-list, .walkthrough-list, .extensions {
+            display: grid;
+            gap: 6px;
+        }
+        .action-link {
+            min-height: 24px;
+            padding: 0;
+            text-align: left;
+            color: var(--vscode-textLink-foreground);
+        }
+        .action-link:hover { color: var(--vscode-textLink-activeForeground); }
+        .action-link .link-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            margin-right: 3px;
+            color: var(--vscode-descriptionForeground);
+            vertical-align: -4px;
+        }
+        .icon-img { width: 16px; height: 16px; display: block; }
+        .recent-item {
+            display: grid;
+            gap: 1px;
+            width: 100%;
+            padding: 6px 8px;
+            text-align: left;
+            border-radius: 4px;
+        }
+        .recent-item:hover { background: var(--vscode-list-hoverBackground); }
+        .workspace-name { font-size: 13px; color: var(--vscode-textLink-foreground); }
+        .path {
+            overflow-wrap: anywhere;
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+        }
+        .status-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .badge {
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-size: 11px;
+            color: var(--vscode-badge-foreground);
+            background: var(--vscode-badge-background);
+        }
+        .badge.ok { color: var(--vscode-testing-iconPassed); background: transparent; }
+        .badge.warn { color: var(--vscode-testing-iconQueued); background: transparent; }
+        .welcome-card {
+            width: 100%;
+            min-height: 58px;
+            display: grid;
+            grid-template-columns: 30px 1fr auto;
+            gap: 12px;
+            align-items: center;
+            padding: 9px 11px;
+            border-radius: 4px;
+            text-align: left;
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        .welcome-card:hover { background: var(--vscode-button-secondaryHoverBackground); }
+        .card-icon {
+            width: 26px;
+            height: 26px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--vscode-button-foreground);
+            background: var(--vscode-button-background);
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .card-title { display: block; font-size: 13px; font-weight: 600; }
+        .card-desc { display: block; margin-top: 1px; color: var(--vscode-descriptionForeground); font-size: 12px; }
+        .card-status { justify-self: end; }
+        .form-grid { display: grid; gap: 8px; }
+        .field { display: grid; gap: 4px; }
+        .field label { font-size: 12px; color: var(--vscode-descriptionForeground); }
+        .field input, .field select {
+            width: 100%;
+            min-height: 28px;
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 2px;
+            padding: 4px 7px;
+            color: var(--vscode-input-foreground);
+            background: var(--vscode-input-background);
+            font: inherit;
+        }
+        .field input:focus, .field select:focus { outline: 1px solid var(--vscode-focusBorder); }
+        .inline-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .toggle-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            align-items: start;
+            margin-top: 9px;
+        }
+        .toggle-row input { margin-top: 3px; }
+        .toggle-title { font-size: 13px; }
+        .toggle-desc { color: var(--vscode-descriptionForeground); font-size: 12px; }
+        .extension-card {
+            border-radius: 4px;
+            padding: 9px 11px;
+            background: var(--vscode-button-secondaryBackground);
+            display: grid;
+            gap: 8px;
+        }
+        .extension-card:hover { background: var(--vscode-button-secondaryHoverBackground); }
+        .extension-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            gap: 10px;
+        }
+        .extension-name { font-weight: 600; }
+        .extension-meta { color: var(--vscode-descriptionForeground); font-size: 12px; }
+        .extension-reason { margin: 0; color: var(--vscode-descriptionForeground); font-size: 12px; }
+        .tile-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tile-actions button {
+            min-height: 24px;
+            padding: 2px 8px;
+            color: var(--vscode-textLink-foreground);
+        }
+        .tile-actions button:hover { color: var(--vscode-textLink-activeForeground); }
+        .config-box { margin-top: 12px; }
+        .notice {
+            display: none;
+            margin-top: 22px;
+            border: 1px solid var(--vscode-inputValidation-errorBorder);
+            color: var(--vscode-inputValidation-errorForeground);
+            background: var(--vscode-inputValidation-errorBackground);
+            border-radius: 6px;
+            padding: 10px;
+        }
+        @media (max-width: 900px) {
+            .page { padding-top: 38px; }
+            .welcome-grid { grid-template-columns: 1fr; gap: 32px; }
+        }
+        @media (max-width: 560px) {
+            .page { padding: 28px 18px; }
+            .brand h1 { font-size: 28px; }
+            .welcome-card { grid-template-columns: 28px 1fr; }
+            .card-status { grid-column: 2; justify-self: start; }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="page">
+        <div class="brand">
+            <h1>Andrea Novel Helper</h1>
+            <p>小说写作工作台</p>
+        </div>
+
+        <div class="welcome-grid">
+            <div class="start-column">
+                <section class="column-section" aria-labelledby="startTitle">
+                    <h2 class="section-title" id="startTitle">启动</h2>
+                    <div class="start-list">
+                        <button class="action-link" data-action="createWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-add.svg" alt=""></span>新建写作工作区...</button>
+                        <button class="action-link" data-action="openWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-open.svg" alt=""></span>打开工作区...</button>
+                        <button class="action-link" data-cmd="workbench.action.openSettings" data-arg="@ext:AndreaFrederica.andrea-novel-helper"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span>打开 ANH 设置...</button>
+                        <button class="action-link" data-action="showGuide"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/guide.svg" alt=""></span>打开完整功能引导</button>
+                    </div>
+                </section>
+
+                <section class="column-section" aria-labelledby="recentTitle">
+                    <h2 class="section-title" id="recentTitle">当前</h2>
+                    <button class="recent-item" data-action="openWorkspace">
+                        <span id="workspaceName" class="workspace-name muted">尚未打开工作区</span>
+                        <span id="workspacePath" class="path">可以先创建一个新项目文件夹，或打开已有小说项目。</span>
+                    </button>
+                    <div class="status-row" id="statusRow"></div>
+                    <div class="simple-list" style="margin-top: 8px;">
+                        <button class="action-link" data-action="enableWorkspace">启用当前工作区</button>
+                        <button class="action-link" data-action="enableManagedMode">启用首页推荐模式</button>
+                    </div>
+                </section>
+
+                <details class="collapsible" id="gitDetails">
+                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/git.svg" alt=""></span><span class="section-title">Git 身份</span></summary>
+                    <div class="collapsible-body">
+                        <div id="gitSummary" class="path">正在检测 Git...</div>
+                        <div class="form-grid" style="margin-top: 10px;">
+                        <div class="field">
+                            <label for="gitScope">保存位置</label>
+                            <select id="gitScope">
+                                <option value="global">全局 Git 配置</option>
+                                <option value="local">当前工作区仓库</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="gitName">用户名</label>
+                            <input id="gitName" type="text" autocomplete="off" placeholder="例如 Andrea Frederica">
+                        </div>
+                        <div class="field">
+                            <label for="gitEmail">邮箱</label>
+                            <input id="gitEmail" type="email" autocomplete="off" placeholder="name@example.com">
+                        </div>
+                        <div class="inline-actions">
+                            <button class="action-link" data-action="saveGitUser">保存 Git 身份</button>
+                            <button id="initRepoBtn" class="action-link" data-action="initGitRepo">初始化仓库</button>
+                            <button id="gitDownloadBtn" class="action-link" data-action="openGitDownload">安装 Git</button>
+                        </div>
+                    </div>
+                    </div>
+                </details>
+
+                <section class="column-section" aria-labelledby="docTitle">
+                    <h2 class="section-title" id="docTitle"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/book.svg" alt=""></span>文档</h2>
+                    <div class="simple-list">
+                        <button class="action-link" data-doc="hello-world">5 分钟快速上手</button>
+                        <button class="action-link" data-doc="vscode-settings">VS Code 基础</button>
+                        <button class="action-link" data-doc="everything-is-role">一切皆角色</button>
+                        <button class="action-link" data-doc="package-manager">包管理器</button>
+                        <button class="action-link" data-doc="markdown-format-guide">文件格式指南</button>
+                        <button class="action-link" data-doc="ai-mcp">AI 与 MCP</button>
+                        <button class="action-link" data-action="openWiki">在线 Wiki</button>
+                    </div>
+                </section>
+
+                <details class="collapsible" id="helloConfigDetails">
+                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span class="section-title">首页设置</span></summary>
+                    <div class="collapsible-body">
+                        <label class="toggle-row">
+                            <input id="helloEnabled" type="checkbox">
+                            <span>
+                                <span class="toggle-title">启动时显示 ANH Hello</span>
+                                <span class="toggle-desc">也可以从命令面板手动打开。</span>
+                            </span>
+                        </label>
+                        <label class="toggle-row">
+                            <input id="forceManaged" type="checkbox">
+                            <span>
+                                <span class="toggle-title">只跟随 VS Code 扩展开关</span>
+                                <span class="toggle-desc">运行时绕过旧工作区禁用判断，不改写原托管设置。</span>
+                            </span>
+                        </label>
+                        <button class="action-link" style="margin-top: 8px;" data-action="dismiss">下次不自动显示</button>
+                    </div>
+                </details>
+            </div>
+
+            <div class="walkthrough-column">
+                <section class="column-section" aria-labelledby="walkthroughTitle">
+                    <h2 class="section-title" id="walkthroughTitle">演练</h2>
+                    <div class="walkthrough-list">
+                        <button class="welcome-card" data-cmd="AndreaNovelHelper.projectInitWizard.graphical">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/rocket.svg" alt=""></span>
+                            <span><span class="card-title">初始化小说项目</span><span class="card-desc">生成项目配置、角色库、敏感词、词汇、正则和基础目录。</span></span>
+                            <span class="badge card-status">开始</span>
+                        </button>
+                        <button class="welcome-card" data-cmd="workbench.view.extension.AndreaNovelHelperSidebar">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/files.svg" alt=""></span>
+                            <span><span class="card-title">管理角色和资料</span><span class="card-desc">进入 ANH 资源视图，创建角色、词汇、敏感词和外部资源包。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="andrea.openWritingDashboard">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/dashboard.svg" alt=""></span>
+                            <span><span class="card-title">打开创作工作台</span><span class="card-desc">查看字数、写作时间、计划、热力图和当前创作状态。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="andrea.comments.open">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/comment.svg" alt=""></span>
+                            <span><span class="card-title">批注与校对</span><span class="card-desc">添加批注，管理修改意见，并进入错别字和翻译相关功能。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="andrea.openRoleRelationshipGraph">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/graph.svg" alt=""></span>
+                            <span><span class="card-title">关系图和时间线</span><span class="card-desc">查看角色关系图谱、关系文件和事件时间线。</span></span>
+                        </button>
+                        <button class="welcome-card" data-doc="export">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/export.svg" alt=""></span>
+                            <span><span class="card-title">导出与发布</span><span class="card-desc">使用 Typst 模板导出 PDF、图片或整理后的文本。</span></span>
+                        </button>
+                    </div>
+                </section>
+
+                <details class="collapsible" id="extensionDetails">
+                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/extension.svg" alt=""></span><span class="section-title">推荐扩展</span></summary>
+                    <div class="collapsible-body">
+                        <div id="extensions" class="extensions"></div>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <div id="notice" class="notice"></div>
+    </main>
+    <script nonce="__NONCE__" src="__SCRIPT_URI__"></script>
+</body>
+
+</html>

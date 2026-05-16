@@ -16,7 +16,7 @@ import { globalRelationshipManager } from '../../utils/globalRelationshipManager
 import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
 import { PROJECT_CONFIG_MARKDOWN_FILE_NAME, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../../projectConfig/constants';
 
-type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | ProjectInitWizardNode | ProjectSettingsNode | WritingDashboardNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
+type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | HelloPageNode | ProjectInitWizardNode | ProjectSettingsNode | WritingDashboardNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
 
 function normalizeFsPathForCompare(p: string): string {
     const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
@@ -100,6 +100,24 @@ class CommonFeaturesRootNode extends vscode.TreeItem {
         this.iconPath = new vscode.ThemeIcon('list-selection');
         this.description = '向导、设置、文档、维护';
         this.tooltip = 'ANH 常用功能快捷入口';
+    }
+}
+
+// ANH Hello 首页节点
+class HelloPageNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ ANH Hello 首页', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'helloPage';
+        this.iconPath = new vscode.ThemeIcon('home');
+        this.description = '打开新手首页、文档和常用入口';
+        this.command = {
+            command: 'AndreaNovelHelper.openHello',
+            title: '打开 ANH Hello 首页',
+            arguments: []
+        };
     }
 }
 
@@ -638,6 +656,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
 
         if (node instanceof CommonFeaturesRootNode) {
             return [
+                new HelloPageNode(this.workspaceRoot),
                 new ProjectInitWizardNode(this.workspaceRoot),
                 new ProjectSettingsNode(this.workspaceRoot),
                 new WritingDashboardNode(this.workspaceRoot),

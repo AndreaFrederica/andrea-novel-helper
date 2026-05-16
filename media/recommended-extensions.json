@@ -1,0 +1,206 @@
+[
+  {
+    "id": "yzhang.markdown-all-in-one",
+    "name": "Markdown All in One",
+    "description": "Markdown 写作、列表、目录和常用快捷键增强。",
+    "reason": "ANH 的智能回车会检测并转发给它，适合长篇 Markdown 写作。",
+    "publisher": "Yu Zhang",
+    "author": "Yu Zhang",
+    "category": "写作基础",
+    "tags": ["markdown", "writing"]
+  },
+  {
+    "id": "myriad-dreamin.tinymist",
+    "name": "Tinymist Typst",
+    "description": "Typst 语言服务、预览和编辑辅助。",
+    "reason": "ANH 内置 Typst 导出模板，安装后编辑模板和排版更顺手。",
+    "publisher": "Myriad Dreamin",
+    "author": "Myriad Dreamin",
+    "category": "排版导出",
+    "tags": ["typst", "export"]
+  },
+  {
+    "id": "tomoki1207.pdf",
+    "name": "vscode-pdf",
+    "description": "在 VS Code 中直接打开和预览 PDF。",
+    "reason": "配合 Typst/PDF 导出，可以在写作环境内检查成稿效果。",
+    "publisher": "tomoki1207",
+    "author": "tomoki1207",
+    "category": "排版导出",
+    "tags": ["pdf", "preview"]
+  },
+  {
+    "id": "streetsidesoftware.code-spell-checker",
+    "name": "Code Spell Checker",
+    "description": "轻量拼写检查扩展。",
+    "reason": "适合英文名词、术语和混合语言草稿的基础拼写检查。",
+    "publisher": "Street Side Software",
+    "author": "Street Side Software",
+    "category": "校对",
+    "tags": ["proofreading", "spellcheck"]
+  },
+  {
+    "id": "ltex-plus.vscode-ltex-plus",
+    "name": "LTeX+",
+    "description": "面向自然语言文本的语法、拼写和风格检查。",
+    "reason": "适合需要更细致语言检查的小说、设定文档和说明文本，也支持 Markdown 与 Typst。",
+    "publisher": "LTeX+",
+    "author": "LTeX+",
+    "category": "校对",
+    "tags": ["proofreading", "grammar"]
+  },
+  {
+    "id": "eamodio.gitlens",
+    "name": "GitLens",
+    "description": "更直观地查看 Git 历史、变更和文件时间线。",
+    "reason": "当项目启用 Git/AutoGit 后，能帮助作者找回修改脉络。",
+    "publisher": "GitKraken",
+    "author": "GitKraken",
+    "category": "备份与版本",
+    "tags": ["git", "backup"]
+  },
+  {
+    "id": "gruntfuggly.todo-tree",
+    "name": "Todo Tree",
+    "description": "把 TODO、FIXME 等注释汇总成可导航树视图。",
+    "reason": "适合整理伏笔、待补设定和章节返修清单。",
+    "publisher": "Gruntfuggly",
+    "category": "编辑效率",
+    "tags": ["todo", "notes", "workflow"]
+  },
+  {
+    "id": "qwtel.sqlite-viewer",
+    "name": "SQLite Viewer",
+    "description": "直接在 VS Code 里查看 sqlite 和 db 文件内容。",
+    "reason": "适合检查 ANH 项目中的数据库型缓存或跟踪数据文件。",
+    "publisher": "qwtel",
+    "category": "数据与配置",
+    "tags": ["sqlite", "database", "viewer"]
+  },
+  {
+    "id": "esbenp.prettier-vscode",
+    "name": "Prettier - Code formatter",
+    "description": "常用文本与代码格式化工具。",
+    "reason": "适合整理 JSON、Markdown、前端资源和脚本文件格式。",
+    "publisher": "Prettier",
+    "category": "编辑质量",
+    "tags": ["format", "prettier", "cleanup"]
+  },
+  {
+    "id": "christian-kohler.path-intellisense",
+    "name": "Path Intellisense",
+    "description": "输入路径时自动补全文件名和目录名。",
+    "reason": "编辑模板、图片链接和脚本引用时更省事。",
+    "publisher": "Christian Kohler",
+    "category": "编辑效率",
+    "tags": ["path", "autocomplete", "assets"]
+  },
+  {
+    "id": "pkief.material-icon-theme",
+    "name": "Material Icon Theme",
+    "description": "给资源管理器和文件标签页提供更清晰的图标主题。",
+    "reason": "项目文件多时更容易一眼区分文档、配置和素材。",
+    "publisher": "PKief",
+    "category": "界面体验",
+    "tags": ["icons", "theme", "ui"]
+  },
+  {
+    "id": "gera2ld.markmap-vscode",
+    "name": "Markmap",
+    "description": "把 Markdown 大纲实时渲染成脑图。",
+    "reason": "适合把章节结构、人物设定和提纲快速展开成思维导图。",
+    "publisher": "gera2ld",
+    "category": "大纲与结构",
+    "tags": ["mindmap", "outline", "markdown"]
+  },
+  {
+    "id": "shd101wyy.markdown-preview-enhanced",
+    "name": "Markdown Preview Enhanced",
+    "description": "增强版 Markdown 预览，支持更多图表、导出和扩展功能。",
+    "reason": "适合在写作时预览复杂说明文档、表格、流程图和导出效果。",
+    "publisher": "Yiyi Wang",
+    "category": "预览与导出",
+    "tags": ["markdown", "preview", "export"]
+  },
+  {
+    "id": "kisstkondoros.vscode-gutter-preview",
+    "name": "Image preview",
+    "description": "在悬停和边栏中直接预览图片。",
+    "reason": "编辑封面、插图和 Markdown 图片链接时更直观。",
+    "publisher": "Kiss Tamás",
+    "category": "素材预览",
+    "tags": ["image", "preview", "assets"]
+  },
+  {
+    "id": "mkxml.vscode-filesize",
+    "name": "filesize",
+    "description": "在状态栏显示当前文件大小和压缩后体积。",
+    "reason": "检查导出文件、图片和静态资源大小时比较方便。",
+    "publisher": "mkxml",
+    "category": "素材预览",
+    "tags": ["files", "size", "statusbar"]
+  },
+  {
+    "id": "mechatroner.rainbow-csv",
+    "name": "Rainbow CSV",
+    "description": "高亮并增强 CSV、TSV 等表格文本编辑体验。",
+    "reason": "处理批量角色表、词汇表和导出数据时更清楚。",
+    "publisher": "mechatroner",
+    "category": "数据与配置",
+    "tags": ["csv", "table", "data"]
+  },
+  {
+    "id": "tamasfe.even-better-toml",
+    "name": "Even Better TOML",
+    "description": "提供 TOML 的高亮、校验、格式化和补全。",
+    "reason": "编辑 wrangler.toml、pixi.toml 等配置文件时更稳。",
+    "publisher": "tamasfe",
+    "category": "数据与配置",
+    "tags": ["toml", "config", "format"]
+  },
+  {
+    "id": "usernamehw.errorlens",
+    "name": "Error Lens",
+    "description": "把错误和警告直接高亮到代码行内。",
+    "reason": "调试脚本、模板和扩展源码时能更快看到问题。",
+    "publisher": "usernamehw",
+    "category": "编辑质量",
+    "tags": ["diagnostics", "errors", "warnings"]
+  },
+  {
+    "id": "igorsbitnev.error-gutters",
+    "name": "Error Gutters",
+    "description": "在行号旁边显示错误、警告和提示标记。",
+    "reason": "和 Error Lens 搭配后，定位问题行会更直观。",
+    "publisher": "IgorSbitnev",
+    "category": "编辑质量",
+    "tags": ["diagnostics", "gutter", "errors"]
+  },
+  {
+    "id": "blueglassblock.better-json5",
+    "name": "Better JSON5",
+    "description": "为 JSON5 提供高亮、验证、格式化和 Schema 补全。",
+    "reason": "ANH 项目里大量使用 json5/ojson5 配置，这个扩展很契合。",
+    "publisher": "BlueGlassBlock",
+    "category": "数据与配置",
+    "tags": ["json5", "schema", "format"]
+  },
+  {
+    "id": "aaron-bond.better-comments",
+    "name": "Better Comments",
+    "description": "把注释中的提醒、问题和 TODO 样式化显示。",
+    "reason": "整理脚本、模板和源码里的注释约定时更清晰。",
+    "publisher": "Aaron Bond",
+    "category": "编辑效率",
+    "tags": ["comments", "todo", "annotation"]
+  },
+  {
+    "id": "ms-ceintl.vscode-language-pack-zh-hans",
+    "name": "Chinese (Simplified) Language Pack for VS Code",
+    "description": "为 VS Code 提供简体中文界面。",
+    "reason": "更适合完全没接触过 VS Code 或偏好中文界面的新手作者。",
+    "publisher": "Microsoft",
+    "category": "界面体验",
+    "tags": ["language", "chinese", "localization"]
+  }
+]

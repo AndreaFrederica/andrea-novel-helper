@@ -119,6 +119,7 @@ import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { registerWritingDashboardPage } from './Provider/view/writingDashboardView'
 import { registerRoleRelationshipGraphView } from './Provider/view/roleRelationshipGraphView'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
+import { isHelloPageEnabled, maybeShowHelloPage, registerHelloPage, shouldUseVsCodeManagedDisablingForHello } from './hello/helloPage';
 
 // 避免重复注册相同命令
 let gitCommandRegistered = false;
@@ -182,7 +183,7 @@ export async function activate(context: vscode.ExtensionContext) {
     initI18n(context.extensionPath);
 
     const cfg1 = vscode.workspace.getConfiguration('AndreaNovelHelper');
-    const useVsCodeManagedDisabling = cfg1.get<boolean>('useVsCodeManagedDisabling', false);
+    const useVsCodeManagedDisabling = cfg1.get<boolean>('useVsCodeManagedDisabling', false) || shouldUseVsCodeManagedDisablingForHello();
 
     // 输出通道用于调试激活阶段错误/栈。需要在任何早退分支之前创建，
     // 因为初始化/文档向导类命令也必须在工作区启用询问前可用。
@@ -214,16 +215,21 @@ export async function activate(context: vscode.ExtensionContext) {
         registerGraphicalProjectInitWizard(context);
         registerGuidePage(context);
         registerDocViewerPage(context);
+        registerHelloPage(context);
         registerWhatsNewPage(context);
         registerQuickSettingsPage(context);
         log('项目初始化/文档向导命令已注册');
     } catch (e) { log('注册 项目初始化/文档向导命令 失败', e); }
 
-    try {
-        await maybePromptFirstUseSettingsWizard(context);
-        log('首次设置向导提示检查完成');
-    } catch (e) {
-        log('首次设置向导提示检查失败', e);
+    if (!isHelloPageEnabled()) {
+        try {
+            await maybePromptFirstUseSettingsWizard(context);
+            log('首次设置向导提示检查完成');
+        } catch (e) {
+            log('首次设置向导提示检查失败', e);
+        }
+    } else {
+        log('Hello 首页已启用，跳过首次设置向导弹窗');
     }
 
     registerContextKeys(context);
@@ -381,6 +387,10 @@ export async function activate(context: vscode.ExtensionContext) {
     }
     //TODO工作区里的多个文件夹兼容没做(要命)
     if (!ws) {
+        if (isHelloPageEnabled()) {
+            await maybeShowHelloPage(context);
+            return;
+        }
         // 没有工作区时，询问是否从WebDAV还原
         const choice = await vscode.window.showInformationMessage(
             '检测到没有打开的工作区。是否要从WebDAV还原项目？',
@@ -404,7 +414,11 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
         log('开始执行主初始化');
         // 统一由独立模块检测并可提示初始化
-        maybePromptProjectInit();
+        if (!isHelloPageEnabled()) {
+            maybePromptProjectInit();
+        } else {
+            log('Hello 首页已启用，跳过项目初始化弹窗');
+        }
         
         // 检查并创建项目配置文件
         const projectConfigManager = new ProjectConfigManager(ws);
@@ -1409,6 +1423,7 @@ export async function activate(context: vscode.ExtensionContext) {
             if (wsRoot2) { log('开始异步检查 Git 配置'); checkGitConfigAndGuide(wsRoot2, { silentIfConfigured: true }).catch(e => log('Git 配置向导执行异常', e)); }
         }, 800);
         log('激活流程结束');
+        maybeShowHelloPage(context).catch(e => log('打开 Hello 首页失败', e));
     } catch (e) {
         const msg = 'Andrea Novel Helper 激活过程出现错误，部分功能可能不可用：' + (e instanceof Error ? e.message : String(e));
         vscode.window.showErrorMessage(msg, '查看日志').then(sel => { if (sel === '查看日志') { logChannel.show(true); } });
