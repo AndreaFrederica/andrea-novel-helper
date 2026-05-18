@@ -119,6 +119,65 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
     let isInRole = false; // 标记是否在角色定义中
     let roleDirectContent: string[] = []; // 角色下面的直接内容（不属于任何字段）
     let fencedBlockMarker: '```' | '~~~' | null = null;
+
+    const isKnownFieldHeader = (headerText: string): boolean => {
+        const standardFieldName = getStandardFieldName(headerText);
+        return Object.keys(FIELD_ALIASES).includes(standardFieldName) ||
+            Object.values(FIELD_ALIASES).includes(headerText.trim());
+    };
+
+    const hasDirectFieldHeadersAfter = (startIndex: number, headerLevel: number): boolean => {
+        for (let j = startIndex + 1; j < lines.length; j++) {
+            const nextHeaderMatch = lines[j].trim().match(/^(#+)\s+(.+)$/);
+            if (!nextHeaderMatch) {
+                continue;
+            }
+            const nextHeaderLevel = nextHeaderMatch[1].length;
+            if (nextHeaderLevel <= headerLevel) {
+                return false;
+            }
+            if (nextHeaderLevel === headerLevel + 1 && isKnownFieldHeader(nextHeaderMatch[2].trim())) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const hasNestedHeadersAfter = (startIndex: number, headerLevel: number): boolean => {
+        for (let j = startIndex + 1; j < lines.length; j++) {
+            const nextHeaderMatch = lines[j].trim().match(/^(#+)\s+(.+)$/);
+            if (!nextHeaderMatch) {
+                continue;
+            }
+            const nextHeaderLevel = nextHeaderMatch[1].length;
+            if (nextHeaderLevel <= headerLevel) {
+                return false;
+            }
+            return true;
+        }
+        return false;
+    };
+
+    const nextHeaderAtOrAbove = (startIndex: number, headerLevel: number): { level: number; text: string; index: number } | null => {
+        for (let j = startIndex + 1; j < lines.length; j++) {
+            const nextHeaderMatch = lines[j].trim().match(/^(#+)\s+(.+)$/);
+            if (!nextHeaderMatch) {
+                continue;
+            }
+            const nextHeaderLevel = nextHeaderMatch[1].length;
+            if (nextHeaderLevel <= headerLevel) {
+                return { level: nextHeaderLevel, text: nextHeaderMatch[2].trim(), index: j };
+            }
+        }
+        return null;
+    };
+
+    const scalarFieldNames = new Set([
+        'name', 'type', 'uuid', 'color', 'backgroundColor',
+        'bold', 'italic', 'strikethrough', 'underline',
+        'regexFlags', 'flags', 'flag', 'priority', 'wordSegmentFilter',
+        'affiliation'
+    ]);
     
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -166,10 +225,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
             const headerText = headerMatch[2].trim();
             
             // 检查是否有下一个可能的字段标题（子标题）
-            const hasSubHeaders = lines.slice(i + 1).some(nextLine => {
-                const nextHeaderMatch = nextLine.trim().match(/^(#+)\s+(.+)$/);
-                return nextHeaderMatch && nextHeaderMatch[1].length > headerLevel;
-            });
+            const hasSubHeaders = hasNestedHeadersAfter(i, headerLevel);
             
             // 如果这是比当前角色标题级别低或相等的标题，可能是新角色
             if (!isInRole || headerLevel <= roleHeaderLevel) {
@@ -182,17 +238,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                 }
                 
                 // 检查是否是直接字段标题（即下一级标题是已知字段）
-                const hasDirectFieldHeaders = lines.slice(i + 1).some(nextLine => {
-                    const nextHeaderMatch = nextLine.trim().match(/^(#+)\s+(.+)$/);
-                    if (nextHeaderMatch && nextHeaderMatch[1].length === headerLevel + 1) {
-                        const nextHeaderText = nextHeaderMatch[2].trim();
-                        const standardFieldName = getStandardFieldName(nextHeaderText);
-                        // 检查是否是已知的基础字段或扩展字段
-                        return Object.keys(FIELD_ALIASES).includes(standardFieldName) || 
-                               Object.values(FIELD_ALIASES).includes(nextHeaderText.trim());
-                    }
-                    return false;
-                });
+                const hasDirectFieldHeaders = hasDirectFieldHeadersAfter(i, headerLevel);
                 
                 // 判断是否是角色标题：有子标题且其中包含任何已知的字段标题
                 if (hasSubHeaders && hasDirectFieldHeaders) {
@@ -214,6 +260,23 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                     isInRole = false;
                     continue;
                 } else {
+                    const nextSiblingOrParentHeader = nextHeaderAtOrAbove(i, headerLevel);
+                    if (
+                        defaultType === '敏感词' &&
+                        nextSiblingOrParentHeader &&
+                        nextSiblingOrParentHeader.level === headerLevel &&
+                        hasDirectFieldHeadersAfter(nextSiblingOrParentHeader.index, headerLevel)
+                    ) {
+                        // 兼容分组标题与详细条目写成同级标题的旧文档，避免把空分组当作角色反复补 UUID。
+                        currentRole = null;
+                        currentField = '';
+                        currentContent = [];
+                        roleDirectContent = [];
+                        roleHeaderLevel = 0;
+                        isInRole = false;
+                        continue;
+                    }
+
                     // 没有子标题的标题，创建简单角色（只有名字）
                     const simpleRole: Role = {
                         name: headerText,
@@ -254,6 +317,9 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
         // 处理普通内容
         if (isInRole && currentRole) {
             if (currentField) {
+                if (scalarFieldNames.has(currentField) && currentContent.some(v => v.trim() !== '') && trimmedLine.startsWith('>')) {
+                    continue;
+                }
                 // 如果有当前字段，内容归属于该字段
                 currentContent.push(line);
             } else {

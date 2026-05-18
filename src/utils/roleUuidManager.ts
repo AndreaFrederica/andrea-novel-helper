@@ -208,6 +208,36 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
         let currentRoleLevel = 0;
         let hasUuidField = false;
         let insertUuidAfterLine = -1;
+        let uuidFieldHeaderLine = -1;
+        let changed = false;
+
+        const flushExistingUuidField = (beforeOutputIndex: number): void => {
+            if (!currentRoleName || !hasUuidField || uuidFieldHeaderLine < 0) {
+                return;
+            }
+            const targetUuid = roleUuidMap.get(currentRoleName);
+            if (!targetUuid) {
+                return;
+            }
+
+            let contentStart = uuidFieldHeaderLine + 1;
+            while (contentStart < beforeOutputIndex && updatedLines[contentStart].trim() === '') {
+                contentStart++;
+            }
+            let contentEnd = contentStart;
+            while (contentEnd < beforeOutputIndex && updatedLines[contentEnd].trim() !== '') {
+                contentEnd++;
+            }
+
+            const existingUuid = updatedLines.slice(contentStart, contentEnd).join('\n').trim();
+            if (existingUuid === targetUuid) {
+                return;
+            }
+
+            const replacement = ['', targetUuid];
+            updatedLines.splice(uuidFieldHeaderLine + 1, contentEnd - (uuidFieldHeaderLine + 1), ...replacement);
+            changed = true;
+        };
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
@@ -221,26 +251,32 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
                 
                 // 如果是新的角色标题
                 if (roleUuidMap.has(headerText)) {
+                    flushExistingUuidField(updatedLines.length);
                     // 保存之前角色的 UUID 插入位置
                     if (currentRoleName && roleUuidMap.has(currentRoleName) && !hasUuidField && insertUuidAfterLine >= 0) {
                         insertUuidAtLine(updatedLines, insertUuidAfterLine, currentRoleLevel + 1, roleUuidMap.get(currentRoleName)!);
+                        changed = true;
                     }
                     
                     currentRoleName = headerText;
                     currentRoleLevel = headerLevel;
                     hasUuidField = false;
                     insertUuidAfterLine = updatedLines.length; // 记录角色标题行的位置
+                    uuidFieldHeaderLine = -1;
                 }
                 // 检测字段标题
                 else if (currentRoleName && headerLevel === currentRoleLevel + 1) {
+                    flushExistingUuidField(updatedLines.length);
                     const fieldName = getStandardFieldName(headerText);
                     if (fieldName === 'uuid') {
                         hasUuidField = true;
+                        uuidFieldHeaderLine = updatedLines.length;
                     }
                     // 如果遇到第一个字段且还没有 UUID 字段，在这里插入
                     if (!hasUuidField && insertUuidAfterLine >= 0) {
                         insertUuidAtLine(updatedLines, insertUuidAfterLine, headerLevel, roleUuidMap.get(currentRoleName)!);
                         hasUuidField = true;
+                        changed = true;
                         insertUuidAfterLine = -1;
                     }
                 }
@@ -249,16 +285,24 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
             updatedLines.push(line);
         }
         
+        flushExistingUuidField(updatedLines.length);
+
         // 处理最后一个角色
         if (currentRoleName && roleUuidMap.has(currentRoleName) && !hasUuidField && insertUuidAfterLine >= 0) {
             insertUuidAtLine(updatedLines, insertUuidAfterLine, currentRoleLevel + 1, roleUuidMap.get(currentRoleName)!);
+            changed = true;
         }
         
-    // 写回文件，并刷新全局缓存
-    const updatedContent = updatedLines.join('\n');
-    await fs.promises.writeFile(filePath, updatedContent, 'utf8');
-    try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
-    console.log(`[RoleUuidManager] 已更新 Markdown 文件: ${filePath}`);
+        const updatedContent = updatedLines.join('\n');
+        if (!changed && content.replace(/\r\n/g, '\n') === updatedContent.replace(/\r\n/g, '\n')) {
+            console.log(`[RoleUuidManager] Markdown 内容无变化，跳过写入: ${filePath}`);
+            return;
+        }
+
+        // 写回文件，并刷新全局缓存
+        await fs.promises.writeFile(filePath, updatedContent, 'utf8');
+        try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
+        console.log(`[RoleUuidManager] 已更新 Markdown 文件: ${filePath}`);
     } catch (error) {
         throw new Error(`更新 Markdown 文件失败: ${error}`);
     }
