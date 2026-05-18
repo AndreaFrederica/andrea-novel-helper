@@ -118,6 +118,7 @@ import { registerDocViewerPage } from './guide/docViewerPage'
 import { registerCopilotDocsCommands } from './commands/copilotDocs'
 import { registerWritingDashboardPage } from './Provider/view/writingDashboardView'
 import { registerRoleRelationshipGraphView } from './Provider/view/roleRelationshipGraphView'
+import { registerNotesSidebarViews } from './Provider/view/notesSidebarView'
 import { startNovelHttpMcpServer, NovelHttpMcpServer, DEFAULT_MCP_PORT } from './mcp/httpServer'
 import { isHelloPageEnabled, maybeShowHelloPage, registerHelloPage, shouldUseVsCodeManagedDisablingForHello } from './hello/helloPage';
 
@@ -701,6 +702,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerEditorSettingsPage(context);
         registerWritingDashboardPage(context);
         registerRoleRelationshipGraphView(context);
+        registerNotesSidebarViews(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);

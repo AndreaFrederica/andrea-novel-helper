@@ -247,6 +247,12 @@
           "title": "%sidebar.settings.title%",
           "icon": "$(gear)",
           "when": "andrea.anh.enabled"
+        },
+        {
+          "id": "AndreaNotesSidebar",
+          "title": "%sidebar.notes.title%",
+          "icon": "$(notebook)",
+          "when": "andrea.anh.enabled"
         }
       ]
     },
@@ -319,6 +325,81 @@
         "title": "独立打开创作工作台组件",
         "category": "Andrea Novel Helper",
         "icon": "$(window)"
+      },
+      {
+        "command": "andrea.notes.refreshOutlineTree",
+        "title": "%command.notes.refreshOutlineTree.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.refreshDailyPlanTree",
+        "title": "%command.notes.refreshDailyPlanTree.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.refreshCustomTree",
+        "title": "%command.notes.refreshCustomTree.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createOutlineNote",
+        "title": "%command.notes.createOutlineNote.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createDailyPlan",
+        "title": "%command.notes.createDailyPlan.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createCustomNote",
+        "title": "%command.notes.createCustomNote.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createOutlineFolder",
+        "title": "%command.notes.createOutlineFolder.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createDailyPlanFolder",
+        "title": "%command.notes.createDailyPlanFolder.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createCustomFolder",
+        "title": "%command.notes.createCustomFolder.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createInFolder",
+        "title": "%command.notes.createInFolder.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.createFolderInFolder",
+        "title": "%command.notes.createFolderInFolder.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.open",
+        "title": "%command.notes.open.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.rename",
+        "title": "%command.notes.rename.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.delete",
+        "title": "%command.notes.delete.title%",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.notes.revealInExplorer",
+        "title": "%command.notes.revealInExplorer.title%",
+        "category": "Andrea Novel Helper"
       },
       {
         "command": "andrea.openRoleRelationshipGraph",
@@ -3686,6 +3767,60 @@
           "when": "view == andrea.settingsView",
           "group": "navigation@1",
           "icon": "$(settings-gear)"
+        },
+        {
+          "command": "andrea.notes.createOutlineNote",
+          "when": "view == andrea.notesOutlineTree",
+          "group": "navigation@1",
+          "icon": "$(new-file)"
+        },
+        {
+          "command": "andrea.notes.createOutlineFolder",
+          "when": "view == andrea.notesOutlineTree",
+          "group": "navigation@2",
+          "icon": "$(new-folder)"
+        },
+        {
+          "command": "andrea.notes.refreshOutlineTree",
+          "when": "view == andrea.notesOutlineTree",
+          "group": "navigation@3",
+          "icon": "$(refresh)"
+        },
+        {
+          "command": "andrea.notes.createDailyPlan",
+          "when": "view == andrea.notesDailyPlanTree",
+          "group": "navigation@1",
+          "icon": "$(new-file)"
+        },
+        {
+          "command": "andrea.notes.createDailyPlanFolder",
+          "when": "view == andrea.notesDailyPlanTree",
+          "group": "navigation@2",
+          "icon": "$(new-folder)"
+        },
+        {
+          "command": "andrea.notes.refreshDailyPlanTree",
+          "when": "view == andrea.notesDailyPlanTree",
+          "group": "navigation@3",
+          "icon": "$(refresh)"
+        },
+        {
+          "command": "andrea.notes.createCustomNote",
+          "when": "view == andrea.notesCustomTree",
+          "group": "navigation@1",
+          "icon": "$(new-file)"
+        },
+        {
+          "command": "andrea.notes.createCustomFolder",
+          "when": "view == andrea.notesCustomTree",
+          "group": "navigation@2",
+          "icon": "$(new-folder)"
+        },
+        {
+          "command": "andrea.notes.refreshCustomTree",
+          "when": "view == andrea.notesCustomTree",
+          "group": "navigation@3",
+          "icon": "$(refresh)"
         }
       ],
       "view/item/context": [
@@ -3716,6 +3851,36 @@
           "when": "view == andrea.scriptsView && viewItem == andrea.script.dir",
           "command": "andrea.scripts.newScript",
           "group": "inline@1"
+        },
+        {
+          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFolder",
+          "command": "andrea.notes.createInFolder",
+          "group": "0_create@1"
+        },
+        {
+          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFolder",
+          "command": "andrea.notes.createFolderInFolder",
+          "group": "0_create@2"
+        },
+        {
+          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFile",
+          "command": "andrea.notes.open",
+          "group": "1_open@1"
+        },
+        {
+          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
+          "command": "andrea.notes.rename",
+          "group": "2_modify@1"
+        },
+        {
+          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
+          "command": "andrea.notes.delete",
+          "group": "2_modify@2"
+        },
+        {
+          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
+          "command": "andrea.notes.revealInExplorer",
+          "group": "3_open@2"
         },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
@@ -4267,6 +4432,23 @@
           "type": "webview",
           "name": "设置",
           "icon": "gear"
+        }
+      ],
+      "AndreaNotesSidebar": [
+        {
+          "id": "andrea.notesOutlineTree",
+          "name": "%view.notes.outline.name%",
+          "icon": "list-tree"
+        },
+        {
+          "id": "andrea.notesDailyPlanTree",
+          "name": "%view.notes.dailyPlan.name%",
+          "icon": "calendar"
+        },
+        {
+          "id": "andrea.notesCustomTree",
+          "name": "%view.notes.custom.name%",
+          "icon": "note"
         }
       ]
     },
