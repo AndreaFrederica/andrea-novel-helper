@@ -1,4 +1,5 @@
 /* eslint-disable semi */
+/* eslint-disable curly */
 /**
  * Novel Helper MCP Server
  *
@@ -21,16 +22,18 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
+import JSON5 from 'json5'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { Role } from '../extension'
 import { BUNDLED_COPILOT_DOC_IDS, listBundledCopilotDocs, readBundledCopilotDoc } from '../copilot/assets'
 import { getAllRoleUsageDocEntries } from '../context/roleUsageStore'
 import { getDocumentRoleOccurrences } from '../context/documentRolesCache'
-import { loadComments, loadCommentContent, listAllCommentDocUuids } from '../comments/storage'
+import { loadComments, loadCommentContent, listAllCommentDocUuids, updateThread, updateThreadStatus } from '../comments/storage'
 import { collectRoleUsageRanges } from '../utils/roleUsageCollector'
 import { getFileUuid, getFileByUuid } from '../utils/tracker/globalFileTracking'
-import { getSupportedExtensions, getSupportedLanguages, isHugeFile, typeColorMap } from '../utils/utils'
+import { getSupportedExtensions, getSupportedLanguages, isHugeFile, typeColorMap, isRoleFile, isExternalResourceMarkerFile } from '../utils/utils'
+import { addRoleToFile, readRoleFile, writeRoleFile, type RoleFileData } from '../utils/roleFileHandler'
 import { mdToPlainText } from '../utils/md_plain'
 import { txtToPlainText } from '../utils/txt_plain'
 
@@ -43,6 +46,9 @@ const SENSITIVE_TYPE = '敏感词'
 const FULL_DETAIL_THRESHOLD = 50
 /** Per-type list threshold – types with more roles than this get a summary hint */
 const TYPE_LIST_THRESHOLD = 50
+const NOVEL_HELPER_IGNORED_DIRS = new Set(['.anh-fsdb', 'outline', 'typo', 'comments'])
+const RESOURCE_KIND_NAME_RE = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/i
+const MANAGED_RESOURCE_EXTS = new Set(['.json5', '.txt', '.md', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5', '.toml'])
 
 // --------------------------------------------------------------------------
 // Helpers
@@ -626,6 +632,432 @@ function getProjectRoleUsageStatsPayload(topN: number): unknown {
   }
 }
 
+function getWorkspaceRoot(): string | undefined {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+}
+
+function getNovelHelperRoot(): string | undefined {
+  const wsRoot = getWorkspaceRoot()
+  if (!wsRoot) return undefined
+  return path.join(wsRoot, 'novel-helper')
+}
+
+function normalizeFsPathForCompare(p: string): string {
+  const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function isPathInside(parentPath: string, targetPath: string): boolean {
+  const parent = normalizeFsPathForCompare(parentPath)
+  const target = normalizeFsPathForCompare(targetPath)
+  return target === parent || target.startsWith(parent + path.sep)
+}
+
+function ensureManagedFilePath(filePath: string, allowedExts?: string[]): { ok: true; resolvedPath: string; novelHelperRoot: string } | { ok: false; error: string } {
+  const novelRoot = getNovelHelperRoot()
+  if (!novelRoot) return { ok: false, error: 'workspace_not_opened' }
+  const resolved = path.resolve(filePath)
+  if (!isPathInside(novelRoot, resolved)) {
+    return { ok: false, error: 'file_must_be_under_novel_helper' }
+  }
+  if (Array.isArray(allowedExts) && allowedExts.length > 0) {
+    const ext = path.extname(resolved).toLowerCase()
+    if (!allowedExts.includes(ext)) {
+      return { ok: false, error: `invalid_file_extension: ${ext}` }
+    }
+  }
+  return { ok: true, resolvedPath: resolved, novelHelperRoot: novelRoot }
+}
+
+function detectResourceKind(filePath: string): 'role' | 'relationship' | 'timeline' | 'external-marker' | 'general' {
+  const fileName = path.basename(filePath)
+  const ext = path.extname(fileName).toLowerCase()
+  if (ext === '.rjson5' || ext === '.rjson') return 'relationship'
+  if (ext === '.tjson5') return 'timeline'
+  if (ext === '.ojson5' || ext === '.ojson') return 'role'
+  if (isExternalResourceMarkerFile(fileName)) return 'external-marker'
+
+  if (MANAGED_RESOURCE_EXTS.has(ext) && RESOURCE_KIND_NAME_RE.test(fileName)) {
+    if (ext === '.tjson5') return 'timeline'
+    if (ext === '.rjson' || ext === '.rjson5') return 'relationship'
+    return 'role'
+  }
+
+  if (isRoleFile(fileName, filePath)) return 'role'
+  return 'general'
+}
+
+interface ResourceTreeNode {
+  type: 'directory' | 'file'
+  name: string
+  path: string
+  relativePath: string
+  kind?: string
+  children?: ResourceTreeNode[]
+}
+
+function buildResourceTreeNode(baseDir: string, currentDir: string, includeGeneralFiles: boolean): ResourceTreeNode {
+  const relativePath = path.relative(baseDir, currentDir) || '.'
+  const node: ResourceTreeNode = {
+    type: 'directory',
+    name: path.basename(currentDir),
+    path: currentDir,
+    relativePath,
+    children: [],
+  }
+
+  let entries: fs.Dirent[] = []
+  try {
+    entries = fs.readdirSync(currentDir, { withFileTypes: true })
+  } catch {
+    return node
+  }
+
+  const sorted = entries.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN'))
+  for (const entry of sorted) {
+    const fullPath = path.join(currentDir, entry.name)
+    if (entry.isDirectory()) {
+      if (NOVEL_HELPER_IGNORED_DIRS.has(entry.name)) continue
+      const childDir = buildResourceTreeNode(baseDir, fullPath, includeGeneralFiles)
+      if ((childDir.children?.length || 0) > 0 || includeGeneralFiles) {
+        node.children?.push(childDir)
+      }
+      continue
+    }
+
+    if (!entry.isFile()) continue
+    const kind = detectResourceKind(fullPath)
+    if (!includeGeneralFiles && kind === 'general') continue
+    node.children?.push({
+      type: 'file',
+      name: entry.name,
+      path: fullPath,
+      relativePath: path.relative(baseDir, fullPath),
+      kind,
+    })
+  }
+
+  return node
+}
+
+function summarizeResourceTree(node: ResourceTreeNode): { directories: number; files: number; roleFiles: number; relationshipFiles: number; timelineFiles: number; tomlRoleFiles: number } {
+  let directories = 0
+  let files = 0
+  let roleFiles = 0
+  let relationshipFiles = 0
+  let timelineFiles = 0
+  let tomlRoleFiles = 0
+
+  const walk = (n: ResourceTreeNode) => {
+    if (n.type === 'directory') {
+      directories += 1
+      for (const c of n.children || []) walk(c)
+      return
+    }
+    files += 1
+    if (n.kind === 'role') {
+      roleFiles += 1
+      if (path.extname(n.name).toLowerCase() === '.toml') tomlRoleFiles += 1
+    }
+    if (n.kind === 'relationship') relationshipFiles += 1
+    if (n.kind === 'timeline') timelineFiles += 1
+  }
+  walk(node)
+
+  return { directories, files, roleFiles, relationshipFiles, timelineFiles, tomlRoleFiles }
+}
+
+function getRoleLibraryStructurePayload(includeGeneralFiles: boolean): unknown {
+  const wsRoot = getWorkspaceRoot()
+  const novelRoot = getNovelHelperRoot()
+  if (!wsRoot || !novelRoot) {
+    return { error: 'workspace_not_opened' }
+  }
+  if (!fs.existsSync(novelRoot)) {
+    return { error: 'novel_helper_not_found', expectedPath: novelRoot }
+  }
+
+  const tree = buildResourceTreeNode(novelRoot, novelRoot, includeGeneralFiles)
+  const summary = summarizeResourceTree(tree)
+  return {
+    workspaceRoot: wsRoot,
+    novelHelperRoot: novelRoot,
+    includeGeneralFiles,
+    summary,
+    tree,
+  }
+}
+
+function collectFilesByExt(rootDir: string, exts: Set<string>): string[] {
+  const results: string[] = []
+  const stack: string[] = [rootDir]
+  while (stack.length > 0) {
+    const dir = stack.pop()
+    if (!dir) continue
+    let entries: fs.Dirent[] = []
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (NOVEL_HELPER_IGNORED_DIRS.has(entry.name)) continue
+        stack.push(fullPath)
+        continue
+      }
+      if (!entry.isFile()) continue
+      const ext = path.extname(entry.name).toLowerCase()
+      if (exts.has(ext)) results.push(fullPath)
+    }
+  }
+  results.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+  return results
+}
+
+function listTimelineFilesPayload(): unknown {
+  const novelRoot = getNovelHelperRoot()
+  if (!novelRoot) return { error: 'workspace_not_opened' }
+  if (!fs.existsSync(novelRoot)) return { error: 'novel_helper_not_found', expectedPath: novelRoot }
+  const files = collectFilesByExt(novelRoot, new Set(['.tjson5']))
+  return {
+    root: novelRoot,
+    count: files.length,
+    files: files.map(filePath => ({ filePath, relativePath: path.relative(novelRoot, filePath) })),
+  }
+}
+
+function listRelationshipFilesPayload(): unknown {
+  const novelRoot = getNovelHelperRoot()
+  if (!novelRoot) return { error: 'workspace_not_opened' }
+  if (!fs.existsSync(novelRoot)) return { error: 'novel_helper_not_found', expectedPath: novelRoot }
+  const files = collectFilesByExt(novelRoot, new Set(['.rjson5', '.rjson']))
+  return {
+    root: novelRoot,
+    count: files.length,
+    files: files.map(filePath => ({ filePath, relativePath: path.relative(novelRoot, filePath) })),
+  }
+}
+
+function getJson5LikeFilePayload(filePath: string, expectedExts: string[]): unknown {
+  const checked = ensureManagedFilePath(filePath, expectedExts)
+  if (!checked.ok) return { error: checked.error }
+  if (!fs.existsSync(checked.resolvedPath)) return { error: 'file_not_found', filePath: checked.resolvedPath }
+
+  try {
+    const raw = fs.readFileSync(checked.resolvedPath, 'utf-8')
+    const parsed = JSON5.parse(raw)
+    return {
+      filePath: checked.resolvedPath,
+      relativePath: path.relative(checked.novelHelperRoot, checked.resolvedPath),
+      parsed,
+      raw,
+    }
+  } catch (e: any) {
+    return { error: `cannot_parse_json5: ${e?.message || String(e)}`, filePath: checked.resolvedPath }
+  }
+}
+
+function saveJson5LikeFilePayload(filePath: string, expectedExts: string[], content: unknown): unknown {
+  const checked = ensureManagedFilePath(filePath, expectedExts)
+  if (!checked.ok) return { error: checked.error }
+
+  const dir = path.dirname(checked.resolvedPath)
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  } catch (e: any) {
+    return { error: `cannot_create_directory: ${e?.message || String(e)}` }
+  }
+
+  try {
+    const text = JSON5.stringify(content, null, 2)
+    fs.writeFileSync(checked.resolvedPath, `${text}\n`, 'utf-8')
+    return {
+      ok: true,
+      filePath: checked.resolvedPath,
+      relativePath: path.relative(checked.novelHelperRoot, checked.resolvedPath),
+    }
+  } catch (e: any) {
+    return { error: `cannot_write_file: ${e?.message || String(e)}`, filePath: checked.resolvedPath }
+  }
+}
+
+function appendJson5ArrayItemPayload(filePath: string, expectedExts: string[], arrayField: string, item: unknown): unknown {
+  const checked = ensureManagedFilePath(filePath, expectedExts)
+  if (!checked.ok) return { error: checked.error }
+  if (!fs.existsSync(checked.resolvedPath)) return { error: 'file_not_found', filePath: checked.resolvedPath }
+
+  try {
+    const raw = fs.readFileSync(checked.resolvedPath, 'utf-8')
+    const parsed = JSON5.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return { error: 'invalid_json5_root: expected_object' }
+    }
+
+    const root = parsed as Record<string, unknown>
+    if (!Array.isArray(root[arrayField])) root[arrayField] = []
+    ;(root[arrayField] as unknown[]).push(item)
+
+    const text = JSON5.stringify(root, null, 2)
+    fs.writeFileSync(checked.resolvedPath, `${text}\n`, 'utf-8')
+
+    return {
+      ok: true,
+      filePath: checked.resolvedPath,
+      relativePath: path.relative(checked.novelHelperRoot, checked.resolvedPath),
+      field: arrayField,
+      count: (root[arrayField] as unknown[]).length,
+    }
+  } catch (e: any) {
+    return { error: `cannot_append_item: ${e?.message || String(e)}`, filePath: checked.resolvedPath }
+  }
+}
+
+function resolveRoleFileTypeByPath(filePath: string): RoleFileData['fileType'] | undefined {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.json5') return 'json5'
+  if (ext === '.ojson5') return 'ojson5'
+  if (ext === '.md') return 'markdown'
+  if (ext === '.csv') return 'csv'
+  if (ext === '.toml') return 'toml'
+  return undefined
+}
+
+function ensureRoleFileExists(filePath: string): { ok: true } | { ok: false; error: string } {
+  if (fs.existsSync(filePath)) return { ok: true }
+
+  const fileType = resolveRoleFileTypeByPath(filePath)
+  if (!fileType) return { ok: false, error: 'unsupported_role_file_extension' }
+
+  const dir = path.dirname(filePath)
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    writeRoleFile(filePath, [], fileType)
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, error: `cannot_create_role_file: ${e?.message || String(e)}` }
+  }
+}
+
+function readRoleFilePayload(filePath: string): unknown {
+  const checked = ensureManagedFilePath(filePath, ['.json5', '.ojson5', '.md', '.csv', '.toml'])
+  if (!checked.ok) return { error: checked.error }
+
+  if (!fs.existsSync(checked.resolvedPath)) {
+    return {
+      filePath: checked.resolvedPath,
+      relativePath: path.relative(checked.novelHelperRoot, checked.resolvedPath),
+      exists: false,
+      roles: [],
+    }
+  }
+
+  try {
+    const fileData = readRoleFile(checked.resolvedPath)
+    return {
+      filePath: checked.resolvedPath,
+      relativePath: path.relative(checked.novelHelperRoot, checked.resolvedPath),
+      exists: true,
+      fileType: fileData.fileType,
+      count: fileData.roles.length,
+      roles: fileData.roles.map(roleDetail),
+    }
+  } catch (e: any) {
+    return { error: `cannot_read_role_file: ${e?.message || String(e)}`, filePath: checked.resolvedPath }
+  }
+}
+
+function upsertRoleInFilePayload(filePath: string, roleInput: Record<string, unknown>, createIfMissing: boolean): unknown {
+  const checked = ensureManagedFilePath(filePath, ['.json5', '.ojson5', '.md', '.csv', '.toml'])
+  if (!checked.ok) return { error: checked.error }
+
+  if (!roleInput || typeof roleInput !== 'object') {
+    return { error: 'invalid_role_payload' }
+  }
+
+  const name = String(roleInput.name ?? '').trim()
+  if (!name) return { error: 'role_name_required' }
+
+  if (!fs.existsSync(checked.resolvedPath)) {
+    if (!createIfMissing) {
+      return { error: 'file_not_found', filePath: checked.resolvedPath }
+    }
+    const created = ensureRoleFileExists(checked.resolvedPath)
+    if (!created.ok) return { error: created.error, filePath: checked.resolvedPath }
+  }
+
+  let beforeExists = false
+  try {
+    const before = readRoleFile(checked.resolvedPath)
+    beforeExists = before.roles.some(r => r.name === name)
+  } catch {
+    // ignore pre-read failures and rely on addRoleToFile result
+  }
+
+  const normalizedRole = {
+    ...(roleInput as Record<string, unknown>),
+    name,
+    type: String(roleInput.type ?? '角色'),
+  } as Role
+
+  const ok = addRoleToFile(checked.resolvedPath, normalizedRole)
+  if (!ok) {
+    return { error: 'cannot_upsert_role', filePath: checked.resolvedPath, roleName: name }
+  }
+
+  return {
+    ok: true,
+    action: beforeExists ? 'updated' : 'created',
+    filePath: checked.resolvedPath,
+    relativePath: path.relative(checked.novelHelperRoot, checked.resolvedPath),
+    roleName: name,
+  }
+}
+
+function buildCommentMessageId(): string {
+  const rand = Math.random().toString(36).slice(2, 10)
+  return `mcp-${Date.now()}-${rand}`
+}
+
+async function appendCommentMessagePayload(threadId: string, author: string, body: string): Promise<unknown> {
+  const trimmedId = threadId.trim()
+  if (!trimmedId) return { error: 'thread_id_required' }
+  if (!body.trim()) return { error: 'body_required' }
+
+  const updated = await updateThread(trimmedId, metadata => {
+    if (!Array.isArray(metadata.messages)) metadata.messages = []
+    metadata.messages.push({
+      id: buildCommentMessageId(),
+      author: author.trim() || 'AI Assistant',
+      body,
+      createdAt: Date.now(),
+    })
+  })
+
+  if (!updated) return { error: 'thread_not_found', threadId: trimmedId }
+  return {
+    ok: true,
+    threadId: trimmedId,
+    docUuid: updated.docUuid,
+    messageCount: updated.messages?.length || 0,
+  }
+}
+
+async function setCommentStatusPayload(threadId: string, status: 'open' | 'resolved'): Promise<unknown> {
+  const trimmedId = threadId.trim()
+  if (!trimmedId) return { error: 'thread_id_required' }
+  const updated = await updateThreadStatus(trimmedId, status)
+  if (!updated) return { error: 'thread_not_found', threadId: trimmedId }
+  return {
+    ok: true,
+    threadId: trimmedId,
+    status: updated.status,
+    updatedAt: updated.updatedAt,
+    docUuid: updated.docUuid,
+  }
+}
+
 // --------------------------------------------------------------------------
 // Factory
 // --------------------------------------------------------------------------
@@ -739,6 +1171,48 @@ export function createNovelMcpServer(rolesGetter: RolesGetter, extensionPath: st
       const includeAliases: boolean = Boolean(args?.includeAliases ?? true)
       const includeSensitive: boolean = Boolean(args?.includeSensitive ?? false)
       const payload = searchRolesPayload(rolesGetter, keyword, includeAliases, includeSensitive)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_role_file_roles',
+    {
+      title: '读取角色文件内容（通用）',
+      description:
+        '读取单个角色文件中的角色列表，支持 .json5/.ojson5/.md/.csv/.toml。',
+      inputSchema: z.object({
+        filePath: z.string().describe('角色文件完整绝对路径，必须位于 novel-helper 下'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const payload = readRoleFilePayload(filePath)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'upsert_role_in_file',
+    {
+      title: '写入角色文件（通用）',
+      description:
+        '按角色名在目标文件中新增或更新角色，支持 .json5/.ojson5/.md/.csv/.toml。',
+      inputSchema: z.object({
+        filePath: z.string().describe('目标角色文件完整绝对路径，必须位于 novel-helper 下'),
+        role: z.record(z.string(), z.unknown()).describe('角色对象，至少需要 name；可包含 type/description/aliases/color 等字段'),
+        createIfMissing: z.boolean().optional().default(true).describe('文件不存在时是否自动创建，默认true'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const role = (args?.role && typeof args.role === 'object' ? args.role : {}) as Record<string, unknown>
+      const createIfMissing = Boolean(args?.createIfMissing ?? true)
+      const payload = upsertRoleInFilePayload(filePath, role, createIfMissing)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
       }
@@ -891,6 +1365,219 @@ export function createNovelMcpServer(rolesGetter: RolesGetter, extensionPath: st
     async (args: any) => {
       const id: string = String(args?.id ?? '')
       const payload = getSkillDocumentPayload(extensionPath, id)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_role_library_structure',
+    {
+      title: '获取角色库文件结构',
+      description:
+        '返回 novel-helper 目录下的文件结构树，包含文件分类（角色/关系/时间线/普通）。结构形态对齐包管理器的目录层级。',
+      inputSchema: z.object({
+        includeGeneralFiles: z.boolean().optional().default(true).describe('是否包含普通文件，默认true；false时仅返回角色相关文件与目录'),
+      }),
+    },
+    async (args: any) => {
+      const includeGeneralFiles = Boolean(args?.includeGeneralFiles ?? true)
+      const payload = getRoleLibraryStructurePayload(includeGeneralFiles)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'list_timeline_files',
+    {
+      title: '列出时间线文件',
+      description:
+        '扫描 novel-helper 下的 .tjson5 文件，返回绝对路径与相对路径。',
+      inputSchema: z.object({}),
+    },
+    async (_args: any) => {
+      const payload = listTimelineFilesPayload()
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_timeline_file',
+    {
+      title: '读取时间线文件',
+      description:
+        '读取并解析 .tjson5 时间线文件，返回 parsed 与 raw。',
+      inputSchema: z.object({
+        filePath: z.string().describe('时间线文件的完整绝对路径（.tjson5，且必须位于 novel-helper 下）'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const payload = getJson5LikeFilePayload(filePath, ['.tjson5'])
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'save_timeline_file',
+    {
+      title: '写入时间线文件',
+      description:
+        '将 data 按 JSON5 格式写入 .tjson5 文件（覆盖写入）。',
+      inputSchema: z.object({
+        filePath: z.string().describe('时间线文件完整绝对路径（.tjson5，且必须位于 novel-helper 下）'),
+        data: z.unknown().describe('要写入的 JSON 对象内容'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const payload = saveJson5LikeFilePayload(filePath, ['.tjson5'], args?.data)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'append_timeline_event',
+    {
+      title: '追加时间线事件',
+      description:
+        '向 .tjson5 文件的 events 数组追加一条事件；若 events 不存在则自动创建。',
+      inputSchema: z.object({
+        filePath: z.string().describe('时间线文件完整绝对路径（.tjson5）'),
+        event: z.unknown().describe('要追加的事件对象'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const payload = appendJson5ArrayItemPayload(filePath, ['.tjson5'], 'events', args?.event)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'list_relationship_files',
+    {
+      title: '列出关系文件',
+      description:
+        '扫描 novel-helper 下的 .rjson5/.rjson 文件。',
+      inputSchema: z.object({}),
+    },
+    async (_args: any) => {
+      const payload = listRelationshipFilesPayload()
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_relationship_file',
+    {
+      title: '读取关系文件',
+      description:
+        '读取并解析 .rjson5/.rjson 关系文件，返回 parsed 与 raw。',
+      inputSchema: z.object({
+        filePath: z.string().describe('关系文件完整绝对路径（.rjson5/.rjson）'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const payload = getJson5LikeFilePayload(filePath, ['.rjson5', '.rjson'])
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'save_relationship_file',
+    {
+      title: '写入关系文件',
+      description:
+        '将 data 按 JSON5 格式写入 .rjson5/.rjson 文件（覆盖写入）。',
+      inputSchema: z.object({
+        filePath: z.string().describe('关系文件完整绝对路径（.rjson5/.rjson）'),
+        data: z.unknown().describe('要写入的关系文件对象内容'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const payload = saveJson5LikeFilePayload(filePath, ['.rjson5', '.rjson'], args?.data)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'append_relationship_entry',
+    {
+      title: '追加关系条目',
+      description:
+        '向关系文件的 relationships 数组追加一条关系；若不存在则自动创建。',
+      inputSchema: z.object({
+        filePath: z.string().describe('关系文件完整绝对路径（.rjson5/.rjson）'),
+        relationship: z.unknown().describe('要追加的关系对象'),
+      }),
+    },
+    async (args: any) => {
+      const filePath = String(args?.filePath ?? '')
+      const payload = appendJson5ArrayItemPayload(filePath, ['.rjson5', '.rjson'], 'relationships', args?.relationship)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'set_comment_status',
+    {
+      title: '设置批注状态',
+      description:
+        '将批注线程状态设置为 open 或 resolved。',
+      inputSchema: z.object({
+        threadId: z.string().describe('批注线程ID'),
+        status: z.enum(['open', 'resolved']).describe('目标状态'),
+      }),
+    },
+    async (args: any) => {
+      const threadId = String(args?.threadId ?? '')
+      const status = (String(args?.status ?? 'open') === 'resolved' ? 'resolved' : 'open') as 'open' | 'resolved'
+      const payload = await setCommentStatusPayload(threadId, status)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
+      }
+    },
+  )
+
+  server.registerTool(
+    'append_comment_message',
+    {
+      title: '追加批注消息',
+      description:
+        '向指定批注线程追加一条消息。',
+      inputSchema: z.object({
+        threadId: z.string().describe('批注线程ID'),
+        author: z.string().optional().default('AI Assistant').describe('消息作者名，默认 AI Assistant'),
+        body: z.string().describe('消息正文'),
+      }),
+    },
+    async (args: any) => {
+      const threadId = String(args?.threadId ?? '')
+      const author = String(args?.author ?? 'AI Assistant')
+      const body = String(args?.body ?? '')
+      const payload = await appendCommentMessagePayload(threadId, author, body)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(payload, null, 2) }],
       }
