@@ -368,3 +368,79 @@ export function generateVocabularyJson5(): string {
     }
 ]`;
 }
+
+// ── TOML 模板 ──────────────────────────────────────────────────────
+
+/** 角色库 TOML 初始模板 */
+export function generateCharacterGalleryToml(): string {
+    const r = EXAMPLE_ROLE;
+    const aliases = (r.aliases || []).map(a => `"${a}"`).join(', ');
+    return `# 角色库
+
+[[roles]]
+name = "${r.name}"
+type = "${r.type}"
+affiliation = "${r.affiliation}"
+aliases = [${aliases}]
+color = "${r.color}"
+description = "${r.description}"
+`;
+}
+
+/** 敏感词 TOML 初始模板 */
+export function generateSensitiveWordsToml(): string {
+    return `# 敏感词表
+
+[[roles]]
+name = "禁用词"
+type = "敏感词"
+color = "#FF4D4F"
+description = "需要避免使用的词汇，成稿前需替换。"
+aliases = ["禁用词2"]
+fixes = ["不是禁用"]
+category = "内容安全"
+severity = "high"
+
+[[roles]]
+name = "剧透点"
+type = "敏感词"
+color = "#FFA940"
+description = "尚未公开的剧情关键词。"
+category = "剧情"
+severity = "medium"
+`;
+}
+
+/** 词汇 TOML 初始模板 */
+export function generateVocabularyToml(): string {
+    return `# 专业词汇表
+
+[[roles]]
+name = "灵能"
+type = "词汇"
+color = "#1890FF"
+description = "世界观核心能量。"
+category = "世界观"
+
+[[roles]]
+name = "聚能阵列"
+type = "词汇"
+description = "用于聚焦灵能的装置。"
+aliases = ["阵列", "聚能器"]
+category = "科技"
+`;
+}
+
+/** 综合入口：根据类型生成 TOML 模板 */
+export function generateTomlTemplate(roleType: string): string {
+    switch (roleType) {
+        case '角色':
+            return generateCharacterGalleryToml();
+        case '敏感词':
+            return generateSensitiveWordsToml();
+        case '词汇':
+            return generateVocabularyToml();
+        default:
+            return generateCharacterGalleryToml();
+    }
+}

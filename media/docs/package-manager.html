@@ -12,8 +12,9 @@
     <li><b>OJSON5 / RJSON5 / TJSON5</b> — 角色卡、关系图、时间线的专用 JSON5 扩展名</li>
     <li><b>CSV</b> — 表格格式，适合从 Excel 批量导入</li>
     <li><b>TXT</b> — 最简单，一行一个名字</li>
+    <li><b>TOML</b> — 结构化配置格式，清晰易读，适合手工编辑</li>
 </ul>
-<div class="doc-note">完整格式说明见文档中心的"文件格式指南"：包含 Markdown、JSON5、OJSON5、RJSON5、TJSON5、CSV、TXT 的详细结构和示例。</div>
+<div class="doc-note">完整格式说明见文档中心的"文件格式指南"：包含 Markdown、JSON5、OJSON5、RJSON5、TJSON5、CSV、TXT、TOML 的详细结构和示例。</div>
 
 <h4>ANH 如何识别资源文件</h4>
 <p>文件名关键词主要是<b>触发包管理器把文件当作资源文件扫描和展示</b>，不是角色类型。角色真正的类型来自文件内容里的 <code>type</code> / <code>类型</code> 字段。</p>
@@ -80,9 +81,9 @@
 <ul>
     <li><b>项目设置</b> — 打开项目配置</li>
     <li><b>项目初始化向导</b> — 打开项目配置向导</li>
-    <li><b>创建角色库 (MD/JSON5/TXT)</b> — 创建角色库文件，可选格式</li>
-    <li><b>创建敏感词库 (MD/JSON5/TXT)</b> — 创建敏感词文件</li>
-    <li><b>创建词汇库 (MD/JSON5/TXT)</b> — 创建词汇表文件</li>
+    <li><b>创建角色库 (MD/JSON5/TXT/TOML)</b> — 创建角色库文件，可选格式</li>
+    <li><b>创建敏感词库 (MD/JSON5/TXT/TOML)</b> — 创建敏感词文件</li>
+    <li><b>创建词汇库 (MD/JSON5/TXT/TOML)</b> — 创建词汇表文件</li>
     <li><b>创建角色文件 (.ojson5)</b> — 创建单角色定义文件</li>
     <li><b>创建关系文件 (.rjson5)</b> — 创建角色关系文件</li>
     <li><b>创建时间线文件 (.tjson5)</b> — 创建时间线文件</li>
@@ -106,6 +107,7 @@
     <li><b>RJSON5 / TJSON5</b> — 关系图和时间线专用格式，不作为普通角色库加载</li>
     <li><b>CSV</b> — 标准逗号分隔值，支持表头别名映射。适合从 Excel 批量导入</li>
     <li><b>TXT</b> — 一行一个名称，支持 <code>#</code> 和 <code>//</code> 注释。适合最简单的列表场景</li>
+    <li><b>TOML</b> — 结构化配置格式，用 <code>[[roles]]</code> 数组表定义角色。清晰易读，语法严格，适合手工编辑</li>
 </ul>
 <p>更详细的字段、示例和格式选择建议请看"文件格式指南"。</p>
 
@@ -179,9 +181,9 @@
         <ul>
             <li><b>项目设置</b> — 打开项目配置</li>
             <li><b>项目初始化向导</b> — 打开项目配置向导</li>
-            <li><b>创建角色库 (MD/JSON5/TXT)</b> — 创建角色库文件，可选格式</li>
-            <li><b>创建敏感词库 (MD/JSON5/TXT)</b> — 创建敏感词文件</li>
-            <li><b>创建词汇库 (MD/JSON5/TXT)</b> — 创建词汇表文件</li>
+            <li><b>创建角色库 (MD/JSON5/TXT/TOML)</b> — 创建角色库文件，可选格式</li>
+            <li><b>创建敏感词库 (MD/JSON5/TXT/TOML)</b> — 创建敏感词文件</li>
+            <li><b>创建词汇库 (MD/JSON5/TXT/TOML)</b> — 创建词汇表文件</li>
             <li><b>创建角色文件 (.ojson5)</b> — 创建单角色定义文件，含 UUID 模板</li>
             <li><b>创建关系文件 (.rjson5)</b> — 创建角色关系定义文件</li>
             <li><b>创建时间线文件 (.tjson5)</b> — 创建时间线配置文件</li>
@@ -203,5 +205,5 @@
     <li><code>AndreaNovelHelper.package.mdLibraryNameRecognition</code> — Markdown 库名识别开关</li>
 </ul>
 
-<div class="doc-note">包管理器支持 Markdown、JSON5/OJSON5、CSV、TXT 等角色资源格式，并识别 RJSON5/TJSON5 这类专用编辑器格式。Markdown 可读性最好，JSON5 字段最完整且支持角色卡管理器，CSV 适合批量导入，TXT 适合快速列表。</div>
+<div class="doc-note">包管理器支持 Markdown、JSON5/OJSON5、CSV、TXT、TOML 等角色资源格式，并识别 RJSON5/TJSON5 这类专用编辑器格式。Markdown 可读性最好，JSON5 字段最完整且支持角色卡管理器，TOML 结构清晰易读，CSV 适合批量导入，TXT 适合快速列表。</div>
 </div>

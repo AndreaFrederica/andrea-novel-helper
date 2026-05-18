@@ -49,6 +49,7 @@
     "onLanguage:ojson5",
     "onLanguage:rjson5",
     "onLanguage:tjson5",
+    "onLanguage:toml",
     "onFileSystem:andrea-outline",
     "onCommand:andrea.openWritingDashboard",
     "onCommand:andrea.openWritingDashboardWidget",
@@ -2126,7 +2127,8 @@
             "ojson5",
             "rjson",
             "rjson5",
-            "tjson5"
+            "tjson5",
+            "toml"
           ],
           "description": "%config.supportedFileTypes.description%"
         },
@@ -4340,6 +4342,7 @@
     "liquidjs": "^10.24.0",
     "memfs": "^4.17.2",
     "pinyin-pro": "^3.28.1",
+    "smol-toml": "^1.6.1",
     "transliteration": "^2.6.1",
     "uuid": "^11.1.0",
     "wanakana": "^5.3.1",

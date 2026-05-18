@@ -12,6 +12,7 @@ import { getLastWord } from './segmenter';
 import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles, sensitiveSourceFiles } from '../activate';
 import { globalFileCache } from '../context/fileCache';
 import { parseMarkdownRoles } from './Parser/markdownParser';
+import { parseTomlRoles } from './Parser/tomlParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 import { generateUUIDv7, generateRoleNameHash } from './uuidUtils';
 import { ensureRoleUUIDs, fixInvalidRoleUUIDs } from './roleUuidManager';
@@ -61,7 +62,7 @@ const EXTERNAL_RESOURCE_AUTO_MARKER_EXTENSIONS = new Set([
 ]);
 
 const EXTERNAL_RESOURCE_KEYWORD_EXTENSIONS = new Set([
-	'.json5', '.txt', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'
+	'.json5', '.txt', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5', '.toml'
 ]);
 
 const DEFAULT_EXTERNAL_FOLDER_MD_MARKER_BASENAMES = [
@@ -327,7 +328,7 @@ export const typeColorMap: Record<string, string> = {
 export const getSupportedLanguages = (): string[] => {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	// 默认包含 markdown / plaintext / json5 / csv / ojson / ojson5 / rjson / rjson5 / tjson5
-	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5', 'csv', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5'])!;
+	const fileTypes = cfg.get<string[]>('supportedFileTypes', ['markdown', 'plaintext', 'json5', 'csv', 'ojson', 'ojson5', 'rjson', 'rjson5', 'tjson5', 'toml'])!;
 	return fileTypes.map((t: string): string =>
 		t === 'txt' ? 'plaintext' : t
 	);
@@ -347,6 +348,7 @@ const langToExt: Record<string, string> = {
 	rjson: 'rjson',
 	rjson5: 'rjson5',
 	tjson5: 'tjson5',
+	toml: 'toml',
 	// ……后缀名和语言id不一样的放在这里
 };
 
@@ -981,7 +983,7 @@ export function isRoleFile(fileName: string, fileFullPath?: string): boolean {
 		return ok;
 	}
 	
-	const validExtensions = ['.json5', '.txt', '.md', '.csv'];
+	const validExtensions = ['.json5', '.txt', '.md', '.csv', '.toml'];
 	const hasValidExtension = validExtensions.some(ext => lowerName.endsWith(ext));
 	
 	if (!hasValidExtension) {
@@ -1081,6 +1083,8 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 			loadMarkdownRoleFile(content, filePath, packagePath, fileType);
 		} else if (lower.endsWith('.csv')) {
 			loadDelimitedRoleFile(content, filePath, packagePath, fileType);
+		} else if (lower.endsWith('.toml')) {
+			loadTomlRoleFile(content, filePath, packagePath, fileType);
 		}
 		// 记录敏感词库源文件（按解析出的角色类型判定）
 		try {
@@ -1226,6 +1230,31 @@ function loadDelimitedRoleFile(content: string, filePath: string, packagePath: s
 	} catch (error) {
 		console.error(`loadDelimitedRoleFile: 解析分隔文本文件失败 ${filePath}: ${error}`);
 		throw new Error(`解析 CSV/分隔文本文件失败: ${error}`);
+	}
+}
+
+function loadTomlRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
+	if (content.trim() === '') {
+		console.log(`loadTomlRoleFile: ${filePath} 是空文件，跳过加载`);
+		return;
+	}
+
+	try {
+		const tomlRoles = parseTomlRoles(content, filePath, packagePath, defaultType);
+		for (const role of tomlRoles) {
+			addRole(role);
+			if (role.type === '敏感词' && role.sourcePath) {
+				try { sensitiveSourceFiles.add(path.resolve(role.sourcePath).toLowerCase()); } catch { /* ignore */ }
+			}
+		}
+		console.log(`loadTomlRoleFile: 从 ${filePath} 加载了 ${tomlRoles.length} 个角色`);
+
+		void fixInvalidRoleUUIDs(tomlRoles, true).catch(err => {
+			console.error('[loadTomlRoleFile] fixInvalidRoleUUIDs 失败:', err);
+		});
+	} catch (error) {
+		console.error(`loadTomlRoleFile: 解析 TOML 文件失败 ${filePath}: ${error}`);
+		throw new Error(`解析 TOML 文件失败: ${error}`);
 	}
 }
 

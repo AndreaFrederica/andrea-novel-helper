@@ -1,6 +1,6 @@
 <div class="doc-section beginner">
 <h4>本指南涵盖什么</h4>
-<p>本指南介绍两件事：<b>用 Markdown 写小说正文</b>和<b>用各种格式编写角色/词汇等资源文件</b>。ANH 同时支持 Markdown、JSON5、CSV、TXT 等多种文件格式，你可以在"包管理器"中右键目录节点选择要创建的格式。</p>
+<p>本指南介绍两件事：<b>用 Markdown 写小说正文</b>和<b>用各种格式编写角色/词汇等资源文件</b>。ANH 同时支持 Markdown、JSON5、CSV、TXT、TOML 等多种文件格式，你可以在"包管理器"中右键目录节点选择要创建的格式。</p>
 <p>如果你想确认某个文件该用什么扩展名、会打开哪个编辑器、能不能被当作角色库扫描，直接看本页的"角色/资源文件格式"和"自定义 XJSON5 扩展名总结"。</p>
 
 <h4>一、用 Markdown 写小说正文</h4>
@@ -130,6 +130,11 @@ ___
         <td style="padding:4px 8px;">TXT</td>
         <td style="padding:4px 8px;"><code>.txt</code></td>
         <td style="padding:4px 8px;">最简单，每行一个名称</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">TOML</td>
+        <td style="padding:4px 8px;"><code>.toml</code></td>
+        <td style="padding:4px 8px;">结构化配置格式，清晰易读，适合手工编辑</td>
     </tr>
 </table>
 
@@ -367,6 +372,76 @@ g
     <li>TXT 不能表达正则规则；正则着色请使用 Markdown 或 JSON5</li>
 </ul>
 
+<h4>四（补）、TOML 格式详解</h4>
+<p>扩展名 <code>.toml</code>。TOML（Tom's Obvious Minimal Language）是一种人类友好的配置文件格式，语法清晰、结构明确。适合手工编辑，也可配合推荐扩展 <b>Even Better TOML</b> 获得语法高亮和校验。</p>
+
+<p><b>基本写法：用 <code>[[roles]]</code> 数组表定义角色</b></p>
+<pre><code># 角色库
+
+[[roles]]
+name = "林小满"
+type = "主角"
+color = "#FF6B6B"
+aliases = ["小满", "小林"]
+description = "一个喜欢雨天咖啡店的女孩"
+affiliation = "星光文学社"
+
+[[roles]]
+name = "陈宇"
+type = "配角"
+color = "#4ECDC4"
+</code></pre>
+
+<p><b>TOML 基础语法速查</b></p>
+<ul>
+    <li>字符串用双引号：<code>name = "林小满"</code></li>
+    <li>整数直接写数字：<code>priority = 5</code></li>
+    <li>布尔值：<code>bold = true</code>，<code>wordSegmentFilter = false</code></li>
+    <li>数组用方括号：<code>aliases = ["小满", "小林"]</code></li>
+    <li>注释用 <code>#</code> 开头</li>
+    <li><code>[[roles]]</code> 表示追加一个角色条目（数组表语法）</li>
+</ul>
+
+<p><b>敏感词 TOML 示例</b></p>
+<pre><code># 敏感词表
+
+[[roles]]
+name = "禁用词"
+type = "敏感词"
+color = "#FF4D4F"
+description = "需要避免使用的词汇"
+aliases = ["禁用词2"]
+fixes = ["不是禁用"]
+category = "内容安全"
+</code></pre>
+
+<p><b>词汇 TOML 示例</b></p>
+<pre><code># 专业词汇表
+
+[[roles]]
+name = "灵能"
+type = "词汇"
+color = "#1890FF"
+description = "世界观核心能量"
+aliases = ["灵力", "能量"]
+category = "世界观"
+</code></pre>
+
+<p><b>正则表达式 TOML 示例</b></p>
+<pre><code># 着色规则
+
+[[roles]]
+name = "中文对话"
+type = "正则表达式"
+regex = "「[^」]*」"
+regexFlags = "g"
+color = "#98FB98"
+priority = 100
+</code></pre>
+
+<p>所有字段名称与 JSON5 格式一致（见下方字段列表），支持中英文别名。自定义字段也可直接添加。</p>
+<div class="doc-note">TOML 格式不支持嵌套对象（如 <code>style</code> 字段），需要使用 JSON5 来表达复杂嵌套结构。其余场景推荐 TOML，可读性最佳。</div>
+
 <h4>五、RJSON5 关系图格式</h4>
 <p>扩展名 <code>.rjson5</code>，内容是 JSON5，双击打开可视化关系图编辑器。它不作为角色库加载，而是用于描述角色之间的关系网络。</p>
 <pre><code>{
@@ -484,6 +559,11 @@ g
         <td style="padding:4px 8px;">大量简单条目</td>
         <td style="padding:4px 8px;">CSV 或 TXT</td>
         <td style="padding:4px 8px;">批量编辑方便</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--vscode-panel-border);">
+        <td style="padding:4px 8px;">结构化手工编辑</td>
+        <td style="padding:4px 8px;">TOML</td>
+        <td style="padding:4px 8px;">语法清晰，类型安全，推荐配合 Even Better TOML 扩展</td>
     </tr>
     <tr style="border-bottom:1px solid var(--vscode-panel-border);">
         <td style="padding:4px 8px;">正则着色规则</td>

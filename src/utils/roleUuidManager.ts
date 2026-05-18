@@ -17,6 +17,7 @@ import {
     parseDelimitedRoleFile,
     stringifyDelimitedRoleFile,
 } from './delimitedRoleFile';
+import { parseTomlRoles, stringifyRolesAsToml } from './Parser/tomlParser';
 
 /**
  * 为所有角色添加 UUID
@@ -91,6 +92,8 @@ async function updateRoleFile(filePath: string, rolesWithUuid: Role[]): Promise<
         await updateMarkdownFile(filePath, rolesWithUuid);
     } else if (fileName.endsWith('.csv')) {
         await updateDelimitedFile(filePath, rolesWithUuid);
+    } else if (fileName.endsWith('.toml')) {
+        await updateTomlFile(filePath, rolesWithUuid);
     } else if (fileName.endsWith('.txt')) {
         // txt 文件无法修改，只在内存中保持 UUID
         console.log(`[RoleUuidManager] txt 文件无法修改，UUID 仅在内存中保持: ${filePath}`);
@@ -355,6 +358,54 @@ async function updateDelimitedFile(filePath: string, rolesWithUuid: Role[]): Pro
         console.log(`[RoleUuidManager] 已更新 CSV 文件: ${filePath}`);
     } catch (error) {
         throw new Error(`更新 CSV 文件失败: ${error}`);
+    }
+}
+
+/**
+ * 更新 TOML 文件，添加 UUID 字段
+ */
+async function updateTomlFile(filePath: string, rolesWithUuid: Role[]): Promise<void> {
+    try {
+        const content = await readTextFileDetectEncoding(filePath);
+        if (!content || content.trim() === '') {
+            console.warn(`[RoleUuidManager] 跳过空 TOML 文件: ${filePath}`);
+            return;
+        }
+
+        const packagePath = path.relative(
+            path.join(path.dirname(filePath), '..', '..'),
+            path.dirname(filePath)
+        );
+        const roles = parseTomlRoles(content, filePath, packagePath, rolesWithUuid[0]?.type || '角色');
+
+        const roleMap = new Map<string | undefined, string | undefined>(
+            rolesWithUuid.map(r => [r.name, r.uuid])
+        );
+
+        let changed = false;
+        for (const role of roles) {
+            if (!role.name) { continue; }
+            const targetUuid = roleMap.get(role.name);
+            if (targetUuid && role.uuid !== targetUuid) {
+                role.uuid = targetUuid;
+                changed = true;
+            }
+        }
+
+        const updatedContent = stringifyRolesAsToml(roles);
+        const normalizedOriginal = content.replace(/\r\n/g, '\n').trimEnd();
+        const normalizedUpdated = updatedContent.trimEnd();
+
+        if (!changed && normalizedOriginal === normalizedUpdated) {
+            console.log(`[RoleUuidManager] TOML 内容无变化，跳过写入: ${filePath}`);
+            return;
+        }
+
+        await fs.promises.writeFile(filePath, updatedContent, 'utf8');
+        try { globalFileCache.refreshFile(filePath); } catch { /* ignore */ }
+        console.log(`[RoleUuidManager] 已更新 TOML 文件: ${filePath}`);
+    } catch (error) {
+        throw new Error(`更新 TOML 文件失败: ${error}`);
     }
 }
 

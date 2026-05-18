@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
-import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
+import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate, generateCharacterGalleryToml, generateSensitiveWordsToml, generateVocabularyToml } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
 import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot, isRoleFile } from '../../utils/utils';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
@@ -47,7 +47,8 @@ const ROLE_CARRIER_EXTENSIONS = new Set([
     '.ojson5',
     '.rjson',
     '.rjson5',
-    '.tjson5'
+    '.tjson5',
+    '.toml'
 ]);
 
 function supportsRoleChildren(fullPath: string): boolean {
@@ -721,7 +722,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
 
                 if (isRoleFile || isRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
                     // 角色相关文件：检查格式并标记错误
-                    const allowed = ['.json5', '.txt', '.md', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5'];
+                    const allowed = ['.json5', '.txt', '.md', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5', '.toml'];
                     const fileNode = this.createFileNode(full, 'resourceFile');
 
                     // 根据配置决定是否使用自定义图标
@@ -1444,7 +1445,7 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
     const baseInput = await vscode.window.showInputBox({ prompt: '输入基础文件名（不含扩展名，留空使用默认）', value: opts.defaultBase });
     if (baseInput === undefined) return; // 取消
     const baseNameRaw = (baseInput.trim() || opts.defaultBase).replace(/\s+/g,'-');
-    const extPick = await vscode.window.showQuickPick(['json5','txt','md','csv'], { placeHolder: '选择文件格式 (json5 / txt / md / csv)' });
+    const extPick = await vscode.window.showQuickPick(['json5','txt','md','csv','toml'], { placeHolder: '选择文件格式 (json5 / txt / md / csv / toml)' });
     if (!extPick) return;
     const fileInfo = resolveFileConflict(dir, baseNameRaw, '.'+extPick);
     let initialContent = '';
@@ -1464,6 +1465,11 @@ async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOption
         else initialContent = '# 新文件\n';
     } else if (extPick === 'csv') {
         initialContent = generateDelimitedCsvTemplate(opts.kind);
+    } else if (extPick === 'toml') {
+        if (opts.kind === 'character') initialContent = generateCharacterGalleryToml();
+        else if (opts.kind === 'sensitive') initialContent = generateSensitiveWordsToml();
+        else if (opts.kind === 'vocabulary') initialContent = generateVocabularyToml();
+        else initialContent = '# 新文件\n';
     }
     fs.writeFileSync(fileInfo.path, initialContent + (initialContent.endsWith('\n')? '':'\n'), 'utf8');
     // 自动打开新文件

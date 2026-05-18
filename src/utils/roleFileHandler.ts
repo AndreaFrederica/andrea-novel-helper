@@ -9,10 +9,11 @@ import {
     parseDelimitedRoleFile,
     stringifyDelimitedRoleFile,
 } from './delimitedRoleFile';
+import { parseTomlRoles, stringifyRolesAsToml } from './Parser/tomlParser';
 
 export interface RoleFileData {
     roles: Role[];
-    fileType: 'json5' | 'ojson5' | 'markdown' | 'csv';
+    fileType: 'json5' | 'ojson5' | 'markdown' | 'csv' | 'toml';
     delimitedFormat?: DelimitedRoleFileFormat;
 }
 
@@ -62,6 +63,13 @@ export function readRoleFile(filePath: string): RoleFileData {
                     headers: parsed.headers,
                 },
             };
+        } else if (ext === '.toml') {
+            const packagePath = path.relative(
+                path.join(path.dirname(filePath), '..', '..'),
+                path.dirname(filePath)
+            );
+            const roles = parseTomlRoles(content, filePath, packagePath, '角色');
+            return { roles, fileType: 'toml' };
         } else if (ext === '.ojson5' || ext === '.json5') {
             // 添加空文件检查
             if (!content || content.trim() === '') {
@@ -113,7 +121,7 @@ export function readRoleFile(filePath: string): RoleFileData {
 export function writeRoleFile(
     filePath: string,
     roles: Role[],
-    fileType: 'json5' | 'ojson5' | 'markdown' | 'csv',
+    fileType: 'json5' | 'ojson5' | 'markdown' | 'csv' | 'toml',
     delimitedFormat?: DelimitedRoleFileFormat,
 ): void {
     let content: string;
@@ -137,6 +145,9 @@ export function writeRoleFile(
         case 'json5':
             // JSON5/OJSON5 格式
             content = JSON5.stringify(roles, null, 2);
+            break;
+        case 'toml':
+            content = stringifyRolesAsToml(roles);
             break;
         default:
             throw new Error(`不支持的文件类型: ${fileType}`);
@@ -181,6 +192,8 @@ export function addRoleToFile(filePath: string, newRole: Role): boolean {
                         hasHeader: true,
                         headers: [...DEFAULT_ROLE_DELIMITED_HEADERS],
                     });
+                } else if (ext === '.toml') {
+                    writeRoleFile(filePath, [newRole], 'toml');
                 } else if (ext === '.md') {
                     writeRoleFile(filePath, [newRole], 'markdown');
                 } else {
@@ -456,13 +469,14 @@ function generateSingleRoleMarkdown(role: Role, headerLevel: number = 2): string
  * @param filePath 文件路径
  * @returns 文件类型
  */
-export function detectFileType(filePath: string): 'json5' | 'ojson5' | 'markdown' {
+export function detectFileType(filePath: string): 'json5' | 'ojson5' | 'markdown' | 'toml' {
     const ext = path.extname(filePath).toLowerCase();
 
     switch (ext) {
         case '.md': return 'markdown';
         case '.ojson5': return 'ojson5';
         case '.json5': return 'json5';
+        case '.toml': return 'toml';
         default: return 'json5'; // 默认为 JSON5
     }
 }
