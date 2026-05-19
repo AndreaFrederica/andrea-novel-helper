@@ -1,139 +1,194 @@
 <div class="doc-section beginner">
-<h4>Git 版本控制是什么</h4>
-<p>Git 是一种<strong>版本控制工具</strong>，可以帮你记录文件的每次修改。就像给你的小说写"修改日志"——每次重要改动都可以保存一个快照，以后想找回旧版本随时可以。</p>
+<h4>这页文档讲什么</h4>
+<p>这页讲的是 <strong>VS Code 里怎么用 Git</strong>，以及 ANH 在 Git 流程里额外帮了你什么。如果你还没系统理解 Git 本身，建议先按这个顺序读：先看 <a class="doc-ref-link" data-doc="version-control-basics"><strong>版本管理是什么</strong></a>，再看 <a class="doc-ref-link" data-doc="git-basics"><strong>Git 本体详解</strong></a>，最后回到这页；如果你正在选 GitHub、GitLab、Gitee、Codeberg、CODING 之类的平台，继续看 <a class="doc-ref-link" data-doc="git-hosting-platforms"><strong>Git 托管平台比较</strong></a>。</p>
 
-<h4>为什么推荐手动使用 Git</h4>
-<p>虽然 ANH 提供了自动 Git 功能，但我们<b>强烈推荐你学习手动使用 Git</b>。原因：</p>
-<ul>
-    <li><b>有意义的提交信息</b>：手动提交时你会写下"完成了第三章初稿"、"修改了主角背景设定"这样的描述，而不是"Auto commit: 2024-01-01"。半年后回看历史，你能一眼看出每次改动做了什么</li>
-    <li><b>干净的版本历史</b>：自动提交会生成大量无意义的快照（每 30 秒一个），淹没掉真正重要的改动。手动提交让你精确控制什么时候保存快照</li>
-    <li><b>更好的协作体验</b>：如果以后要和别人合作写作，有意义的提交信息是协作的基础</li>
-    <li><b>学习一项实用技能</b>：Git 是软件开发中最常用的工具，学会了对你的职业生涯也有帮助</li>
-</ul>
+<h4>VS Code 里的 Git 是怎么工作的</h4>
+<p>VS Code 自带 Source Control 视图。你可以把它理解成一个把常用 Git 命令“做成按钮”的界面：</p>
+<table class="doc-table">
+    <tr>
+        <th>你在 VS Code 里看到的操作</th>
+        <th>本质上对应的 Git 行为</th>
+    </tr>
+    <tr>
+        <td>初始化仓库</td>
+        <td><code>git init</code></td>
+    </tr>
+    <tr>
+        <td>把文件加入暂存区</td>
+        <td><code>git add 文件名</code></td>
+    </tr>
+    <tr>
+        <td>提交</td>
+        <td><code>git commit -m "说明"</code></td>
+    </tr>
+    <tr>
+        <td>拉取 / 推送 / 同步</td>
+        <td><code>git pull</code> / <code>git push</code></td>
+    </tr>
+    <tr>
+        <td>查看文件差异</td>
+        <td><code>git diff</code></td>
+    </tr>
+    <tr>
+        <td>切分支</td>
+        <td><code>git switch 分支名</code></td>
+    </tr>
+    <tr>
+        <td>发布到远端</td>
+        <td><code>git remote add origin ...</code> + <code>git push -u</code></td>
+    </tr>
+</table>
 
-<h4>手动使用 Git 的基本流程</h4>
+<h4>最适合新手的 VS Code 流程</h4>
 <ol>
-    <li><b>安装 Git</b> — 从 <a href="https://git-scm.com/">git-scm.com</a> 下载安装</li>
-    <li><b>初始化仓库</b> — 在项目文件夹中右键 → "Git Bash Here" → 输入 <code>git init</code></li>
-    <li><b>配置身份</b> — 输入 <code>git config user.name "你的名字"</code> 和 <code>git config user.email "你的邮箱"</code></li>
-    <li><b>提交改动</b> — 写完一段后，在终端输入：
-        <pre><code>git add .                    # 暂存所有改动
-git commit -m "完成第三章初稿"  # 提交并写描述
-</code></pre>
-    </li>
-    <li><b>查看历史</b> — 输入 <code>git log</code> 查看所有提交记录</li>
-    <li><b>找回旧版本</b> — 输入 <code>git log --oneline</code> 查看版本号，然后 <code>git checkout &lt;版本号&gt; -- 文件名</code> 恢复</li>
+    <li>打开小说项目文件夹。</li>
+    <li>点左侧 Source Control 图标。</li>
+    <li>如果还没有仓库，点“初始化仓库”。</li>
+    <li>改完文件后，先看文件列表和差异。</li>
+    <li>把要提交的文件点 <code>+</code> 暂存。</li>
+    <li>在消息框里写一句清楚的人话，比如“完成第六章初稿”或“补齐角色关系设定”。</li>
+    <li>点“提交”。</li>
+    <li>需要上云时，再点“发布分支”或“同步更改”。</li>
 </ol>
 
-<h4>ANH 提供的 Git 辅助</h4>
+<h4>什么时候该用 VS Code 按钮，什么时候该用原始命令</h4>
 <ul>
-    <li><b>Git 身份配置向导</b> — 在命令面板输入"设置 Git 身份"，一步步引导你配置</li>
-    <li><b>自动 Git（可选）</b> — 如果你觉得手动太麻烦，ANH 也提供自动提交功能，但不推荐作为主要使用方式</li>
-    <li><b>Git 状态显示</b> — 底部状态栏显示 Git 同步状态</li>
+    <li><b>日常写作</b>：看差异、暂存、提交、推送，优先用 VS Code 就够了</li>
+    <li><b>第一次绑定远端</b>：VS Code 可以做，但命令行更能帮助你理解发生了什么</li>
+    <li><b>处理冲突</b>：VS Code 的冲突编辑器很好用，优先用图形界面</li>
+    <li><b>高级操作</b>：例如 <code>rebase</code>、<code>cherry-pick</code>、<code>stash</code>、多远端推送，通常还是命令行更直接</li>
+    <li><b>排错</b>：当按钮提示看不懂时，去终端输入 Git 命令最清楚</li>
 </ul>
 
-<h4>推荐的工作习惯</h4>
+<h4>ANH 在 Git 这件事上帮了什么</h4>
 <ul>
-    <li>每完成一个场景或章节就提交一次</li>
-    <li>提交信息写清楚做了什么（如"完成第三章初稿"、"修改了反派角色设定"）</li>
-    <li>重要里程碑打标签：<code>git tag v1.0-初稿完成</code></li>
-    <li>定期推送到远程仓库（如 GitHub）做备份</li>
+    <li><b>Git 身份配置向导</b>：命令 <code>AndreaNovelHelper.setupGitIdentity</code>，帮你补齐 <code>user.name</code> 和 <code>user.email</code></li>
+    <li><b>状态栏同步状态</b>：把 Git 与 WebDAV 的自动同步状态合并显示在底部状态栏</li>
+    <li><b>自动 Git</b>：可以当安全网，但不建议拿来代替你自己的提交节奏</li>
+    <li><b>GitGuard 字数统计</b>：可以基于 Git 基线统计“自上次提交以后真实新增的字数”</li>
 </ul>
+
+<div class="doc-note">一句话建议：新手先学会“看差异、写提交、推送远端”这三件事。先把这三件事做稳定，比一开始就学一堆高级命令更重要。如果你想把这些按钮背后的 Git 机制一次性学明白，直接去看 <a class="doc-ref-link" data-doc="git-basics"><strong>Git 本体详解</strong></a>。</div>
 </div>
 
 <div class="doc-section pro">
-<h4>一、手动 Git（推荐）</h4>
-<p>手动使用 Git 能给你最干净、最有意义的版本历史。以下是进阶技巧：</p>
+<h4>图 1：VS Code 工作流和 Git 命令的对应关系</h4>
+<pre><code>编辑文件
+  ↓
+Source Control 里查看变更
+  ↓
+Stage Changes
+  ↓
+Commit
+  ↓
+Publish / Push
 
-<p><b>分支管理：</b></p>
-<pre><code>git branch 修订版        # 创建修订分支
-git checkout 修订版      # 切换到修订分支
-git checkout master      # 切回主线
-git merge 修订版         # 合并修订到主线
-</code></pre>
+等价命令大致是：
+git status
+git add ...
+git commit -m "..."
+git push</code></pre>
 
-<p><b>标签：</b></p>
-<pre><code>git tag v1.0-初稿
-git tag v2.0-终稿
-git tag -a v3.0 -m "出版版"
-</code></pre>
+<h4>你至少应该认识的 10 个命令</h4>
+<table class="doc-table">
+    <tr>
+        <th>命令</th>
+        <th>用途</th>
+        <th>新手常见场景</th>
+    </tr>
+    <tr>
+        <td><code>git status</code></td>
+        <td>看当前仓库状态</td>
+        <td>先确认哪些文件改了</td>
+    </tr>
+    <tr>
+        <td><code>git add 文件名</code></td>
+        <td>加入暂存区</td>
+        <td>只提交你真正想保存的改动</td>
+    </tr>
+    <tr>
+        <td><code>git commit -m "说明"</code></td>
+        <td>创建版本快照</td>
+        <td>写清楚本次修改意图</td>
+    </tr>
+    <tr>
+        <td><code>git log --oneline</code></td>
+        <td>看历史</td>
+        <td>回忆“昨天到底改了什么”</td>
+    </tr>
+    <tr>
+        <td><code>git diff</code></td>
+        <td>看未暂存差异</td>
+        <td>提交前复查</td>
+    </tr>
+    <tr>
+        <td><code>git diff --cached</code></td>
+        <td>看已暂存差异</td>
+        <td>确认暂存区没有混进多余文件</td>
+    </tr>
+    <tr>
+        <td><code>git switch -c 分支名</code></td>
+        <td>创建并切换分支</td>
+        <td>开一个“试验剧情”支线</td>
+    </tr>
+    <tr>
+        <td><code>git pull</code></td>
+        <td>拉取远端更新</td>
+        <td>换电脑前先同步</td>
+    </tr>
+    <tr>
+        <td><code>git push</code></td>
+        <td>把本地提交发到云端</td>
+        <td>做备份，或和别的设备同步</td>
+    </tr>
+    <tr>
+        <td><code>git revert 提交号</code></td>
+        <td>安全撤销一个已提交版本</td>
+        <td>比乱用强制回退更稳</td>
+    </tr>
+</table>
 
-<p><b>查看差异：</b></p>
-<pre><code>git diff                 # 查看未暂存的改动
-git diff --cached        # 查看已暂存的改动
-git log --oneline        # 简洁版提交历史
-git log --graph          # 图形化分支历史
-</code></pre>
-
-<p><b>撤销操作：</b></p>
-<pre><code>git checkout -- 文件名    # 撤销工作区改动
-git reset HEAD 文件名     # 取消暂存
-git revert HEAD           # 撤销最近一次提交（创建新提交）
-</code></pre>
-
-<h4>二、自动 Git（可选）</h4>
-<p>ANH 的自动 Git 功能（<code>AutoGitService</code>）可以自动提交你的改动。虽然不推荐作为主要方式，但在某些场景下可以作为辅助：</p>
+<h4>分支对小说作者到底有什么用</h4>
+<p>你不一定需要复杂分支模型，但下面这三种情况很适合开分支：</p>
 <ul>
-    <li>你完全不想学习 Git 命令</li>
-    <li>你只需要基本的版本备份，不需要有意义的提交历史</li>
+    <li>你想试写一个“平行剧情版本”，又不想污染主线</li>
+    <li>你想大改角色设定，但还没决定要不要保留</li>
+    <li>你和合作者分工改不同章节，最后再合并</li>
+</ul>
+<pre><code>git switch -c alt-ending
+# 写另一种结局
+git add .
+git commit -m "试写另一版结局"
+
+git switch main
+# 如果满意，再 merge 过来</code></pre>
+
+<h4>冲突是什么，VS Code 怎么帮你解</h4>
+<p>冲突通常发生在“两边都改了同一段内容”。VS Code 会把冲突区块高亮出来，并提供“接受当前更改 / 接受传入更改 / 同时接受 / 手工编辑”等操作。原则很简单：</p>
+<ul>
+    <li>先读清楚两边分别改了什么</li>
+    <li>不要机械点“Accept Both”</li>
+    <li>解决后重新检查正文是否通顺，再提交一次“解决冲突”</li>
 </ul>
 
-<p><b>自动提交行为：</b></p>
+<h4>自动 Git 的定位</h4>
+<p>ANH 的 AutoGit 更像安全网，不像主工作流。它适合“防忘记”，不适合“整理历史”。你仍然应该手动做里程碑提交。</p>
 <ul>
-    <li>保存文件时自动创建 Git 提交</li>
-    <li>内置 30 秒冷却 + 3 秒防抖，避免频繁提交</li>
-    <li>提交信息格式：<code>"Auto commit: {timestamp}"</code></li>
-    <li>可选自动推送到远程仓库</li>
-    <li>可选自动拉取远程更新</li>
+    <li><code>AndreaNovelHelper.autoGit.enabled</code>：总开关</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPush</code>：是否自动推送</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPull</code>：是否自动拉取</li>
+    <li><code>AndreaNovelHelper.autoGit.commitMessageTemplate</code>：自动提交信息模板</li>
+    <li><code>AndreaNovelHelper.autoGit.excludePatterns</code>：忽略文件模式</li>
+    <li><code>AndreaNovelHelper.autoGit.compactStatus</code>：状态栏紧凑模式</li>
 </ul>
 
-<p><b>配置项：</b></p>
-<ul>
-    <li><code>AndreaNovelHelper.autoGit.enabled</code> — 总开关</li>
-    <li><code>AndreaNovelHelper.autoGit.autoPush</code> — 自动推送</li>
-    <li><code>AndreaNovelHelper.autoGit.autoPull</code> — 自动拉取</li>
-    <li><code>AndreaNovelHelper.autoGit.checkIntervalSeconds</code> — HEAD 检查间隔（默认 30 秒）</li>
-    <li><code>AndreaNovelHelper.autoGit.commitMessageTemplate</code> — 提交信息模板</li>
-    <li><code>AndreaNovelHelper.autoGit.includeUntracked</code> — 包含未跟踪文件</li>
-    <li><code>AndreaNovelHelper.autoGit.excludePatterns</code> — 排除文件模式</li>
-    <li><code>AndreaNovelHelper.autoGit.compactStatus</code> — 状态栏紧凑模式</li>
-</ul>
+<h4>推荐习惯</h4>
+<ol>
+    <li>每天开写前先 <code>pull</code>，收工前至少 <code>commit</code> 一次。</li>
+    <li>提交信息写“动作 + 对象”，例如“补完第三章追逐戏”“重写叶青角色背景”。</li>
+    <li>大改结构前先开分支，不要拿主分支裸奔。</li>
+    <li>远端仓库主要用来同步和备份，不要把它当唯一存档；关键节点最好还有压缩包或导出备份。</li>
+</ol>
 
-<p><b>提交信息模板变量：</b></p>
-<ul>
-    <li><code>{timestamp}</code> — 当前时间</li>
-    <li><code>{files}</code> — 变更文件列表</li>
-    <li><code>{branch}</code> — 当前分支名</li>
-</ul>
-
-<h4>三、GitGuard — 智能字数统计</h4>
-<p>ANH 的字数统计可以与 Git 联动，只统计<b>自上次提交以来真正新增的字数</b>，而不是每次保存都重新计算。</p>
-<ul>
-    <li>通过 VS Code Git 扩展 API 读取 Git 状态（不依赖 CLI）</li>
-    <li>三种基线模式：HEAD（对比最新提交）、INDEX（对比暂存区）、WORKTREE（对比工作区）</li>
-    <li>内容哈希去重，避免重复统计相同内容</li>
-</ul>
-
-<h4>四、Git 身份配置向导</h4>
-<p>命令：<code>AndreaNovelHelper.setupGitIdentity</code></p>
-<ul>
-    <li>检查 Git 是否已安装</li>
-    <li>检测已有的全局/本地 user.name 和 user.email</li>
-    <li>交互式向导配置 Git 身份</li>
-    <li>支持全局配置和本地（仅当前仓库）配置</li>
-    <li>本地配置时自动初始化 Git 仓库</li>
-</ul>
-
-<h4>五、状态栏</h4>
-<p>Git 状态与 WebDAV 同步状态整合显示在底部状态栏：<code>ANH:Sync Git:ON/OFF WebDAV:ON/OFF</code>。点击可快速切换开关。</p>
-
-<h4>六、.gitignore 建议</h4>
-<p>以下目录建议加入 <code>.gitignore</code>：</p>
-<pre><code>novel-helper/.anh-fsdb/
-novel-helper/typo/data/
-node_modules/
-*.vsix
-</code></pre>
-
-<div class="doc-note">我们推荐手动使用 Git，因为有意义的提交信息和干净的版本历史对长期写作项目至关重要。自动 Git 可以作为安全网，但不应该替代你的主动版本管理。如果你是 Git 新手，建议花 30 分钟学习基本命令，这会让你的写作流程受益终身。</div>
+<div class="doc-note">如果你的重点是“怎么创建云仓库、怎么绑定远端、怎么在两台电脑之间同步”，继续看 <a class="doc-ref-link" data-doc="git-remote-sync"><strong>云仓库同步与备份</strong></a>。</div>
 </div>

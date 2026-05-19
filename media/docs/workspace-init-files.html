@@ -1,0 +1,167 @@
+<div class="doc-section beginner">
+<h4>工作区初始化会创建哪些文件</h4>
+<p>运行项目初始化向导后，ANH 会在你的工作区中自动创建以下文件和目录。它们是 ANH 正常工作的基础。</p>
+
+<h4>项目根目录文件</h4>
+<ul>
+  <li><a class="doc-ref-link" data-doc="anhproject-file"><code>anhproject.md</code></a> — 项目的"身份证"，包含项目名称、作者、描述、UUID、标签等元数据</li>
+  <li><a class="doc-ref-link" data-doc="project-config-file"><code>project-config.json5</code></a> — 项目的功能配置表，定义了各类资源文件的路径和识别关键词</li>
+  <li><a class="doc-ref-link" data-doc="gitignore-file"><code>.gitignore</code></a> — 告诉 Git 哪些文件不用备份（如写作统计缓存）</li>
+  <li><a class="doc-ref-link" data-doc="wcignore-file"><code>.wcignore</code></a> — 告诉字数统计哪些目录不用统计（如 <code>.vscode/</code>）</li>
+</ul>
+
+<h4>novel-helper/ 资源目录</h4>
+<p>这是 ANH 的核心资源目录，所有角色、词汇、敏感词、正则规则都存放在这里。</p>
+<ul>
+  <li><a class="doc-ref-link" data-doc="character-gallery-file"><code>novel-helper/character-gallery.json5</code></a> — 示例角色库（JSON5 格式），包含一个配角示例</li>
+  <li><a class="doc-ref-link" data-doc="character-gallery-file"><code>novel-helper/character-gallery.csv</code></a> — 示例角色库（CSV 格式），与上面内容相同，格式不同</li>
+  <li><a class="doc-ref-link" data-doc="sensitive-words-file"><code>novel-helper/sensitive-words.json5</code></a> — 示例敏感词库，包含两个敏感词示例</li>
+  <li><a class="doc-ref-link" data-doc="vocabulary-file"><code>novel-helper/vocabulary.json5</code></a> — 示例词汇表，包含两个世界观专有名词</li>
+  <li><a class="doc-ref-link" data-doc="regex-patterns-file"><code>novel-helper/regex-patterns.json5</code></a> — 正则着色规则库，内置中文引号、书名号等标点符号的着色规则</li>
+  <li><a class="doc-ref-link" data-doc="roles-markdown-file"><code>novel-helper/roles.md</code></a> — Markdown 格式的示例角色，展示完整的角色定义写法</li>
+</ul>
+
+<div class="doc-note">这些文件都是<strong>初始化样例</strong>，不是推荐你以后永远只维护这几个根目录 JSON5 文件。按包机制，更成熟的做法通常是把资源拆到多个子目录和多个独立文件里：手工长期维护优先 Markdown，Excel / 表格来源优先 CSV，复杂结构再用 JSON5。想看完整理由，直接读 <a class="doc-ref-link" data-doc="package-mechanism"><strong>包机制与外部包详解</strong></a>。</div>
+
+<h4>正则着色规则文件详解</h4>
+<p><code>regex-patterns.json5</code> 是初始化时自带的正则匹配规则库。它为你的小说提供了默认的标点符号着色：</p>
+<div class="doc-note">如果你不只是想知道“这里有四条规则”，而是想弄明白这些规则为什么这样写、以后怎么自己改，可以继续看 <a class="doc-ref-link" data-doc="regex-tutorial"><strong>正则表达式入门</strong></a>。</div>
+<ul>
+    <li><strong>中文引号 <code>""</code></strong> — 金色（<code>#fbdc98ff</code>），匹配双引号内的对话内容</li>
+    <li><strong>角引号 <code>「」</code></strong> — 金色（<code>#fbdc98ff</code>），匹配角引号内的对话内容</li>
+    <li><strong>单引号 <code>''</code></strong> — 浅蓝色（<code>#98bbfbff</code>），匹配单引号内的思考内容</li>
+    <li><strong>书名号 <code>《》</code></strong> — 橙色（<code>#fbbc98ff</code>），匹配书名号内的内容</li>
+</ul>
+<p>每条规则包含以下字段：</p>
+<ul>
+    <li><code>name</code> — 规则名称</li>
+    <li><code>type</code> — 固定为 <code>"正则表达式"</code></li>
+    <li><code>regex</code> — 正则表达式 pattern</li>
+    <li><code>regexFlags</code> — 正则标志（如 <code>g</code> 表示全局匹配）</li>
+    <li><code>color</code> — 匹配到的文本的着色颜色</li>
+    <li><code>priority</code> — 优先级（数值越小优先级越高）</li>
+    <li><code>description</code> — 规则描述</li>
+</ul>
+
+<pre><code>[
+  {
+    name: '中文对话',
+    type: '正则表达式',
+    regex: '"[^"]*"',
+    regexFlags: 'g',
+    color: '#fbdc98ff',
+    priority: 100,
+    description: '匹配中文引号内的对话内容',
+  },
+  {
+    name: '中文对话2',
+    type: '正则表达式',
+    regex: '「[^」]*」',
+    regexFlags: 'g',
+    color: '#fbdc98ff',
+    priority: 100,
+    description: '匹配中文引号内的对话内容',
+  },
+  {
+    name: '中文思考',
+    type: '正则表达式',
+    regex: '\'[^\']*\'',
+    regexFlags: 'g',
+    color: '#98bbfbff',
+    priority: 95,
+    description: '匹配中文引号内的对话内容',
+  },
+  {
+    name: '书名号',
+    type: '正则表达式',
+    regex: '《[^》]*》',
+    regexFlags: 'g',
+    color: '#fbbc98ff',
+    priority: 90,
+    description: '匹配书名号内的内容',
+  },
+]</code></pre>
+</div>
+
+<div class="doc-section pro">
+<h4>初始化文件结构</h4>
+<p>向导根据用户选择创建文件。以下是一个<strong>初始化后的起步结构</strong>，不是成熟项目的唯一推荐终局：</p>
+<pre><code>workspace/
+├── anhproject.md              # 项目元数据
+├── project-config.json5       # 功能配置
+├── .gitignore                 # Git 忽略规则
+├── .wcignore                  # 字数统计忽略规则
+└── novel-helper/
+    ├── character-gallery.json5  # 角色库 (JSON5)
+    ├── character-gallery.csv    # 角色库 (CSV)
+    ├── sensitive-words.json5    # 敏感词库
+    ├── vocabulary.json5         # 词汇表
+    ├── regex-patterns.json5     # 正则着色规则
+    └── roles.md                 # 示例角色 (Markdown)
+</code></pre>
+
+  <h4>更符合包机制的长期结构</h4>
+  <p>项目真正写起来以后，更常见的演化结果会像这样：</p>
+  <pre><code>workspace/
+  ├── anhproject.md
+  ├── project-config.json5
+  ├── 第01章 初到星港.md
+  ├── 第02章 失控的货舱.md
+  └── novel-helper/
+    ├── cast-main/
+    │   ├── roles.md
+    │   └── character-gallery.csv
+    ├── world/
+    │   └── vocabulary.md
+    ├── style-guide/
+    │   └── sensitive-words.md
+    └── coloring/
+      └── regex-patterns.json5
+  </code></pre>
+  <p>也就是说：初始化默认文件主要负责“把系统点亮”，而成熟项目通常会继续按包拆分。</p>
+
+<h4>anhproject.md</h4>
+<p>项目元数据文件，使用 Markdown 格式存储。包含 <code>##</code> 分节的键值对：项目名称、描述、作者、UUID、封面、摘要、标签、文件关键词、创建时间、更新时间。UUID 由向导自动生成（<code>uuidv4()</code>）。</p>
+
+<h4>project-config.json5</h4>
+<p>项目级配置文件（JSON5 格式），定义资源文件路径映射和文件识别关键词：</p>
+<ul>
+    <li><code>rolesFile</code> — 角色库文件路径</li>
+    <li><code>sensitiveWordsFile</code> — 敏感词库路径</li>
+    <li><code>vocabularyFile</code> — 词汇表路径</li>
+    <li><code>regexPatternsFile</code> — 正则规则路径</li>
+    <li><code>defaultRoleLookupKeys</code> — 默认角色查找键</li>
+    <li><code>extendedLookupKeyPrefixes</code> — 扩展查找键前缀</li>
+</ul>
+
+<h4>正则着色规则 (regex-patterns.json5)</h4>
+<p>每条规则的完整字段：</p>
+<ul>
+    <li><code>name</code> — 规则名称（显示在匹配结果中）</li>
+    <li><code>type</code> — 固定为 <code>"正则表达式"</code></li>
+    <li><code>regex</code> — JavaScript 正则表达式 pattern</li>
+    <li><code>regexFlags</code> — 正则标志（<code>g</code> 全局 / <code>i</code> 忽略大小写 / <code>m</code> 多行）</li>
+    <li><code>color</code> — 匹配文本的着色颜色（HEX/RGB/HSL）</li>
+    <li><code>priority</code> — 优先级（数值越小越优先，重叠时先处理优先级更高的规则）</li>
+    <li><code>description</code> — 规则描述</li>
+    <li><code>uuid</code> — 唯一标识符（可选）</li>
+</ul>
+
+<h4>.gitignore / .wcignore</h4>
+<p>向导会修改（而非覆盖）已有的 <code>.gitignore</code> 和 <code>.wcignore</code>：</p>
+<ul>
+    <li><code>.gitignore</code> — 默认排除 <code>novel-helper/.anh-fsdb/</code>（写作统计缓存）和 <code>.history/</code>（本地历史）</li>
+    <li><code>.wcignore</code> — 默认排除 <code>.vscode/</code> 和 <code>.out-of-code-insights/</code>，避免字数统计误计入</li>
+</ul>
+
+<h4>novel-helper/ 资源文件格式</h4>
+<p>每个资源文件支持多种格式。向导默认给你放几个 JSON5 / CSV / Markdown 样例，但这不代表 JSON5 永远是第一推荐：</p>
+<ul>
+  <li><strong>Markdown</strong> — 最适合手工长期维护；可读性最好，也最符合包机制鼓励的“拆分手册式资源”</li>
+  <li><strong>CSV</strong> — 最适合从 Excel / 表格软件迁入，或者做大量简单条目导入</li>
+  <li><strong>JSON5</strong> — 最适合字段复杂、样式多、结构化强的条目</li>
+    <li><strong>TXT</strong> — 纯文本格式，适合简单列表</li>
+</ul>
+
+<div class="doc-note">向导执行的所有操作均可手动撤销或修改。如果你已有项目，也可以直接创建 <code>anhproject.md</code> 和 <code>project-config.json5</code> 来激活 ANH。</div>
+</div>

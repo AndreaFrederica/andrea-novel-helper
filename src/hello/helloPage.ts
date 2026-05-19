@@ -184,13 +184,24 @@ function setupHelloPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
         if (currentPanel === panel) {
             currentPanel = undefined;
         }
+        themeWatcher.dispose();
     }, undefined, context.subscriptions);
+
+    const themeWatcher = vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('workbench.colorTheme') || e.affectsConfiguration('editor.tokenColorCustomizations')) {
+            sendThemeColors(panel);
+        }
+    });
+    context.subscriptions.push(themeWatcher);
     panel.webview.onDidReceiveMessage(async message => {
         try {
             switch (message?.command) {
                 case 'ready':
                 case 'refresh':
                     await postState(panel, context);
+                    break;
+                case 'requestThemeColors':
+                    sendThemeColors(panel);
                     break;
                 case 'dismiss':
                     await context.globalState.update(HELLO_DISMISSED_KEY, true);
@@ -300,6 +311,7 @@ async function postState(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
     if (workspaceFolder) {
         await updateRecentWorkspaces(context, workspaceFolder.uri.fsPath);
     }
+    const themeKind = getThemeKindName();
     await panel.webview.postMessage({
         command: 'state',
         data: {
@@ -320,6 +332,7 @@ async function postState(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
             },
             recommendations,
             git,
+            themeKind,
         }
     });
 }
@@ -515,45 +528,44 @@ async function enableManagedHelloMode(): Promise<void> {
     vscode.window.showInformationMessage('已启用 Hello 首页模式，并由 VS Code 扩展开关控制运行状态。');
 }
 
+const AUTO_OPEN_PROJECT_INIT_KEY = 'andrea.projectInit.autoOpenAfterCreate';
+
 async function createWorkspace(context: vscode.ExtensionContext): Promise<void> {
-    const parent = await vscode.window.showOpenDialog({
-        title: '选择新写作工作区所在位置',
+    const picked = await vscode.window.showOpenDialog({
+        title: '选择新写作工作区文件夹（可在对话框内新建文件夹后选中）',
         canSelectFiles: false,
         canSelectFolders: true,
         canSelectMany: false,
-        openLabel: '选择位置'
+        openLabel: '创建工作区'
     });
-    if (!parent?.[0]) {
+    if (!picked?.[0]) {
         return;
     }
 
-    const projectName = await vscode.window.showInputBox({
-        title: '新建写作工作区',
-        prompt: '输入新工作区文件夹名称',
-        placeHolder: '我的小说项目',
-        validateInput(value) {
-            const trimmed = value.trim();
-            if (!trimmed) {
-                return '请输入文件夹名称';
-            }
-            if (/[\\/:*?"<>|]/.test(trimmed)) {
-                return '文件夹名称不能包含 \\ / : * ? " < > |';
-            }
-            return undefined;
-        }
-    });
-    if (!projectName) {
-        return;
-    }
+    const projectPath = picked[0].fsPath;
 
-    const projectPath = path.join(parent[0].fsPath, projectName.trim());
+    // 如果文件夹已存在且里面有内容，提示确认
     if (fs.existsSync(projectPath)) {
-        vscode.window.showWarningMessage('该文件夹已经存在，请换一个名称或直接打开它。');
-        return;
+        const entries = fs.readdirSync(projectPath);
+        if (entries.length > 0) {
+            const choice = await vscode.window.showWarningMessage(
+                '所选文件夹已有内容，是否仍作为写作工作区打开？',
+                { modal: true },
+                '打开',
+                '取消'
+            );
+            if (choice !== '打开') {
+                return;
+            }
+        }
+    } else {
+        // 理论上 showOpenDialog 不会返回不存在的路径，兜底创建
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(projectPath));
     }
 
-    await vscode.workspace.fs.createDirectory(vscode.Uri.file(projectPath));
     await updateRecentWorkspaces(context, projectPath);
+    // 设置标记：打开新工作区后自动弹出项目初始化向导（不询问）
+    await context.globalState.update(AUTO_OPEN_PROJECT_INIT_KEY, path.resolve(projectPath));
     await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(projectPath), false);
 }
 
@@ -689,6 +701,18 @@ function getHelloI18n(): Record<string, string> {
     return HELLO_I18N_EN;
 }
 
+function getThemeKindName(): string {
+    const kind = vscode.window.activeColorTheme.kind;
+    if (kind === vscode.ColorThemeKind.Dark || kind === vscode.ColorThemeKind.HighContrast) {
+        return kind === vscode.ColorThemeKind.HighContrast ? 'hc' : 'dark';
+    }
+    return kind === vscode.ColorThemeKind.HighContrastLight ? 'hc-light' : 'light';
+}
+
+function sendThemeColors(panel: vscode.WebviewPanel): void {
+    panel.webview.postMessage({ command: 'themeColors', themeKind: getThemeKindName() });
+}
+
 const HELLO_I18N_ZH_CN: Record<string, string> = {
     subtitle: '小说写作工作台',
     withVsCode: 'With VS Code',
@@ -771,6 +795,14 @@ const HELLO_I18N_ZH_CN: Record<string, string> = {
     faqSettingsDesc: 'VS Code 和 ANH 的选项都在设置页，搜索关键词就能找到对应开关。',
     faqWorkspace: '工作区和文件夹有什么区别？',
     faqWorkspaceDesc: '工作区就是当前打开的项目根目录，ANH 会围绕它管理章节、设定和统计。',
+    faqWordWrap: '为什么自动换行看起来和 Word 不一样？',
+    faqWordWrapDesc: 'VS Code 默认按屏幕宽度或固定字符数换行，不像 Word 按纸张排版。可在 ANH 图形化快速设置里调整。',
+    faqFont: '字体太小/太大，怎么改？',
+    faqFontDesc: '按 Ctrl+Shift+P 打开命令面板，输入"ANH 图形化快速设置"，找到"字体与排版"即可调整字体和字号。',
+    faqTheme: '界面颜色太亮/太暗，怎么改主题？',
+    faqThemeDesc: '点击此卡片可直接打开颜色主题选择器。也可以在 ANH 图形化快速设置里找到"切换颜色主题"按钮。',
+    faqLanguage: '界面是英文的，怎么改成中文？',
+    faqLanguageDesc: '点击此卡片打开语言配置，选择"中文(简体)"后，VS Code 会提示你安装中文语言包扩展，安装完成并重启后即可显示中文界面。',
     workspaceEnabled: '工作区启用',
     workspaceDisabled: '工作区禁用',
     followsVsCode: '跟随 VS Code 扩展开关',
@@ -876,6 +908,14 @@ const HELLO_I18N_EN: Record<string, string> = {
     faqSettingsDesc: 'VS Code and ANH options are both in Settings. Search by keyword to find the switch you need.',
     faqWorkspace: 'What is a workspace?',
     faqWorkspaceDesc: 'A workspace is the project folder currently open. ANH manages chapters, lore, and stats around it.',
+    faqWordWrap: 'Why does word wrapping look different from Word?',
+    faqWordWrapDesc: 'VS Code wraps text by screen width or fixed character count by default, unlike Word which wraps by paper page. You can change this in ANH Graphical Quick Settings.',
+    faqFont: 'How do I change the font size?',
+    faqFontDesc: 'Press Ctrl+Shift+P, type "ANH Graphical Quick Settings", and find "Font & Typesetting" to adjust the font and size.',
+    faqTheme: 'How do I change the color theme?',
+    faqThemeDesc: 'Click this card to open the color theme picker directly. You can also find the "Switch Color Theme" button in ANH Graphical Quick Settings.',
+    faqLanguage: 'How do I switch the interface language to my own?',
+    faqLanguageDesc: 'Click this card to open the language configuration, select your preferred language, and VS Code will prompt you to install the language pack extension. Restart after installation to apply the language.',
     workspaceEnabled: 'Workspace enabled',
     workspaceDisabled: 'Workspace disabled',
     followsVsCode: 'Following VS Code extension state',

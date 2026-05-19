@@ -1,0 +1,398 @@
+<div class="doc-section beginner">
+<h4>这篇文档解决什么问题</h4>
+<p>这不是“正则着色功能说明”，而是一篇专门讲<strong>正则表达式怎么读、怎么写、怎么在 ANH 里落地</strong>的入门文档。整篇都围绕工作区初始化时自动创建的 <code>regex-patterns.json5</code> 展开，用那四条默认规则做完整示例。</p>
+
+<h4>先看结论：初始化自带的 4 条规则</h4>
+<table class="doc-table">
+    <tr>
+        <th>规则名</th>
+        <th>正则</th>
+        <th>抓什么</th>
+        <th>为什么这样写</th>
+    </tr>
+    <tr>
+        <td>中文对话</td>
+        <td><code>"[^"]*"</code></td>
+        <td>英文双引号里的内容</td>
+        <td>从 <code>"</code> 开始，到下一个 <code>"</code> 结束，中间允许出现任意数量的“非双引号字符”</td>
+    </tr>
+    <tr>
+        <td>中文对话 2</td>
+        <td><code>「[^」]*」</code></td>
+        <td>角引号里的内容</td>
+        <td>思路和双引号完全一样，只是把边界字符换成了 <code>「</code> 与 <code>」</code></td>
+    </tr>
+    <tr>
+        <td>中文思考</td>
+        <td><code>'[^']*'</code></td>
+        <td>单引号里的内容</td>
+        <td>利用单引号作为左右边界，中间不允许再出现单引号</td>
+    </tr>
+    <tr>
+        <td>书名号</td>
+        <td><code>《[^》]*》</code></td>
+        <td>书名号里的内容</td>
+        <td>与前面三条是同一个模板：左边界 + 非右边界字符若干 + 右边界</td>
+    </tr>
+</table>
+
+<h4>图 1：一条正则规则在 ANH 里怎么工作</h4>
+<pre><code>你写的正文
+   ↓
+JavaScript RegExp 逐段扫描整篇文本
+   ↓
+找到所有命中的片段
+   ↓
+按 priority 决定谁先占用范围
+   ↓
+VS Code Decoration API 给命中的文字上色</code></pre>
+
+<div class="doc-note">在 ANH 里，<code>priority</code> 是<strong>数字越小越优先</strong>。这和有些系统“数字越大越高”相反，写规则时不要搞反。</div>
+
+<h4>图 2：把一条默认规则拆开读</h4>
+<p>以 <code>「[^」]*」</code> 为例：</p>
+<table class="doc-table">
+    <tr>
+        <th>片段</th>
+        <th>读法</th>
+        <th>作用</th>
+    </tr>
+    <tr>
+        <td><code>「</code></td>
+        <td>字面量字符</td>
+        <td>要求匹配必须从左角引号开始</td>
+    </tr>
+    <tr>
+        <td><code>[^」]</code></td>
+        <td>字符类取反</td>
+        <td>匹配“不是右角引号”的任意单个字符</td>
+    </tr>
+    <tr>
+        <td><code>*</code></td>
+        <td>重复 0 次或多次</td>
+        <td>允许中间内容为空，也允许有很多字符</td>
+    </tr>
+    <tr>
+        <td><code>」</code></td>
+        <td>字面量字符</td>
+        <td>要求在右角引号结束</td>
+    </tr>
+ </table>
+
+<h4>图 3：为什么不是 <code>「.*」</code></h4>
+<table class="doc-table">
+    <tr>
+        <th>写法</th>
+        <th>结果</th>
+        <th>问题</th>
+    </tr>
+    <tr>
+        <td><code>「.*」</code></td>
+        <td>从第一个 <code>「</code> 吞到最后一个 <code>」</code></td>
+        <td>容易过度匹配</td>
+    </tr>
+    <tr>
+        <td><code>「[^」]*」</code></td>
+        <td>严格停在最近的右角引号</td>
+        <td>更适合做着色规则</td>
+    </tr>
+ </table>
+
+<h4>你真正需要记住的 6 类语法</h4>
+<table class="doc-table">
+    <tr>
+        <th>类别</th>
+        <th>写法</th>
+        <th>含义</th>
+        <th>在默认规则里的例子</th>
+    </tr>
+    <tr>
+        <td>字面量</td>
+        <td><code>「</code> <code>」</code> <code>《</code></td>
+        <td>就匹配这个字符本身</td>
+        <td><code>《[^》]*》</code></td>
+    </tr>
+    <tr>
+        <td>字符类</td>
+        <td><code>[abc]</code></td>
+        <td>三选一</td>
+        <td>如果你想匹配多种收尾符号时会用到</td>
+    </tr>
+    <tr>
+        <td>取反字符类</td>
+        <td><code>[^」]</code></td>
+        <td>匹配“不是某字符”的任意字符</td>
+        <td>四条默认规则都在用</td>
+    </tr>
+    <tr>
+        <td>量词</td>
+        <td><code>*</code> <code>+</code> <code>?</code> <code>{n,m}</code></td>
+        <td>控制重复次数</td>
+        <td><code>*</code> 表示 0 次或多次</td>
+    </tr>
+    <tr>
+        <td>边界</td>
+        <td><code>^</code> <code>$</code> <code>\b</code></td>
+        <td>限制开头、结尾或单词边界</td>
+        <td>做章节标题、整行匹配时常用</td>
+    </tr>
+    <tr>
+        <td>分组/或</td>
+        <td><code>(...)</code> <code>|</code></td>
+        <td>把多个片段当一组，或在多个模式中选一个</td>
+        <td>例如同时支持两种引号</td>
+    </tr>
+</table>
+
+<h4>图 4：最常用量词速查</h4>
+<table class="doc-table">
+    <tr>
+        <th>量词</th>
+        <th>含义</th>
+        <th>例子</th>
+        <th>适合用在哪</th>
+    </tr>
+    <tr>
+        <td><code>*</code></td>
+        <td>0 次或多次</td>
+        <td><code>[^」]*</code></td>
+        <td>允许空内容，如 <code>「」</code></td>
+    </tr>
+    <tr>
+        <td><code>+</code></td>
+        <td>1 次或多次</td>
+        <td><code>[^」]+</code></td>
+        <td>要求引号内至少有 1 个字符</td>
+    </tr>
+    <tr>
+        <td><code>?</code></td>
+        <td>0 次或 1 次</td>
+        <td><code>第?一章</code></td>
+        <td>可有可无的部分</td>
+    </tr>
+    <tr>
+        <td><code>{n,m}</code></td>
+        <td>最少 n 次，最多 m 次</td>
+        <td><code>\d{1,3}</code></td>
+        <td>限制长度</td>
+    </tr>
+</table>
+
+<h4>图 5：从需求写到表达式的最短路径</h4>
+<pre><code>先问自己 3 个问题：
+1. 左边界是什么？     例如 「
+2. 右边界是什么？     例如 」
+3. 中间不能出现谁？   例如 不能再出现 」
+
+于是得到模板：
+左边界 + [^右边界]* + 右边界
+
+例子：
+「 + [^」]* + 」  →  「[^」]*」
+《 + [^》]* + 》  →  《[^》]*》</code></pre>
+
+<h4>Markdown 和 JSON5 写法有什么区别</h4>
+<table class="doc-table">
+    <tr>
+        <th>场景</th>
+        <th>Markdown 规则文件</th>
+        <th>JSON5 规则文件</th>
+    </tr>
+    <tr>
+        <td>写 <code>\d+</code></td>
+        <td><code>\d+</code></td>
+        <td><code>"\\d+"</code></td>
+    </tr>
+    <tr>
+        <td>写引号规则</td>
+        <td><code>"[^"]*"</code></td>
+        <td><code>'"[^\"]*"'</code> 或等价安全写法</td>
+    </tr>
+    <tr>
+        <td>推荐程度</td>
+        <td>复杂正则更推荐</td>
+        <td>适合程序生成或统一结构化管理</td>
+    </tr>
+</table>
+
+<h4>最容易踩的 4 个坑</h4>
+<ul>
+    <li><b>把 <code>.</code> 当成“任意字符但会自动停下”</b>：不会，它通常会尽量吞更多内容</li>
+    <li><b>忘了转义</b>：在 JSON5 里，反斜杠经常要写成两个</li>
+    <li><b>把 <code>priority</code> 写反</b>：ANH 里数字越小越优先</li>
+    <li><b>一上来就写复杂表达式</b>：先把左右边界写对，再逐步加条件</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>ANH 里的执行模型</h4>
+<p>ANH 的正则着色底层使用 JavaScript <code>RegExp</code>。正则角色会用 <code>new RegExp(role.regex, role.regexFlags || 'g')</code> 在整篇文本上执行，然后再和普通角色命中一起做范围冲突处理。</p>
+<table class="doc-table">
+    <tr>
+        <th>字段</th>
+        <th>真实含义</th>
+        <th>你该怎么用</th>
+    </tr>
+    <tr>
+        <td><code>regex</code></td>
+        <td>JavaScript 正则 pattern</td>
+        <td>写匹配规则本体</td>
+    </tr>
+    <tr>
+        <td><code>regexFlags</code></td>
+        <td>JavaScript flags</td>
+        <td>着色规则通常至少带 <code>g</code></td>
+    </tr>
+    <tr>
+        <td><code>priority</code></td>
+        <td>数值排序键</td>
+        <td>越小越先占用范围</td>
+    </tr>
+    <tr>
+        <td><code>color</code> / <code>style</code></td>
+        <td>Decoration 样式</td>
+        <td>决定命中后怎样显示</td>
+    </tr>
+</table>
+
+<h4>图 6：推荐先学会的 flags</h4>
+<table class="doc-table">
+    <tr>
+        <th>flag</th>
+        <th>作用</th>
+        <th>在 ANH 着色里常不常用</th>
+        <th>例子</th>
+    </tr>
+    <tr>
+        <td><code>g</code></td>
+        <td>全局匹配</td>
+        <td>几乎必带</td>
+        <td><code>「[^」]*」</code> + <code>g</code></td>
+    </tr>
+    <tr>
+        <td><code>i</code></td>
+        <td>忽略大小写</td>
+        <td>匹配英文字段时常用</td>
+        <td><code>todo</code> + <code>gi</code></td>
+    </tr>
+    <tr>
+        <td><code>m</code></td>
+        <td>让 <code>^</code> / <code>$</code> 对每一行生效</td>
+        <td>匹配章节标题时常用</td>
+        <td><code>^第.+章$</code> + <code>gm</code></td>
+    </tr>
+    <tr>
+        <td><code>s</code></td>
+        <td>让 <code>.</code> 可以跨换行</td>
+        <td>只在确实要跨段落时用</td>
+        <td><code>开始.*结束</code> + <code>gs</code></td>
+    </tr>
+    <tr>
+        <td><code>u</code></td>
+        <td>启用 Unicode 语义</td>
+        <td>要用 Unicode 属性类时再带</td>
+        <td><code>\p{L}+</code> + <code>gu</code></td>
+    </tr>
+</table>
+
+<h4>图 7：四条默认规则的结构其实是同一个模板</h4>
+<pre><code>模板：
+左边界 + [^右边界]* + 右边界
+
+套进去：
+"  + [^"]* + "   →  "[^"]*"
+「 + [^」]* + 」   →  「[^」]*」
+'  + [^']*  + '   →  '[^']*'
+《 + [^》]* + 》   →  《[^》]*》</code></pre>
+
+<h4>案例 1：如果你想匹配章节标题</h4>
+<p>需求：整行形如“第十二章 雨夜”“第 3 章 重逢”的标题。</p>
+<table class="doc-table">
+    <tr>
+        <th>步骤</th>
+        <th>写法</th>
+        <th>说明</th>
+    </tr>
+    <tr>
+        <td>限定从行首开始</td>
+        <td><code>^</code></td>
+        <td>避免匹配到正文中间</td>
+    </tr>
+    <tr>
+        <td>固定前缀</td>
+        <td><code>第</code></td>
+        <td>字面量</td>
+    </tr>
+    <tr>
+        <td>数字部分</td>
+        <td><code>[一二三四五六七八九十百千\d]+</code></td>
+        <td>支持中文数字和阿拉伯数字</td>
+    </tr>
+    <tr>
+        <td>固定后缀</td>
+        <td><code>章</code></td>
+        <td>标题级别词</td>
+    </tr>
+    <tr>
+        <td>后面允许有标题正文</td>
+        <td><code>.*</code></td>
+        <td>比如“雨夜”“重逢”</td>
+    </tr>
+ </table>
+<pre><code>推荐写法：
+^第[一二三四五六七八九十百千\d]+章.*$
+
+推荐 flags：
+gm</code></pre>
+
+<h4>案例 2：如果你想同时匹配两种对话引号</h4>
+<pre><code>(?:"[^"]*"|「[^」]*」)</code></pre>
+<p>这里的关键是：</p>
+<ul>
+    <li><code>|</code> 表示“二选一”</li>
+    <li><code>(?: ... )</code> 是非捕获分组，只是把两个分支包起来，不额外记组</li>
+</ul>
+
+<h4>案例 3：如果你不想让规则贪太多</h4>
+<table class="doc-table">
+    <tr>
+        <th>写法</th>
+        <th>行为</th>
+    </tr>
+    <tr>
+        <td><code>.*</code></td>
+        <td>贪婪，通常会尽量吃更多</td>
+    </tr>
+    <tr>
+        <td><code>.*?</code></td>
+        <td>懒惰，通常会尽量早点停</td>
+    </tr>
+    <tr>
+        <td><code>[^」]*</code></td>
+        <td>最稳妥，直接规定“不能吃到右边界”</td>
+    </tr>
+ </table>
+
+<h4>图 8：调试流程图</h4>
+<pre><code>规则没生效？
+   ↓
+先看有没有 g
+   ↓
+再看边界字符写没写对
+   ↓
+再看 JSON5 里是否漏了转义
+   ↓
+再看 priority 是否被别的规则抢先占用
+   ↓
+最后再考虑量词太贪婪 / 太保守</code></pre>
+
+<h4>推荐工作流</h4>
+<ol>
+    <li>先用“边界版模板”写出第一版：左边界 + 中间内容 + 右边界。</li>
+    <li>先在 Markdown 规则文件里调通，再决定要不要写成 JSON5。</li>
+    <li>只有确实需要时，再引入分组、或、断言、懒惰量词。</li>
+    <li>多条规则可能重叠时，主动规划 <code>priority</code>，不要靠运气。</li>
+</ol>
+
+<div class="doc-note">这篇文档的术语和 JavaScript 正则语义按 MDN/ECMAScript 口径整理，同时结合了 ANH 当前实现：规则使用 JavaScript <code>RegExp</code> 执行，标志位如 <code>g</code>、<code>m</code>、<code>s</code>、<code>u</code> 的行为与 JS 一致。</div>
+</div>

@@ -1,0 +1,106 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>anhproject.md</code> 是 ANH 项目的<strong>项目元数据文件</strong>。你可以把它理解成小说项目的封面页和身份证：它描述“这个项目是谁、叫什么、有哪些标签、用什么关键词识别资源文件”。</p>
+
+<h4>它和正文不是一回事</h4>
+<p>它不是章节正文文件，也不是角色库。它的作用是给 ANH 提供项目级信息。</p>
+
+<h4>默认模板长什么样</h4>
+<pre><code># 我的小说
+
+## 项目名称
+我的小说
+
+## 项目描述
+这是一个小说项目
+
+## 作者
+作者
+
+## 项目UUID
+xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+
+## 封面
+
+## 项目简介
+项目简介
+
+## 标签
+小说, 创作</code></pre>
+
+<h4>你最常改的字段</h4>
+<table class="doc-table">
+    <tr>
+        <th>标题</th>
+        <th>作用</th>
+    </tr>
+    <tr>
+        <td><code>## 项目名称</code></td>
+        <td>项目显示名</td>
+    </tr>
+    <tr>
+        <td><code>## 项目描述</code></td>
+        <td>较详细的项目说明</td>
+    </tr>
+    <tr>
+        <td><code>## 作者</code></td>
+        <td>作者名或团队名</td>
+    </tr>
+    <tr>
+        <td><code>## 项目UUID</code></td>
+        <td>项目唯一标识；一般不要手改</td>
+    </tr>
+    <tr>
+        <td><code>## 封面</code></td>
+        <td>封面图片路径</td>
+    </tr>
+    <tr>
+        <td><code>## 项目简介</code></td>
+        <td>短摘要</td>
+    </tr>
+    <tr>
+        <td><code>## 标签</code></td>
+        <td>可用逗号或换行分隔</td>
+    </tr>
+</table>
+
+<h4>它还可以放哪些项目关键词</h4>
+<p>除了上面这些元数据，它还支持四组“文件识别关键词”：角色文件关键词、敏感词文件关键词、词汇文件关键词、正则文件关键词。它们决定 ANH 如何根据文件名猜测资源类型。</p>
+
+<div class="doc-note">如果你主要是想改“具体资源文件路径”，那更常去改的是 <a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a>；<code>anhproject.md</code> 更偏项目名片和关键词识别。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>解析规则</h4>
+<ul>
+    <li>按二级标题 <code>## 标题名</code> 分段解析</li>
+    <li>标题下面的内容就是该字段值</li>
+    <li>标签支持逗号分隔、换行分隔，并会忽略 <code>//</code> 注释行</li>
+    <li>如果缺少 UUID，系统会自动生成新的 UUID</li>
+</ul>
+
+<h4>兼容别名</h4>
+<p>源码里为了兼容旧项目，还接受一些别名标题，例如：</p>
+<ul>
+    <li><code>项目标识</code> / <code>uuid</code></li>
+    <li><code>简介</code> / <code>summary</code></li>
+    <li><code>name</code> / <code>description</code> / <code>author</code></li>
+</ul>
+
+<h4>常见错误</h4>
+<ul>
+    <li>把字段标题写成三级标题 <code>###</code>，导致不被识别</li>
+    <li>手动改坏 UUID 格式</li>
+    <li>把正文内容写进这个文件里，导致项目元数据和章节混在一起</li>
+    <li>标签写成一句长文本，而不是列表 / 逗号分隔</li>
+</ul>
+
+<h4>什么时候应该改它</h4>
+<ul>
+    <li>项目刚初始化完，要补齐信息</li>
+    <li>改项目名、封面、简介、标签</li>
+    <li>你想调整资源文件的命名识别关键词</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="project-settings"><strong>项目设置</strong></a>、<a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a>、<a class="doc-ref-link" data-doc="workspace-init-files"><strong>工作区初始化文件</strong></a>。</div>
+</div>

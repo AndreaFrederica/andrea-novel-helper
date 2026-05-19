@@ -1,0 +1,188 @@
+<div class="doc-section beginner">
+<h4>这页讲的是“上云”</h4>
+<p>前面两页讲的是 Git 是什么，以及该选哪个平台；这页讲的是最实操的部分：<strong>怎么创建云仓库、怎么把本地项目绑定上去、怎么用 Git 做同步和备份</strong>。</p>
+
+<h4>你要先分清三件事</h4>
+<table class="doc-table">
+    <tr>
+        <th>概念</th>
+        <th>人话解释</th>
+    </tr>
+    <tr>
+        <td>本地仓库</td>
+        <td>你电脑里的 Git 项目</td>
+    </tr>
+    <tr>
+        <td>远端仓库</td>
+        <td>GitHub / GitLab / Gitee / CODING 上那份仓库</td>
+    </tr>
+    <tr>
+        <td>绑定远端</td>
+        <td>告诉本地 Git：以后把提交发到哪个云地址</td>
+    </tr>
+</table>
+
+<h4>图 1：绑定远端以后会发生什么</h4>
+<pre><code>本地写作
+  ↓ commit
+本地仓库
+  ↓ push
+云仓库
+  ↓ pull
+另一台电脑</code></pre>
+
+<h4>最推荐的新手路径</h4>
+<ol>
+    <li>先在本地把项目初始化成 Git 仓库。</li>
+    <li>先至少做一次本地提交。</li>
+    <li>再去 GitHub / Gitee / GitLab / CODING 上创建一个空远端仓库。</li>
+    <li>把远端地址绑到本地。</li>
+    <li>第一次 <code>push</code> 上去。</li>
+</ol>
+
+<h4>创建云仓库时怎么选</h4>
+<ul>
+    <li><b>仓库名</b>：建议和你的项目目录名接近，方便识别</li>
+    <li><b>Public / Private</b>：小说项目通常先用 Private</li>
+    <li><b>README</b>：如果你已经有本地仓库，新建远端时最好别勾“初始化 README”，避免首次推送时多一次合并</li>
+    <li><b>.gitignore 模板</b>：可以不选，因为 ANH 初始化通常已经给你生成了合适的 <a class="doc-ref-link" data-doc="gitignore-file"><strong>.gitignore</strong></a></li>
+</ul>
+
+<h4>命令行最小流程</h4>
+<pre><code>git init
+git add .
+git commit -m "初始化项目"
+
+git remote add origin 你的远端地址
+git branch -M main
+git push -u origin main</code></pre>
+
+<h4>VS Code 图形界面流程</h4>
+<ol>
+    <li>初始化仓库并提交一次。</li>
+    <li>点击 Source Control 里的“发布分支”或“Publish Branch”。</li>
+    <li>登录对应平台账号。</li>
+    <li>选择公开或私有。</li>
+    <li>发布完成后，后续就可以用“同步更改”。</li>
+</ol>
+
+<h4>两台电脑同步的正确顺序</h4>
+<ol>
+    <li>电脑 A：写作 → <code>commit</code> → <code>push</code></li>
+    <li>电脑 B：打开项目前先 <code>pull</code></li>
+    <li>电脑 B：继续写 → <code>commit</code> → <code>push</code></li>
+    <li>电脑 A：下次继续前再 <code>pull</code></li>
+</ol>
+
+<div class="doc-note">最容易出事的不是 Git 本身，而是“在两台电脑都改了，但谁也没先 pull”。只要养成“开写先拉、收工就推”的习惯，绝大多数同步问题都能避免。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>HTTPS 还是 SSH</h4>
+<table class="doc-table">
+    <tr>
+        <th>方式</th>
+        <th>优点</th>
+        <th>缺点</th>
+        <th>适合谁</th>
+    </tr>
+    <tr>
+        <td>HTTPS</td>
+        <td>上手简单</td>
+        <td>可能涉及浏览器登录、Token</td>
+        <td>新手</td>
+    </tr>
+    <tr>
+        <td>SSH</td>
+        <td>长期使用更顺手</td>
+        <td>前期要配密钥</td>
+        <td>长期多设备用户</td>
+    </tr>
+</table>
+
+<h4>建议的新手命令模板</h4>
+<pre><code># 第一次绑定远端
+git remote add origin https://平台地址/用户名/仓库名.git
+git branch -M main
+git push -u origin main
+
+# 以后日常同步
+git pull
+git add .
+git commit -m "写明本次改动"
+git push</code></pre>
+
+<h4><code>git pull</code> 和 <code>git pull --rebase</code> 该怎么选</h4>
+<table class="doc-table">
+    <tr>
+        <th>做法</th>
+        <th>会发生什么</th>
+        <th>更适合什么情况</th>
+    </tr>
+    <tr>
+        <td><code>git pull</code></td>
+        <td>拉取远端并合并到当前分支</td>
+        <td>默认首选；团队协作；规范保守；不希望改写历史</td>
+    </tr>
+    <tr>
+        <td><code>git pull --rebase</code></td>
+        <td>先拉远端，再把你本地未推送提交重放到后面</td>
+        <td>个人项目、多设备单人写作、且你明确理解 rebase 影响时</td>
+    </tr>
+</table>
+
+<p>这里我把默认模板改成了普通 <code>git pull</code>。原因很简单：它更保守，也更符合很多团队规范。<strong>如果团队文档、仓库规则、代码评审规范明确写了“不准 rebase 公共历史”或“禁止 rebase”，就应当直接遵守，不要自作主张换成 <code>pull --rebase</code>。</strong></p>
+
+<div class="doc-note">如果你是单人项目，主要目标是减少机械性的 pull merge 提交，并且你清楚知道 rebase 会改写提交历史，那么可以自己选择 <code>git pull --rebase</code>。但这不该被表述成通用默认值。更完整的比较见 <a class="doc-ref-link" data-doc="git-basics"><strong>Git 本体详解</strong></a>。</div>
+
+<h4>图 2：一个安全的备份策略</h4>
+<pre><code>日常：本地 Git + 远端私有仓库
+每周：导出一次 zip / 章节文本备份
+里程碑：打 tag 或单独归档
+
+不要只依赖其中一种</code></pre>
+
+<h4>双远端备份</h4>
+<p>如果你既想要 GitHub 生态，又想照顾大陆访问，可以给同一个本地仓库挂两个远端：</p>
+<pre><code>git remote add origin https://github.com/you/novel.git
+git remote add gitee  https://gitee.com/you/novel.git
+
+git push origin main
+git push gitee main</code></pre>
+
+<h4>常见故障排查</h4>
+<table class="doc-table">
+    <tr>
+        <th>现象</th>
+        <th>通常原因</th>
+        <th>先检查什么</th>
+    </tr>
+    <tr>
+        <td><code>push rejected</code></td>
+        <td>远端比你新</td>
+        <td>先 <code>pull</code> 再推</td>
+    </tr>
+    <tr>
+        <td>认证失败</td>
+        <td>密码 / Token / SSH 密钥问题</td>
+        <td>远端地址类型和登录方式是否一致</td>
+    </tr>
+    <tr>
+        <td>首次推送报冲突</td>
+        <td>远端创建时多初始化了 README</td>
+        <td>确认远端是不是空仓库</td>
+    </tr>
+    <tr>
+        <td>两台电脑互相覆盖</td>
+        <td>没先 pull 就直接改</td>
+        <td>建立固定顺序：先拉再写</td>
+    </tr>
+    <tr>
+        <td>大文件推不上去</td>
+        <td>平台容量 / LFS / 仓库限制</td>
+        <td>先别把大导出文件直接进 Git 历史</td>
+    </tr>
+</table>
+
+<div class="doc-note">如果你只是想把 ANH 初始化出来的项目安全纳入 Git，顺手看一下 <a class="doc-ref-link" data-doc="workspace-init-files"><strong>工作区初始化文件</strong></a> 和 <a class="doc-ref-link" data-doc="gitignore-file"><strong>.gitignore</strong></a>，避免把不该进仓库的缓存也推上去。</div>
+</div>

@@ -1,0 +1,83 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>mcp.json</code> 是项目里给 MCP 服务用的配置文件。就 ANH 当前实现来说，内置 MCP 配置编辑入口默认操作的是 <code>novel-helper/mcp.json</code>。</p>
+
+<h4>它解决什么问题</h4>
+<p>它告诉 ANH：有哪些 MCP 服务器、默认用哪个、每个服务器是 HTTP 还是 stdio、是否启用。</p>
+
+<h4>最小示例</h4>
+<pre><code>{
+  "mcpServers": {
+    "chrome-mcp-server": {
+      "type": "streamableHttp",
+      "url": "http://127.0.0.1:12306/mcp",
+      "enabled": true
+    }
+  },
+  "defaultServer": "chrome-mcp-server"
+}</code></pre>
+
+<h4>最常见的字段</h4>
+<table class="doc-table">
+    <tr>
+        <th>键</th>
+        <th>作用</th>
+    </tr>
+    <tr>
+        <td><code>mcpServers</code></td>
+        <td>所有可选 MCP 服务的集合</td>
+    </tr>
+    <tr>
+        <td><code>defaultServer</code></td>
+        <td>默认使用哪一个服务</td>
+    </tr>
+    <tr>
+        <td><code>type</code></td>
+        <td>常见是 <code>streamableHttp</code> 或 <code>stdio</code></td>
+    </tr>
+    <tr>
+        <td><code>url</code></td>
+        <td>HTTP 型 MCP 服务地址</td>
+    </tr>
+    <tr>
+        <td><code>command</code> / <code>args</code></td>
+        <td>stdio 型 MCP 的启动命令</td>
+    </tr>
+    <tr>
+        <td><code>enabled</code></td>
+        <td>是否启用该服务</td>
+    </tr>
+</table>
+
+<div class="doc-note">如果你现在并不用 MCP，可以先忽略这页。它属于高级配置，不是 ANH 基础写作流程的前置条件。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>两种最常见接法</h4>
+<ul>
+    <li><b>streamableHttp</b>：已有本地或远程 HTTP MCP 服务，直接填 URL</li>
+    <li><b>stdio</b>：通过命令启动一个本地进程型 MCP 服务</li>
+</ul>
+
+<h4>stdio 示例</h4>
+<pre><code>{
+  "mcpServers": {
+    "my-server": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./bin/my-mcp.js"],
+      "enabled": true
+    }
+  },
+  "defaultServer": "my-server"
+}</code></pre>
+
+<h4>注意点</h4>
+<ul>
+    <li>内置配置文件路径默认是 <code>novel-helper/mcp.json</code></li>
+    <li>如果默认服务器没启用，系统会退回到第一个启用的服务</li>
+    <li>写错 <code>type</code>、<code>url</code> 或命令路径时，最常见表现就是“连不上”</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="script-runtime"><strong>脚本运行时</strong></a>、<a class="doc-ref-link" data-doc="ai-mcp"><strong>AI 与 MCP 集成</strong></a>。</div>
+</div>

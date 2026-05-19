@@ -7,6 +7,7 @@ import { templateRegistry } from '../typst/templateRegistry'
 import { renderFromTemplate, compileTypstWithLog, mapTypstToMemory } from '../typst/exportService'
 import { ensureBuildTempBase } from '../typst/tempPaths'
 import { parseMarkdownDoc, firstH1, firstHeading, Block } from '../typst/mdParser'
+import { scriptExtensionRegistry } from '../mcp/scriptExtensions'
 
 function parseMarkdownLight(text: string): { meta: Record<string, any>; blocks: Block[] } {
     const doc = parseMarkdownDoc(text)
@@ -65,8 +66,15 @@ function getConfig() {
 }
 
 async function pickTemplate(defaultTemplate: string): Promise<string> {
-    const renderer = vscode.workspace.getConfiguration('andrea.typst').get<string>('defaultRenderer', 'internal')
-    if (renderer && renderer !== 'internal' && renderer !== 'liquid') return defaultTemplate
+    // 如果当前使用外部渲染器且声明不需要模板，直接返回默认模板
+    const rendererId = vscode.workspace.getConfiguration('andrea.typst').get<string>('defaultRenderer', 'internal')
+    const isExternalRenderer = rendererId && rendererId !== 'internal' && rendererId !== 'liquid'
+    if (isExternalRenderer) {
+        const mode = scriptExtensionRegistry.getTypstRendererTemplateMode(rendererId)
+        if (mode === 'none') {
+            return defaultTemplate
+        }
+    }
     const templates = templateRegistry.list()
     if (templates.length === 0) {
         return defaultTemplate
@@ -74,7 +82,7 @@ async function pickTemplate(defaultTemplate: string): Promise<string> {
     if (templates.length === 1) {
         return templates[0].name
     }
-    // 多个模板时，让用户选择（与explorerTypstExport保持一致）
+    // 多个模板时，让用户选择
     const picks = templates.map(t => ({
         label: t.name,
         description: t.root,

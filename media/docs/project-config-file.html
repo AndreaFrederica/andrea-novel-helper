@@ -1,0 +1,103 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>project-config.json5</code> 是 ANH 的<strong>项目级功能配置表</strong>。它主要管两类事：</p>
+<ul>
+    <li>新建角色、词汇、敏感词、正则规则时默认写到哪个文件</li>
+    <li>角色索引键默认怎么补</li>
+</ul>
+
+<div class="doc-note">这里的 <code>rolesFile</code>、<code>sensitiveWordsFile</code>、<code>vocabularyFile</code>、<code>regexPatternsFile</code> 不是“整个项目只扫描这些文件”。ANH 会按包机制扫描 <code>novel-helper/</code> 下的多个资源文件，也会识别当前工作区里标记出来的非 <code>novel-helper/</code> 外部包。</div>
+
+<h4>为什么它很重要</h4>
+<p>因为它的优先级高于 VS Code 里的同名设置。也就是说，同一台电脑上不同小说项目可以用不同的资源文件路径和识别策略，而不会互相干扰。</p>
+
+<h4>最小示例</h4>
+<pre><code>{
+  rolesFile: 'novel-helper/character-gallery.json5',
+  sensitiveWordsFile: 'novel-helper/sensitive-words.json5',
+  vocabularyFile: 'novel-helper/vocabulary.json5',
+  regexPatternsFile: 'novel-helper/regex-patterns.json5',
+  defaultRoleLookupKeys: [],
+  extendedLookupKeyPrefixes: [],
+}</code></pre>
+
+<h4>更符合包机制的示例</h4>
+<pre><code>{
+    rolesFile: 'novel-helper/cast-main/roles.md',
+    sensitiveWordsFile: 'novel-helper/style-guide/sensitive-words.md',
+    vocabularyFile: 'novel-helper/world/vocabulary.md',
+    regexPatternsFile: 'novel-helper/coloring/regex-patterns.json5',
+    defaultRoleLookupKeys: [],
+    extendedLookupKeyPrefixes: [],
+}</code></pre>
+<p>这样设置的含义是：以后你用“新建角色”“新建敏感词”这类命令时，默认往这些包里的文件写。它不妨碍 ANH 同时扫描其他包里的 <code>roles.md</code>、<code>character-gallery.csv</code>、<code>vocabulary.md</code> 等文件。</p>
+
+<h4>字段说明</h4>
+<table class="doc-table">
+    <tr>
+        <th>键</th>
+        <th>作用</th>
+    </tr>
+    <tr>
+        <td><code>rolesFile</code></td>
+        <td>新建角色时的默认写入文件</td>
+    </tr>
+    <tr>
+        <td><code>sensitiveWordsFile</code></td>
+        <td>新建敏感词时的默认写入文件</td>
+    </tr>
+    <tr>
+        <td><code>vocabularyFile</code></td>
+        <td>新建词汇时的默认写入文件</td>
+    </tr>
+    <tr>
+        <td><code>regexPatternsFile</code></td>
+        <td>新建正则规则时的默认写入文件</td>
+    </tr>
+    <tr>
+        <td><code>defaultRoleLookupKeys</code></td>
+        <td>新建角色时默认补上的索引键字段</td>
+    </tr>
+    <tr>
+        <td><code>extendedLookupKeyPrefixes</code></td>
+        <td>把额外前缀识别成“索引键家族”</td>
+    </tr>
+</table>
+
+<h4>JSON5 和 JSON 有什么区别</h4>
+<p>JSON5 比 JSON 宽松，支持注释、尾逗号、无引号键。对人手工编辑更友好，所以 ANH 用它做项目配置。</p>
+
+<div class="doc-note">如果你更想改项目名称、作者、标签、封面，那该看的是 <a class="doc-ref-link" data-doc="anhproject-file"><strong>anhproject.md</strong></a>。这两个文件是配套关系，不是替代关系。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>真实优先级</h4>
+<pre><code>project-config.json5
+   > VS Code 工作区设置
+   > 插件默认值</code></pre>
+
+<h4>defaultRoleLookupKeys 是干什么的</h4>
+<p>它决定新建角色时默认补哪些“索引键字段”。如果你的项目会额外维护日文名、拼音名、罗马字、内部代号等字段，这里就有用。</p>
+
+<h4>extendedLookupKeyPrefixes 是干什么的</h4>
+<p>它是给高级用户的。如果你有一整套自定义索引字段前缀，比如 <code>refkeys</code>、<code>tagkeys</code>，你可以把前缀登记在这里，让系统把这类字段也视作索引键家族。</p>
+
+<h4>常见错误</h4>
+<ul>
+    <li>顶层写成数组，而不是对象</li>
+    <li>路径写成绝对路径，导致项目换电脑就坏</li>
+    <li>把章节正文路径误写进这里</li>
+    <li>以为 <code>rolesFile</code> 只要指向一个文件，ANH 就不会再扫描其他角色包</li>
+    <li>填了 <code>defaultRoleLookupKeys</code> 却不知道它只影响“默认补字段”，不是自动生成内容</li>
+</ul>
+
+<h4>推荐做法</h4>
+<ul>
+    <li>路径尽量写相对路径</li>
+    <li>可以把默认写入目标指向某个包里的 Markdown 文件，例如 <code>novel-helper/cast-main/roles.md</code></li>
+    <li>只放项目级行为，不要把临时实验参数塞满</li>
+    <li>如果项目要长期维护，把这个文件纳入 Git</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="project-settings"><strong>项目设置</strong></a>、<a class="doc-ref-link" data-doc="package-mechanism"><strong>包机制与外部包详解</strong></a>、<a class="doc-ref-link" data-doc="character-gallery-file"><strong>character-gallery.*</strong></a>、<a class="doc-ref-link" data-doc="regex-patterns-file"><strong>regex-patterns.*</strong></a>。</div>
+</div>

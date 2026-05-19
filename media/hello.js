@@ -87,6 +87,13 @@
             applyI18n();
             render(message.data);
             hideNotice();
+            if (message.data?.themeKind) {
+                applyTheme(message.data.themeKind);
+            }
+        } else if (message.command === 'themeColors') {
+            if (message.themeKind) {
+                applyTheme(message.themeKind);
+            }
         } else if (message.command === 'error') {
             showNotice(message.message || '操作失败');
         }
@@ -368,4 +375,13 @@
     }
 
     vscode.postMessage({ command: 'ready' });
+    vscode.postMessage({ command: 'requestThemeColors' });
+
+    function applyTheme(themeKind) {
+        const body = document.body;
+        body.removeAttribute('data-theme');
+        if (themeKind) {
+            body.setAttribute('data-theme', themeKind);
+        }
+    }
 })();

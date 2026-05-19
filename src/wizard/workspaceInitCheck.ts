@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../projectConfig/projectKeywordConfig';
 
+const AUTO_OPEN_PROJECT_INIT_KEY = 'andrea.projectInit.autoOpenAfterCreate';
+
 /** 检测当前工作区是否完全缺少任何描述文件，缺少则提示运行初始化向导 */
 // 标记是否已经计划弹出项目初始化向导（用于避免与其他初始化提示冲突）
 export let projectInitPromptScheduled = false;
@@ -26,7 +28,7 @@ function hasAnyResourceFilesUnder(root: string): boolean {
     'sensitive-words','sensitive','vocabulary','vocab',
     'regex-patterns','regex'
   ];
-  const validExts = ['.json5','.txt','.md', '.csv'];
+  const validExts = ['.json5','.txt','.md', '.csv', '.toml'];
   const stack: string[] = [root];
   while (stack.length) {
     const dir = stack.pop()!;
@@ -92,12 +94,24 @@ export function getProjectInitStatus(workspaceRoot = vscode.workspace.workspaceF
   };
 }
 
-export function maybePromptProjectInit() {
+export async function maybePromptProjectInit(context?: vscode.ExtensionContext) {
   try {
     const wsRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!wsRoot) { return; }
+    if (!wsRoot) { return; }
     const status = getProjectInitStatus(wsRoot);
     if (!status.configExists && !status.keywordConfigExists && !status.anyConfiguredExists && !status.anyPackageResourceExists) {
+      // 检查是否是从 hello 页面新建的工作区，需要自动打开初始化向导（不询问）
+      if (context) {
+        const autoOpenPath = context.globalState.get<string>(AUTO_OPEN_PROJECT_INIT_KEY);
+        if (autoOpenPath && path.resolve(autoOpenPath) === path.resolve(wsRoot)) {
+          await context.globalState.update(AUTO_OPEN_PROJECT_INIT_KEY, undefined);
+          projectInitPromptScheduled = true; // 抑制其他初始化提示（如缺失角色库弹窗）
+          setTimeout(() => {
+            vscode.commands.executeCommand('AndreaNovelHelper.projectInitWizard.graphical');
+          }, 600);
+          return;
+        }
+      }
       projectInitPromptScheduled = true;
       setTimeout(() => {
         vscode.window.showInformationMessage('未检测到角色/词汇/敏感词等描述文件，是否运行项目初始化向导？', '运行向导', '忽略').then(sel => {

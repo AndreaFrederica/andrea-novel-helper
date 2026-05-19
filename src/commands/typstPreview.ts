@@ -8,6 +8,7 @@ import { renderFromTemplate, getTypstFS } from '../typst/exportService'
 import { TypstMemoryProvider } from '../Provider/fileSystem/TypstMemoryProvider'
 import { TypstPreviewStatusBar } from '../Provider/typstPreviewStatusBar'
 import { ensureBuildTempBase } from '../typst/tempPaths'
+import { scriptExtensionRegistry } from '../mcp/scriptExtensions'
 
 /**
  * 全局状态栏管理器
@@ -51,8 +52,9 @@ export async function openTypstPreview(typstFS: TypstMemoryProvider | undefined,
         let selectedTemplate = defaultTemplate;
         const templates = templateRegistry.list();
         const defaultRenderer = cfg.get<string>('defaultRenderer') || 'internal';
-        const useInternalRenderer = defaultRenderer === 'internal' || defaultRenderer === 'liquid';
-        if (useInternalRenderer && templates.length > 1) {
+        const isExternalRenderer = defaultRenderer && defaultRenderer !== 'internal' && defaultRenderer !== 'liquid';
+        const needsTemplate = !isExternalRenderer || scriptExtensionRegistry.getTypstRendererTemplateMode(defaultRenderer) !== 'none';
+        if (needsTemplate && templates.length > 1) {
             const picks = templates.map(t => ({
                 label: t.name,
                 description: t.root,
@@ -64,7 +66,7 @@ export async function openTypstPreview(typstFS: TypstMemoryProvider | undefined,
             });
             if (!selected) { return; } // 用户取消了选择
             selectedTemplate = selected.value;
-        } else if (useInternalRenderer && templates.length === 1) {
+        } else if (needsTemplate && templates.length === 1) {
             selectedTemplate = templates[0].name;
         }
         
@@ -297,11 +299,6 @@ export async function changeTypstTemplate(typstFS: TypstMemoryProvider | undefin
 
     try {
         const templates = templateRegistry.list();
-        const renderer = vscode.workspace.getConfiguration('andrea.typst').get<string>('defaultRenderer', 'internal');
-        if (renderer && renderer !== 'internal' && renderer !== 'liquid') {
-            vscode.window.showInformationMessage('当前使用脚本 Typst 渲染器；请在脚本面板中切换默认 Typst 渲染器。');
-            return;
-        }
         if (templates.length === 0) {
             vscode.window.showErrorMessage('没有可用的模板');
             return;

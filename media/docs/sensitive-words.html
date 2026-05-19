@@ -71,7 +71,13 @@ bao力
 </ul>
 
 <h4>文件格式规范</h4>
-<p>敏感词库支持 Markdown、JSON5、CSV 三种格式（不支持纯 TXT），命名规则为 <code>sensitive-words.md</code> 或 <code>*_sensitive.md</code>。</p>
+<p>敏感词库支持 Markdown、JSON5、CSV、TXT、TOML 等格式。TXT 是最简单的“一行一个敏感词”格式，支持空行和 <code>#</code> / <code>//</code> 注释；它不能表达修复建议、别名、颜色、优先级和说明。命名规则通常使用 <code>sensitive-words.*</code> 或包含 <code>sensitive</code> / <code>敏感词</code> 关键词的文件名。</p>
+
+<p><b>TXT 格式示例</b>：</p>
+<pre><code># 一行一个敏感词，支持 # / // 注释
+暴力
+某个不推荐词
+某个投稿禁用表达</code></pre>
 
 <p><b>Markdown 格式示例</b>：</p>
 <pre><code># 敏感词库
@@ -124,7 +130,7 @@ bao力
 <p>ANH 对修复字段有广泛的兼容处理：字段名可以是 <code>fixes</code>、<code>fixs</code>、<code>fix</code>、<code>replacements</code>、<code>replacement</code>，解析时会统一处理为修复候选数组。当你将某个词汇标记为敏感词并提供了修复值后，其他角色的 <code>fixes</code> 值被匹配时不会触发敏感词警告。</p>
 
 <h4>创建敏感词库</h4>
-<p>在包管理器中右键目录节点 → "创建敏感词库 (MD/JSON5/TXT)"，选择格式（推荐 Markdown 或 JSON5），输入文件名即可创建。创建后会自动打开文件供你编辑。</p>
+<p>在包管理器中右键目录节点 → "创建敏感词库 (MD/JSON5/TXT)"，选择格式即可创建。只是一行一个词时选 TXT；需要写修复建议、别名、说明和优先级时选 Markdown 或 JSON5。创建后会自动打开文件供你编辑。</p>
 
 <h4>配置项</h4>
 <ul>

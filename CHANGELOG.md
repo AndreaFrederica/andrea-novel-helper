@@ -1,5 +1,114 @@
 # Change Log
 
+## [0.5.6] - 2026-05-20
+
+### ✨ 新增
+
+#### ANH Hello 首页
+- 新增 **ANH Hello 首页**（`AndreaNovelHelper.openHello`），作为扩展的统一入口页面，整合在包管理器"常用功能"中。
+- **推荐扩展**：内置 22 款写作相关扩展清单（Markdown All in One、Tinymist Typst、GitLens、Better JSON5 等），动态检测安装状态，一键查看详情。
+- **Git 配置**：检测 Git 安装状态与版本，查看和设置全局/本地 `user.name` / `user.email`，支持一键初始化仓库。
+- **工作区管理**：快速创建新工作区、打开现有文件夹，最近工作区历史记录（上限 8 条）存储在 globalState 中。
+- **首次设置弹窗**：新用户首次打开 Hello 时显示引导弹窗，可配置"保持 Hello 可用"和"启动时自动显示"。
+- **项目初始化状态卡片**：展示当前工作区的初始化状态（已初始化/待补全/未初始化），悬停显示缺少的文件。
+- **FAQ 区域**：内置 4 个常见问题解答（命令面板入口、资源管理器、设置位置、工作区概念）。
+- 新增配置项：`AndreaNovelHelper.hello.enabled`、`AndreaNovelHelper.hello.forceVsCodeManagedDisabling`。
+
+#### 笔记侧边栏
+- 新增 **Andrea Notes 侧边栏面板**，集成到活动栏，内含三个树视图：
+  - **跟踪目录大纲**（Tracked Outline）：镜像工作区 `novel-helper/` 目录结构，过滤内部目录和 `.wcignore` 忽略路径，点击目录打开目录大纲编辑器，点击文件打开章节大纲。
+  - **自由大纲**（Free Outline）：基于 `novel-helper/outline`（可配置 `outlinePath`）和自由笔记目录的独立文件树。
+  - **每日计划**：基于 `novel-helper/dashboard/plan`，支持按文件名日期、Frontmatter `date:` 或文件修改时间自动按年月分组显示。
+- 支持新建 Markdown 文件/文件夹、刷新、打开、重命名、删除、在资源管理器中显示等操作。
+- 文件系统监视器自动刷新树视图；`outlinePath` 配置变更时自动重建大纲监视器。
+- 新增配置：`AndreaNovelHelper.writingDashboard.planSidebar.groupByTime`。
+- 新增 15+ 相关命令，覆盖四种语言本地化。
+
+#### TOML 角色库支持
+- 角色库、敏感词库、词汇库全链路支持 **`.toml` 格式**，包括右键从选择文本创建角色/敏感词/词汇：
+  - `selectOrCreateFile` 通用文件选择器新增 `includeToml` 选项，扫描和创建文件时均支持 `.toml`。
+  - 右键"从选择创建角色"、"添加敏感词"、"添加词汇"均传入 `includeToml: true`。
+  - 新建 `.toml` 文件时根据类型自动写入角色库/敏感词表/词汇表的 TOML 模板。
+  - 新增自研简易 TOML 解析器与序列化器（`src/utils/Parser/tomlParser.ts`），支持基本/多行字符串、整数、浮点、布尔、数组、普通表 `[key]`、数组表 `[[roles]]`。
+  - `readRoleFile()` / `writeRoleFile()` / `addRoleToFile()` / `detectFileType()` 完整支持 TOML。
+  - 字段别名系统复用 `FIELD_ALIASES`，支持中英文键名自动映射；序列化时有序输出已知字段后再输出自定义字段。
+  - 包管理器可识别 `.toml` 角色文件并显示角色数量，新建文件时提供 TOML 模板选项。
+- 新增 TOML 模板生成器：角色库、敏感词表、词汇表三种默认模板。
+- `package.json` 新增 `onLanguage:toml` 激活事件。
+- 新增依赖 `smol-toml: ^1.6.1`。
+
+#### MCP 服务器增强
+- 新增 **时间线文件工具**：`list_timeline_files`、`get_timeline_file`、`save_timeline_file`、`append_timeline_event`，面向 `.tjson5` 文件自动管理 `events` 数组。
+- 新增 **关系文件工具**：`list_relationship_files`、`get_relationship_file`、`save_relationship_file`、`append_relationship_entry`，面向 `.rjson5/.rjson` 文件管理 `relationships` 数组。
+- 新增 **角色库结构工具**：`get_role_library_structure`，返回 `novel-helper` 目录的完整文件树，自动分类统计角色/关系/时间线/TOML 文件数量。
+- 新增 **通用角色文件读写**：`get_role_file_roles`、`upsert_role_in_file`，支持 json5/ojson5/md/csv/toml 全格式。
+- 新增 **批注管理工具**：`set_comment_status`、`append_comment_message`。
+- 新增 **路径安全校验**：所有文件操作必须位于 `novel-helper` 目录内，防止越界访问。
+
+#### Typst 导出与脚本扩展
+- **渲染器选择**：导出时可在内部渲染器、外部渲染器、Liquid 渲染器之间切换。
+- **脚本扩展 API**：新增 `src/mcp/scriptExtensions.ts` 注册系统，支持三类扩展点：
+  - **Hook 扩展**：`beforeTypstRender` / `afterTypstRender` 链式修改 `typContent`。
+  - **纯文本处理器**：`ctx.processors.registerPlainText()` 注册自定义文本处理流程。
+  - **Typst 渲染器**：`ctx.renderers.registerTypst()` 注册自定义 Typst 渲染器，注册时声明 `templateMode`。
+- **Typst 渲染器模板模式（templateMode）**：外部渲染器注册时从三种模式中选择，导出时自动按声明处理，无需用户额外选择：
+  - `post-process` — 先 Liquid 渲染模板，将渲染后的 Typst 内容 (`liquidOutput`) 传给处理器做后处理。
+  - `source` — 读取模板源文件 (.liquid) 的原始内容 (`templateSource`)，传给处理器自行解析。
+  - `none` — 处理器完全自主，不需要模板输入；导出时自动跳过模板选择。
+- 新增配置：`andrea.typst.defaultRenderer`、`AndreaNovelHelper.scripts.defaultPlainTextProcessor`。
+- 新增命令：`andrea.scripts.reloadExtensions`、`andrea.scripts.selectPlainTextProcessor`、`andrea.scripts.selectTypstRenderer`、`andrea.scripts.runPlainTextProcessor`、`WordCount.exportTxtWithProcessor`。
+- 新增脚本运行时文档页面 `media/docs/script-runtime.html`。
+
+#### 脚本运行器增强
+- **脚本类型自动检测**：通过静态正则分析 `export function run` / `export function activate` / `registerPlainText` / `registerTypst` / `hooks.on` 等模式，自动识别为 `runnable`（可执行）、`extension`（扩展）、`hybrid`（混合）、`plain`（普通）四种类型。
+- **脚本标签**：根据检测结果显示 `⚡ Hook`、`⌨ 纯文本处理器`、`Σ Typst 渲染器` 等标签。
+- **条件菜单**：右键/工具栏运行按钮根据脚本类型条件显示。
+- 文件系统更改时自动清除 `scriptMetaCache`。
+- 新增 5 个示例脚本：`open-calculator.js`（打开系统计算器）、`publish-current-chapter-to-pastebin.js`（通过 MCP Chrome 工具发布）、`test-mcp-status.js` / `test-no-mcp.js`（MCP 状态测试）、`ui-type-tests/`（5 个脚本类型检测用例）。
+
+#### 包管理器增强
+- 新增 **Hello 首页节点**：包管理器"常用功能"中可直接打开 ANH Hello。
+- 新增 **`getParent()`** 和 **`findNodeByPath()`** 方法，支持树节点父级查找和按路径定位节点。
+- 新增 **`AndreaNovelHelper.package.revealPath`** 命令：在包管理器中定位并展开指定路径。
+- **大纲存储路径识别**：自动检测 `novel-helper/outline` 和 `novel-helper/free-outline` 下的文件/文件夹，标记为 `outlineStorageFolder` / `outlineStorageFile`。
+- 新增 **`AndreaNovelHelper.wordCount.revealPath`** 命令：在写作资源管理器中定位并选中指定文件。
+
+#### 项目初始化与向导
+- **Hello 创建工作区自动打开向导**：从 ANH Hello 首页点击"新建写作工作区"创建工作区后，打开该工作区时会直接自动弹出项目初始化向导，不再询问确认。
+- **项目初始化检测重构**：`getProjectInitStatus()` 返回结构化状态（`hasWorkspace`、`configExists`、`novelHelperExists`、`anyPackageResourceExists`、`missing[]` 等），判断逻辑更清晰。
+- **向导 UI 优化**：Stepper（步骤圆点）替换为 Progress Bar（进度条），显示当前步骤文字和步骤总数；新增移动端响应式适配（<520px 时 header 缩小）。
+- **向导集成项目状态**：初始化完成后自动设置 `andrea.roleJson5.openWithRoleManager` 配置。
+
+#### Markdown 解析与角色管理
+- **Markdown 解析器增强**：兼容 `#敏感词表 → ##分组标题 → ###详细条目` 这种旧文档结构；标量字段跳过以 `>` 开头的引用行，防止引用注释污染字段值。
+- **UUID 管理器优化**：`updateMarkdownFile()` 引入 `changed` 标志，内容无实际变化时跳过写盘和缓存刷新；修复同一文件中多个角色时 UUID 字段更新位置计算错误的问题。
+- 新增 `src/utils/roleLoadMode.ts` 加载模式判断工具；`shouldIncrementalRoleLoad()` 统一全量/增量策略。
+
+#### 单元测试框架
+- 新增 `scripts/register-node-unit-test-env.js`：注册 Node 单元测试环境。
+- 新增 `src/test/roleLoadRefresh.unit.test.ts`：覆盖全量清空重建、增量单文件替换、SmartRoleAdder stale-map 防护三种场景。
+- 新增 `src/test/markdownParser.test.ts`：Markdown 角色解析单元测试。
+
+### 🚀 优化
+- **设置名称格式化**：提取 `src/Provider/utils/settingsSectionNames.ts`，覆盖约 30 个设置节的本地化；支持三层回退：i18n 翻译 → 内置多语言表（zh/ja/en）→ 自动 humanize。新增 `hello`、`package`、`roleEditor`、`scripts`、`writingDashboard` 等节。
+- **Quasar 框架全局样式**：`packages/webview/src/css/app.scss` 新增全局样式，背景色/文字色绑定 VS Code CSS 变量，字体绑定 `var(--vscode-font-family)`，确保 Quasar Webview 在主题切换时正确适配。
+- **Webview 面板图标统一**：新增 `src/Provider/utils/webviewPanelIcon.ts`，为所有 Webview 面板（预览、角色编辑器、快速设置、设置向导、Hello 页、What's New、 heatmap、dashboard、graph 等）设置统一品牌图标。
+- **Hello 页面协同判断**：当 Hello 启用时，跳过旧的首次设置向导弹窗和项目初始化弹窗；仅当没有打开文本编辑器时才自动显示 Hello 页面，避免干扰用户已有工作流。
+- `updateDecorations.ts` 移除硬编码的敏感词/词汇 `.txt` 文件跳过逻辑，改为更通用的处理方式。
+
+### ⚙️ 默认配置变更
+- `andrea.typeset.statusBar.compact`：默认 `false` → `true`（版式状态栏默认精简模式）。
+- `AndreaNovelHelper.wordCount.statusBar.mode`：默认 `detailed` → `semi`（字数统计状态栏默认半精简模式）。
+- `AndreaNovelHelper.autoGit.compactStatus`：默认 `false` → `true`（AutoGit 状态栏默认精简模式）。
+
+### 🐛 修复
+- 修复右键快速添加角色时的异步/同步遗留问题：
+  - `addRuleFormSelection.ts`、`addSensitiveWord.ts`、`addVocabulary.ts` 中的 `loadRoles()` 改为增量模式 `loadRoles(false, [fullPath])`，避免全量重扫导致高亮短暂丢失。
+  - 全量扫描时确保同步重建 `SmartRoleAdder` 索引，修复 stale-map 失效模式。
+  - 修复强制刷新时未清空 `sensitiveSourceFiles` 的 bug。
+- 修复 `src/wizard/workspaceInitCheck.ts` 未将 `.toml` 纳入有效资源扩展名的问题。
+- 修复右键从选择的文本创建角色/敏感词/词汇时 `selectOrCreateFile` 未支持 `.toml` 格式的问题。
+
 ## [0.5.4] - 2026-05-10
 
 ### ✨ 新增

@@ -1,0 +1,65 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>sensitive-words.*</code> 是项目的<strong>敏感词库文件</strong>。初始化默认会创建 <code>novel-helper/sensitive-words.json5</code>，它的默认路径也可以在 <a class="doc-ref-link" data-doc="project-config-file"><code>project-config.json5</code></a> 里改。</p>
+
+<div class="doc-note">默认的 <code>sensitive-words.json5</code> 是初始化样例，不是说敏感词永远最推荐放 JSON5。按包机制，一行一个词的简单规则可以直接用 TXT；想写说明、修复建议和别名时用 Markdown；表格来源适合 CSV；结构字段很多时再用 JSON5。</div>
+
+<h4>它解决什么问题</h4>
+<p>它让 ANH 知道哪些词需要提示、标注或给出修复建议。常见用法包括：</p>
+<ul>
+    <li>错别字或常错词</li>
+    <li>投稿敏感项</li>
+    <li>项目内部禁用表达</li>
+</ul>
+
+<h4>推荐维护方式</h4>
+<ul>
+  <li>最简单的一行一个词：可以直接用 TXT</li>
+  <li>简单列表、长期人工维护、需要说明或修复建议：更推荐 Markdown</li>
+  <li>原始来源是表格：先迁成 CSV</li>
+  <li>带修复建议、等级、说明：更推荐 JSON5</li>
+</ul>
+
+<h4>从旧敏感词表迁移时怎么选格式</h4>
+<table class="doc-table">
+  <tr>
+    <th>旧资料长什么样</th>
+    <th>建议目标</th>
+  </tr>
+  <tr>
+    <td>一个 TXT，一行一个词</td>
+    <td><code>sensitive-words.txt</code>，直接一行一个词；需要额外字段时再转 <code>sensitive-words.md</code></td>
+  </tr>
+  <tr>
+    <td>Excel / CSV，列是“原词、替换词、说明”</td>
+    <td>先保留为 <code>sensitive-words.csv</code>，确认识别后再决定是否转 Markdown 或 JSON5</td>
+  </tr>
+  <tr>
+    <td>一条词有多个替换建议、别名、优先级、颜色</td>
+    <td><code>sensitive-words.json5</code></td>
+  </tr>
+</table>
+
+<div class="doc-note">如果你关注的是“功能怎么生效”，去看 <a class="doc-ref-link" data-doc="sensitive-words"><strong>敏感词检测</strong></a>；这页主要讲的是“这个文件是什么、该怎么放”。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>最小 JSON5 示例</h4>
+<pre><code>[
+  {
+    name: '某个不推荐词',
+    type: '敏感词',
+    fixes: ['推荐替换词 1', '推荐替换词 2'],
+    description: '为什么不推荐使用',
+  }
+]</code></pre>
+
+<h4>文件级建议</h4>
+<ul>
+    <li>把真正项目级规则放这里，不要散落在各章节里</li>
+    <li>多人协作时，把修复建议也写清楚，避免不同人各改各的</li>
+    <li>如果规则越来越多，考虑按主题拆分多个文件并在项目配置里统一指向</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="sensitive-words"><strong>敏感词检测</strong></a>、<a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a>。</div>
+</div>

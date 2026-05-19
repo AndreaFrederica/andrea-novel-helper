@@ -1,0 +1,396 @@
+<div class="doc-section beginner">
+<h4>这页文档讲什么</h4>
+<p>这页不是泛泛讲“迁移原则”，而是专门教你：<strong>怎样从别的软件或旧文件夹，一步一步迁移到 ANH</strong>。起点是 <strong>先创建工作区</strong>，然后 <strong>运行初始化向导</strong>，再把旧正文、角色表、词汇表、敏感词表一点点搬进来，最后得到一个真正能继续写、能搜索、能备份的 ANH 项目。</p>
+
+<div class="doc-note">如果你还没看过向导说明，先读 <a class="doc-ref-link" data-doc="init-wizard"><strong>项目初始化向导</strong></a>；如果你想知道向导最终会生成哪些文件，再读 <a class="doc-ref-link" data-doc="workspace-init-files"><strong>工作区初始化文件</strong></a>。</div>
+
+<h4>先说结论：迁移不是“把旧文件夹直接扔进来”</h4>
+<p>正确做法是：</p>
+<pre><code>1. 新建一个给 ANH 用的新工作区
+2. 运行初始化向导，先把 ANH 的基础骨架搭起来
+3. 把旧资料按类型搬进对应位置
+4. 检查补全、词汇、敏感词、搜索是否正常
+5. 再做 Git / WebDAV 备份</code></pre>
+<p>不要在旧项目原地硬改，也不要一上来就把几十个旧目录整个复制进正文主目录。</p>
+
+<h4>图 1：迁移的正确起点</h4>
+<pre><code>旧软件 / 旧文件夹 / 压缩包
+   ↓ 先保留原件
+新建一个 ANH 工作区
+   ↓
+运行初始化向导
+   ↓
+得到标准项目骨架
+   ↓
+分批迁入正文和资料
+   ↓
+检查功能是否正常
+   ↓
+再开始继续写作</code></pre>
+
+<h4>第 0 步：先备份旧资料</h4>
+<p>在做任何迁移动作前，先把旧项目完整复制一份。你可以叫它：</p>
+<pre><code>旧项目原件/
+旧项目迁移副本/</code></pre>
+<p>后面所有整理、改名、拆章节、转换格式的动作，都只对“迁移副本”做，不碰原件。</p>
+
+<h4>第 1 步：先创建一个新的 ANH 工作区</h4>
+<ol>
+    <li>打开 ANH Hello 页。</li>
+    <li>点击<strong>“新建写作工作区”</strong>。</li>
+    <li>选择一个新的空文件夹，例如 <code>D:\Novel\星港回声-ANH</code>。</li>
+    <li>让 VS Code 直接打开这个新工作区。</li>
+</ol>
+<p>这里的关键是：<strong>迁移最好迁到一个新的 ANH 工作区里</strong>，而不是直接在旧软件项目目录上强行叠加。</p>
+
+<h4>第 2 步：运行项目初始化向导</h4>
+<p>新工作区打开后，初始化向导通常会自动弹出。按顺序填完它：</p>
+<ol>
+    <li><b>项目信息</b>：填小说名、作者名、简介。</li>
+    <li><b>项目配置</b>：先用默认值就行，不要一开始就自定义太多路径。</li>
+    <li><b>Git 账户</b>：暂时不会也没关系，可以先跳过。</li>
+    <li><b>Git 仓库</b>：先不填远端地址也可以，迁移完再配。</li>
+    <li><b>项目文件</b>：让向导把基础文件一次性创建出来。</li>
+    <li><b>确认</b>：点完成。</li>
+</ol>
+
+<h4>第 3 步：你应该先看到什么结果</h4>
+<p>向导结束后，工作区里至少应该先有这些东西：</p>
+<pre><code>星港回声-ANH/
+├── anhproject.md
+├── project-config.json5
+├── .gitignore
+├── .wcignore
+└── novel-helper/
+    ├── character-gallery.json5
+    ├── character-gallery.csv
+    ├── sensitive-words.json5
+    ├── vocabulary.json5
+    ├── regex-patterns.json5
+    └── roles.md</code></pre>
+<p>到这里，你只是把 <strong>ANH 项目的骨架</strong> 建好了。注意：这些默认文件只是起步样例，真正迁移时你通常会继续把资料拆成多个包目录和多个独立文件，而不是永远只往这几个根目录 JSON5 里塞。</p>
+
+<h4>第 4 步：先决定“来源类型对应什么格式”</h4>
+<table class="doc-table">
+    <tr>
+        <th>旧资料来源</th>
+        <th>优先迁成什么</th>
+        <th>为什么</th>
+    </tr>
+    <tr>
+        <td>Word / WPS 正文</td>
+        <td>章节 <code>.md</code></td>
+        <td>正文本来就最适合 Markdown 写作流</td>
+    </tr>
+    <tr>
+        <td>Excel / 表格里的人物设定</td>
+        <td><code>character-gallery.csv</code></td>
+        <td>表格到 CSV 最直接，字段映射最省事</td>
+    </tr>
+    <tr>
+        <td>手工写的人物卡、人物手册</td>
+        <td><code>roles.md</code></td>
+        <td>长期人工阅读和维护更舒服</td>
+    </tr>
+    <tr>
+        <td>世界观术语文档</td>
+        <td><code>vocabulary.md</code></td>
+        <td>术语表通常是“人看得多”，Markdown 更自然</td>
+    </tr>
+    <tr>
+        <td>Excel / 表格里的术语表</td>
+        <td><code>vocabulary.csv</code></td>
+        <td>先保留表格结构，后面再决定要不要转 Markdown</td>
+    </tr>
+    <tr>
+        <td>纯文本敏感词列表</td>
+        <td><code>sensitive-words.txt</code> 或 <code>sensitive-words.md</code></td>
+        <td>TXT 可以直接一行一个词；想补说明、修复建议、别名时再转 Markdown</td>
+    </tr>
+    <tr>
+        <td>带修复建议、等级、说明的敏感词规则</td>
+        <td><code>sensitive-words.json5</code></td>
+        <td>结构字段比较多，JSON5 更合适</td>
+    </tr>
+    <tr>
+        <td>旧归档、PDF、截图、导出稿</td>
+        <td><code>archive/</code> 或工作区外备份目录</td>
+        <td>不应该和当前正文、当前资源包混在一起</td>
+    </tr>
+    <tr>
+        <td>旧软件数据库、缓存、索引文件</td>
+        <td>通常不迁</td>
+        <td>保留原件备查即可，别污染当前工作区</td>
+    </tr>
+</table>
+
+<div class="doc-note">一句话版规则：<strong>手工长期维护优先 Markdown，表格来源优先 CSV，复杂结构再用 JSON5。</strong></div>
+
+<h4>第 5 步：先把默认根目录文件“升级”为包结构</h4>
+<p>不要一开始就把所有资料都塞回初始化时那几个默认文件。更推荐先在 <code>novel-helper/</code> 里建几个包目录，例如：</p>
+<pre><code>novel-helper/
+├── cast-main/
+├── world/
+├── style-guide/
+└── coloring/</code></pre>
+<ol>
+    <li>打开包管理器。</li>
+    <li>在 <code>novel-helper/</code> 上右键，连续创建几个子包。</li>
+    <li>以后角色放 <code>cast-main/</code>，术语放 <code>world/</code>，敏感词放 <code>style-guide/</code>，正则规则放 <code>coloring/</code>。</li>
+    <li>初始化生成的根目录样例文件可以保留作参考，也可以在确认迁移稳定后删除。</li>
+</ol>
+
+<h4>第 6 步：先迁正文，不要先迁杂项</h4>
+<p>正文永远是第一优先级。你应该先做的是：</p>
+<ol>
+    <li>从旧软件或旧文件夹里找出“当前有效正文”。</li>
+    <li>按章节拆开，尽量整理成多个 Markdown 文件。</li>
+    <li>把这些章节文件放到 ANH 工作区根目录，或者你自己的章节子目录里。</li>
+    <li>打开几章看看，确认能正常显示、搜索和编辑。</li>
+</ol>
+
+<h4>例子 A：从 Word / WPS + Excel 迁移</h4>
+<p>假设你原来是这么管理的：</p>
+<pre><code>D:\OldNovel\
+├── 第一卷总稿.docx
+├── 角色设定.xlsx
+├── 世界观术语.docx
+└── 敏感替换词.txt</code></pre>
+<p>建议你这样迁：</p>
+<ol>
+    <li>先在 <code>novel-helper/</code> 里建三个包：<code>cast-main/</code>、<code>world/</code>、<code>style-guide/</code>。</li>
+    <li>把 <code>第一卷总稿.docx</code> 导出或整理成 Markdown / TXT 副本。</li>
+    <li>按章节拆成多个 <code>.md</code> 文件，例如：</li>
+</ol>
+<pre><code>星港回声-ANH/
+├── 第01章 初到星港.md
+├── 第02章 失控的货舱.md
+├── 第03章 雨夜追踪.md
+└── novel-helper/...</code></pre>
+<ol>
+    <li>把 <code>角色设定.xlsx</code> 另存为 CSV。</li>
+    <li>把这个 CSV 文件重命名成 <code>character-gallery.csv</code>，放进 <code>novel-helper/cast-main/</code>。</li>
+    <li>打开 CSV，至少确认第一列是名字；如果有类型、描述、别名列就一起保留。</li>
+    <li>在包管理器里确认它已经被识别为角色资源文件。</li>
+    <li>如果 Excel 里还有少数“核心角色”的长篇设定，不要硬塞 CSV；把这几个核心角色另写进 <code>novel-helper/cast-main/roles.md</code>。</li>
+    <li>把 <code>世界观术语.docx</code> 整理成 <code>novel-helper/world/vocabulary.md</code>。术语这类资料通常更推荐 Markdown，因为后续是“人读得多”。</li>
+    <li>如果 <code>敏感替换词.txt</code> 本来就是一行一个词，可以直接重命名为 <code>sensitive-words.txt</code>，放进 <code>novel-helper/style-guide/</code>；如果你想同时写修复建议、说明、别名或优先级，再整理成 Markdown / CSV / JSON5。</li>
+</ol>
+
+<h4>例子 A-1：Excel 人物设定迁到 CSV 的具体做法</h4>
+<ol>
+    <li>在 Excel 里保留最关键的列，例如：<code>name</code>、<code>type</code>、<code>description</code>、<code>aliases</code>。</li>
+    <li>删除纯视觉排版用的合并单元格、彩色分隔行、空白装饰列。</li>
+    <li>执行“另存为 CSV”。</li>
+    <li>把文件名改成能命中角色关键词的名字，例如 <code>character-gallery.csv</code>。</li>
+    <li>把它放到包目录，例如 <code>novel-helper/cast-main/character-gallery.csv</code>。</li>
+    <li>回到 VS Code，确认包管理器能展开这个文件。</li>
+</ol>
+<pre><code>name,type,description,aliases
+林小满,主角,雨天咖啡店常客,"小满;小林"
+周既白,配角,货运站调度员,"老周"</code></pre>
+
+<h4>例子 A-2：TXT 敏感词列表怎么迁</h4>
+<p>如果你原来的 <code>敏感替换词.txt</code> 大概长这样：</p>
+<pre><code>某个不推荐词
+另一个不推荐词
+某个投稿禁用表达</code></pre>
+<p>那么最直接的迁法就是保留 TXT 格式：</p>
+<ol>
+    <li>在 <code>novel-helper/style-guide/</code> 里创建或复制出 <code>sensitive-words.txt</code>。</li>
+    <li>保持“一行一个敏感词”。</li>
+    <li>空行会被跳过；以 <code>#</code> 或 <code>//</code> 开头的行会被当作注释。</li>
+    <li>在包管理器里确认这个文件被识别为敏感词库。</li>
+</ol>
+<pre><code># 一行一个敏感词，支持 # / // 注释
+某个不推荐词
+另一个不推荐词
+某个投稿禁用表达</code></pre>
+<p>TXT 的限制也很明确：它只能表达“词本身”，不能写修复建议、别名、颜色、优先级和说明。如果你需要这些字段，再升级成 Markdown：</p>
+<ol>
+    <li>创建 <code>novel-helper/style-guide/sensitive-words.md</code>。</li>
+    <li>第一行写 <code># 敏感词库</code>，表示这是一个敏感词资源文件。</li>
+    <li>把每个旧词改成一个二级标题，也就是 <code>## 词条名</code>。</li>
+    <li>每个词条下面写 <code>### 类型</code>，下一行写 <code>敏感词</code>。</li>
+    <li>如果有替换建议，再加 <code>### 修复</code>，下面一行一个建议词。</li>
+</ol>
+<pre><code># 敏感词库
+
+## 某个不推荐词
+
+### 类型
+敏感词
+
+### 修复
+推荐替换词
+更温和的表达
+
+## 另一个不推荐词
+
+### 类型
+敏感词
+
+### 修复
+替代表达</code></pre>
+<p>这样迁完以后，你能直接在 VS Code 里读懂每一条规则，也能继续补说明、别名、优先级和颜色：</p>
+<pre><code>### 别名
+某个变体
+某个谐音
+
+### 优先级
+2
+
+### 颜色
+#FF4D4F</code></pre>
+
+<h4>例子 A-3：带“原词 / 替换词 / 说明”的敏感词表怎么迁</h4>
+<p>如果旧资料不是一行一个词，而是类似这样的表格：</p>
+<pre><code>原词,替换词,说明
+某个不推荐词,推荐替换词,成稿前统一替换
+另一个不推荐词,替代表达,投稿平台不建议出现</code></pre>
+<p>它本来就是表格来源，先落 CSV 会更清楚：</p>
+<pre><code>novel-helper/style-guide/sensitive-words.csv</code></pre>
+<p>如果你想让字段更完整，或者需要一条敏感词对应多个修复建议，再迁成 JSON5：</p>
+<pre><code>[
+    {
+        name: '某个不推荐词',
+        type: '敏感词',
+        fixes: ['推荐替换词', '更温和的表达'],
+        description: '成稿前统一替换',
+        priority: 2,
+    },
+    {
+        name: '另一个不推荐词',
+        type: '敏感词',
+        fixes: ['替代表达'],
+        description: '投稿平台不建议出现',
+    },
+]</code></pre>
+<p>所以敏感词迁移不是“全部扔进默认 <code>sensitive-words.json5</code>”。正确路线是：一行一个词可以直接保留 TXT；想手工写说明和修复建议就用 Markdown；原始表格先 CSV；规则复杂、要多修复建议和说明时再 JSON5。</p>
+
+<h4>例子 B：从 Obsidian / Markdown 项目迁移</h4>
+<p>假设你原来长这样：</p>
+<pre><code>obsidian-vault/
+├── 小说正文/
+│   ├── 第1章.md
+│   ├── 第2章.md
+│   └── 第3章.md
+├── 人物卡/
+│   ├── 女主.md
+│   └── 男主.md
+├── 术语.md
+└── 零散笔记/</code></pre>
+<p>这种情况通常更好迁，因为正文本来就是 Markdown：</p>
+<ol>
+    <li>把 <code>小说正文/</code> 下的章节直接复制到新 ANH 工作区。</li>
+    <li>先在 <code>novel-helper/</code> 下建 <code>cast-main/</code> 和 <code>world/</code> 两个包。</li>
+    <li>把 <code>人物卡/</code> 里的关键信息整理进 <code>novel-helper/cast-main/roles.md</code>。</li>
+    <li>把 <code>术语.md</code> 整理进 <code>novel-helper/world/vocabulary.md</code>。</li>
+    <li>双链、标签、frontmatter 不是不能留，但不要让它们妨碍你先完成迁移。</li>
+</ol>
+
+<h4>例子 C：把旧项目目录的一部分先标成“外部包”</h4>
+<p>如果你有一批旧资料暂时不想塞进 <code>novel-helper/</code>，但又想让 ANH 先识别它，更适合这样做：</p>
+<pre><code>当前工作区/
+├── novel-helper/
+└── imports/
+    └── 旧项目角色迁移包/
+        ├── roles.md
+        └── character-gallery.csv</code></pre>
+<ol>
+    <li>把旧资料先整理到 <code>imports/旧项目角色迁移包/</code>。</li>
+    <li>打开“外部资源目录管理”。</li>
+    <li>选择这个目录。</li>
+    <li>让 ANH 创建 <code>__init__.ojson5</code>。</li>
+    <li>这样它就会作为<strong>当前工作区里一个非 <code>novel-helper/</code> 的外部包</strong>出现在包管理器顶层。</li>
+</ol>
+<p>这比一上来就挂工作区外目录更符合 ANH 的日常使用方式。</p>
+
+<div class="doc-note">迁移阶段最重要的原则是：<strong>先能继续写，再追求漂亮结构</strong>。不要在第一天就试图把所有历史废稿、截图、索引库、插件缓存都“标准化”。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>一个完整的迁移示例</h4>
+<p>假设你的旧项目叫“星港回声”，原目录如下：</p>
+<pre><code>D:\OldNovel\星港回声\
+├── 正文总稿.docx
+├── 人物关系.xlsx
+├── 敏感词.txt
+├── 设定术语.docx
+├── 历史归档.zip
+└── 截图素材/</code></pre>
+
+<p>迁移到 ANH 之后，一个比较合理的结果可以是：</p>
+<pre><code>D:\Novel\星港回声-ANH\
+├── anhproject.md
+├── project-config.json5
+├── .gitignore
+├── .wcignore
+├── 第01章 初到星港.md
+├── 第02章 失控的货舱.md
+├── 第03章 雨夜追踪.md
+├── archive/
+│   └── from-old-project/
+│       └── 历史归档.zip
+├── imports/
+│   └── 旧项目角色迁移包/
+│       ├── __init__.ojson5
+│       ├── roles.md
+│       └── character-gallery.csv
+└── novel-helper/
+    ├── cast-main/
+    │   ├── roles.md
+    │   └── character-gallery.csv
+    ├── world/
+    │   └── vocabulary.md
+    ├── style-guide/
+    │   └── sensitive-words.md
+    ├── coloring/
+    │   └── regex-patterns.json5
+    └── mcp.json</code></pre>
+
+<h4>上面这个最终效果意味着什么</h4>
+<ul>
+    <li><b>项目根目录</b>：放当前还在写的正文主文件。</li>
+    <li><b>novel-helper/</b>：放项目主资源，而且是按包拆开的，不再只依赖初始化那几个默认 JSON5 文件。</li>
+    <li><b>imports/旧项目角色迁移包/</b>：这是一个当前工作区里的<strong>外部包</strong>示例，它不在 <code>novel-helper/</code> 下，但仍可被 ANH 识别。</li>
+    <li><b>archive/</b>：放旧归档、旧导出、旧压缩包，不和当前正文混在一起。</li>
+    <li><b>向导生成的基础文件</b>：保证 ANH 能正常识别这个项目。</li>
+</ul>
+
+<h4>哪些东西不要急着迁</h4>
+<ul>
+    <li>其他软件的数据库文件。</li>
+    <li>自动保存缓存。</li>
+    <li>过期导出 PDF。</li>
+    <li>一大堆截图和零散素材。</li>
+    <li>几十个“最终版2”“最终版3”之类的旧副本。</li>
+</ul>
+<p>这些东西可以先保留在旧项目备份里，或者放到 <code>archive/</code>，但不要让它们污染当前工作区主目录。</p>
+
+<h4>迁移完成后立刻做的 6 件事</h4>
+<ol>
+    <li>打开几章正文，确认文件都能正常编辑。</li>
+    <li>跑一次全文搜索，确认章节没有丢。</li>
+    <li>检查角色补全、词汇识别、敏感词识别是否开始工作。</li>
+    <li>补齐 <a class="doc-ref-link" data-doc="anhproject-file"><strong>anhproject.md</strong></a> 和 <a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a>。</li>
+    <li>确认 <a class="doc-ref-link" data-doc="gitignore-file"><strong>.gitignore</strong></a> 是否合理。</li>
+    <li>做一次“迁移完成初始状态”提交。</li>
+</ol>
+
+<h4>图 2：迁移完成检查单</h4>
+<pre><code>[ ] 旧项目原件已保留
+[ ] 新 ANH 工作区已创建
+[ ] 初始化向导已完成
+[ ] novel-helper/ 下的包目录已建好
+[ ] 正文章节已迁入并能打开
+[ ] Excel 角色表已迁入 character-gallery.csv
+[ ] 核心角色手册已迁入 roles.md
+[ ] 词汇表已迁入 vocabulary.md 或 vocabulary.csv
+[ ] 敏感词表已迁入 sensitive-words.txt / Markdown / CSV / JSON5
+[ ] archive/ 中只放旧归档，不干扰当前正文
+[ ] 如有需要，非 novel-helper 目录已标成外部包
+[ ] 第一次 Git 提交已完成</code></pre>
+
+<div class="doc-note">如果你迁移完之后还要做云端同步，下一步就去看 <a class="doc-ref-link" data-doc="git-remote-sync"><strong>云仓库同步与备份</strong></a>。如果你是完全不懂 Git 的新手，先回去补 <a class="doc-ref-link" data-doc="version-control-basics"><strong>版本管理是什么</strong></a> 和 <a class="doc-ref-link" data-doc="git-basics"><strong>Git 本体详解</strong></a>。</div>
+</div>

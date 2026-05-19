@@ -37,14 +37,22 @@ export interface TypstRenderer {
   id: string
   label: string
   description?: string
+  /** 模板处理方式：post-process(基于Liquid渲染结果后处理) / source(自主读取模板源文件) / none(不需要模板) */
+  templateMode?: TypstTemplateMode
   scriptPath?: string
   handler: (input: TypstRendererInput, ctx: any) => string | { typContent: string } | undefined | Promise<string | { typContent: string } | undefined>
 }
+
+export type TypstTemplateMode = 'post-process' | 'source' | 'none'
 
 export interface TypstRendererInput {
   templateName: string
   fallbackTemplatesDir: string
   renderContext: any
+  /** Liquid 模板预渲染后的 Typst 内容，适用于 templateMode='post-process' */
+  liquidOutput?: string
+  /** 模板源文件原始内容，适用于 templateMode='source' */
+  templateSource?: string
 }
 
 class ScriptExtensionRegistry {
@@ -106,6 +114,10 @@ class ScriptExtensionRegistry {
     this.typstRenderers.set(renderer.id, renderer)
   }
 
+  getTypstRendererTemplateMode(id: string): TypstTemplateMode | undefined {
+    return this.typstRenderers.get(id)?.templateMode
+  }
+
   listTypstRenderers(): TypstRenderer[] {
     return Array.from(this.typstRenderers.values()).sort((a, b) => a.label.localeCompare(b.label))
   }
@@ -151,13 +163,14 @@ export function createScriptExtensionApi(scriptPath?: string) {
     },
     renderers: {
       registerTypst: (
-        meta: { id: string; label?: string; description?: string },
+        meta: { id: string; label?: string; description?: string; templateMode?: TypstTemplateMode },
         handler: TypstRenderer['handler']
       ) => {
         scriptExtensionRegistry.registerTypstRenderer({
           id: meta.id,
           label: meta.label || meta.id,
           description: meta.description,
+          templateMode: meta.templateMode,
           scriptPath,
           handler
         })
@@ -259,9 +272,7 @@ export async function pickPlainTextProcessor(includeInternal = true): Promise<st
 }
 
 export async function renderTypstWithRegisteredRenderer(
-  templateName: string,
-  fallbackTemplatesDir: string,
-  renderContext: any,
+  input: TypstRendererInput,
   rendererId?: string
 ): Promise<string | undefined> {
   const id = rendererId || vscode.workspace.getConfiguration('andrea.typst').get<string>('defaultRenderer', 'internal')
@@ -273,7 +284,7 @@ export async function renderTypstWithRegisteredRenderer(
   }
   const { ctx, disconnect } = await buildRuntimeContext({ label: `typst-renderer:${id}` })
   try {
-    const result = await renderer.handler({ templateName, fallbackTemplatesDir, renderContext }, ctx)
+    const result = await renderer.handler(input, ctx)
     if (typeof result === 'string') return result
     if (result && typeof result.typContent === 'string') return result.typContent
     return undefined

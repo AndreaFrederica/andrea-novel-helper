@@ -415,7 +415,7 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
         log('开始执行主初始化');
         // 统一由独立模块检测并可提示初始化
-        maybePromptProjectInit();
+        await maybePromptProjectInit(context);
         
         // 检查并创建项目配置文件
         const projectConfigManager = new ProjectConfigManager(ws);

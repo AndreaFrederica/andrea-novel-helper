@@ -1,0 +1,60 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>roles.md</code> 是一种<strong>Markdown 版角色资源文件</strong>。如果你更喜欢“像写文档一样写角色卡”，而不是在 JSON5 里对括号和逗号，它通常是最舒服的方案。</p>
+
+<h4>基本结构</h4>
+<pre><code># 角色库
+
+## 林小满
+
+### 类型
+主角
+
+### 颜色
+#FF6B6B
+
+### 别名
+小满
+小林</code></pre>
+
+<h4>层级怎么读</h4>
+<ul>
+    <li><code>#</code>：文件标题</li>
+    <li><code>##</code>：一个条目（通常是一个角色）</li>
+    <li><code>###</code>：该条目的字段名</li>
+</ul>
+
+<h4>为什么很多人喜欢它</h4>
+<ul>
+    <li>可读性好</li>
+    <li>适合边看边改</li>
+    <li>更像写设定手册，不像写配置文件</li>
+</ul>
+
+<div class="doc-note">如果你的角色字段很多，而且以后还想做批量处理，JSON5 往往更稳；如果你更在意可读性和手工整理体验，<code>roles.md</code> 更舒服。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>适合 roles.md 的场景</h4>
+<ul>
+    <li>手工维护几十个以内的重要角色</li>
+    <li>你会经常阅读设定，而不只是把它当数据库</li>
+    <li>你习惯 Markdown 工作流</li>
+</ul>
+
+<h4>不太适合的场景</h4>
+<ul>
+    <li>要批量导入几百条简单数据</li>
+    <li>要做复杂程序处理或导出</li>
+    <li>字段高度结构化、机器优先</li>
+</ul>
+
+<h4>最常见错误</h4>
+<ul>
+    <li>把字段标题写错层级</li>
+    <li>忘了“类型”字段</li>
+    <li>把多个角色写进同一段自然语言里，失去结构</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="markdown-format-guide"><strong>文件格式指南</strong></a>、<a class="doc-ref-link" data-doc="role-management"><strong>角色管理</strong></a>、<a class="doc-ref-link" data-doc="character-gallery-file"><strong>character-gallery.*</strong></a>。</div>
+</div>

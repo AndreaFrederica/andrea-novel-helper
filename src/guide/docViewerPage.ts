@@ -19,6 +19,7 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
         docs: {
             'hello-world': 'Hello World',
             'init-wizard': '项目初始化向导',
+            'workspace-init-files': '工作区初始化文件',
             'project-settings': '项目设置',
             'plugin-settings': '插件设置',
             'quick-settings': '快速设置',
@@ -32,7 +33,25 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
         docs: {
             'everything-is-role': '一切皆角色',
             'package-manager': '包管理器',
+            'package-mechanism': '包机制与外部包详解',
             'markdown-format-guide': '文件格式指南',
+            'version-control-basics': '版本管理是什么',
+            'git-basics': 'Git 本体详解',
+        }
+    },
+    projectFiles: {
+        title: '项目文件',
+        docs: {
+            'anhproject-file': 'anhproject.md',
+            'project-config-file': 'project-config.json5',
+            'gitignore-file': '.gitignore',
+            'wcignore-file': '.wcignore',
+            'character-gallery-file': 'character-gallery.*',
+            'sensitive-words-file': 'sensitive-words.*',
+            'vocabulary-file': 'vocabulary.*',
+            'regex-patterns-file': 'regex-patterns.*',
+            'roles-markdown-file': 'roles.md',
+            'mcp-config-file': 'mcp.json',
         }
     },
     roles: {
@@ -42,6 +61,7 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
             'sensitive-words': '敏感词检测',
             'vocabulary': '词汇表',
             'regex-coloring': '正则着色',
+            'regex-tutorial': '正则表达式入门',
         }
     },
     writing: {
@@ -65,7 +85,10 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
         docs: {
             'external-resource': '外部资源目录',
             'reference-heatmap': '引用维护与热力图',
-            'git-integration': 'Git 集成',
+            'git-integration': 'Git 与 VS Code 集成',
+            'git-hosting-platforms': 'Git 托管平台比较',
+            'git-remote-sync': '云仓库同步与备份',
+            'data-import-migration': '从旧项目迁入数据',
             'relationship': '角色关系图',
             'role-relationship-graph': '角色关系图谱',
             'timeline': '时间线',
@@ -137,15 +160,83 @@ function setupDocViewerPanel(panel: vscode.WebviewPanel, docId?: string): void {
     const docsData = buildDocsData();
     panel.webview.html = getDocViewerHtml(panel.webview, docsData, docId);
 
-    panel.onDidDispose(() => { currentPanel = undefined; });
+    sendThemeColors(panel);
+
+    const themeWatcher = vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('workbench.colorTheme') || e.affectsConfiguration('editor.tokenColorCustomizations')) {
+            sendThemeColors(panel);
+        }
+    });
+
+    panel.onDidDispose(() => {
+        currentPanel = undefined;
+        themeWatcher.dispose();
+    });
 
     panel.webview.onDidReceiveMessage(async message => {
         if (message?.command === 'openGuide') {
             await vscode.commands.executeCommand('AndreaNovelHelper.showGuide');
         } else if (message?.command === 'releaseDocs' && message.docId) {
             await releaseDocsToWorkspace(message.docId);
+        } else if (message?.command === 'requestThemeColors') {
+            sendThemeColors(panel);
         }
     });
+}
+
+function sendThemeColors(panel: vscode.WebviewPanel): void {
+    const merged: Record<string, string> = {
+        keyword: 'var(--vscode-symbolIcon-keywordForeground, #569cd6)',
+        string: 'var(--vscode-symbolIcon-stringForeground, #ce9178)',
+        number: 'var(--vscode-symbolIcon-numberForeground, #b5cea8)',
+        comment: 'var(--vscode-descriptionForeground, #6a9955)',
+        type: 'var(--vscode-symbolIcon-classForeground, #4ec9b0)',
+        'function': 'var(--vscode-symbolIcon-functionForeground, #dcdcaa)',
+        variable: 'var(--vscode-symbolIcon-variableForeground, #9cdcfe)',
+        constant: 'var(--vscode-symbolIcon-constantForeground, #4fc1ff)',
+        punctuation: 'var(--vscode-editor-foreground, #d4d4d4)',
+        bracket: 'var(--vscode-symbolIcon-operatorForeground, #ffd700)',
+        separator: 'var(--vscode-descriptionForeground, #808080)',
+        tag: 'var(--vscode-symbolIcon-keywordForeground, #569cd6)',
+        attribute: 'var(--vscode-symbolIcon-propertyForeground, #9cdcfe)',
+        operator: 'var(--vscode-symbolIcon-operatorForeground, #d4d4d4)',
+        regexp: 'var(--vscode-symbolIcon-colorForeground, #d16969)',
+        'md-heading': 'var(--vscode-textLink-foreground, #569cd6)',
+        'md-heading2': 'var(--vscode-textLink-foreground, #569cd6)',
+        'md-heading3': 'var(--vscode-textLink-foreground, #569cd6)',
+        'md-heading4': 'var(--vscode-textLink-foreground, #569cd6)',
+        'md-bold': 'var(--vscode-editor-foreground, #d4d4d4)',
+        'md-italic': 'var(--vscode-editor-foreground, #d4d4d4)',
+        'md-strike': 'var(--vscode-descriptionForeground, #808080)',
+        'md-list': 'var(--vscode-descriptionForeground, #808080)',
+        'md-link': 'var(--vscode-textLink-foreground, #4ec9b0)',
+        'md-code': 'var(--vscode-textPreformat-foreground, #ce9178)',
+        'md-sep': 'var(--vscode-descriptionForeground, #808080)',
+        'role-field': 'var(--vscode-symbolIcon-keyForeground, #c586c0)',
+        'role-value': 'var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground, #d4d4d4))',
+        'prose-dialogue-double': 'var(--vscode-terminal-ansiYellow, #fbdc98ff)',
+        'prose-dialogue-corner': 'var(--vscode-terminal-ansiYellow, #fbdc98ff)',
+        'prose-thought-single': 'var(--vscode-terminal-ansiBlue, #98bbfbff)',
+        'prose-book-title': 'var(--vscode-terminal-ansiMagenta, #fbbc98ff)'
+    };
+
+    // Merge user tokenColorCustomizations if present
+    const customizations = vscode.workspace.getConfiguration('editor').get<Record<string, any>>('tokenColorCustomizations');
+
+    if (customizations) {
+        const scopeMap: Record<string, string> = {
+            comments: 'comment', strings: 'string', keywords: 'keyword',
+            numbers: 'number', types: 'type', functions: 'function',
+            variables: 'variable', constants: 'constant', operators: 'operator',
+            regexp: 'regexp'
+        };
+        for (const [key, tokenKey] of Object.entries(scopeMap)) {
+            const val = customizations[key];
+            if (typeof val === 'string') { merged[tokenKey] = val; }
+        }
+    }
+
+    panel.webview.postMessage({ command: 'themeColors', colors: merged });
 }
 
 async function releaseDocsToWorkspace(_docId: string): Promise<void> {
@@ -223,7 +314,9 @@ function getDocViewerHtml(webview: vscode.Webview, docsData: Record<string, DocD
     }
 
     // Inject docs data
-    const docsDataScript = `<script nonce="${nonce}">window.__DOCS_DATA__ = ${JSON.stringify(docsData)}; window.__INITIAL_DOC_ID__ = ${JSON.stringify(initialDocId || null)};</script>`;
+    const settings = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const triggerMode = settings.get<string>('completion.triggerMode', 'loose');
+    const docsDataScript = `<script nonce="${nonce}">window.__DOCS_DATA__ = ${JSON.stringify(docsData)}; window.__INITIAL_DOC_ID__ = ${JSON.stringify(initialDocId || null)}; window.__SETTINGS__ = ${JSON.stringify({ triggerMode })};</script>`;
 
     return template
         .replace(/__CSP_SOURCE__/g, webview.cspSource)

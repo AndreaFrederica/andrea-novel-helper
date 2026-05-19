@@ -1,0 +1,70 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>.gitignore</code> 是 Git 的忽略清单。写进这里的文件或目录，Git 默认不会跟踪。</p>
+
+<h4>为什么 ANH 项目里需要它</h4>
+<p>因为有些东西适合本地生成，不适合进入版本历史，比如写作统计缓存或本地历史目录。如果把这些文件也提交进 Git，仓库会很脏，历史也会膨胀。</p>
+
+<h4>初始化时常见内容</h4>
+<pre><code>novel-helper/.anh-fsdb/
+.history/</code></pre>
+
+<h4>这两条分别是什么意思</h4>
+<ul>
+    <li><code>novel-helper/.anh-fsdb/</code>：写作统计数据库缓存</li>
+    <li><code>.history/</code>：某些本地历史插件写出来的历史快照</li>
+</ul>
+
+<h4>哪些东西不要随便忽略</h4>
+<ul>
+    <li>章节正文</li>
+    <li><code>anhproject.md</code></li>
+    <li><code>project-config.json5</code></li>
+    <li><code>novel-helper/</code> 里你真正维护的角色、词汇、敏感词、正则规则文件</li>
+</ul>
+
+<div class="doc-note">一句话：<strong>忽略“可重建的缓存”，不要忽略“真正的创作资产”。</strong></div>
+</div>
+
+<div class="doc-section pro">
+<h4>Git ignore 和 .wcignore 不是一回事</h4>
+<table class="doc-table">
+    <tr>
+        <th>文件</th>
+        <th>影响什么</th>
+    </tr>
+    <tr>
+        <td><code>.gitignore</code></td>
+        <td>Git 是否跟踪文件</td>
+    </tr>
+    <tr>
+        <td><code>.wcignore</code></td>
+        <td>ANH 的字数统计 / 某些扫描是否忽略</td>
+    </tr>
+</table>
+
+<h4>适合写进 .gitignore 的内容</h4>
+<ul>
+    <li>缓存目录</li>
+    <li>临时导出文件</li>
+    <li>自动生成但可重建的产物</li>
+    <li>本地编辑器插件历史</li>
+</ul>
+
+<h4>不适合写进 .gitignore 的内容</h4>
+<ul>
+    <li>正文</li>
+    <li>角色和词汇资源库</li>
+    <li>项目配置文件</li>
+    <li>你打算跨设备同步的真正资料</li>
+</ul>
+
+<h4>常见误区</h4>
+<ul>
+    <li>把整个 <code>novel-helper/</code> 都忽略掉，结果角色词汇完全不同步</li>
+    <li>把导出目录和当前正文目录混在一起，不知道哪些该忽略</li>
+    <li>已经被 Git 跟踪过的文件，后来加进 <code>.gitignore</code> 却以为会自动消失</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="git-remote-sync"><strong>云仓库同步与备份</strong></a>、<a class="doc-ref-link" data-doc="wcignore-file"><strong>.wcignore</strong></a>。</div>
+</div>

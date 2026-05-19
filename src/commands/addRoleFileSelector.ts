@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSON5 from 'json5';
 import { isRoleFile, getPackageDirectory } from '../utils/utils';
-import { generateMarkdownTemplate } from '../templates/templateGenerators';
+import { generateMarkdownTemplate, generateCharacterGalleryToml, generateSensitiveWordsToml, generateVocabularyToml } from '../templates/templateGenerators';
 import { DEFAULT_ROLE_DELIMITED_HEADERS } from '../utils/delimitedRoleFile';
 
 // 记忆功能：存储每种fileType上次选择的文件
@@ -28,12 +28,15 @@ export async function scanJson5Files(options?: {
     includeOjson5?: boolean;
     /** 是否包含 csv 文件，默认为 false */
     includeCsv?: boolean;
+    /** 是否包含 toml 文件，默认为 false */
+    includeToml?: boolean;
 }, customFilter?: (fileName: string) => boolean): Promise<string[]> {
     const {
         excludeSensitive = true,
         includeMd = false,
         includeOjson5 = true,
-        includeCsv = false
+        includeCsv = false,
+        includeToml = false
     } = options || {};
 
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -54,7 +57,8 @@ export async function scanJson5Files(options?: {
                 lowerFile.endsWith('.json5') ||
                 (includeOjson5 && lowerFile.endsWith('.ojson5')) ||
                 (includeMd && lowerFile.endsWith('.md')) ||
-                (includeCsv && lowerFile.endsWith('.csv'));
+                (includeCsv && lowerFile.endsWith('.csv')) ||
+                (includeToml && lowerFile.endsWith('.toml'));
 
             if (!validExtension) return false;
 
@@ -98,6 +102,8 @@ export async function selectOrCreateFile(
         includeOjson5?: boolean;
         /** 是否包含 csv 文件，默认为 false */
         includeCsv?: boolean;
+        /** 是否包含 toml 文件，默认为 false */
+        includeToml?: boolean;
         /** 自定义文件名过滤器 */
         customFilter?: (fileName: string) => boolean;
     }
@@ -107,6 +113,7 @@ export async function selectOrCreateFile(
         includeMd = false,
         includeOjson5 = true,
         includeCsv = false,
+        includeToml = false,
         customFilter
     } = scanOptions || {};
 
@@ -207,6 +214,7 @@ export async function selectOrCreateFile(
                 validExtensions.push('.json5');
                 if (includeMd) validExtensions.push('.md');
                 if (includeCsv) validExtensions.push('.csv');
+                if (includeToml) validExtensions.push('.toml');
 
                 const hasValidExtension = validExtensions.some(ext => value.endsWith(ext));
                 if (!hasValidExtension) {
@@ -241,6 +249,15 @@ export async function selectOrCreateFile(
                 content = generateDelimitedTemplate();
             } else if (filePath.endsWith('.ojson5') || filePath.endsWith('.json5')) {
                 content = JSON5.stringify([], null, 2);
+            } else if (filePath.endsWith('.toml')) {
+                const ft = fileType.toLowerCase();
+                if (ft.includes('敏感词')) {
+                    content = generateSensitiveWordsToml();
+                } else if (ft.includes('词汇')) {
+                    content = generateVocabularyToml();
+                } else {
+                    content = generateCharacterGalleryToml();
+                }
             } else {
                 content = '';
             }

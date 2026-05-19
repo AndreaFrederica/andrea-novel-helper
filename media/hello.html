@@ -125,6 +125,17 @@
             vertical-align: -4px;
         }
         .icon-img { width: 16px; height: 16px; display: block; }
+
+        /* Theme-aware icon tinting: white-stroke icons need darkening on light themes */
+        body[data-theme="light"] .icon-img[data-white="1"],
+        body[data-theme="hc-light"] .icon-img[data-white="1"] {
+            filter: brightness(0) invert(0.2);
+        }
+        /* Blue-stroke icons get a slight brightness boost on dark themes */
+        body[data-theme="dark"] .icon-img[data-blue="1"],
+        body[data-theme="hc"] .icon-img[data-blue="1"] {
+            filter: brightness(1.15);
+        }
         .recent-item {
             display: grid;
             gap: 1px;
@@ -303,10 +314,10 @@
                 <section class="column-section" aria-labelledby="startTitle">
                     <h2 class="section-title" id="startTitle" data-i18n="start">启动</h2>
                     <div class="start-list">
-                        <button class="action-link" data-action="createWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-add.svg" alt=""></span><span data-i18n="createWorkspace">新建写作工作区...</span></button>
-                        <button class="action-link" data-action="openWorkspace"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/folder-open.svg" alt=""></span><span data-i18n="openWorkspace">打开工作区...</span></button>
-                        <button class="action-link" data-action="openAnhSettings"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span data-i18n="openSettings">打开 ANH 设置...</span></button>
-                        <button class="action-link" data-action="showGuide"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/guide.svg" alt=""></span><span data-i18n="openGuide">打开完整功能引导</span></button>
+                        <button class="action-link" data-action="createWorkspace"><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/folder-add.svg" alt=""></span><span data-i18n="createWorkspace">新建写作工作区...</span></button>
+                        <button class="action-link" data-action="openWorkspace"><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/folder-open.svg" alt=""></span><span data-i18n="openWorkspace">打开工作区...</span></button>
+                        <button class="action-link" data-action="openAnhSettings"><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/settings.svg" alt=""></span><span data-i18n="openSettings">打开 ANH 设置...</span></button>
+                        <button class="action-link" data-action="showGuide"><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/guide.svg" alt=""></span><span data-i18n="openGuide">打开完整功能引导</span></button>
                     </div>
                 </section>
 
@@ -330,7 +341,7 @@
                 </section>
 
                 <details class="collapsible" id="gitDetails">
-                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/git.svg" alt=""></span><span class="section-title" data-i18n="gitIdentity">Git 身份</span></summary>
+                    <summary><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/git.svg" alt=""></span><span class="section-title" data-i18n="gitIdentity">Git 身份</span></summary>
                     <div class="collapsible-body">
                         <div id="gitSummary" class="path">正在检测 Git...</div>
                         <div class="form-grid" style="margin-top: 10px;">
@@ -359,7 +370,7 @@
                 </details>
 
                 <section class="column-section" aria-labelledby="docTitle">
-                    <h2 class="section-title" id="docTitle"><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/book.svg" alt=""></span><span data-i18n="docs">文档</span></h2>
+                    <h2 class="section-title" id="docTitle"><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/book.svg" alt=""></span><span data-i18n="docs">文档</span></h2>
                     <div class="simple-list">
                         <button class="action-link" data-doc="hello-world" data-i18n="quickStart">5 分钟快速上手</button>
                         <button class="action-link" data-doc="vscode-settings" data-i18n="vscodeBasics">VS Code 基础</button>
@@ -372,7 +383,7 @@
                 </section>
 
                 <details class="collapsible" id="helloConfigDetails">
-                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span><span class="section-title" data-i18n="homeSettings">首页设置</span></summary>
+                    <summary><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/settings.svg" alt=""></span><span class="section-title" data-i18n="homeSettings">首页设置</span></summary>
                     <div class="collapsible-body">
                         <label class="toggle-row">
                             <input id="helloEnabled" type="checkbox">
@@ -398,35 +409,35 @@
                     <h2 class="section-title" id="walkthroughTitle" data-i18n="walkthrough">演练</h2>
                     <div class="walkthrough-list">
                         <button class="welcome-card" id="initProjectCard" data-cmd="AndreaNovelHelper.projectInitWizard.graphical">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/rocket.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-white="1" src="__ICONS_URI__/rocket.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="initProject">初始化小说项目</span><span class="card-desc" data-i18n="initProjectDesc">生成项目配置、角色库、敏感词、词汇、正则和基础目录。</span></span>
                             <span class="badge card-status" id="initProjectStatus" data-i18n="startButton">开始</span>
                         </button>
                         <button class="welcome-card" data-cmd="workbench.view.extension.AndreaNovelHelperSidebar">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/files.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-white="1" src="__ICONS_URI__/files.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="manageResources">管理角色和资料</span><span class="card-desc" data-i18n="manageResourcesDesc">进入 ANH 资源视图，创建角色、词汇、敏感词和外部资源包。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="andrea.openWritingDashboard">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/dashboard.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-white="1" src="__ICONS_URI__/dashboard.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="dashboard">打开创作工作台</span><span class="card-desc" data-i18n="dashboardDesc">查看字数、写作时间、计划、热力图和当前创作状态。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="andrea.comments.open">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/comment.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-white="1" src="__ICONS_URI__/comment.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="comments">批注与校对</span><span class="card-desc" data-i18n="commentsDesc">添加批注，管理修改意见，并进入错别字和翻译相关功能。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="andrea.openRoleRelationshipGraph">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/graph.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-white="1" src="__ICONS_URI__/graph.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="graph">关系图和时间线</span><span class="card-desc" data-i18n="graphDesc">查看角色关系图谱、关系文件和事件时间线。</span></span>
                         </button>
                         <button class="welcome-card" data-doc="export">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/export.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-white="1" src="__ICONS_URI__/export.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="export">导出与发布</span><span class="card-desc" data-i18n="exportDesc">使用 Typst 模板导出 PDF、图片或整理后的文本。</span></span>
                         </button>
                     </div>
                 </section>
 
                 <details class="collapsible" id="extensionDetails">
-                    <summary><span class="link-icon"><img class="icon-img" src="__ICONS_URI__/extension.svg" alt=""></span><span class="section-title" data-i18n="recommendedExtensions">推荐扩展</span></summary>
+                    <summary><span class="link-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/extension.svg" alt=""></span><span class="section-title" data-i18n="recommendedExtensions">推荐扩展</span></summary>
                     <div class="collapsible-body">
                         <div id="extensions" class="extensions"></div>
                     </div>
@@ -436,20 +447,36 @@
                     <h2 class="section-title" id="faqTitle" data-i18n="faqTitle">常见疑问</h2>
                     <div class="walkthrough-list">
                         <button class="welcome-card" data-cmd="workbench.action.quickOpen">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/guide.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/guide.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="faqCommandPalette">命令面板是什么？</span><span class="card-desc" data-i18n="faqCommandPaletteDesc">它是 VS Code 的总入口，可以搜索并执行所有命令；不会写代码也能用。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="workbench.view.explorer">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/files.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-white="1" src="__ICONS_URI__/files.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="faqExplorer">左侧资源管理器是干什么的？</span><span class="card-desc" data-i18n="faqExplorerDesc">这里显示项目文件夹、章节文件和资料文件，像普通文件管理器一样打开和整理。</span></span>
                         </button>
                         <button class="welcome-card" data-cmd="workbench.action.openSettings">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/settings.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/settings.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="faqSettings">设置在哪里改？</span><span class="card-desc" data-i18n="faqSettingsDesc">VS Code 和 ANH 的选项都在设置页，搜索关键词就能找到对应开关。</span></span>
                         </button>
                         <button class="welcome-card" data-doc="vscode-settings">
-                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/book.svg" alt=""></span>
+                            <span class="card-icon"><img class="icon-img" data-blue="1" src="__ICONS_URI__/book.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="faqWorkspace">工作区和文件夹有什么区别？</span><span class="card-desc" data-i18n="faqWorkspaceDesc">工作区就是当前打开的项目根目录，ANH 会围绕它管理章节、设定和统计。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="andrea.openGraphicalQuickSettings">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/text-wrap.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqWordWrap">为什么自动换行看起来和 Word 不一样？</span><span class="card-desc" data-i18n="faqWordWrapDesc">VS Code 默认按屏幕宽度或固定字符数换行，不像 Word 按纸张排版。可在 ANH 图形化快速设置里调整。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="andrea.openGraphicalQuickSettings">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/font.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqFont">字体太小/太大，怎么改？</span><span class="card-desc" data-i18n="faqFontDesc">按 Ctrl+Shift+P 打开命令面板，输入"ANH 图形化快速设置"，找到"字体与排版"即可调整字体和字号。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="workbench.action.selectTheme">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/color-mode.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqTheme">界面颜色太亮/太暗，怎么改主题？</span><span class="card-desc" data-i18n="faqThemeDesc">点击此卡片可直接打开颜色主题选择器。也可以在 ANH 图形化快速设置里找到"切换颜色主题"按钮。</span></span>
+                        </button>
+                        <button class="welcome-card" data-cmd="workbench.action.configureLocale">
+                            <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/globe.svg" alt=""></span>
+                            <span><span class="card-title" data-i18n="faqLanguage">界面是英文的，怎么改成中文？</span><span class="card-desc" data-i18n="faqLanguageDesc">点击此卡片打开语言配置，选择"中文(简体)"后，VS Code 会提示你安装中文语言包扩展，安装完成并重启后即可显示中文界面。</span></span>
                         </button>
                     </div>
                 </section>

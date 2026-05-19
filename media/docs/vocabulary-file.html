@@ -1,0 +1,41 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>vocabulary.*</code> 是项目的<strong>词汇表 / 术语表</strong>。初始化默认是 <code>novel-helper/vocabulary.json5</code>。</p>
+
+<div class="doc-note">默认的 <code>vocabulary.json5</code> 主要是起步样例。对大多数“世界观术语”“译名表”“地名表”这类资料，长期维护其实更推荐 Markdown；如果原始来源是 Excel 或表格，再优先落 CSV。</div>
+
+<h4>它适合放什么</h4>
+<ul>
+    <li>世界观名词</li>
+    <li>组织名、地名、器物名</li>
+    <li>项目内部约定译名</li>
+</ul>
+
+<h4>什么时候词汇表比角色库更合适</h4>
+<p>当条目不是“人 / 角色”，而是“概念 / 术语 / 名词”时，应该优先放词汇表，不要硬塞进角色库。</p>
+
+<div class="doc-note">把词汇表维护好，最大的收益不是“好看”，而是整本书的专有名词能保持一致。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>最小 JSON5 示例</h4>
+<pre><code>[
+  {
+    name: '星辉议会',
+    type: '词汇',
+    aliases: ['议会'],
+    description: '世界观中的核心组织',
+  }
+]</code></pre>
+
+<h4>推荐做法</h4>
+<ul>
+  <li>术语统一放一个地方，不要在正文里临时发挥</li>
+    <li>别名写全，帮助补全和检索</li>
+    <li>如果有中英 / 多语写法，可以配合索引键字段管理</li>
+  <li>如果你是长期手工维护，优先考虑 <code>vocabulary.md</code></li>
+  <li>如果你是从表格导入，先用 <code>vocabulary.csv</code>，后面再决定要不要转 Markdown</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="vocabulary"><strong>词汇表</strong></a>、<a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a>。</div>
+</div>

@@ -88,21 +88,7 @@ function registerFilters(engine: Liquid) {
   } catch {}
 }
 
-export async function renderFromTemplate(templateName: string, fallbackTemplatesDir: string, ctx: any, channel?: vscode.OutputChannel): Promise<string> {
-  await scriptExtensionRegistry.emit('beforeTypstRender', { templateName, fallbackTemplatesDir, ctx })
-  const finish = async (typContent: string) => {
-    const results = await scriptExtensionRegistry.emit('afterTypstRender', { templateName, fallbackTemplatesDir, ctx, typContent })
-    for (const r of results) {
-      if (typeof r === 'string') typContent = r
-      else if (r && typeof r.typContent === 'string') typContent = r.typContent
-    }
-    return typContent
-  }
-  const registered = await renderTypstWithRegisteredRenderer(templateName, fallbackTemplatesDir, ctx)
-  if (typeof registered === 'string') {
-    if (channel) channel.appendLine(`rendered by registered typst renderer (${registered.length} chars)`)
-    return finish(registered)
-  }
+async function tryRenderLiquid(templateName: string, fallbackTemplatesDir: string, ctx: any, channel?: vscode.OutputChannel): Promise<string> {
   const pack = templateRegistry.resolve(templateName)
   if (pack) {
     if (channel) channel.appendLine(`template pack resolved: ${templateName}, singleFile=${!!pack.singleFile}`)
@@ -118,10 +104,10 @@ export async function renderFromTemplate(templateName: string, fallbackTemplates
       try {
         const out = await engine.parseAndRender(combined, ctx)
         if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
-        return finish(out)
+        return out
       } catch (e) {
         if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
-        return finish('')
+        return ''
       }
     } else {
       const engine = new Liquid({ root: path.dirname(pack.root), extname: '.liquid' })
@@ -131,10 +117,10 @@ export async function renderFromTemplate(templateName: string, fallbackTemplates
       try {
         const out = await engine.renderFile(entryRel, ctx)
         if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
-        return finish(out)
+        return out
       } catch (e) {
         if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
-        return finish('')
+        return ''
       }
     }
   }
@@ -153,19 +139,19 @@ export async function renderFromTemplate(templateName: string, fallbackTemplates
       try {
         const out = await engine.parseAndRender(combined, ctx)
         if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
-        return finish(out)
+        return out
       } catch (e) {
         if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
-        return finish('')
+        return ''
       }
     }
     try {
       const out = await engine.renderFile(entry, ctx)
       if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
-      return finish(out)
+      return out
     } catch (e) {
       if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
-      return finish('')
+      return ''
     }
   }
   // direct single-file under dir
@@ -186,14 +172,96 @@ export async function renderFromTemplate(templateName: string, fallbackTemplates
     try {
       const out = await engine.parseAndRender(combined, ctx)
       if (channel) channel.appendLine(`render result length: ${out?.length ?? 0}`)
-      return finish(out)
+      return out
     } catch (e) {
       if (channel) channel.appendLine(`render error: ${e instanceof Error ? e.message : String(e)}`)
-      return finish('')
+      return ''
     }
   }
   if (channel) channel.appendLine(`template not found: ${templateName} in ${fallbackTemplatesDir}`)
-  return finish('')
+  return ''
+}
+
+async function readTemplateSource(templateName: string, fallbackTemplatesDir: string, channel?: vscode.OutputChannel): Promise<string | undefined> {
+  const pack = templateRegistry.resolve(templateName)
+  if (pack) {
+    if (pack.singleFile) {
+      if (channel) channel.appendLine(`read template source (single-file pack): ${pack.root}`)
+      return fs.readFileSync(pack.root, 'utf8')
+    } else {
+      const entryRel = path.join(path.basename(pack.root), pack.entry)
+      const entryPath = path.join(path.dirname(pack.root), entryRel)
+      if (fs.existsSync(entryPath)) {
+        if (channel) channel.appendLine(`read template source (pack entry): ${entryPath}`)
+        return fs.readFileSync(entryPath, 'utf8')
+      }
+    }
+  }
+  const dirPath = path.join(fallbackTemplatesDir, templateName)
+  const jsonPath = path.join(dirPath, 'template.json')
+  if (fs.existsSync(jsonPath)) {
+    const cfg = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+    const entryPath = path.join(fallbackTemplatesDir, templateName, cfg.entry)
+    if (fs.existsSync(entryPath)) {
+      if (channel) channel.appendLine(`read template source (fallback dir): ${entryPath}`)
+      return fs.readFileSync(entryPath, 'utf8')
+    }
+  }
+  if (fs.existsSync(dirPath) && fs.statSync(dirPath).isFile()) {
+    if (channel) channel.appendLine(`read template source (fallback file): ${dirPath}`)
+    return fs.readFileSync(dirPath, 'utf8')
+  } else {
+    const candidates = fs.existsSync(dirPath) ? fs.readdirSync(dirPath).filter(f => f.toLowerCase().endsWith('.typ.liquid')) : []
+    if (candidates.length) {
+      const p = path.join(dirPath, candidates[0])
+      if (channel) channel.appendLine(`read template source (fallback single): ${p}`)
+      return fs.readFileSync(p, 'utf8')
+    }
+  }
+  if (channel) channel.appendLine(`template source not found: ${templateName} in ${fallbackTemplatesDir}`)
+  return undefined
+}
+
+export async function renderFromTemplate(templateName: string, fallbackTemplatesDir: string, ctx: any, channel?: vscode.OutputChannel): Promise<string> {
+  await scriptExtensionRegistry.emit('beforeTypstRender', { templateName, fallbackTemplatesDir, ctx })
+  const finish = async (typContent: string) => {
+    const results = await scriptExtensionRegistry.emit('afterTypstRender', { templateName, fallbackTemplatesDir, ctx, typContent })
+    for (const r of results) {
+      if (typeof r === 'string') typContent = r
+      else if (r && typeof r.typContent === 'string') typContent = r.typContent
+    }
+    return typContent
+  }
+
+  const rendererId = vscode.workspace.getConfiguration('andrea.typst').get<string>('defaultRenderer', 'internal')
+  const hasRegisteredRenderer = rendererId && rendererId !== 'internal' && rendererId !== 'liquid'
+
+  if (hasRegisteredRenderer) {
+    const renderer = scriptExtensionRegistry.getTypstRenderer(rendererId!)
+    if (renderer) {
+      const mode = renderer.templateMode
+      const input: import('../mcp/scriptExtensions').TypstRendererInput = {
+        templateName,
+        fallbackTemplatesDir,
+        renderContext: ctx
+      }
+
+      if (mode === 'post-process') {
+        input.liquidOutput = await tryRenderLiquid(templateName, fallbackTemplatesDir, ctx, channel)
+      } else if (mode === 'source') {
+        input.templateSource = await readTemplateSource(templateName, fallbackTemplatesDir, channel)
+      }
+
+      const registered = await renderTypstWithRegisteredRenderer(input, rendererId)
+      if (typeof registered === 'string') {
+        if (channel) channel.appendLine(`rendered by registered typst renderer (${registered.length} chars)`)
+        return finish(registered)
+      }
+    }
+  }
+
+  const liquidResult = await tryRenderLiquid(templateName, fallbackTemplatesDir, ctx, channel)
+  return finish(liquidResult)
 }
 
 export async function compileTypstWithLog(cli: string, typPath: string, out: vscode.Uri, opts: TypstOpts, channel: vscode.OutputChannel): Promise<{ ok: boolean; stderr?: string; stdout?: string }>{

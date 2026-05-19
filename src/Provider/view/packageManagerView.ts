@@ -1218,7 +1218,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         })
     );
 
-    // 统一创建命令：角色库 / 敏感词库 / 词汇库 （内部选择 json5 / txt / md）
+    // 统一创建命令：角色库 / 敏感词库 / 词汇库 （内部选择 json5 / txt / md / csv / toml）
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGallery', async (node: PackageNode | BookRootNode) => {
             const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'character-gallery', kind: 'character' });

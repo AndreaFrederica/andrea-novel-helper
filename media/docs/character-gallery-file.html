@@ -1,0 +1,64 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>character-gallery.*</code> 是初始化时默认创建的<strong>角色库示例文件</strong>。它的默认目标路径由 <a class="doc-ref-link" data-doc="project-config-file"><code>project-config.json5</code></a> 里的 <code>rolesFile</code> 决定，默认是 <code>novel-helper/character-gallery.json5</code>。</p>
+
+<div class="doc-note">这个默认文件更像“起步样例”，不是包机制下唯一推荐的终局结构。长期手工维护通常更推荐拆到多个包目录里，并优先用 <a class="doc-ref-link" data-doc="roles-markdown-file"><strong>roles.md</strong></a>；Excel / 表格来源则更适合先落 <code>character-gallery.csv</code>。</div>
+
+<h4>为什么这里写成 <code>*</code></h4>
+<p>因为 ANH 不只支持一种角色库格式。初始化常见是：</p>
+<ul>
+  <li><code>character-gallery.json5</code>：字段完整，适合结构复杂、机器处理较多的角色数据</li>
+    <li><code>character-gallery.csv</code>：适合从 Excel / 表格迁入</li>
+  <li><code>roles.md</code>：更适合手工阅读、长期维护和分层组织</li>
+</ul>
+
+<h4>什么时候该优先用 JSON5</h4>
+<ul>
+    <li>字段多</li>
+    <li>要写颜色、样式、别名、描述、优先级</li>
+    <li>希望结构化、易于程序处理</li>
+</ul>
+
+<h4>什么时候 Markdown 更好</h4>
+<ul>
+  <li>你会经常阅读这些设定，而不只是把它们当数据库</li>
+  <li>你想按阵营、卷册、势力拆成多个包目录长期维护</li>
+  <li>你更习惯“像写设定手册一样写角色”</li>
+</ul>
+
+<h4>什么时候 CSV 更好</h4>
+<ul>
+    <li>你手里原本就是 Excel 表格</li>
+    <li>你要一次性导入很多条简单角色数据</li>
+</ul>
+
+<div class="doc-note">角色库是“写作体验”的核心文件之一。补全、着色、检索、角色面板都跟它直接相关。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>JSON5 版最小示例</h4>
+<pre><code>[
+  {
+    name: '林小满',
+    type: '主角',
+    color: '#FF6B6B',
+    aliases: ['小满', '小林'],
+    description: '一个喜欢雨天咖啡店的女孩',
+  }
+]</code></pre>
+
+<h4>CSV 版适合什么</h4>
+<p>CSV 更像导入中转站，不一定适合承载特别复杂的角色结构。你可以先用 CSV 导入，再逐步迁成 JSON5 或 Markdown。</p>
+
+<h4>和 roles.md 的关系</h4>
+<p><code>roles.md</code> 更像“可读性优先”的角色手册；<code>character-gallery.json5</code> 更像“结构化优先”的角色数据库。二者不是谁绝对替代谁，而是看你的维护方式。</p>
+
+<h4>常见错误</h4>
+<ul>
+    <li>把敏感词或词汇表也塞进角色库里</li>
+    <li>角色别名字段写成一整段自然语言</li>
+    <li>把 CSV 当成无限复杂结构容器，结果维护困难</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="role-management"><strong>角色管理</strong></a>、<a class="doc-ref-link" data-doc="roles-markdown-file"><strong>roles.md</strong></a>、<a class="doc-ref-link" data-doc="markdown-format-guide"><strong>文件格式指南</strong></a>。</div>
+</div>

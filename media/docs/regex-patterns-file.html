@@ -1,0 +1,49 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>regex-patterns.*</code> 是项目的<strong>正则着色规则文件</strong>。初始化默认创建 <code>novel-helper/regex-patterns.json5</code>，用于给引号、书名号、特殊文本等内容做正则匹配和着色。</p>
+
+<h4>这和普通角色库有什么区别</h4>
+<p>普通角色库是“按词条匹配”；正则规则是“按模式匹配”。适合“凡是长得像某种格式的内容都处理一下”。</p>
+
+<h4>典型场景</h4>
+<ul>
+    <li>给对话引号上色</li>
+    <li>给书名号、特殊标记上色</li>
+    <li>识别一类格式化文本，而不是单个固定词</li>
+</ul>
+
+<h4>每条规则最常见的字段</h4>
+<ul>
+    <li><code>name</code></li>
+    <li><code>type</code>（通常是 <code>正则表达式</code>）</li>
+    <li><code>regex</code></li>
+    <li><code>regexFlags</code></li>
+    <li><code>color</code></li>
+    <li><code>priority</code></li>
+</ul>
+
+<div class="doc-note">如果你想学“正则本身怎么写”，直接看 <a class="doc-ref-link" data-doc="regex-tutorial"><strong>正则表达式入门</strong></a>；如果你想看这个文件在 ANH 里怎么工作，继续看 <a class="doc-ref-link" data-doc="regex-coloring"><strong>正则着色</strong></a>。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>最小 JSON5 示例</h4>
+<pre><code>[
+  {
+    name: '中文对话',
+    type: '正则表达式',
+    regex: '「[^」]*」',
+    regexFlags: 'g',
+    color: '#fbdc98ff',
+    priority: 100,
+  }
+]</code></pre>
+
+<h4>文件级建议</h4>
+<ul>
+    <li>把项目里长期使用的规则放进文件，不要散落在临时实验里</li>
+    <li>规则多时写上 <code>description</code></li>
+    <li>重叠规则提前规划 <code>priority</code>，不要靠运气</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="regex-coloring"><strong>正则着色</strong></a>、<a class="doc-ref-link" data-doc="regex-tutorial"><strong>正则表达式入门</strong></a>、<a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a>。</div>
+</div>

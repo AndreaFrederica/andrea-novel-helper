@@ -2,8 +2,11 @@
 <h4>什么是包管理器</h4>
 <p>包管理器就是 ANH 的<strong>资料文件夹浏览器</strong>。你可以把它想象成一个"档案柜"，每个"抽屉"（包）里放着不同类型的资料：角色卡、敏感词表、世界观词汇等。</p>
 
+<div class="doc-note">如果你想知道的不是“这个树怎么点”，而是<strong>包到底按什么规则识别、外部包怎么被扫描出来、内部包和外部包冲突时谁生效</strong>，请直接看 <a class="doc-ref-link" data-doc="package-mechanism"><strong>包机制与外部包详解</strong></a>。那一页是按代码实现写的。</div>
+
 <h4>"包"是什么</h4>
 <p>"包"就是 <code>novel-helper/</code> 文件夹下的一个子文件夹。每个文件夹可以包含任意数量的资料文件，还可以继续嵌套子文件夹。</p>
+<p>在 UI 里你还会看到<strong>外部资源目录</strong>。它们不属于 <code>novel-helper/</code>，但也会作为顶层资源包显示在包管理器里。</p>
 
 <h4>支持哪些文件格式</h4>
 <ul>
@@ -27,6 +30,7 @@
     <li>扩展名 <code>.tjson5</code> → 使用时间线编辑器和时间线文件逻辑</li>
 </ul>
 <div class="doc-note">例如 <code>vocabulary.md</code> 里也可以有 <code>type: 主角</code> 的条目；文件名只影响资源入口和默认用途，不会覆盖条目自己的类型。</div>
+<div class="doc-note">补一条很容易误会的事实：<a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a> 里的 <code>rolesFile</code>、<code>vocabularyFile</code>、<code>sensitiveWordsFile</code>、<code>regexPatternsFile</code> 主要影响“新建资源时默认写到哪里”，不是包管理器的唯一扫描范围。</div>
 
 <h4>推荐怎么整理文件夹</h4>
 <pre><code>novel-helper/
@@ -146,7 +150,7 @@
     <li><b>拖放</b> — 在包之间移动或复制文件，支持跨包拖放</li>
     <li><b>复制/剪切/粘贴</b> — 支持完整的剪贴板操作（<code>AndreaNovelHelper.package.copy/cut/paste</code>）</li>
     <li><b>展开文件</b> — 点击文件节点可展开查看其中包含的角色列表，每个角色旁显示类型名称</li>
-    <li><b>外部资源</b> — 可挂载工作区外的目录，外部资源中的角色与项目内角色享有相同能力</li>
+    <li><b>外部资源</b> — 更常见是把当前工作区里不在 <code>novel-helper/</code> 下的目录标成资源包；也支持挂载工作区外目录</li>
 </ul>
 
 <h4>常用功能节点（可直接点击）</h4>
@@ -205,5 +209,5 @@
     <li><code>AndreaNovelHelper.package.mdLibraryNameRecognition</code> — Markdown 库名识别开关</li>
 </ul>
 
-<div class="doc-note">包管理器支持 Markdown、JSON5/OJSON5、CSV、TXT、TOML 等角色资源格式，并识别 RJSON5/TJSON5 这类专用编辑器格式。Markdown 可读性最好，JSON5 字段最完整且支持角色卡管理器，TOML 结构清晰易读，CSV 适合批量导入，TXT 适合快速列表。</div>
+<div class="doc-note">包管理器支持 Markdown、JSON5/OJSON5、CSV、TXT、TOML 等角色资源格式，并识别 RJSON5/TJSON5 这类专用编辑器格式。对大多数手工维护的设定，Markdown 通常最舒服；Excel / 表格来源先落 CSV；字段复杂、样式多、结构化要求高时再用 JSON5。</div>
 </div>

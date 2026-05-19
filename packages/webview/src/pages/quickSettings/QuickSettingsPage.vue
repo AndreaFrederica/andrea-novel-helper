@@ -56,6 +56,24 @@
 
       <!-- Content -->
       <div class="content">
+        <!-- 外观与语言快捷操作 -->
+        <div class="setting-group">
+          <div class="group-header">
+            <span class="group-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M4.2 19.8l2.8-2.8M17 7l2.8-2.8" stroke="currentColor" stroke-width="2"/></svg></span>
+            <span class="group-name">外观与语言</span>
+          </div>
+          <div class="group-items">
+            <div class="appearance-actions">
+              <button class="btn btn-secondary" @click="runCommand('workbench.action.selectTheme')">
+                切换颜色主题
+              </button>
+              <button class="btn btn-secondary" @click="runCommand('workbench.action.configureLocale')">
+                切换显示语言
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div v-for="group in settingGroups" :key="group.id" class="setting-group">
           <div class="group-header">
             <span class="group-icon" v-html="group.icon"></span>
@@ -422,6 +440,12 @@ const settingGroups = computed(() => {
       ids: ['AndreaNovelHelper.wordCount.statusBar.mode', 'AndreaNovelHelper.wordCount.statusBar.speedUnit', 'AndreaNovelHelper.wordCount.primaryUnit', 'AndreaNovelHelper.wordCount.statusBar.compact', 'andrea.typeset.statusBar.compact', 'AndreaNovelHelper.autoGit.compactStatus']
     },
     {
+      id: 'hello',
+      name: 'Hello 首页',
+      icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      ids: ['AndreaNovelHelper.hello.enabled', 'AndreaNovelHelper.hello.forceVsCodeManagedDisabling']
+    },
+    {
       id: 'other',
       name: '其他',
       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2"/></svg>',
@@ -779,6 +803,15 @@ function openFullSettings() {
   if (vsCodeApiStore.vscode) {
     vsCodeApiStore.vscode.postMessage({
       command: 'openFullSettings'
+    })
+  }
+}
+
+function runCommand(commandId: string) {
+  if (vsCodeApiStore.vscode) {
+    vsCodeApiStore.vscode.postMessage({
+      command: 'runCommand',
+      commandId
     })
   }
 }
@@ -1320,6 +1353,13 @@ onMounted(() => {
 
 .statusbar-fullwidth-preview:hover {
   border-color: var(--vscode-focusBorder, #007acc);
+}
+
+.appearance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0;
 }
 
 .empty-state,

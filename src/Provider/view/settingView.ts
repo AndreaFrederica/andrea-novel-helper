@@ -141,8 +141,8 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             
             // 验证并保存每个设置项
             for (const [key, value] of Object.entries(settings)) {
-                // 验证键名是否有效（以AndreaNovelHelper开头） 或者以andrea开头
-                if (!key.startsWith('AndreaNovelHelper') && !key.startsWith('andrea') && !key.startsWith('editor.')) {
+                // 验证键名是否有效（以AndreaNovelHelper/andrea/editor/workbench开头）
+                if (!key.startsWith('AndreaNovelHelper') && !key.startsWith('andrea') && !key.startsWith('editor.') && !key.startsWith('workbench.')) {
                     console.warn(`跳过无效的配置键: ${key}`);
                     continue;
                 }
@@ -516,12 +516,16 @@ export class SettingsWebviewProvider implements vscode.WebviewViewProvider {
             'AndreaNovelHelper.roles.details.wrapColumn',
             'AndreaNovelHelper.roles.details.enableRoleExpansion',
             
-            // 13. 其他功能配置
+            // 13. Hello 首页
+            'AndreaNovelHelper.hello.enabled',
+            'AndreaNovelHelper.hello.forceVsCodeManagedDisabling',
+
+            // 14. 其他功能配置
             'AndreaNovelHelper.useVsCodeManagedDisabling',
             'AndreaNovelHelper.smartTabGroupLock.enabled',
             'AndreaNovelHelper.autoGit.compactStatus',
             
-            // 14. 按键绑定相关 - 智能回车按键绑定配置
+            // 15. 按键绑定相关 - 智能回车按键绑定配置
             'markdown.extension.onEnterKey',
             'andrea.smartEnter'
         ];

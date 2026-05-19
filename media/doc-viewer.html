@@ -228,7 +228,8 @@
 
         .content-body code {
             font-family: var(--vscode-editor-font-family);
-            background: var(--vscode-textBlockQuote-background);
+            color: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
+            background: var(--vscode-textCodeBlock-background, var(--vscode-textBlockQuote-background));
             padding: 1px 4px;
             border-radius: 3px;
             font-size: 12px;
@@ -238,7 +239,8 @@
             margin: 8px 0;
             padding: 12px;
             border-radius: 4px;
-            background: var(--vscode-textBlockQuote-background);
+            color: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
+            background: var(--vscode-textCodeBlock-background, var(--vscode-textBlockQuote-background));
             border: 1px solid var(--vscode-panel-border);
             overflow-x: auto;
             font-size: 12px;
@@ -260,6 +262,28 @@
 
         .content-body ol li {
             margin: 3px 0;
+        }
+
+        .content-body .doc-table {
+            width: 100%;
+            margin: 8px 0;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .content-body .doc-table tr {
+            border-bottom: 1px solid var(--vscode-panel-border);
+        }
+
+        .content-body .doc-table th,
+        .content-body .doc-table td {
+            padding: 6px 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .content-body .doc-table th {
+            font-weight: 600;
         }
 
         .content-body .content-body pre {
@@ -286,6 +310,174 @@
             font-size: 12px;
         }
 
+        .doc-ref-link {
+            color: var(--vscode-textLink-foreground);
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .doc-ref-link:hover {
+            filter: brightness(1.2);
+        }
+
+        /* ── Completion Demo ─────────────────────────── */
+        .completion-demo {
+            margin: 10px 0;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--vscode-panel-border);
+        }
+
+        .demo-chrome {
+            background: var(--vscode-editorGroupHeader-tabsBackground, #252526);
+            padding: 0 8px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            height: 30px;
+            display: flex;
+            align-items: center;
+        }
+
+        .demo-tab {
+            font-size: 12px;
+            padding: 4px 12px;
+            color: var(--vscode-foreground);
+            background: var(--vscode-editor-background);
+            border-top: 2px solid var(--vscode-focusBorder);
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .demo-editor {
+            position: relative;
+            background: var(--vscode-editor-background);
+            padding: 8px 12px;
+            min-height: 56px;
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 14px;
+            line-height: 22px;
+        }
+
+        .demo-line {
+            display: flex;
+            align-items: baseline;
+        }
+
+        .demo-gutter {
+            width: 36px;
+            text-align: right;
+            padding-right: 12px;
+            color: var(--vscode-editorLineNumber-foreground, #858585);
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .demo-code {
+            color: var(--vscode-editor-foreground);
+            white-space: pre;
+        }
+
+        .demo-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background: var(--vscode-editor-foreground);
+            vertical-align: text-bottom;
+            animation: demo-blink 1s step-end infinite;
+        }
+
+        @keyframes demo-blink {
+            50% { opacity: 0; }
+        }
+
+        .demo-suggest {
+            display: none;
+            position: absolute;
+            left: 48px;
+            top: 36px;
+            background: var(--vscode-editorSuggestWidget-background, #252526);
+            border: 1px solid var(--vscode-editorSuggestWidget-border, #454545);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+            min-width: 240px;
+            max-width: 340px;
+            z-index: 10;
+            font-size: 13px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .demo-suggest-item {
+            display: flex;
+            align-items: center;
+            padding: 2px 8px;
+            gap: 6px;
+            line-height: 20px;
+        }
+
+        .demo-suggest-item.selected {
+            background: var(--vscode-editorSuggestWidget-selectedBackground, #094771);
+        }
+
+        .demo-suggest-label {
+            flex: 1;
+            color: var(--vscode-editor-foreground);
+            white-space: nowrap;
+        }
+
+        .demo-suggest-detail {
+            color: var(--vscode-descriptionForeground, #999);
+            font-size: 12px;
+            white-space: nowrap;
+            margin-left: auto;
+        }
+
+        .demo-status {
+            padding: 6px 12px;
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            border-top: 1px solid var(--vscode-panel-border);
+            text-align: center;
+            background: var(--vscode-editor-background);
+        }
+
+        .demo-mode-bar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            border-bottom: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-editor-background);
+        }
+
+        .demo-mode-label {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-right: 4px;
+            white-space: nowrap;
+        }
+
+        .demo-mode-btn {
+            padding: 2px 8px;
+            font-size: 11px;
+            font-family: var(--vscode-editor-font-family, monospace);
+            border: 1px solid var(--vscode-panel-border);
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .demo-mode-btn:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+
+        .demo-mode-btn.active {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-color: var(--vscode-button-background);
+        }
+
         /* ── Mode Switching ───────────────────────────── */
         .doc-section { display: block; }
 
@@ -303,6 +495,122 @@
 
         .content-body.mode-pro h4.beginner-only {
             display: none;
+        }
+
+        /* ── Syntax Highlighting ───────────────────────── */
+        :root {
+            --sh-keyword: var(--vscode-symbolIcon-keywordForeground, #569cd6);
+            --sh-string: var(--vscode-symbolIcon-stringForeground, #ce9178);
+            --sh-number: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+            --sh-comment: var(--vscode-descriptionForeground, #6a9955);
+            --sh-type: var(--vscode-symbolIcon-classForeground, #4ec9b0);
+            --sh-function: var(--vscode-symbolIcon-functionForeground, #dcdcaa);
+            --sh-variable: var(--vscode-symbolIcon-variableForeground, #9cdcfe);
+            --sh-constant: var(--vscode-symbolIcon-constantForeground, #4fc1ff);
+            --sh-punctuation: var(--vscode-editor-foreground, #d4d4d4);
+            --sh-bracket: var(--vscode-symbolIcon-operatorForeground, #ffd700);
+            --sh-separator: var(--vscode-descriptionForeground, #808080);
+            --sh-tag: var(--vscode-symbolIcon-keywordForeground, #569cd6);
+            --sh-attribute: var(--vscode-symbolIcon-propertyForeground, #9cdcfe);
+            --sh-operator: var(--vscode-symbolIcon-operatorForeground, #d4d4d4);
+            --sh-regexp: var(--vscode-symbolIcon-colorForeground, #d16969);
+            --sh-md-heading: var(--vscode-textLink-foreground, #569cd6);
+            --sh-md-heading2: var(--vscode-textLink-foreground, #569cd6);
+            --sh-md-heading3: var(--vscode-textLink-foreground, #569cd6);
+            --sh-md-heading4: var(--vscode-textLink-foreground, #569cd6);
+            --sh-md-bold: var(--vscode-editor-foreground, #d4d4d4);
+            --sh-md-italic: var(--vscode-editor-foreground, #d4d4d4);
+            --sh-md-strike: var(--vscode-descriptionForeground, #808080);
+            --sh-md-list: var(--vscode-descriptionForeground, #808080);
+            --sh-md-link: var(--vscode-textLink-foreground, #4ec9b0);
+            --sh-md-code: var(--vscode-textPreformat-foreground, #ce9178);
+            --sh-md-sep: var(--vscode-descriptionForeground, #808080);
+            --sh-role-field: var(--vscode-symbolIcon-keyForeground, #c586c0);
+            --sh-role-value: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground, #d4d4d4));
+            --sh-prose-dialogue-double: var(--vscode-terminal-ansiYellow, #fbdc98ff);
+            --sh-prose-dialogue-corner: var(--vscode-terminal-ansiYellow, #fbdc98ff);
+            --sh-prose-thought-single: var(--vscode-terminal-ansiBlue, #98bbfbff);
+            --sh-prose-book-title: var(--vscode-terminal-ansiMagenta, #fbbc98ff);
+        }
+        .content-body pre {
+            position: relative;
+        }
+
+        .content-body pre code {
+            display: block;
+            white-space: pre;
+        }
+
+        .sh-key { color: var(--sh-variable); }
+        .sh-str { color: var(--sh-string); }
+        .sh-num { color: var(--sh-number); }
+        .sh-bool { color: var(--sh-keyword); }
+        .sh-null { color: var(--sh-keyword); }
+        .sh-comment { color: var(--sh-comment); }
+        .sh-bracket { color: var(--sh-bracket); }
+        .sh-colon { color: var(--sh-punctuation); }
+        .sh-comma { color: var(--sh-punctuation); }
+        .sh-punct { color: var(--sh-separator); }
+
+        .sh-md-h1 { color: var(--sh-md-heading); font-weight: bold; }
+        .sh-md-h2 { color: var(--sh-md-heading2); font-weight: bold; }
+        .sh-md-h3 { color: var(--sh-md-heading3); font-weight: bold; }
+        .sh-md-h4 { color: var(--sh-md-heading4); }
+        .sh-md-bold { color: var(--sh-md-bold); font-weight: bold; }
+        .sh-md-italic { color: var(--sh-md-italic); font-style: italic; }
+        .sh-md-strike { color: var(--sh-md-strike); text-decoration: line-through; }
+        .sh-md-list { color: var(--sh-md-list); }
+        .sh-md-link { color: var(--sh-md-link); }
+        .sh-md-link-text { color: var(--sh-md-link); }
+        .sh-md-code { color: var(--sh-md-code); }
+        .sh-md-sep { color: var(--sh-md-sep); }
+        .sh-md-marker { color: var(--sh-md-sep); }
+        .sh-md-quote { color: var(--sh-md-sep); }
+        .sh-md-meta { color: var(--sh-keyword); }
+        .sh-md-url { color: var(--sh-string); }
+        .sh-md-table-pipe { color: var(--sh-md-sep); }
+        .sh-md-plain { color: inherit; }
+
+        .sh-toml-section { color: var(--sh-keyword); font-weight: bold; }
+        .sh-toml-key { color: var(--sh-variable); }
+        .sh-toml-eq { color: var(--sh-punctuation); }
+        .sh-toml-str { color: var(--sh-string); }
+        .sh-toml-num { color: var(--sh-number); }
+        .sh-toml-bool { color: var(--sh-keyword); }
+        .sh-toml-comment { color: var(--sh-comment); }
+        .sh-toml-bracket { color: var(--sh-bracket); }
+
+        .sh-csv-header { color: var(--sh-variable); font-weight: bold; }
+        .sh-csv-sep { color: var(--sh-separator); }
+        .sh-csv-str { color: var(--sh-string); }
+
+        .sh-js-kw { color: var(--sh-keyword); }
+        .sh-js-str { color: var(--sh-string); }
+        .sh-js-func { color: var(--sh-function); }
+        .sh-js-num { color: var(--sh-number); }
+        .sh-js-comment { color: var(--sh-comment); }
+        .sh-js-punct { color: var(--sh-punctuation); }
+        .sh-js-const { color: var(--sh-constant); }
+        .sh-js-prop { color: var(--sh-variable); }
+
+        .sh-role-name,
+        .sh-prose-role {
+            font-weight: bold;
+            cursor: pointer;
+            border-bottom: 1px dotted currentColor;
+        }
+
+        .sh-role-name:hover,
+        .sh-prose-role:hover {
+            filter: brightness(1.3);
+        }
+
+        .sh-role-field { color: var(--sh-role-field); font-weight: bold; }
+        .sh-role-value { color: var(--sh-role-value); }
+
+        .role-tooltip {
+            font-family: var(--vscode-font-family);
+            line-height: 1.5;
         }
 
         /* ── Empty State ──────────────────────────────── */

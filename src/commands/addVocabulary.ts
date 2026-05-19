@@ -25,6 +25,7 @@ export const addVocabulary = async () => {
             includeMd: true,      // 支持 Markdown 格式
             includeOjson5: true,   // 支持 OJSON5 格式
             includeCsv: true,      // 支持 CSV 格式
+            includeToml: true,     // 支持 TOML 格式
             // 添加词汇特定过滤：排除角色和敏感词相关文件
             customFilter: (fileName: string) => {
                 const lowerFileName = fileName.toLowerCase();

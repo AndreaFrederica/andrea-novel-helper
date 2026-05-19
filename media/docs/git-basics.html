@@ -1,0 +1,567 @@
+<div class="doc-section beginner">
+<h4>这篇文档讲什么</h4>
+<p>这一页专门讲 <strong>Git 本身</strong>，不是讲“哪个网站托管 Git”，也不是讲“VS Code 上哪个按钮对应哪个命令”。如果你已经知道版本管理大概是什么，但还是搞不清 <code>commit</code>、<code>branch</code>、<code>HEAD</code>、<code>stash</code>、<code>tag</code>、<code>remote</code> 这些词到底在说什么，这页就是给你用的。</p>
+
+<div class="doc-note">建议阅读顺序：先看 <a class="doc-ref-link" data-doc="version-control-basics"><strong>版本管理是什么</strong></a> 建立大框架，再读这页理解 Git 本体，最后看 <a class="doc-ref-link" data-doc="git-integration"><strong>Git 与 VS Code 集成</strong></a> 和 <a class="doc-ref-link" data-doc="git-remote-sync"><strong>云仓库同步与备份</strong></a> 落地操作。</div>
+
+<h4>Git 到底是什么</h4>
+<p><strong>Git 是一个分布式版本控制系统</strong>。拆成人话是：</p>
+<ul>
+    <li><b>版本控制</b>：它会按顺序记录项目在不同时间点的状态。</li>
+    <li><b>分布式</b>：每台电脑上的本地仓库通常都带着完整历史，不是只有云端那一份才叫“真仓库”。</li>
+    <li><b>面向差异和历史</b>：它不只是保存“现在这个文件”，更保存“这个项目是怎么一步步变成现在这样的”。</li>
+</ul>
+
+<h4>你可以把 Git 想成三样东西叠在一起</h4>
+<pre><code>1. 工作区 Working Tree
+   你正在编辑的真实文件
+
+2. 暂存区 Index / Staging Area
+   你准备放进下一次提交的改动清单
+
+3. 仓库 Repository
+   已经正式写入历史的提交串</code></pre>
+<p>新手最容易卡住的地方，不是命令本身，而是不知道这三层彼此有什么区别。你只要把这三层分清，Git 的大多数日常操作都会突然变得可解释。</p>
+
+<h4>图 1：Git 的最小心智模型</h4>
+<pre><code>编辑文件
+  ↓
+工作区发生变化
+  ↓ git add
+暂存区记录“下一次提交要放哪些变化”
+  ↓ git commit
+仓库里生成一个新的提交
+  ↓ git push
+把本地提交送去远端</code></pre>
+
+<h4>最重要的 10 个词</h4>
+<table class="doc-table">
+    <tr>
+        <th>词</th>
+        <th>准确但好懂的解释</th>
+        <th>你在写作里会碰到什么场景</th>
+    </tr>
+    <tr>
+        <td>Repository 仓库</td>
+        <td>一个被 Git 管理的项目，里面有完整提交历史</td>
+        <td>你的整部小说项目目录</td>
+    </tr>
+    <tr>
+        <td>Working Tree 工作区</td>
+        <td>当前磁盘上的文件内容</td>
+        <td>你刚改完的正文、设定和资料文件</td>
+    </tr>
+    <tr>
+        <td>Index 暂存区</td>
+        <td>下一次提交准备收进历史的那部分变化</td>
+        <td>你只想先提交第六章，不想把半成品设定一起交上去</td>
+    </tr>
+    <tr>
+        <td>Commit 提交</td>
+        <td>一次带说明的历史快照</td>
+        <td>“完成第六章初稿”</td>
+    </tr>
+    <tr>
+        <td>Branch 分支</td>
+        <td>指向某条提交线的名字</td>
+        <td>开一条“BE 结局试写”分支，不污染主线</td>
+    </tr>
+    <tr>
+        <td>HEAD</td>
+        <td>你当前所在位置的指针，通常指向当前分支的最新提交</td>
+        <td>决定“你现在正在哪条历史线上工作”</td>
+    </tr>
+    <tr>
+        <td>Tag 标签</td>
+        <td>给某个提交贴一个稳定名字</td>
+        <td>给“投稿版”“出版版”做里程碑标记</td>
+    </tr>
+    <tr>
+        <td>Remote 远端</td>
+        <td>另一个仓库地址，通常是云上的 GitHub / GitLab / Gitee 仓库</td>
+        <td>用来同步、备份、跨设备继续写</td>
+    </tr>
+    <tr>
+        <td>Merge 合并</td>
+        <td>把另一条历史线的结果并进来</td>
+        <td>试写分支满意了，合回主线</td>
+    </tr>
+    <tr>
+        <td>Diff 差异</td>
+        <td>两个状态之间到底改了哪些行</td>
+        <td>核对这一轮润色到底动了什么</td>
+    </tr>
+</table>
+
+<h4>Git 最常见的日常循环</h4>
+<ol>
+    <li>改文件。</li>
+    <li>用 <code>git status</code> 看哪些文件改了。</li>
+    <li>用 <code>git diff</code> 看改了什么。</li>
+    <li>用 <code>git add</code> 把该交的那部分改动放进暂存区。</li>
+    <li>用 <code>git commit -m "说明"</code> 形成一个历史节点。</li>
+    <li>需要同步或备份时，再用 <code>git push</code> 发到远端。</li>
+</ol>
+
+<h4>为什么 Git 故意设计出“暂存区”这一步</h4>
+<p>因为现实世界里的改动经常不是一次性干净完成的。你可能同时做了三件事：</p>
+<ul>
+    <li>修了一章正文里的病句。</li>
+    <li>顺手改了角色卡里的年龄。</li>
+    <li>又开了一个半成品的新设定文件。</li>
+</ul>
+<p>这时你未必想把三件事打包成一个提交。暂存区的意义，就是让你能说：</p>
+<pre><code>“这次提交只交正文病句修订和角色年龄修正，
+那份半成品新设定先别进历史。”</code></pre>
+
+<h4>保存、提交、推送，这三个动作完全不是一回事</h4>
+<table class="doc-table">
+    <tr>
+        <th>动作</th>
+        <th>发生在哪</th>
+        <th>意义</th>
+    </tr>
+    <tr>
+        <td>保存</td>
+        <td>编辑器和磁盘</td>
+        <td>把当前内容写进文件</td>
+    </tr>
+    <tr>
+        <td>提交 Commit</td>
+        <td>本地 Git 仓库</td>
+        <td>把一组改动写进本地历史</td>
+    </tr>
+    <tr>
+        <td>推送 Push</td>
+        <td>本地仓库到远端仓库</td>
+        <td>把本地已有提交同步到云端</td>
+    </tr>
+</table>
+
+<h4>一组你真的会每天用到的命令</h4>
+<table class="doc-table">
+    <tr>
+        <th>命令</th>
+        <th>用途</th>
+        <th>怎么理解</th>
+    </tr>
+    <tr>
+        <td><code>git status</code></td>
+        <td>看仓库当前状态</td>
+        <td>先别乱按，先看现场</td>
+    </tr>
+    <tr>
+        <td><code>git diff</code></td>
+        <td>看工作区和暂存区之间的差异</td>
+        <td>确认你到底改了哪几行</td>
+    </tr>
+    <tr>
+        <td><code>git diff --cached</code></td>
+        <td>看已经暂存、准备提交的那部分差异</td>
+        <td>提交前最后核对一次</td>
+    </tr>
+    <tr>
+        <td><code>git add 文件名</code></td>
+        <td>把改动加入暂存区</td>
+        <td>告诉 Git“这部分要进下一次提交”</td>
+    </tr>
+    <tr>
+        <td><code>git commit -m "说明"</code></td>
+        <td>创建提交</td>
+        <td>给当前版本拍一张带说明的快照</td>
+    </tr>
+    <tr>
+        <td><code>git log --oneline</code></td>
+        <td>简洁查看提交历史</td>
+        <td>快速回顾过去做过什么</td>
+    </tr>
+    <tr>
+        <td><code>git log --graph --oneline --decorate</code></td>
+        <td>看分支图</td>
+        <td>理解历史线怎么分叉、怎么合并</td>
+    </tr>
+    <tr>
+        <td><code>git switch 分支名</code></td>
+        <td>切换分支</td>
+        <td>换到另一条修改线</td>
+    </tr>
+    <tr>
+        <td><code>git switch -c 新分支名</code></td>
+        <td>创建并切换到新分支</td>
+        <td>准备试新剧情或大改</td>
+    </tr>
+    <tr>
+        <td><code>git push</code></td>
+        <td>推送到远端</td>
+        <td>同步和备份本地提交</td>
+    </tr>
+    <tr>
+        <td><code>git pull</code></td>
+        <td>拉取远端并尝试合并到当前分支</td>
+        <td>更保守，也更符合很多团队默认工作流</td>
+    </tr>
+    <tr>
+        <td><code>git pull --rebase</code></td>
+        <td>拉取远端后，把本地未推送提交重放到最新远端后面</td>
+        <td>更适合理解了历史改写影响、且团队允许这样做的人</td>
+    </tr>
+    <tr>
+        <td><code>git tag v2.0-终稿</code></td>
+        <td>给当前提交贴标签</td>
+        <td>标出“终稿”“投稿版”“出版版”</td>
+    </tr>
+    <tr>
+        <td><code>git tag -a v3.0 -m "出版版"</code></td>
+        <td>创建附注标签</td>
+        <td>比轻量标签更像正式里程碑</td>
+    </tr>
+    <tr>
+        <td><code>git stash</code></td>
+        <td>临时把未完成改动收起来</td>
+        <td>现场太乱，但你得先切去做别的事</td>
+    </tr>
+</table>
+
+<h4>图 2：分支到底是什么</h4>
+<pre><code>main:   A --- B --- C
+                 \
+experiment:       D --- E
+
+main 代表主线
+experiment 代表“试写另一版剧情”
+它们最开始共享历史，后来分叉</code></pre>
+<p>很多新手以为分支会复制整个项目。不是。分支更像“指向不同提交位置的标签”。它很轻，所以你应该敢于开分支做试验，而不是靠复制文件夹硬分叉。</p>
+
+<h4>什么时候该开分支</h4>
+<ul>
+    <li>要尝试另一版剧情走向。</li>
+    <li>要做一次风险较高的大规模重构。</li>
+    <li>准备和别人协作，想把某项工作隔离开。</li>
+    <li>想保留主线稳定可用，但同时试新方案。</li>
+</ul>
+
+<h4>什么时候不要滥开分支</h4>
+<ul>
+    <li>只是改几个错字或补几句设定，不必什么都开分支。</li>
+    <li>如果你根本不会合并，先把单分支提交习惯练稳。</li>
+    <li>一堆长期不合并的分支只会制造历史垃圾。</li>
+</ul>
+
+<h4>远端和本地的关系</h4>
+<pre><code>你的电脑里有一份本地仓库
+GitHub / GitLab / Gitee 里有一份远端仓库
+
+push = 把本地已有提交送过去
+pull = 把远端新提交拿下来
+clone = 第一次把远端整仓复制到本地</code></pre>
+<p>远端不是 Git 的本体，它只是 Git 很常见的一种落地场景。就算完全离线，你照样可以在本地提交、看历史、开分支、打标签。</p>
+
+<h4>新手最常犯的 6 个误解</h4>
+<ol>
+    <li><b>“保存了就等于提交了。”</b> 不是，保存只是写磁盘。</li>
+    <li><b>“推送失败说明本地历史没了。”</b> 不是，本地提交通常还在。</li>
+    <li><b>“分支很危险，最好别碰。”</b> 恰恰相反，分支是降低风险的工具。</li>
+    <li><b>“删除文件就等于历史里也没了。”</b> 不是，旧提交仍然能找回。</li>
+    <li><b>“GitHub 就是 Git。”</b> 不是，GitHub 只是 Git 托管平台之一。</li>
+    <li><b>“我只写小说，不需要 Git。”</b> 越是长期、反复改稿、跨设备的项目，越适合 Git。</li>
+</ol>
+
+<h4>一个适合小说作者的最小纪律</h4>
+<ol>
+    <li>每次写作前先 <code>git pull</code> 或先确认你已经是最新。</li>
+    <li>每次写作结束后至少做一次清晰提交。</li>
+    <li>重大修改前先打标签或开分支。</li>
+    <li>不要把缓存、临时导出和本地机器专属文件一起提交。</li>
+    <li>不要把 Git 当唯一备份，远端和额外归档仍然值得保留。</li>
+</ol>
+</div>
+
+<div class="doc-section pro">
+<h4>Git 的内部结构为什么能高效保存历史</h4>
+<p>Git 并不是每次都傻乎乎地复制整个项目目录。它内部主要围绕几类对象组织数据：</p>
+<table class="doc-table">
+    <tr>
+        <th>对象</th>
+        <th>作用</th>
+    </tr>
+    <tr>
+        <td>blob</td>
+        <td>文件内容对象</td>
+    </tr>
+    <tr>
+        <td>tree</td>
+        <td>目录结构对象，记录某层目录里有哪些文件和子目录</td>
+    </tr>
+    <tr>
+        <td>commit</td>
+        <td>记录一次提交，它会指向一个 tree，并指向父提交</td>
+    </tr>
+    <tr>
+        <td>ref</td>
+        <td>给某个提交起名字，比如分支名、标签名</td>
+    </tr>
+    <tr>
+        <td>HEAD</td>
+        <td>当前工作位置，通常指向某个分支 ref</td>
+    </tr>
+</table>
+
+<h4>图 3：提交为什么能连成历史</h4>
+<pre><code>Commit C  -> parent: Commit B
+Commit B  -> parent: Commit A
+Commit A  -> parent: none
+
+所以 Git 不只是“存快照”，
+还知道“这个快照是从哪个上一个快照长出来的”。</code></pre>
+
+<h4>为什么说 Branch 只是“一个会移动的名字”</h4>
+<pre><code>main -> Commit C
+HEAD -> main
+
+当你再提交一次：
+main -> Commit D
+HEAD -> main</code></pre>
+<p>分支名本身不是一大坨副本，它只是一个指向最新提交的位置标记。正因为它轻，Git 才鼓励你用分支而不是用复制文件夹来试验。</p>
+
+<h4><code>reset</code>、<code>restore</code>、<code>revert</code> 到底有什么区别</h4>
+<table class="doc-table">
+    <tr>
+        <th>命令</th>
+        <th>主要影响</th>
+        <th>适合什么场景</th>
+        <th>风险感受</th>
+    </tr>
+    <tr>
+        <td><code>git restore 文件名</code></td>
+        <td>工作区文件</td>
+        <td>丢掉尚未提交的某个文件改动</td>
+        <td>中等，丢的是未提交内容</td>
+    </tr>
+    <tr>
+        <td><code>git restore --staged 文件名</code></td>
+        <td>暂存区</td>
+        <td>把文件从暂存区拿出来，但保留工作区改动</td>
+        <td>低</td>
+    </tr>
+    <tr>
+        <td><code>git reset --soft HEAD~1</code></td>
+        <td>分支指针</td>
+        <td>想撤回上一次提交，但保留改动和暂存状态</td>
+        <td>中</td>
+    </tr>
+    <tr>
+        <td><code>git reset --mixed HEAD~1</code></td>
+        <td>分支指针和暂存区</td>
+        <td>想拆掉上一次提交，改动回到工作区</td>
+        <td>中</td>
+    </tr>
+    <tr>
+        <td><code>git reset --hard HEAD~1</code></td>
+        <td>分支指针、暂存区、工作区</td>
+        <td>明确要直接扔掉未保留的现场</td>
+        <td>高</td>
+    </tr>
+    <tr>
+        <td><code>git revert HEAD</code></td>
+        <td>提交历史</td>
+        <td>不重写历史，而是新增一个“反向提交”撤销旧提交</td>
+        <td>更安全，适合已推送历史</td>
+    </tr>
+    <tr>
+        <td><code>git reset HEAD 文件名</code></td>
+        <td>暂存区</td>
+        <td>旧式写法，用来取消暂存</td>
+        <td>低</td>
+    </tr>
+</table>
+
+<div class="doc-note">简单记法：<strong>restore 更像“把文件状态拿回来”，reset 更像“改指针位置”，revert 更像“追加一个反向补丁”。</strong></div>
+
+<h4><code>merge</code>、<code>rebase</code>、<code>cherry-pick</code> 分别在干什么</h4>
+<table class="doc-table">
+    <tr>
+        <th>命令</th>
+        <th>做的事</th>
+        <th>什么时候考虑用</th>
+    </tr>
+    <tr>
+        <td><code>git merge</code></td>
+        <td>把另一条线整体并进来</td>
+        <td>功能分支完成后合回主线；团队协作、保留真实分叉历史时优先考虑</td>
+    </tr>
+    <tr>
+        <td><code>git rebase</code></td>
+        <td>把一串提交“挪到”另一个基底之后</td>
+        <td>想让历史更线性，尤其是整理自己尚未共享的本地提交时</td>
+    </tr>
+    <tr>
+        <td><code>git cherry-pick</code></td>
+        <td>只挑某一个提交复制到当前分支</td>
+        <td>只想借一个修复，不想整条分支都并进来</td>
+    </tr>
+</table>
+
+<h4><code>merge</code> 和 <code>rebase</code> 的核心区别</h4>
+<table class="doc-table">
+    <tr>
+        <th>维度</th>
+        <th><code>merge</code></th>
+        <th><code>rebase</code></th>
+    </tr>
+    <tr>
+        <td>对历史做什么</td>
+        <td>保留原有分叉，再新增一个合并结果</td>
+        <td>改写提交的“长相”和位置，让它们像是从新基底直接长出来的</td>
+    </tr>
+    <tr>
+        <td>提交 ID 会不会变</td>
+        <td>通常不会改已有提交</td>
+        <td>会，新生成的是另一批提交 ID</td>
+    </tr>
+    <tr>
+        <td>历史看起来怎样</td>
+        <td>更真实，能看见什么时候分叉、什么时候合并</td>
+        <td>更线性，更像一条直线</td>
+    </tr>
+    <tr>
+        <td>对协作的影响</td>
+        <td>更稳妥，尤其适合共享分支和多人协作</td>
+        <td>如果拿去改已经共享的历史，容易让别人本地历史对不上</td>
+    </tr>
+    <tr>
+        <td>为什么有些规范禁用它</td>
+        <td>一般不会因为安全性被禁</td>
+        <td>因为它会改写历史。很多团队禁止在公共分支、已推送分支、受保护分支上用它</td>
+    </tr>
+    <tr>
+        <td>更适合谁</td>
+        <td>大多数团队、想保留上下文的人、偏保守流程的人</td>
+        <td>理解 Git 历史模型、只整理自己本地未共享提交的人</td>
+    </tr>
+</table>
+
+<h4>图 4：同一批改动，<code>merge</code> 和 <code>rebase</code> 的结果长什么样</h4>
+<pre><code>分叉之前：
+main:    A --- B --- C
+feature:           \
+                     D --- E
+
+如果用 merge：
+main:    A --- B --- C -------- M
+                     \        /
+feature:               D --- E
+
+如果用 rebase：
+main:    A --- B --- C --- D' --- E'
+
+M 是新的 merge commit
+D' E' 不是原来的 D E，而是“重放后生成的新提交”</code></pre>
+
+<h4>为什么很多团队更偏向 <code>merge</code></h4>
+<ul>
+    <li><b>它不隐瞒历史</b>：谁从哪条分支分出去、什么时候合进来，一眼能看出来。</li>
+    <li><b>它不改写公共历史</b>：已经推给别人的提交不会突然换一套 ID。</li>
+    <li><b>它更适合审计和回溯</b>：很多团队、很多规范更看重“真实过程可追踪”。</li>
+    <li><b>它更符合保护分支策略</b>：很多仓库规则默认就是 PR 合并、保留 merge commit。</li>
+</ul>
+
+<h4>为什么有人仍然喜欢 <code>rebase</code></h4>
+<ul>
+    <li><b>历史更直</b>：看日志时像单线时间轴。</li>
+    <li><b>减少机械性的 pull merge 提交</b>：特别是在单人、多设备切换时。</li>
+    <li><b>整理本地提交更方便</b>：尤其是交 PR 前，把自己的一串零碎提交理顺。</li>
+</ul>
+
+<h4>什么时候应该优先选 <code>merge</code></h4>
+<ul>
+    <li>你的团队规范明确禁止 rebase。</li>
+    <li>你操作的是共享分支、公共分支、受保护分支。</li>
+    <li>你不希望历史被重写，希望保留真实开发过程。</li>
+    <li>你对 rebase 的冲突处理和历史改写后果还不够熟。</li>
+</ul>
+
+<h4>什么时候 <code>rebase</code> 才相对合理</h4>
+<ul>
+    <li>你整理的是自己本地尚未共享的提交。</li>
+    <li>这是个人项目或团队明确允许的工作流。</li>
+    <li>你清楚知道 rebase 后提交 ID 会变，也知道后续该如何 push。</li>
+    <li>你要的是线性历史，而不是完整保留分叉轨迹。</li>
+</ul>
+
+<div class="doc-note"><strong>保守而正确的默认建议</strong>：如果你没有非常明确的理由，就先用 <code>merge</code> 思维来理解 Git；如果团队规范说不能 rebase，那就把这条规范当硬约束，而不是“建议”。<code>rebase</code> 不是更高级，它只是另一种会改写历史的整理手段。</div>
+
+<h4>图 5：为什么有时候会冲突</h4>
+<pre><code>你改了第 10 行
+别人也改了第 10 行
+
+Git 能自动合并很多“不重叠”的修改，
+但面对同一位置的不同改法时，
+它不知道你想保留哪一个，于是要求你手工决策。</code></pre>
+<p>所以冲突不代表仓库坏了。它只是 Git 在说：“这里我不敢替你做语义决定。”</p>
+
+<h4>标签 Tag 在写作项目里特别有用</h4>
+<ul>
+    <li>给投稿版本打标签：<code>投稿版-2026-05</code></li>
+    <li>给出版审校前版本打标签：<code>出版前送审版</code></li>
+    <li>给重大剧情节点打标签：<code>第三卷重构前</code></li>
+</ul>
+<pre><code>git tag v2.0-终稿
+git tag -a v3.0 -m "出版版"
+git push origin v2.0-终稿
+git push origin v3.0</code></pre>
+
+<h4>一个从零到一的 Git 命令行示例</h4>
+<pre><code>git init
+git status
+git add .
+git commit -m "初始化小说项目"
+
+# 继续写作
+git status
+git diff
+git add chapters/第06章.md
+git add novel-helper/roles.md
+git commit -m "完成第六章初稿并补齐角色设定"
+
+# 打一个里程碑标签
+git tag -a v0.6 -m "第六章完成"
+
+# 绑定远端并推送
+git remote add origin 远端地址
+git push -u origin main</code></pre>
+
+<h4>如果你把现场搞乱了，先问自己哪一类问题</h4>
+<ol>
+    <li><b>只是工作区乱了？</b> 先看 <code>git status</code> 和 <code>git diff</code>。</li>
+    <li><b>只是暂存错了？</b> 优先想 <code>git restore --staged</code>。</li>
+    <li><b>提交说明写错或提早提交了？</b> 先考虑 <code>git commit --amend</code> 或软重置。</li>
+    <li><b>已经推到远端了？</b> 优先想 <code>git revert</code>，不要直接改公共历史。</li>
+    <li><b>只是想先把未完成工作挪开？</b> 先想 <code>git stash</code>。</li>
+</ol>
+
+<h4>新手应避免的高风险习惯</h4>
+<ul>
+    <li>没看清状态就直接乱用 <code>reset --hard</code>。</li>
+    <li>把几十件不相关的修改塞进一个提交。</li>
+    <li>在公共分支上反复改写历史，再强推覆盖别人。</li>
+    <li>把缓存、导出成品、构建产物、私密信息一起提交。</li>
+    <li>完全不写提交说明，最后历史只剩“update”或“修改”。</li>
+</ul>
+
+<h4>一张给小说作者的 Git 速查表</h4>
+<pre><code>git status                # 先看现场
+git diff                  # 看还没暂存的改动
+git diff --cached         # 看准备提交的改动
+git add 文件名             # 暂存指定文件
+git restore --staged 文件名 # 取消暂存
+git commit -m "说明"       # 创建提交
+git log --oneline         # 看简洁历史
+git log --graph --oneline # 看分支图
+git switch 分支名          # 切分支
+git switch -c 新分支名      # 新建并切换分支
+git stash                 # 临时收起现场
+git tag v2.0-终稿         # 打标签
+git revert HEAD           # 用新提交撤销最近一次提交</code></pre>
+
+<div class="doc-note">读完这页以后，下一步不要继续背更多命令，而是去看 <a class="doc-ref-link" data-doc="git-integration"><strong>Git 与 VS Code 集成</strong></a>，把这些概念映射到你实际会点的按钮上；需要上云时，再接着看 <a class="doc-ref-link" data-doc="git-hosting-platforms"><strong>Git 托管平台比较</strong></a> 和 <a class="doc-ref-link" data-doc="git-remote-sync"><strong>云仓库同步与备份</strong></a>。</div>
+</div>

@@ -1,0 +1,63 @@
+<div class="doc-section beginner">
+<h4>这是什么文件</h4>
+<p><code>.wcignore</code> 是 ANH 的<strong>字数统计 / 文件扫描忽略清单</strong>。它不是 Git 文件，而是给 ANH 自己用的。</p>
+
+<h4>它和 .gitignore 的区别</h4>
+<p>最简单的理解是：</p>
+<ul>
+    <li><code>.gitignore</code> 决定“Git 看不看”</li>
+    <li><code>.wcignore</code> 决定“字数统计和某些 ANH 文件选择逻辑算不算”</li>
+</ul>
+
+<h4>初始化时常见内容</h4>
+<pre><code>.vscode/
+.out-of-code-insights/</code></pre>
+
+<h4>为什么要忽略这些目录</h4>
+<ul>
+    <li><code>.vscode/</code>：工作区配置，不应该混进正文统计</li>
+    <li><code>.out-of-code-insights/</code>：扩展数据目录，不属于创作正文</li>
+</ul>
+
+<h4>什么时候你应该改它</h4>
+<ul>
+    <li>你有素材目录、备份目录，不想被统计</li>
+    <li>你把导出文件放在项目里，不想影响字数</li>
+    <li>你想让大纲重定向 / 文件选择器避开某些目录</li>
+</ul>
+
+<div class="doc-note">如果你发现字数统计莫名其妙多了很多，先不要怀疑正文，先检查是不是没把素材或导出目录写进 <code>.wcignore</code>。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>它会影响哪些地方</h4>
+<ul>
+    <li>启用相关配置后，影响字数统计是否把某些路径计入</li>
+    <li>影响某些文件浏览 / 选取命令对路径的过滤</li>
+    <li>不影响 Git 跟踪，不影响远端同步</li>
+</ul>
+
+<h4>常见用法</h4>
+<pre><code>.vscode/
+.out-of-code-insights/
+exports/
+archive/
+assets/reference/
+</code></pre>
+
+<h4>推荐策略</h4>
+<ul>
+    <li>把“非正文、非创作资产”的目录放进去</li>
+    <li>别把真正章节目录误忽略掉</li>
+    <li>项目结构一变，就回头检查一次</li>
+</ul>
+
+<h4>常见误区</h4>
+<ul>
+    <li>以为写进 <code>.wcignore</code> 以后 Git 也会忽略</li>
+    <li>把当前写作目录也忽略了，导致统计变成 0</li>
+    <li>素材目录和正文目录混在一起，结果很难精确过滤</li>
+</ul>
+
+<div class="doc-note">相关文档：<a class="doc-ref-link" data-doc="word-count"><strong>字数统计</strong></a>、<a class="doc-ref-link" data-doc="gitignore-file"><strong>.gitignore</strong></a>。</div>
+</div>

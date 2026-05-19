@@ -8,6 +8,7 @@ import { WordCountProvider } from '../Provider/view/wordCountProvider'
 import { templateRegistry } from '../typst/templateRegistry'
 import { renderFromTemplate, compileTypstWithLog } from '../typst/exportService'
 import { parseMarkdownDoc, firstH1, firstHeading, Block } from '../typst/mdParser'
+import { scriptExtensionRegistry } from '../mcp/scriptExtensions'
 
 function parseBlocks(text: string): { blocks: Block[] } {
   const doc = parseMarkdownDoc(text)
@@ -49,8 +50,9 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
   const cfg = vscode.workspace.getConfiguration('andrea.typst')
   const defTpl = cfg.get<string>('defaultTemplate','sample')
   const renderer = cfg.get<string>('defaultRenderer', 'internal')
-  const useInternalRenderer = !renderer || renderer === 'internal' || renderer === 'liquid'
-  const pick = useInternalRenderer && packs.length > 0
+  const isExternalRenderer = renderer && renderer !== 'internal' && renderer !== 'liquid'
+  const needsTemplate = !isExternalRenderer || scriptExtensionRegistry.getTypstRendererTemplateMode(renderer) !== 'none'
+  const pick = needsTemplate && packs.length > 0
     ? await vscode.window.showQuickPick(packs.map(p => ({ label: p.name, description: p.root })), { placeHolder: '选择Typst模板', canPickMany: false })
     : undefined
   const tplName = pick?.label || defTpl

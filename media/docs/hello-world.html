@@ -9,12 +9,12 @@
 
 <h4>第 1 步：创建你的小说项目</h4>
 <ol>
-    <li>打开 VS Code，新建或打开一个空文件夹作为你的小说项目</li>
-    <li>ANH 会自动弹窗询问：<b>"是否在当前工作区启用 Andrea Novel Helper？"</b> — 点击<b>"启用本工作区"</b></li>
-    <li>如果 ANH 检测到没有角色/词汇等描述文件，会再次弹窗：<b>"是否运行项目初始化向导？"</b> — 点击<b>"运行向导"</b></li>
+    <li>打开 VS Code，按 <kbd>Ctrl+Shift+P</kbd> 搜索<strong>"打开 ANH Hello"</strong>进入 Hello 首页</li>
+    <li>点击<strong>"新建写作工作区"</strong>，选择一个空文件夹（或在对话框内新建文件夹后选中），ANH 会打开该工作区并<strong>直接自动弹出项目初始化向导</strong></li>
     <li>跟着向导填写：项目名称、你的名字（其他都可以跳过）</li>
     <li>完成后，ANH 的视图（包管理器、字数统计等）就会出现在侧边栏中</li>
 </ol>
+<p>如果你习惯手动操作，也可以直接打开一个空文件夹，ANH 检测到没有角色/词汇等描述文件时，会弹窗询问是否运行项目初始化向导。</p>
 
 <h4>第 2 步：创建你的第一个角色</h4>
 <ol>
@@ -44,10 +44,32 @@
 <h4>第 3 步：体验角色自动提示</h4>
 <ol>
     <li>新建一个 Markdown 文件（如 <code>chapter1.md</code>）</li>
-    <li>输入 <code>@</code>，会弹出一个列表，里面有"林小满"</li>
-    <li>点击"林小满"，名字会自动插入到文档中</li>
-    <li>你也可以直接输入"小满"（别名），同样会弹出提示</li>
+    <li>输入角色名的一部分（如 <code>林</code>），会弹出补全列表，里面有"林小满"</li>
+    <li>选择"林小满"，名字会自动插入到文档中</li>
+    <li>你也可以直接输入别名（如 <code>小满</code>），同样会弹出提示</li>
 </ol>
+<div class="doc-note">默认补全模式是 <code>loose</code>（模糊匹配），输入任意字符即可触发。你也可以在设置中切换为 <code>symbolLoose</code> 等模式，使用 <code>@</code> 前缀触发补全。下方动画可以切换不同模式体验区别。</div>
+
+<div class="completion-demo">
+    <div class="demo-chrome">
+        <div class="demo-tab">chapter1.md</div>
+    </div>
+    <div class="demo-mode-bar">
+        <span class="demo-mode-label">补全模式:</span>
+        <button class="demo-mode-btn active" data-mode="loose">loose</button>
+        <button class="demo-mode-btn" data-mode="startsWith">startsWith</button>
+        <button class="demo-mode-btn" data-mode="symbolLoose">symbolLoose</button>
+        <button class="demo-mode-btn" data-mode="symbolStartsWith">symbolStartsWith</button>
+    </div>
+    <div class="demo-editor">
+        <div class="demo-line">
+            <div class="demo-gutter"><span>1</span></div>
+            <div class="demo-code"><span class="demo-typed" id="demoTyped"></span><span class="demo-cursor"></span></div>
+        </div>
+        <div class="demo-suggest" id="demoSuggest"></div>
+    </div>
+    <div class="demo-status" id="demoStatus">输入 @ 触发角色补全...</div>
+</div>
 
 <h4>第 4 步：观察魔法上色效果</h4>
 <ol>
@@ -60,9 +82,11 @@
 </code></pre>
     </li>
     <li>你会发现"林小满"三个字变成了你设定的颜色（珊瑚红）</li>
+    <li>双引号 <code>""</code> 也会被自动着色（金色）——这是初始化时自带的正则匹配规则在工作</li>
     <li>把鼠标停在"林小满"上，会显示你写的描述</li>
     <li>按住 <kbd>Ctrl</kbd> 点击"林小满"，会直接跳转到角色资料</li>
 </ol>
+<div class="doc-note"><a class="doc-ref-link" data-doc="workspace-init-files" data-tooltip="regex"><strong>初始化时自带的正则匹配规则</strong></a>：项目初始化时会自动创建正则规则库，内置了中文引号 <code>""</code>、书名号 <code>《》</code>、单引号 <code>''</code>、角引号 <code>「」</code> 的着色规则。你可以在 <code>novel-helper/</code> 下找到并自定义这些规则。</div>
 
 <h4>第 5 步：实时预览你的章节</h4>
 <ol>

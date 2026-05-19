@@ -1,0 +1,301 @@
+<div class="doc-section beginner">
+<h4>这篇文档讲什么</h4>
+<p>这页专门讲 <strong>ANH 的包机制和外部包机制</strong>。重点不是“包管理器面板上有哪些按钮”，而是：</p>
+<ul>
+    <li>ANH 眼里的“包”到底是什么。</li>
+    <li>哪些目录会被当成内部包，哪些目录会被当成外部包。</li>
+    <li>哪些文件会被识别成角色库、词汇表、敏感词库、正则规则、关系文件、时间线文件。</li>
+    <li>为什么包机制鼓励你把资料拆成多个独立的 Markdown / CSV / JSON5 文件，而不是永远只守着初始化那几个默认 JSON5 文件。</li>
+    <li>包管理器树上的内容是怎么从代码里算出来的。</li>
+    <li>内部包和外部包同时存在时，角色加载和冲突处理是什么顺序。</li>
+</ul>
+
+<div class="doc-note">如果你只想学“怎么点这个视图”，去看 <a class="doc-ref-link" data-doc="package-manager"><strong>包管理器</strong></a>；如果你只想学“怎么挂载一个外部目录”，去看 <a class="doc-ref-link" data-doc="external-resource"><strong>外部资源目录</strong></a>。这页讲的是背后的机制。</div>
+
+<h4>先说结论：ANH 里的“包”不是 npm 那种包</h4>
+<p>在 ANH 里，<strong>包本质上就是一个目录</strong>。它没有强制的 <code>package.json</code>，也没有复杂的安装流程。你可以把它理解成：</p>
+<pre><code>一个目录
+  + 若干资源文件
+  + 可继续嵌套子目录
+  + 被包管理器当成树节点显示</code></pre>
+
+<h4>ANH 实际上有两种“包”</h4>
+<table class="doc-table">
+    <tr>
+        <th>类型</th>
+        <th>它是什么</th>
+        <th>典型位置</th>
+    </tr>
+    <tr>
+        <td>内部包</td>
+        <td>工作区内 <code>novel-helper/</code> 下面的目录</td>
+        <td><code>novel-helper/main/</code>、<code>novel-helper/faction-a/</code></td>
+    </tr>
+    <tr>
+        <td>外部包</td>
+        <td>主要是同一工作区里、不在 <code>novel-helper/</code> 里的资源目录；也可以手动挂工作区外目录</td>
+        <td><code>资料库/公共设定/</code>、<code>imports/旧项目角色包/</code></td>
+    </tr>
+</table>
+
+<h4>图 1：包管理器根节点到底显示什么</h4>
+<pre><code>包管理器根层
+├── 常用功能
+├── 项目设置文件
+├── 外部资源目录 A（如果被识别到）
+├── 外部资源目录 B（如果被识别到）
+└── novel-helper/   ← 项目内资源根目录</code></pre>
+<p>也就是说，包管理器并不是“只显示 <code>novel-helper/</code>”。顶部还有常用功能和项目设置文件，而外部包会作为和 <code>novel-helper/</code> 并列的顶层节点出现。</p>
+
+<h4>内部包怎么理解</h4>
+<p>内部包最简单。只要它在 <code>novel-helper/</code> 下面，就是包管理器会递归扫描的对象。例如：</p>
+<pre><code>novel-helper/
+├── main/
+│   ├── character-gallery.md
+│   └── vocabulary.md
+├── faction-a/
+│   ├── roles.md
+│   └── sensitive-words.json5
+└── world/
+    ├── vocabulary.json5
+    └── regex-patterns.json5</code></pre>
+<p>这里的 <code>main</code>、<code>faction-a</code>、<code>world</code> 都是“包”。它们不需要额外声明文件，只要目录存在就能出现在树里。</p>
+
+<h4>外部包怎么理解</h4>
+<p>外部包首先应该理解成：<strong>同一工作区里，但不放在 <code>novel-helper/</code> 下面的资源目录</strong>。它们仍然属于这个项目的工作区，只是你不想把它们塞进默认资源根目录里。需要时，你也可以通过面板手动挂载工作区外目录，但那是扩展玩法，不是唯一用法。例如：</p>
+<pre><code>资料库/公共设定/
+├── __init__.ojson5
+├── roles.md
+├── vocabulary.md
+└── timeline.tjson5</code></pre>
+<p>这个目录虽然不在 <code>novel-helper/</code> 下，但只要它在当前工作区里，并且带了外部包标记或可识别资源文件，ANH 就会把它当成外部资源目录，显示在包管理器根层。</p>
+
+<h4>为什么说包机制鼓励“拆分文件”，而不是死守默认文件</h4>
+<p>初始化向导会给你几个默认文件，例如：</p>
+<pre><code>novel-helper/character-gallery.json5
+novel-helper/character-gallery.csv
+novel-helper/sensitive-words.json5
+novel-helper/vocabulary.json5
+novel-helper/regex-patterns.json5
+novel-helper/roles.md</code></pre>
+<p>这些文件的意义是<strong>帮你启动项目</strong>，不是在说“以后整部小说永远只维护这几个根目录文件”。按代码实现，ANH 会递归扫描整个 <code>novel-helper/</code>，所以成熟项目更自然的做法是：</p>
+<ul>
+    <li>按阵营、卷册、资料类型拆成多个包目录。</li>
+    <li>手工长期维护的设定优先放 Markdown。</li>
+    <li>从 Excel / 表格迁来的数据优先先落 CSV。</li>
+    <li>字段特别复杂、要写样式或结构化属性时再用 JSON5。</li>
+</ul>
+
+<div class="doc-note">简单说：默认 JSON5 文件是起步骨架，包机制真正鼓励的是“多目录、多文件、按用途拆分”。</div>
+
+<h4>项目配置里的路径，到底是不是“包列表”</h4>
+<p>不是。很多人会误会 <a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a> 里的这些字段：</p>
+<pre><code>rolesFile
+sensitiveWordsFile
+vocabularyFile
+regexPatternsFile</code></pre>
+<p>它们的主要作用是：<strong>告诉“新建角色/词汇/敏感词/正则规则”这类命令默认写到哪个文件</strong>。它们并不等于“整个项目只扫描这四个文件”。</p>
+<p>真正的扫描范围是：</p>
+<ol>
+    <li>递归扫描 <code>novel-helper/</code>。</li>
+    <li>再把识别到的外部资源目录加入扫描队列。</li>
+    <li>按文件识别规则决定哪些文件要当成资源文件加载。</li>
+</ol>
+
+<h4>哪些文件会被当成资源文件</h4>
+<table class="doc-table">
+    <tr>
+        <th>文件</th>
+        <th>大意</th>
+    </tr>
+    <tr>
+        <td><code>.ojson5</code></td>
+        <td>一定会被当成角色文件</td>
+    </tr>
+    <tr>
+        <td><code>.rjson5</code></td>
+        <td>会被当成关系文件，不按普通角色库处理</td>
+    </tr>
+    <tr>
+        <td><code>.tjson5</code></td>
+        <td>会被当成时间线文件</td>
+    </tr>
+    <tr>
+        <td><code>.json5</code> / <code>.txt</code> / <code>.md</code> / <code>.csv</code> / <code>.toml</code></td>
+        <td>若文件名命中关键词，或内容嗅探命中规则，就会被当成资源文件</td>
+    </tr>
+    <tr>
+        <td>正则规则文件</td>
+        <td>要求文件名命中正则关键词，且格式必须是 <code>.json5</code> 或 <code>.md</code></td>
+    </tr>
+</table>
+
+<h4>图 2：资源文件识别不是只看扩展名</h4>
+<pre><code>文件名命中关键词
+        或
+文件内容嗅探命中结构
+        或
+扩展名本身就是强标记（如 .ojson5 / .rjson5 / .tjson5）
+        ↓
+才会进入角色加载 / 关系加载 / 时间线加载流程</code></pre>
+
+<h4>关键词从哪里来</h4>
+<p>ANH 的文件识别关键词不是写死一层，而是三路合并：</p>
+<ol>
+    <li>内置默认关键词。</li>
+    <li><a class="doc-ref-link" data-doc="anhproject-file"><strong>anhproject.md</strong></a> 里的文件关键词段落。</li>
+    <li><a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a> 里的关键词数组，以及相关 VS Code 设置。</li>
+</ol>
+<p>它们是<strong>附加合并</strong>，不是简单互相覆盖。所以你可以在项目级继续加自己的命名习惯，比如 <code>cast</code>、<code>glossary</code>、<code>banlist</code> 之类。</p>
+
+<h4>一个最实用的内部包例子</h4>
+<pre><code>novel-helper/
+├── cast-main/
+│   ├── roles.md
+│   └── character-gallery.csv
+├── world/
+│   └── vocabulary.md
+├── style-guide/
+│   └── sensitive-words.md
+└── coloring/
+    └── regex-patterns.json5</code></pre>
+<p>这时包管理器会把三个子目录都显示为包；资源文件会被识别为可展开节点；Markdown / JSON5 / CSV / TXT / TOML 角色文件还能继续展开出角色条目。</p>
+
+<h4>一个最实用的“共享外部包”例子</h4>
+<pre><code>当前工作区/
+├── novel-helper/
+├── 资料库/
+│   └── AndromedaWorld/
+├── __init__.ojson5
+│       ├── roles.md
+│       ├── vocabulary.md
+│       └── timeline.tjson5</code></pre>
+<p>这时你可以把 <code>资料库/AndromedaWorld/</code> 当成当前项目里的“工作区级公共设定包”。它不在 <code>novel-helper/</code> 下，但仍然属于这个工作区。只有当你确实要跨多个完全不同的工作区复用时，才更需要去挂工作区外目录。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>内部包的扫描机制</h4>
+<p>角色加载入口会先定位工作区根目录，再定位 <code>novel-helper/</code>，然后递归扫描里面的子目录和文件。默认会跳过一些内部技术目录，例如：</p>
+<pre><code>.anh-fsdb
+outline
+typo
+comments</code></pre>
+<p>这意味着包管理器和角色加载器并不要求你把所有资源都塞在根层；你完全可以分多层目录组织资源。</p>
+
+<h4>外部包的扫描机制</h4>
+<p>外部包不是靠“你在设置里填一个列表”来维持的。代码实际做的是：<strong>每次扫描当前工作区时，去找那些符合外部资源目录规则、但不在 <code>novel-helper/</code> 里的目录</strong>。扫描时会先跳过：</p>
+<ul>
+    <li><code>novel-helper/</code> 本身</li>
+    <li><code>.git</code>、<code>.vscode</code>、<code>node_modules</code>、<code>dist</code>、<code>build</code>、<code>out</code> 等忽略目录</li>
+    <li>被 <code>.anh-ignore</code> 标记排除的目录</li>
+</ul>
+
+<h4>外部包是怎么被“识别出来”的</h4>
+<p>目录里只要出现以下任一情况，就可能被当成外部资源目录：</p>
+<ol>
+    <li>存在 <code>__init__.ojson5</code>。</li>
+    <li>存在强标记扩展名文件，例如 <code>.ojson5</code>、<code>.rjson5</code>、<code>.ojson</code>、<code>.rjson</code>、<code>.tjson5</code>。</li>
+    <li>存在文件名命中“外部资源标记关键词”的 <code>.json5</code>、<code>.txt</code>、<code>.csv</code>、<code>.md</code>、<code>.toml</code> 等文件。</li>
+    <li>在启用 Markdown 库名标记时，存在像 <code>character-gallery.md</code>、<code>sensitive-words.md</code>、<code>vocabulary.md</code> 这样的 Markdown 文件。</li>
+</ol>
+
+<h4>图 3：为什么“手动添加外部目录”之后下次还能识别</h4>
+<pre><code>你在面板里选择一个目录
+   ↓
+ANH 询问是否创建 __init__.ojson5
+   ↓
+如果创建了，这个目录以后就带了标记
+   ↓
+下次启动重新扫描时，又会重新识别到它</code></pre>
+<p>所以“外部目录不会保存到设置列表里”这句话只说对了一半。更准确的说法是：<strong>它不是靠设置列表持久化，而是靠目录里的实际标记文件和可识别资源文件再次被扫描出来</strong>。</p>
+
+<div class="doc-note">对大多数小说项目来说，更常见的做法不是去挂工作区外某个神秘目录，而是在当前工作区里专门留出一个不叫 <code>novel-helper/</code> 的资料区，然后把需要独立管理的包标出来。</div>
+
+<h4><code>.anh-ignore</code> 是干什么的</h4>
+<p>如果你明确不想让某个目录再被识别成外部资源目录，ANH 可以在该目录放一个 <code>.anh-ignore</code>。之后扫描器会把这个目录加入排除集合。也就是说：</p>
+<table class="doc-table">
+    <tr>
+        <th>文件</th>
+        <th>作用</th>
+    </tr>
+    <tr>
+        <td><code>__init__.ojson5</code></td>
+        <td>把目录显式标记成外部资源目录</td>
+    </tr>
+    <tr>
+        <td><code>.anh-ignore</code></td>
+        <td>把目录显式排除，不再自动识别成外部资源目录</td>
+    </tr>
+</table>
+
+<h4>文件识别比你以为的更宽</h4>
+<p>代码里对几类文件做了额外嗅探：</p>
+<ul>
+    <li><b>Markdown</b>：如果文件名没命中关键词，但内容前几 KB 里长得像角色库结构，也可能被识别。</li>
+    <li><b>CSV</b>：如果在 <code>novel-helper/</code> 内，或者内容像角色表，也可能被识别为资源文件。</li>
+    <li><b>正则规则</b>：命中正则关键词后，只接受 <code>.json5</code> 和 <code>.md</code>，不接受 <code>.txt</code> 这种表达力不够的格式。</li>
+</ul>
+
+<h4>包管理器树和实际加载器不是两套分离系统</h4>
+<p>包管理器视图会显示：</p>
+<ul>
+    <li>常用功能节点</li>
+    <li>项目设置文件节点</li>
+    <li>外部资源目录节点</li>
+    <li><code>novel-helper/</code> 根节点及其子目录</li>
+</ul>
+<p>而真正的角色加载器会扫描 <code>novel-helper/</code> 和外部目录，把识别到的资源文件送进解析器。它们不是一套只看 UI、一套只看数据的分离系统，而是共享同一套识别逻辑和外部目录扫描结果。</p>
+
+<h4>角色冲突时谁优先</h4>
+<p>这里必须说清楚，否则很容易把文档写错。</p>
+<ol>
+    <li>默认策略是 <strong>loadOrder</strong>，不是自定义优先级。</li>
+    <li>加载顺序是：先扫内部 <code>novel-helper/</code>，再把外部目录加入扫描队列。</li>
+    <li>同 UUID 冲突时，先到的角色作为基础对象，后到的角色主要补充它缺失的字段。</li>
+</ol>
+<p>这意味着在默认策略下，<strong>项目内角色通常更像“主版本”，外部角色更像“补丁来源”</strong>。它不是简单地“谁在外部谁优先”。</p>
+
+<h4>图 4：默认冲突处理的大意</h4>
+<pre><code>内部包先加载到一个角色 A
+外部包后加载到同 UUID 的角色 B
+   ↓
+默认策略：A 做基础对象
+B 只补 A 没填的字段
+   ↓
+结果通常更接近“内部覆盖外部，外部补空缺”</code></pre>
+
+<h4>什么时候这个结论会变</h4>
+<p>只有在你显式启用了自定义优先级策略时，位置、文件名、扩展名、默认优先级这些配置才会参与比较。那时外部/内部位置权重才可能影响结果。</p>
+<p>相关思想大致是：</p>
+<pre><code>strategy: 'custom'
+enableLocationPriority: true
+enableFileNamePriority: true
+enableFileTypePriority: true</code></pre>
+<p>但如果你没有专门配这套东西，就应该按默认加载顺序去理解系统，而不是想当然地把“外部资源”当成高优先级覆盖层。</p>
+
+<h4>包机制最常见的 6 个误区</h4>
+<ol>
+    <li><b>“包必须有专门的元数据文件。”</b> 不是，内部包本质上就是目录。</li>
+    <li><b>“project-config.json5 里写了 rolesFile，系统就只认那一个文件。”</b> 不是，它主要影响默认写入目标。</li>
+    <li><b>“外部包是手工临时挂一下，下次就没了。”</b> 不准确；它可以靠标记文件和可识别资源再次被扫描出来。</li>
+    <li><b>“外部包一定覆盖内部包。”</b> 默认并不是这样。</li>
+    <li><b>“文件名关键词决定角色类型。”</b> 不是，类型最终还是看条目内容里的 <code>type</code> / <code>类型</code>。</li>
+    <li><b>“包管理器只是一层 UI，和真实加载无关。”</b> 也不是，树视图和加载器共用识别逻辑。</li>
+</ol>
+
+<h4>推荐的组织方式</h4>
+<pre><code>项目内：
+novel-helper/
+    cast-main/
+    world/
+    style-guide/
+
+同一工作区但不在 novel-helper 下：
+资料库/公共世界观包/
+  __init__.ojson5
+    roles.md
+    vocabulary.md</code></pre>
+<p>内部包放“项目主资源”；工作区内的外部包放“你不想塞进 <code>novel-helper/</code>、但又要被当前项目识别的资源”；工作区外目录挂载则留给更高级的跨项目共享场景。这样最稳，也最符合 ANH 现在的代码实现。</p>
+
+<div class="doc-note">如果你下一步要实际操作，建议阅读顺序是：先看 <a class="doc-ref-link" data-doc="package-manager"><strong>包管理器</strong></a> 学 UI，再看 <a class="doc-ref-link" data-doc="external-resource"><strong>外部资源目录</strong></a> 学挂载流程；如果你要改项目级文件识别习惯，再回头看 <a class="doc-ref-link" data-doc="project-config-file"><strong>project-config.json5</strong></a> 和 <a class="doc-ref-link" data-doc="anhproject-file"><strong>anhproject.md</strong></a>。</div>
+</div>
