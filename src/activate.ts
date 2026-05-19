@@ -1194,6 +1194,32 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.commands.registerCommand('AndreaNovelHelper.refreshWordCount', () => {
                 wordCountProvider.refresh();
             }),
+            vscode.commands.registerCommand('AndreaNovelHelper.wordCount.revealPath', async (target: vscode.Uri | string | { resourceUri?: vscode.Uri; fsPath?: string }, options?: { silent?: boolean }) => {
+                const uri = target instanceof vscode.Uri
+                    ? target
+                    : typeof target === 'string'
+                        ? vscode.Uri.file(target)
+                        : target?.resourceUri ?? (target?.fsPath ? vscode.Uri.file(target.fsPath) : undefined);
+                if (!uri) {
+                    if (!options?.silent) vscode.window.showWarningMessage('未找到要定位的路径。');
+                    return false;
+                }
+
+                try {
+                    await vscode.commands.executeCommand('wordCountExplorer.focus');
+                } catch {
+                    // ignore
+                }
+
+                const stub = { id: uri.fsPath, resourceUri: uri } as any;
+                try {
+                    await treeView.reveal(stub, { expand: true, select: true, focus: true });
+                    return true;
+                } catch {
+                    if (!options?.silent) vscode.window.showWarningMessage('写作资源管理器中未找到对应节点。');
+                    return false;
+                }
+            }),
             vscode.commands.registerCommand('AndreaNovelHelper.wordCount.forceRecountAll', () => {
                 wordCountProvider.forceRecountAll();
                 vscode.window.showInformationMessage('已强制重算所有字数缓存');

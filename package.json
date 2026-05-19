@@ -329,77 +329,152 @@
       {
         "command": "andrea.notes.refreshOutlineTree",
         "title": "%command.notes.refreshOutlineTree.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "andrea.notes.createTrackedOutlineChapter",
+        "title": "%command.notes.createTrackedOutlineChapter.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "andrea.notes.createTrackedOutlineFolder",
+        "title": "%command.notes.createTrackedOutlineFolder.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "andrea.notes.openTrackedDirectoryOutline",
+        "title": "%command.notes.openTrackedDirectoryOutline.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(folder-library)"
+      },
+      {
+        "command": "andrea.notes.openTrackedChapterOutline",
+        "title": "%command.notes.openTrackedChapterOutline.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(book)"
+      },
+      {
+        "command": "andrea.notes.openTrackedOutlineForResource",
+        "title": "%command.notes.openTrackedOutlineForResource.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(book)"
+      },
+      {
+        "command": "andrea.notes.revealTrackedInOutlineTree",
+        "title": "%command.notes.revealTrackedInOutlineTree.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "andrea.notes.openTrackedSourceFile",
+        "title": "%command.notes.openTrackedSourceFile.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "andrea.notes.revealTrackedInWritingExplorer",
+        "title": "%command.notes.revealTrackedInWritingExplorer.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "andrea.notes.revealTrackedOutlineStorage",
+        "title": "%command.notes.revealTrackedOutlineStorage.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(file-symlink-file)"
+      },
+      {
+        "command": "andrea.notes.refreshFreeOutlineTree",
+        "title": "%command.notes.refreshFreeOutlineTree.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(refresh)"
       },
       {
         "command": "andrea.notes.refreshDailyPlanTree",
         "title": "%command.notes.refreshDailyPlanTree.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(refresh)"
       },
       {
         "command": "andrea.notes.refreshCustomTree",
         "title": "%command.notes.refreshCustomTree.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(refresh)"
       },
       {
         "command": "andrea.notes.createOutlineNote",
         "title": "%command.notes.createOutlineNote.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-file)"
       },
       {
         "command": "andrea.notes.createDailyPlan",
         "title": "%command.notes.createDailyPlan.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-file)"
       },
       {
         "command": "andrea.notes.createCustomNote",
         "title": "%command.notes.createCustomNote.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-file)"
       },
       {
         "command": "andrea.notes.createOutlineFolder",
         "title": "%command.notes.createOutlineFolder.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-folder)"
       },
       {
         "command": "andrea.notes.createDailyPlanFolder",
         "title": "%command.notes.createDailyPlanFolder.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-folder)"
       },
       {
         "command": "andrea.notes.createCustomFolder",
         "title": "%command.notes.createCustomFolder.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-folder)"
       },
       {
         "command": "andrea.notes.createInFolder",
         "title": "%command.notes.createInFolder.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-file)"
       },
       {
         "command": "andrea.notes.createFolderInFolder",
         "title": "%command.notes.createFolderInFolder.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-folder)"
       },
       {
         "command": "andrea.notes.open",
         "title": "%command.notes.open.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(go-to-file)"
       },
       {
         "command": "andrea.notes.rename",
         "title": "%command.notes.rename.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(edit)"
       },
       {
         "command": "andrea.notes.delete",
         "title": "%command.notes.delete.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(trash)"
       },
       {
         "command": "andrea.notes.revealInExplorer",
         "title": "%command.notes.revealInExplorer.title%",
-        "category": "Andrea Novel Helper"
+        "category": "Andrea Novel Helper",
+        "icon": "$(folder-opened)"
       },
       {
         "command": "andrea.openRoleRelationshipGraph",
@@ -1355,6 +1430,12 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "独立打开创作工作台组件时是否显示顶部标题栏和“打开工作台”按钮。关闭后组件内容会占满整个 Webview。"
+        },
+        "AndreaNovelHelper.writingDashboard.planSidebar.groupByTime": {
+          "anhName": "每日计划树按时间分类显示",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "笔记侧边栏中的“每日计划”树是否按年月自动分组显示。关闭后改为平铺显示工作台计划目录中的 Markdown 文件列表。"
         },
         "AndreaNovelHelper.typo.suppressRolesMode": {
           "anhName": "角色抑制模式",
@@ -3769,13 +3850,13 @@
           "icon": "$(settings-gear)"
         },
         {
-          "command": "andrea.notes.createOutlineNote",
+          "command": "andrea.notes.createTrackedOutlineChapter",
           "when": "view == andrea.notesOutlineTree",
           "group": "navigation@1",
           "icon": "$(new-file)"
         },
         {
-          "command": "andrea.notes.createOutlineFolder",
+          "command": "andrea.notes.createTrackedOutlineFolder",
           "when": "view == andrea.notesOutlineTree",
           "group": "navigation@2",
           "icon": "$(new-folder)"
@@ -3787,21 +3868,33 @@
           "icon": "$(refresh)"
         },
         {
+          "command": "andrea.notes.createOutlineNote",
+          "when": "view == andrea.notesFreeOutlineTree",
+          "group": "navigation@1",
+          "icon": "$(new-file)"
+        },
+        {
+          "command": "andrea.notes.createOutlineFolder",
+          "when": "view == andrea.notesFreeOutlineTree",
+          "group": "navigation@2",
+          "icon": "$(new-folder)"
+        },
+        {
+          "command": "andrea.notes.refreshFreeOutlineTree",
+          "when": "view == andrea.notesFreeOutlineTree",
+          "group": "navigation@3",
+          "icon": "$(refresh)"
+        },
+        {
           "command": "andrea.notes.createDailyPlan",
           "when": "view == andrea.notesDailyPlanTree",
           "group": "navigation@1",
           "icon": "$(new-file)"
         },
         {
-          "command": "andrea.notes.createDailyPlanFolder",
-          "when": "view == andrea.notesDailyPlanTree",
-          "group": "navigation@2",
-          "icon": "$(new-folder)"
-        },
-        {
           "command": "andrea.notes.refreshDailyPlanTree",
           "when": "view == andrea.notesDailyPlanTree",
-          "group": "navigation@3",
+          "group": "navigation@2",
           "icon": "$(refresh)"
         },
         {
@@ -3853,32 +3946,115 @@
           "group": "inline@1"
         },
         {
-          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFolder",
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaNotesFolder",
+          "command": "andrea.notes.createTrackedOutlineChapter",
+          "group": "0_create@1"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaNotesFolder",
+          "command": "andrea.notes.createTrackedOutlineFolder",
+          "group": "0_create@2"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFolder",
+          "command": "andrea.notes.openTrackedDirectoryOutline",
+          "group": "inline@1",
+          "icon": "$(folder-library)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFolder",
+          "command": "andrea.notes.revealTrackedInWritingExplorer",
+          "group": "inline@2",
+          "icon": "$(list-tree)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFolder",
+          "command": "andrea.notes.revealTrackedOutlineStorage",
+          "group": "inline@3",
+          "icon": "$(file-symlink-file)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFolder",
+          "command": "andrea.notes.revealInExplorer",
+          "group": "inline@4",
+          "icon": "$(folder-opened)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFile",
+          "command": "andrea.notes.openTrackedSourceFile",
+          "group": "inline@1",
+          "icon": "$(go-to-file)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFile",
+          "command": "andrea.notes.revealTrackedInWritingExplorer",
+          "group": "inline@2",
+          "icon": "$(list-tree)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFile",
+          "command": "andrea.notes.revealTrackedOutlineStorage",
+          "group": "inline@3",
+          "icon": "$(file-symlink-file)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFile",
+          "command": "andrea.notes.revealInExplorer",
+          "group": "inline@4",
+          "icon": "$(folder-opened)"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFolder",
+          "command": "andrea.notes.openTrackedDirectoryOutline",
+          "group": "1_open@1"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFile",
+          "command": "andrea.notes.openTrackedChapterOutline",
+          "group": "1_open@1"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && viewItem == andreaTrackedOutlineFile",
+          "command": "andrea.notes.openTrackedSourceFile",
+          "group": "1_open@2"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && (viewItem == andreaTrackedOutlineFolder || viewItem == andreaTrackedOutlineFile)",
+          "command": "andrea.notes.revealTrackedInWritingExplorer",
+          "group": "1_open@3"
+        },
+        {
+          "when": "view == andrea.notesOutlineTree && (viewItem == andreaTrackedOutlineFolder || viewItem == andreaTrackedOutlineFile)",
+          "command": "andrea.notes.revealTrackedOutlineStorage",
+          "group": "1_open@4"
+        },
+        {
+          "when": "(view == andrea.notesFreeOutlineTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFolder",
           "command": "andrea.notes.createInFolder",
           "group": "0_create@1"
         },
         {
-          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFolder",
+          "when": "(view == andrea.notesFreeOutlineTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFolder",
           "command": "andrea.notes.createFolderInFolder",
           "group": "0_create@2"
         },
         {
-          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFile",
+          "when": "(view == andrea.notesFreeOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && viewItem == andreaNotesFile",
           "command": "andrea.notes.open",
           "group": "1_open@1"
         },
         {
-          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
+          "when": "(view == andrea.notesFreeOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
           "command": "andrea.notes.rename",
           "group": "2_modify@1"
         },
         {
-          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
+          "when": "(view == andrea.notesFreeOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
           "command": "andrea.notes.delete",
           "group": "2_modify@2"
         },
         {
-          "when": "(view == andrea.notesOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile)",
+          "when": "(view == andrea.notesOutlineTree && (viewItem == andreaTrackedOutlineFolder || viewItem == andreaTrackedOutlineFile)) || ((view == andrea.notesFreeOutlineTree || view == andrea.notesDailyPlanTree || view == andrea.notesCustomTree) && (viewItem == andreaNotesFolder || viewItem == andreaNotesFile))",
           "command": "andrea.notes.revealInExplorer",
           "group": "3_open@2"
         },
@@ -3938,14 +4114,36 @@
           "group": "1_package@1"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == outlineStorageFolder || viewItem == outlineStorageFile || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.deleteNode",
           "group": "2_deletion"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == outlineStorageFolder || viewItem == outlineStorageFile || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.openFile",
           "group": "3_open"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "command": "andrea.notes.openTrackedOutlineForResource",
+          "group": "inline@1",
+          "icon": "$(book)"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "command": "andrea.notes.revealTrackedInOutlineTree",
+          "group": "inline@2",
+          "icon": "$(list-tree)"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "command": "andrea.notes.openTrackedOutlineForResource",
+          "group": "3_open@1.5"
+        },
+        {
+          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "command": "andrea.notes.revealTrackedInOutlineTree",
+          "group": "3_open@1.6"
         },
         {
           "when": "view == packageManagerView && (viewItem == projectConfigFile || viewItem == missingProjectConfigFile)",
@@ -3953,17 +4151,17 @@
           "group": "3_open"
         },
         {
-          "when": "view == packageManagerView && (viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
+          "when": "view == packageManagerView && (viewItem == outlineStorageFile || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile)",
           "command": "AndreaNovelHelper.openWith",
           "group": "3_open"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == projectConfigFile || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == outlineStorageFolder || viewItem == outlineStorageFile || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == projectConfigFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.revealInExplorer",
           "group": "3_open"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == outlineStorageFolder || viewItem == outlineStorageFile || viewItem == resourceFile || viewItem == resourceFileError || viewItem == generalResourceFile || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.renamePackage",
           "group": "1_package@2"
         },
@@ -4001,6 +4199,18 @@
           "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",
           "command": "AndreaNovelHelper.wordCount.revealInOS",
           "group": "3_open@3"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",
+          "command": "andrea.notes.openTrackedOutlineForResource",
+          "group": "inline@1",
+          "icon": "$(book)"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",
+          "command": "andrea.notes.revealTrackedInOutlineTree",
+          "group": "inline@2",
+          "icon": "$(list-tree)"
         },
         {
           "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",
@@ -4074,6 +4284,16 @@
         },
         {
           "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",
+          "command": "andrea.notes.openTrackedOutlineForResource",
+          "group": "3_open@1.5"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",
+          "command": "andrea.notes.revealTrackedInOutlineTree",
+          "group": "3_open@1.6"
+        },
+        {
+          "when": "view == wordCountExplorer && (viewItem =~ /^wordCountFolder/ || viewItem == wordCountFile)",
           "command": "AndreaNovelHelper.wordCount.cut",
           "group": "5_clip@2"
         },
@@ -4108,17 +4328,17 @@
           "group": "navigation"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == outlineStorageFolder || viewItem == outlineStorageFile || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.package.copy",
           "group": "6_clip@1"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == outlineStorageFolder || viewItem == outlineStorageFile || viewItem == resourceFile || viewItem == generalResourceFile || viewItem == resourceFileError || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.package.cut",
           "group": "6_clip@2"
         },
         {
-          "when": "view == packageManagerView && (viewItem == package || viewItem == externalRoleFolder)",
+          "when": "view == packageManagerView && (viewItem == package || viewItem == outlineStorageFolder || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.package.paste",
           "group": "6_clip@3"
         },
@@ -4437,8 +4657,13 @@
       "AndreaNotesSidebar": [
         {
           "id": "andrea.notesOutlineTree",
-          "name": "%view.notes.outline.name%",
+          "name": "%view.notes.trackedOutline.name%",
           "icon": "list-tree"
+        },
+        {
+          "id": "andrea.notesFreeOutlineTree",
+          "name": "%view.notes.freeOutline.name%",
+          "icon": "note"
         },
         {
           "id": "andrea.notesDailyPlanTree",

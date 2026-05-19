@@ -51,6 +51,24 @@ const ROLE_CARRIER_EXTENSIONS = new Set([
     '.toml'
 ]);
 
+function getOutlineStorageRoots(workspaceRoot: string): string[] {
+    const configuredOutlineRoot = vscode.workspace
+        .getConfiguration('AndreaNovelHelper')
+        .get<string>('outlinePath', 'novel-helper/outline') || 'novel-helper/outline';
+    const roots = new Set<string>();
+    roots.add(path.isAbsolute(configuredOutlineRoot) ? configuredOutlineRoot : path.join(workspaceRoot, configuredOutlineRoot));
+    roots.add(path.join(workspaceRoot, 'novel-helper', 'free-outline'));
+    return Array.from(roots);
+}
+
+function isOutlineStoragePath(workspaceRoot: string, targetPath: string): boolean {
+    const normalizedTarget = normalizeFsPathForCompare(targetPath);
+    return getOutlineStorageRoots(workspaceRoot).some(root => {
+        const normalizedRoot = normalizeFsPathForCompare(root);
+        return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(normalizedRoot + path.sep);
+    });
+}
+
 function supportsRoleChildren(fullPath: string): boolean {
     const baseName = path.basename(fullPath);
     const lower = fullPath.toLowerCase();
@@ -576,6 +594,79 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
         return node;
     }
 
+    getParent(node: PackageManagerNode): PackageManagerNode | undefined {
+        if (!isFileSystemTreeNode(node)) return undefined;
+
+        const fullPath = node.resourceUri.fsPath;
+        const parentPath = path.dirname(fullPath);
+        if (parentPath === fullPath) return undefined;
+
+        const helperRoot = path.join(this.workspaceRoot, 'novel-helper');
+        if (normalizeFsPathForCompare(fullPath) === normalizeFsPathForCompare(helperRoot)) return undefined;
+
+        const externalRoot = this.externalRoleFolders.find(folder => {
+            const normalizedFolder = normalizeFsPathForCompare(folder);
+            const normalizedFullPath = normalizeFsPathForCompare(fullPath);
+            return normalizedFullPath === normalizedFolder || normalizedFullPath.startsWith(normalizedFolder + path.sep);
+        });
+        if (externalRoot && normalizeFsPathForCompare(fullPath) === normalizeFsPathForCompare(externalRoot)) return undefined;
+
+        if (normalizeFsPathForCompare(parentPath) === normalizeFsPathForCompare(helperRoot)) {
+            return new BookRootNode(helperRoot, this.expandedNodes.has(helperRoot));
+        }
+
+        if (externalRoot && normalizeFsPathForCompare(parentPath) === normalizeFsPathForCompare(externalRoot)) {
+            const externalNode = new PackageNode(
+                vscode.Uri.file(externalRoot),
+                this.expandedNodes.has(externalRoot) ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
+            );
+            externalNode.contextValue = 'externalRoleFolder';
+            externalNode.tooltip = `外部角色文件夹: ${externalRoot}`;
+            return externalNode;
+        }
+
+        if (!fs.existsSync(parentPath)) return undefined;
+        return this.applyOutlineStorageContext(new PackageNode(
+            vscode.Uri.file(parentPath),
+            this.expandedNodes.has(parentPath) ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
+        ));
+    }
+
+    public isManagedResourcePath(filePath: string): boolean {
+        const helperRoot = path.join(this.workspaceRoot, 'novel-helper');
+        return isPathUnderAnyRoot(filePath, [helperRoot, ...this.externalRoleFolders]);
+    }
+
+    public async findNodeByPath(filePath: string): Promise<PackageManagerNode | undefined> {
+        if (!filePath || !fs.existsSync(filePath) || !this.isManagedResourcePath(filePath)) return undefined;
+
+        const normalizedTarget = normalizeFsPathForCompare(filePath);
+        const roots = (await this.getChildren()).filter(isFileSystemTreeNode);
+        let current = roots.find(root => {
+            const rootPath = root.resourceUri.fsPath;
+            const normalizedRoot = normalizeFsPathForCompare(rootPath);
+            return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(normalizedRoot + path.sep);
+        });
+
+        while (current) {
+            const currentPath = current.resourceUri.fsPath;
+            if (normalizeFsPathForCompare(currentPath) === normalizedTarget) return current;
+
+            const children = (await this.getChildren(current)).filter(isFileSystemTreeNode);
+            const next = children.find(child => {
+                const childPath = child.resourceUri.fsPath;
+                const normalizedChild = normalizeFsPathForCompare(childPath);
+                if (normalizedChild === normalizedTarget) return true;
+                if (!fs.existsSync(childPath) || !fs.statSync(childPath).isDirectory()) return false;
+                return normalizedTarget.startsWith(normalizedChild + path.sep);
+            });
+            if (!next) return undefined;
+            current = next;
+        }
+
+        return undefined;
+    }
+
     private getRolesForFile(filePath: string): Role[] {
         const normalized = normalizeFsPathForCompare(filePath);
         return roles
@@ -593,6 +684,20 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
         } as AnyNode));
     }
 
+    private applyOutlineStorageContext(node: PackageNode): PackageNode {
+        const fullPath = node.resourceUri.fsPath;
+        if (!isOutlineStoragePath(this.workspaceRoot, fullPath)) return node;
+
+        try {
+            node.contextValue = fs.statSync(fullPath).isDirectory() ? 'outlineStorageFolder' : 'outlineStorageFile';
+            if (!node.description) node.description = '大纲存储';
+        } catch {
+            // keep original context for stale nodes
+        }
+
+        return node;
+    }
+
     private createFileNode(fullPath: string, contextValue: string, collapsibleState?: vscode.TreeItemCollapsibleState): PackageNode {
         const fileRoles = this.getRolesForFile(fullPath);
         const canShowRoleChildren = supportsRoleChildren(fullPath);
@@ -606,7 +711,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
             fileNode.description = `${fileRoles.length} 个角色`;
             fileNode.tooltip = `${fullPath}\n承载角色: ${fileRoles.map(role => role.name).join('、')}`;
         }
-        return fileNode;
+        return this.applyOutlineStorageContext(fileNode);
     }
 
     async getChildren(node?: PackageManagerNode): Promise<PackageManagerNode[]> {
@@ -708,10 +813,10 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 // 根据保存的状态决定子目录展开状态
                 const isExpanded = this.expandedNodes.has(full);
                 nodes.push(
-                    new PackageNode(
+                    this.applyOutlineStorageContext(new PackageNode(
                         vscode.Uri.file(full),
                         isExpanded ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed
-                    )
+                    ))
                 );
             } else {
                 // 对于文件，分两类处理
@@ -868,6 +973,35 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('AndreaNovelHelper.package.showExternalScanReport', async () => {
             const report = provider.getExternalScanReport() || provider.rescanExternalRoleFolders(false);
             await openExternalScanReportPage(report);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.package.revealPath', async (target: vscode.Uri | string | { resourceUri?: vscode.Uri; fsPath?: string }, options?: { silent?: boolean }) => {
+            const uri = target instanceof vscode.Uri
+                ? target
+                : typeof target === 'string'
+                    ? vscode.Uri.file(target)
+                    : target?.resourceUri ?? (target?.fsPath ? vscode.Uri.file(target.fsPath) : undefined);
+            if (!uri) {
+                if (!options?.silent) vscode.window.showWarningMessage('未找到要定位的包管理器路径。');
+                return false;
+            }
+
+            const item = await provider.findNodeByPath(uri.fsPath);
+            if (!item) {
+                if (!options?.silent) vscode.window.showWarningMessage('包管理器中未找到对应节点。');
+                return false;
+            }
+
+            try {
+                await vscode.commands.executeCommand('packageManagerView.focus');
+                await treeView.reveal(item, { select: true, focus: true, expand: true });
+                return true;
+            } catch (error) {
+                if (!options?.silent) vscode.window.showWarningMessage(`包管理器定位失败: ${error}`);
+                return false;
+            }
         })
     );
 

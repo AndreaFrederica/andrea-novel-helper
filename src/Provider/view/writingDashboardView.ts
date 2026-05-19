@@ -981,7 +981,7 @@ async function setSelectedPlanFile(fileName: unknown): Promise<string> {
     return selectedPlanFile;
 }
 
-async function createDashboardPlanFile(fileName: unknown): Promise<string> {
+export async function createDashboardPlanFile(fileName: unknown): Promise<string> {
     await ensureDashboardPlanDir(String(createDefaultDashboardState().planMarkdown || ''));
     const dir = getDashboardPlanDirPath();
     if (!dir) {
