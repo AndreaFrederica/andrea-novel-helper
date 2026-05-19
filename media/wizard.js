@@ -27,30 +27,24 @@
         el.classList.toggle('show', !!text);
     }
 
-    // ── Stepper ────────────────────────────────────────
+    // ── Progress ───────────────────────────────────────
 
-    function renderStepper() {
-        const container = $('stepper');
-        container.innerHTML = stepTitles.map((title, index) => {
-            const isActive = index === currentStep;
-            const isDone = index < currentStep;
-            const cls = isActive ? 'active' : isDone ? 'completed' : '';
+    function renderProgress() {
+        const total = stepTitles.length;
+        const current = currentStep + 1;
+        const percent = total <= 1 ? 100 : (currentStep / (total - 1)) * 100;
+        const currentText = '步骤 ' + current + '：' + stepTitles[currentStep];
+        const progressCurrent = $('progressCurrent');
+        const progressCount = $('progressCount');
+        const progressFill = $('progressFill');
+        const progressTrack = document.querySelector('.progress-track');
+        const progressSteps = $('progressSteps');
 
-            let inner;
-            if (isDone) {
-                inner = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none">'
-                    + '<path d="M2.5 7.5L5.5 10.5L11.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
-                    + '</svg>';
-            } else {
-                inner = String(index + 1);
-            }
-
-            const circle = '<div class="step-circle">' + inner + '</div>';
-            const label = '<span class="step-label">' + title + '</span>';
-            const line = index < stepTitles.length - 1 ? '<div class="stepper-line"></div>' : '';
-
-            return '<div class="stepper-item ' + cls + '">' + circle + label + '</div>' + line;
-        }).join('');
+        if (progressCurrent) progressCurrent.textContent = currentText;
+        if (progressCount) progressCount.textContent = current + ' / ' + total;
+        if (progressFill) progressFill.style.width = percent + '%';
+        if (progressTrack) progressTrack.setAttribute('aria-valuenow', String(current));
+        if (progressSteps) progressSteps.textContent = stepTitles.join(' -> ');
     }
 
     // ── Page Navigation ────────────────────────────────
@@ -64,7 +58,7 @@
             section.classList.remove('exiting');
         });
 
-        renderStepper();
+        renderProgress();
 
         $('back').disabled = currentStep === 0 || currentStep === 7;
         $('next').classList.toggle('hidden', currentStep >= 6);
@@ -140,9 +134,15 @@
         hasRepo = !!data.git.hasRepo;
         hasGitUser = !!((data.git.localName && data.git.localEmail) || (data.git.globalName && data.git.globalEmail));
 
+        const projectInit = data.projectInit || {};
+        const missing = Array.isArray(projectInit.missing) ? projectInit.missing : [];
+        const initText = projectInit.initialized
+            ? '已完成初始化'
+            : missing.length
+                ? '未完成初始化，缺少：' + missing.join('、')
+                : '未完成初始化';
         $('state').textContent = data.workspaceRoot
-            + ' | ' + (data.configExists ? '已有 anhproject.md' : '未创建 anhproject.md')
-            + '，' + (data.keywordConfigExists ? '已有 project-config.json5' : '未创建 project-config.json5');
+            + ' | ' + initText;
 
         if (!$('projectName').value) { $('projectName').value = data.workspaceName || '未命名项目'; }
         if (!$('projectAuthor').value) { $('projectAuthor').value = data.git.localName || data.git.globalName || '作者'; }
@@ -187,6 +187,7 @@
             ignoreHistory: $('ignoreHistory').checked,
             wcIgnoreVscode: $('wcIgnoreVscode').checked,
             wcIgnoreOutOfInsights: $('wcIgnoreOutOfInsights').checked,
+            openWithRoleManager: $('openWithRoleManager').checked,
             initialCommit: $('initialCommit').checked && !$('initialCommit').disabled,
         };
     }
@@ -214,6 +215,7 @@
             ['初始提交', data.initialCommit ? '创建' : '不创建'],
             ['示例资源结构', data.createStructure ? '创建' : '不创建'],
             ['写作统计数据库', data.writingStatsMode === 'ignore' ? '不纳入版本控制' : '纳入版本控制'],
+            ['角色卡编辑器打开 JSON5', data.openWithRoleManager ? '启用' : '不启用'],
         ];
         $('summary').innerHTML = items.map(item =>
             '<div><strong>' + escapeHtml(item[0]) + '：</strong>' + escapeHtml(item[1]) + '</div>'
@@ -261,7 +263,7 @@
 
     // ── Init ───────────────────────────────────────────
 
-    renderStepper();
+    renderProgress();
     renderPage();
     vscode.postMessage({ command: 'ready' });
 })();

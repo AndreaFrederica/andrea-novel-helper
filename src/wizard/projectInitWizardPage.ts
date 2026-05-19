@@ -9,6 +9,7 @@ import { ProjectConfigManager } from '../projectConfig/projectConfigManager';
 import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME, clearAllProjectConfigCaches } from '../projectConfig/projectKeywordConfig';
 import { setProjectInitWizardRunning } from './projectInitWizard';
 import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
+import { getProjectInitStatus } from './workspaceInitCheck';
 
 interface GitState {
     installed: boolean;
@@ -46,6 +47,7 @@ interface InitPayload {
     wcIgnoreVscode: boolean;
     wcIgnoreOutOfInsights: boolean;
     initialCommit: boolean;
+    openWithRoleManager: boolean;
 }
 
 let currentPanel: vscode.WebviewPanel | undefined;
@@ -107,14 +109,16 @@ export function registerGraphicalProjectInitWizard(context: vscode.ExtensionCont
 async function postState(panel: vscode.WebviewPanel): Promise<void> {
     const workspaceRoot = getWorkspaceRoot();
     const git = await getGitState(workspaceRoot);
+    const projectInit = getProjectInitStatus(workspaceRoot);
     panel.webview.postMessage({
         command: 'state',
         data: {
             workspaceRoot,
             workspaceName: path.basename(workspaceRoot),
-            configExists: fs.existsSync(path.join(workspaceRoot, 'anhproject.md')),
-            keywordConfigExists: fs.existsSync(path.join(workspaceRoot, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME)),
-            novelHelperExists: fs.existsSync(path.join(workspaceRoot, 'novel-helper')),
+            configExists: projectInit.configExists,
+            keywordConfigExists: projectInit.keywordConfigExists,
+            novelHelperExists: projectInit.novelHelperExists,
+            projectInit,
             git,
         },
     });
@@ -170,6 +174,7 @@ async function runGraphicalInit(data: unknown): Promise<void> {
         log.push('已更新忽略规则');
 
         await vscode.workspace.getConfiguration().update('AndreaNovelHelper.workspaceDisabled', false, vscode.ConfigurationTarget.Workspace);
+        await vscode.workspace.getConfiguration().update('andrea.roleJson5.openWithRoleManager', payload.openWithRoleManager, vscode.ConfigurationTarget.Workspace);
         clearAllProjectConfigCaches(workspaceRoot);
 
         if (git.installed && payload.initialCommit && (hasRepo || payload.initGitRepo)) {
@@ -300,6 +305,7 @@ function normalizePayload(data: unknown, workspaceRoot: string): InitPayload {
         wcIgnoreVscode: record.wcIgnoreVscode !== false,
         wcIgnoreOutOfInsights: record.wcIgnoreOutOfInsights !== false,
         initialCommit: Boolean(record.initialCommit),
+        openWithRoleManager: record.openWithRoleManager !== false,
     };
 }
 

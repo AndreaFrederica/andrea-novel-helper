@@ -9,6 +9,9 @@
     const statusRow = document.getElementById('statusRow');
     const helloEnabled = document.getElementById('helloEnabled');
     const forceManaged = document.getElementById('forceManaged');
+    const firstSetupModal = document.getElementById('firstSetupModal');
+    const firstSetupOpenHello = document.getElementById('firstSetupOpenHello');
+    const firstSetupStartupHello = document.getElementById('firstSetupStartupHello');
     const extensions = document.getElementById('extensions');
     const notice = document.getElementById('notice');
     const gitSummary = document.getElementById('gitSummary');
@@ -17,6 +20,8 @@
     const gitEmail = document.getElementById('gitEmail');
     const initRepoBtn = document.getElementById('initRepoBtn');
     const gitDownloadBtn = document.getElementById('gitDownloadBtn');
+    const initProjectCard = document.getElementById('initProjectCard');
+    const initProjectStatus = document.getElementById('initProjectStatus');
 
     let currentState = undefined;
     let i18n = window.__HELLO_I18N__ || {};
@@ -135,15 +140,44 @@
             case 'refresh':
                 vscode.postMessage({ command: 'refresh' });
                 break;
+            case 'submitFirstSetup':
+                hideFirstSetup();
+                vscode.postMessage({
+                    command: 'submitFirstHelloPrompt',
+                    data: {
+                        openHello: firstSetupOpenHello ? !!firstSetupOpenHello.checked : true,
+                        startupHello: firstSetupStartupHello ? !!firstSetupStartupHello.checked : true
+                    }
+                });
+                break;
+            case 'skipFirstSetup':
+                hideFirstSetup();
+                vscode.postMessage({ command: 'skipFirstHelloPrompt' });
+                break;
         }
     }
 
     function render(state) {
+        renderFirstSetup(state.config || {});
         renderWorkspace(state);
+        renderProjectInit(state.projectInit || {});
         renderRecentWorkspaces(state.recentWorkspaces || []);
         renderConfig(state);
         renderGit(state.git || {});
         renderExtensions(state.recommendations || []);
+    }
+
+    function renderFirstSetup(cfg) {
+        if (!firstSetupModal) return;
+        const needed = !!cfg.firstHelloPromptNeeded;
+        firstSetupModal.hidden = !needed;
+        if (!needed) return;
+        if (firstSetupOpenHello) firstSetupOpenHello.checked = true;
+        if (firstSetupStartupHello) firstSetupStartupHello.checked = !!cfg.helloEnabled;
+    }
+
+    function hideFirstSetup() {
+        if (firstSetupModal) firstSetupModal.hidden = true;
     }
 
     function renderWorkspace(state) {
@@ -166,6 +200,30 @@
             badges.push({ text: t('helloManagedTemporary'), kind: 'ok' });
         }
         statusRow.innerHTML = badges.map(badge => `<span class="badge ${badge.kind || ''}">${escapeHtml(badge.text)}</span>`).join('');
+    }
+
+    function renderProjectInit(projectInit) {
+        if (!initProjectStatus) return;
+        if (!projectInit.hasWorkspace) {
+            initProjectStatus.textContent = t('needsWorkspace');
+            initProjectStatus.className = 'badge warn card-status';
+            if (initProjectCard) initProjectCard.setAttribute('title', t('noWorkspaceDesc'));
+            return;
+        }
+        if (projectInit.initialized) {
+            initProjectStatus.textContent = t('doneButton');
+            initProjectStatus.className = 'badge ok card-status';
+            if (initProjectCard) initProjectCard.setAttribute('title', t('projectInitializedDesc'));
+            return;
+        }
+        const missing = Array.isArray(projectInit.missing) ? projectInit.missing : [];
+        const partial = projectInit.configExists || projectInit.keywordConfigExists || projectInit.anyConfiguredExists || projectInit.anyPackageResourceExists;
+        initProjectStatus.textContent = partial ? t('partialButton') : t('notInitializedButton');
+        initProjectStatus.className = 'badge warn card-status';
+        if (initProjectCard) {
+            const missingText = missing.length ? `${t('missingItems')}：${missing.join(', ')}` : t('projectNotInitializedDesc');
+            initProjectCard.setAttribute('title', missingText);
+        }
     }
 
     function renderRecentWorkspaces(items) {

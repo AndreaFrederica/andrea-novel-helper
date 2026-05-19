@@ -13,4 +13,6 @@ target/
 novel-helper# pixi environments
 .pixi/*
 !.pixi/config.toml
-novel-helper
+novel-helper/*
+!novel-helper/scripts
+!novel-helper/scripts/**

@@ -415,11 +415,7 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
         log('开始执行主初始化');
         // 统一由独立模块检测并可提示初始化
-        if (!isHelloPageEnabled()) {
-            maybePromptProjectInit();
-        } else {
-            log('Hello 首页已启用，跳过项目初始化弹窗');
-        }
+        maybePromptProjectInit();
         
         // 检查并创建项目配置文件
         const projectConfigManager = new ProjectConfigManager(ws);

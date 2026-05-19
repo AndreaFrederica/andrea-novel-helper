@@ -334,16 +334,6 @@ export async function updateDecorations() {
             continue;
         }
         const folders = vscode.workspace.workspaceFolders;
-        if (folders?.length) {
-            const root = folders[0].uri.fsPath;
-            const cfgAll = vscode.workspace.getConfiguration('AndreaNovelHelper');
-            const fileB = path.join(root, cfgAll.get<string>('sensitiveWordsFile')!);
-            const fileV = path.join(root, cfgAll.get<string>('vocabularyFile')!);
-            const txtB = fileB.replace(/\.[^/.]+$/, '.txt');
-            const txtV = fileV.replace(/\.[^/.]+$/, '.txt');
-            const docPathLower = doc.uri.fsPath.toLowerCase();
-            if ([fileB, fileV, txtB, txtV].some(p => p.toLowerCase() === docPathLower)) continue;
-        }
 
         // 重置 hoverRanges
         setHoverRanges([]);

@@ -55,6 +55,7 @@
     "onCommand:andrea.openWritingDashboardWidget",
     "onCommand:andrea.openRoleRelationshipGraph",
     "onCommand:AndreaNovelHelper.openHello",
+    "onCommand:AndreaNovelHelper.forceShowHelloFirstSetup",
     "onView:andrea.commentsExplorer",
     "onView:andrea.commentsPanelView",
     "onView:andrea.commentsManagerView",
@@ -1060,6 +1061,12 @@
         "icon": "$(home)"
       },
       {
+        "command": "AndreaNovelHelper.forceShowHelloFirstSetup",
+        "title": "强制显示 Hello 首次设置弹窗（测试）",
+        "category": "Andrea Novel Helper",
+        "icon": "$(beaker)"
+      },
+      {
         "command": "AndreaNovelHelper.showGuideDoc",
         "title": "%command.showGuideDoc.title%",
         "category": "Andrea Novel Helper",
@@ -1953,7 +1960,7 @@
         },
         "andrea.typeset.statusBar.compact": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "scope": "window",
           "anhName": "状态栏显示模式",
           "markdownDescription": "版式状态栏显示为**简略模式**（仅显示“版式”）。关闭则显示详细信息（缩进、段距、去尾空格、括号补齐、跳出、切段等）。"
@@ -2716,7 +2723,7 @@
         },
         "AndreaNovelHelper.wordCount.statusBar.mode": {
           "type": "string",
-          "default": "detailed",
+          "default": "semi",
           "enum": [
             "detailed",
             "semi",
@@ -3489,7 +3496,7 @@
         },
         "AndreaNovelHelper.autoGit.compactStatus": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "scope": "window",
           "anhName": "简洁状态栏",
           "markdownDescription": "ANH:Sync 状态栏简洁模式：开启时仅显示 'ANH:Sync'，不显示具体的 Git/WebDAV 状态。"
@@ -3923,7 +3930,7 @@
           "group": "0_create@2"
         },
         {
-          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
+          "when": "view == andrea.scriptsView && viewItem =~ /^andrea\\.script\\.file\\.(runnable|hybrid)$/",
           "command": "andrea.scripts.run",
           "group": "inline@1",
           "icon": "$(run)"
@@ -4423,7 +4430,7 @@
           "group": "3_export@3"
         },
         {
-          "when": "view == andrea.scriptsView && viewItem == andrea.script.file",
+          "when": "view == andrea.scriptsView && viewItem =~ /^andrea\\.script\\.file\\.(runnable|hybrid)$/",
           "command": "andrea.scripts.run",
           "group": "navigation@1",
           "icon": "$(run-all)"

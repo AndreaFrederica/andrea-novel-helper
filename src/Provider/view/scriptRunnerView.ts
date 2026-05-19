@@ -1,4 +1,5 @@
 /* eslint-disable semi */
+/* eslint-disable curly */
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -8,13 +9,86 @@ import { loadScriptExtensions, pickPlainTextProcessor, pickTypstRenderer, render
 import { mdToPlainText } from '../../utils/md_plain'
 import { txtToPlainText } from '../../utils/txt_plain'
 
+type ScriptFileKind = 'runnable' | 'extension' | 'hybrid' | 'plain'
+
+interface ScriptFileMeta {
+  kind: ScriptFileKind
+  tags: string[]
+}
+
+const scriptMetaCache = new Map<string, { mtimeMs: number; size: number; meta: ScriptFileMeta }>()
+
+function detectScriptFileMeta(fullPath: string): ScriptFileMeta {
+  try {
+    const stat = fs.statSync(fullPath)
+    const cached = scriptMetaCache.get(fullPath)
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.meta
+
+    const code = fs.readFileSync(fullPath, 'utf8')
+    const hasRun = /export\s+(?:async\s+)?function\s+run\b|export\s+default\s+(?:async\s+)?function\b|export\s+(?:const|let|var)\s+run\s*=|module\.exports\s*=|exports\.run\s*=/.test(code)
+    const hasActivateOrRegister = /export\s+(?:async\s+)?function\s+(?:activate|register)\b/.test(code)
+
+    const tags: string[] = []
+    if (/hooks\s*\.\s*on\s*\(/.test(code)) tags.push('hook')
+    if (/registerPlainText\s*\(/.test(code)) tags.push('plaintext')
+    if (/renderers\s*\.\s*registerTypst\s*\(|processors\s*\.\s*registerTypst\s*\(|registerTypst\s*\(/.test(code)) tags.push('typst')
+
+    let kind: ScriptFileKind = 'plain'
+    if (hasRun && hasActivateOrRegister) kind = 'hybrid'
+    else if (hasRun) kind = 'runnable'
+    else if (hasActivateOrRegister) kind = 'extension'
+
+    const meta: ScriptFileMeta = { kind, tags }
+    scriptMetaCache.set(fullPath, { mtimeMs: stat.mtimeMs, size: stat.size, meta })
+    return meta
+  } catch {
+    return { kind: 'plain', tags: [] }
+  }
+}
+
+function getScriptKindLabel(kind: ScriptFileKind): string {
+  if (kind === 'runnable') return '可执行脚本'
+  if (kind === 'extension') return '扩展脚本'
+  if (kind === 'hybrid') return '混合脚本'
+  return '普通脚本'
+}
+
+const TAG_ICON: Record<string, string> = {
+  hook: '⚡',
+  plaintext: '⌨',
+  typst: 'Σ',
+}
+
+const TAG_LABEL: Record<string, string> = {
+  hook: 'Hook',
+  plaintext: '纯文本处理器',
+  typst: 'Typst 渲染器',
+}
+
+function getScriptKindIcon(kind: ScriptFileKind): vscode.ThemeIcon {
+  if (kind === 'runnable') return new vscode.ThemeIcon('play-circle')
+  if (kind === 'extension') return new vscode.ThemeIcon('extensions')
+  if (kind === 'hybrid') return new vscode.ThemeIcon('tools')
+  return new vscode.ThemeIcon('file-code')
+}
+
 class ScriptItem extends vscode.TreeItem {
   constructor(public fullPath: string, label: string, collapsibleState: vscode.TreeItemCollapsibleState) {
     super(label, collapsibleState)
     this.resourceUri = vscode.Uri.file(fullPath)
     const isDir = fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()
-    this.contextValue = isDir ? 'andrea.script.dir' : 'andrea.script.file'
-    this.iconPath = isDir ? new vscode.ThemeIcon('folder') : new vscode.ThemeIcon('file-code')
+    if (isDir) {
+      this.contextValue = 'andrea.script.dir'
+      this.iconPath = new vscode.ThemeIcon('folder')
+    } else {
+      const meta = detectScriptFileMeta(fullPath)
+      this.contextValue = `andrea.script.file.${meta.kind}`
+      this.iconPath = getScriptKindIcon(meta.kind)
+      const tagIcons = meta.tags.map(t => TAG_ICON[t] ?? t).join(' ')
+      const tagLabels = meta.tags.map(t => TAG_LABEL[t] ?? t).join(' / ')
+      this.description = meta.tags.length ? `${getScriptKindLabel(meta.kind)} ${tagIcons}` : getScriptKindLabel(meta.kind)
+      this.tooltip = `${label}\n${getScriptKindLabel(meta.kind)}${meta.tags.length ? `\n能力: ${tagLabels}` : ''}\n${fullPath}`
+    }
     // 文件可以点击打开，目录可以右键新建脚本
     if (!isDir) {
       this.command = { command: 'andrea.scripts.open', title: 'Open', arguments: [this] }
@@ -124,6 +198,7 @@ export function registerScriptRunnerView(context: vscode.ExtensionContext) {
   const schedule = () => {
     if (t) clearTimeout(t)
     t = setTimeout(() => {
+      scriptMetaCache.clear()
       provider.refresh()
       void loadScriptExtensions(abs)
     }, 200)

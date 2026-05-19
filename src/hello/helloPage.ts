@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
+import { getProjectInitStatus } from '../wizard/workspaceInitCheck';
 
 interface RecommendedExtensionEntry {
     id: string;
@@ -47,6 +48,7 @@ interface HelloRecentWorkspace {
 }
 
 const HELLO_DISMISSED_KEY = 'andrea.hello.dismissed.v1';
+const HELLO_FIRST_PROMPT_DONE_KEY = 'andrea.hello.firstPromptDone.v1';
 const HELLO_RECENT_WORKSPACES_KEY = 'andrea.hello.recentWorkspaces.v1';
 const HELLO_VIEW_TYPE = 'andrea.hello';
 const RECOMMENDED_EXTENSIONS_FILE = 'recommended-extensions.json';
@@ -55,12 +57,23 @@ const RECENT_WORKSPACE_LIMIT = 8;
 let currentPanel: vscode.WebviewPanel | undefined;
 let extensionPath = '';
 let openingHello = false;
+const firstPromptSkippedPanels = new WeakSet<vscode.WebviewPanel>();
 
 export function registerHelloPage(context: vscode.ExtensionContext): void {
     extensionPath = context.extensionPath;
 
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.openHello', async () => {
+            await showHelloPage(context, true);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('AndreaNovelHelper.forceShowHelloFirstSetup', async () => {
+            await context.globalState.update(HELLO_FIRST_PROMPT_DONE_KEY, false);
+            if (currentPanel) {
+                firstPromptSkippedPanels.delete(currentPanel);
+            }
             await showHelloPage(context, true);
         })
     );
@@ -85,6 +98,26 @@ export function shouldUseVsCodeManagedDisablingForHello(): boolean {
     return cfg.get<boolean>('hello.enabled', true) && cfg.get<boolean>('hello.forceVsCodeManagedDisabling', true);
 }
 
+/**
+ * 检查是否有其他打开的文本编辑器（不是webview或其他自定义页面）
+ */
+function hasOtherEditors(): boolean {
+    try {
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                const input = tab.input;
+                // 检查是否是文本编辑器（TextTab）
+                if (input instanceof vscode.TabInputText) {
+                    return true;
+                }
+            }
+        }
+    } catch {
+        return false;
+    }
+    return false;
+}
+
 export async function maybeShowHelloPage(context: vscode.ExtensionContext): Promise<void> {
     if (!isHelloPageEnabled()) {
         return;
@@ -92,24 +125,27 @@ export async function maybeShowHelloPage(context: vscode.ExtensionContext): Prom
     if (context.globalState.get<boolean>(HELLO_DISMISSED_KEY, false)) {
         return;
     }
+    // 如果已经有其他打开的文本编辑器，就不显示hello页面
+    if (hasOtherEditors()) {
+        return;
+    }
+
     await showHelloPage(context, false);
 }
 
 async function showHelloPage(context: vscode.ExtensionContext, explicit: boolean): Promise<void> {
-    if (currentPanel) {
-        currentPanel.reveal(vscode.ViewColumn.Active);
-        await postState(currentPanel, context);
+    // 如果已经有hello tab存在或正在打开，直接返回或显示已打开的提示
+    if (hasExistingHelloTab()) {
+        if (currentPanel) {
+            currentPanel.reveal(vscode.ViewColumn.Active);
+            await postState(currentPanel, context);
+        } else if (explicit) {
+            vscode.window.showInformationMessage('ANH Hello 首页已经打开。');
+        }
         return;
     }
 
     if (openingHello) {
-        return;
-    }
-
-    if (hasExistingHelloTab()) {
-        if (explicit) {
-            vscode.window.showInformationMessage('ANH Hello 首页已经打开。');
-        }
         return;
     }
 
@@ -162,6 +198,15 @@ function setupHelloPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
                     break;
                 case 'setConfig':
                     await updateHelloConfig(message.key, message.value);
+                    await postState(panel, context);
+                    break;
+                case 'submitFirstHelloPrompt':
+                    if (await applyFirstHelloPrompt(context, message.data, panel)) {
+                        await postState(panel, context);
+                    }
+                    break;
+                case 'skipFirstHelloPrompt':
+                    firstPromptSkippedPanels.add(panel);
                     await postState(panel, context);
                     break;
                 case 'enableWorkspace':
@@ -251,6 +296,7 @@ async function postState(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
     const workspaceDisabled = getEffectiveWorkspaceDisabled(cfg);
     const recommendations = loadRecommendedExtensions(context).map(toRecommendationState);
     const git = await getGitState();
+    const projectInit = getProjectInitStatus(workspaceFolder?.uri.fsPath);
     if (workspaceFolder) {
         await updateRecentWorkspaces(context, workspaceFolder.uri.fsPath);
     }
@@ -262,6 +308,7 @@ async function postState(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
                 name: workspaceFolder.name || path.basename(workspaceFolder.uri.fsPath),
                 path: workspaceFolder.uri.fsPath,
             } : undefined,
+            projectInit,
             recentWorkspaces: getRecentWorkspaces(context, workspaceFolder?.uri.fsPath),
             config: {
                 helloEnabled: cfg.get<boolean>('hello.enabled', true),
@@ -269,11 +316,34 @@ async function postState(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
                 originalVsCodeManagedDisabling: cfg.get<boolean>('useVsCodeManagedDisabling', false),
                 effectiveVsCodeManagedDisabling: cfg.get<boolean>('useVsCodeManagedDisabling', false) || shouldUseVsCodeManagedDisablingForHello(),
                 workspaceDisabled,
+                firstHelloPromptNeeded: !context.globalState.get<boolean>(HELLO_FIRST_PROMPT_DONE_KEY, false) && !firstPromptSkippedPanels.has(panel),
             },
             recommendations,
             git,
         }
     });
+}
+
+async function applyFirstHelloPrompt(
+    context: vscode.ExtensionContext,
+    data: unknown,
+    panel: vscode.WebviewPanel
+): Promise<boolean> {
+    const payload = data as { openHello?: boolean; startupHello?: boolean } | undefined;
+    const openHello = payload?.openHello !== false;
+    const startupHello = payload?.startupHello !== false;
+
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    await cfg.update('hello.enabled', startupHello, vscode.ConfigurationTarget.Global);
+    await context.globalState.update(HELLO_DISMISSED_KEY, !startupHello);
+    await context.globalState.update(HELLO_FIRST_PROMPT_DONE_KEY, true);
+
+    if (!openHello) {
+        panel.dispose();
+        return false;
+    }
+
+    return true;
 }
 
 function runGit(args: string[], cwd?: string): Promise<RunGitResult> {
@@ -658,6 +728,14 @@ const HELLO_I18N_ZH_CN: Record<string, string> = {
     homeSettings: '首页设置',
     showHello: '启动时显示 ANH Hello',
     showHelloDesc: '也可以从命令面板手动打开。',
+    firstSetupTitle: '首次设置',
+    firstSetupDesc: '请先确认 Hello 页面与启动自动显示偏好。',
+    firstSetupOpenHello: '保持 Hello 页面可用',
+    firstSetupOpenHelloDesc: '当前会立即应用；如取消将关闭本页。',
+    firstSetupStartupHello: '启动时自动显示 Hello',
+    firstSetupStartupHelloDesc: '适合初次使用，后续可在首页设置中修改。',
+    firstSetupSave: '保存并继续',
+    firstSetupSkip: '暂不设置',
     followVsCode: '只跟随 VS Code 扩展开关',
     followVsCodeDesc: '运行时绕过旧工作区禁用判断，不改写原托管设置。',
     dismiss: '下次不自动显示',
@@ -665,6 +743,13 @@ const HELLO_I18N_ZH_CN: Record<string, string> = {
     initProject: '初始化小说项目',
     initProjectDesc: '生成项目配置、角色库、敏感词、词汇、正则和基础目录。',
     startButton: '开始',
+    doneButton: '已完成',
+    partialButton: '待补全',
+    notInitializedButton: '未初始化',
+    needsWorkspace: '需工作区',
+    missingItems: '缺少',
+    projectInitializedDesc: '当前工作区已完成小说项目初始化。',
+    projectNotInitializedDesc: '当前工作区尚未完成小说项目初始化。',
     manageResources: '管理角色和资料',
     manageResourcesDesc: '进入 ANH 资源视图，创建角色、词汇、敏感词和外部资源包。',
     dashboard: '打开创作工作台',
@@ -748,6 +833,14 @@ const HELLO_I18N_EN: Record<string, string> = {
     homeSettings: 'Welcome Settings',
     showHello: 'Show ANH Hello on startup',
     showHelloDesc: 'You can also open it manually from the command palette.',
+    firstSetupTitle: 'First-time setup',
+    firstSetupDesc: 'Please confirm your Hello page and startup preferences.',
+    firstSetupOpenHello: 'Keep Hello page available',
+    firstSetupOpenHelloDesc: 'This applies immediately. Unchecking will close this page.',
+    firstSetupStartupHello: 'Show Hello automatically on startup',
+    firstSetupStartupHelloDesc: 'Recommended for first-time users; can be changed later in Hello settings.',
+    firstSetupSave: 'Save and continue',
+    firstSetupSkip: 'Skip for now',
     followVsCode: 'Follow VS Code extension state only',
     followVsCodeDesc: 'Bypass legacy workspace-disable checks without rewriting the original managed setting.',
     dismiss: 'Do not show automatically again',
@@ -755,6 +848,13 @@ const HELLO_I18N_EN: Record<string, string> = {
     initProject: 'Initialize Novel Project',
     initProjectDesc: 'Generate project config, role library, sensitive words, vocabulary, regex rules, and base folders.',
     startButton: 'Start',
+    doneButton: 'Done',
+    partialButton: 'Incomplete',
+    notInitializedButton: 'Not initialized',
+    needsWorkspace: 'Needs workspace',
+    missingItems: 'Missing',
+    projectInitializedDesc: 'The current workspace is initialized as a novel project.',
+    projectNotInitializedDesc: 'The current workspace has not been initialized as a novel project.',
     manageResources: 'Manage Roles and Resources',
     manageResourcesDesc: 'Open ANH resources to create roles, vocabulary, sensitive words, and external resource packs.',
     dashboard: 'Open Writing Workbench',

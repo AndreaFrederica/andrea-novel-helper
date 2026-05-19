@@ -241,6 +241,34 @@
         }
         .tile-actions button:hover { color: var(--vscode-textLink-activeForeground); }
         .config-box { margin-top: 12px; }
+        .first-setup-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            display: grid;
+            place-items: center;
+            padding: 16px;
+            background: color-mix(in srgb, var(--vscode-editor-background) 55%, transparent);
+        }
+        .first-setup-backdrop[hidden] { display: none; }
+        .first-setup-modal {
+            width: min(560px, 100%);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            padding: 14px;
+            background: var(--vscode-editor-background);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+        }
+        .first-setup-title {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .first-setup-desc {
+            margin: 4px 0 0;
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+        }
         .notice {
             display: none;
             margin-top: 22px;
@@ -369,10 +397,10 @@
                 <section class="column-section" aria-labelledby="walkthroughTitle">
                     <h2 class="section-title" id="walkthroughTitle" data-i18n="walkthrough">演练</h2>
                     <div class="walkthrough-list">
-                        <button class="welcome-card" data-cmd="AndreaNovelHelper.projectInitWizard.graphical">
+                        <button class="welcome-card" id="initProjectCard" data-cmd="AndreaNovelHelper.projectInitWizard.graphical">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/rocket.svg" alt=""></span>
                             <span><span class="card-title" data-i18n="initProject">初始化小说项目</span><span class="card-desc" data-i18n="initProjectDesc">生成项目配置、角色库、敏感词、词汇、正则和基础目录。</span></span>
-                            <span class="badge card-status" data-i18n="startButton">开始</span>
+                            <span class="badge card-status" id="initProjectStatus" data-i18n="startButton">开始</span>
                         </button>
                         <button class="welcome-card" data-cmd="workbench.view.extension.AndreaNovelHelperSidebar">
                             <span class="card-icon"><img class="icon-img" src="__ICONS_URI__/files.svg" alt=""></span>
@@ -429,6 +457,30 @@
         </div>
 
         <div id="notice" class="notice"></div>
+        <section id="firstSetupModal" class="first-setup-backdrop" hidden>
+            <div class="first-setup-modal" role="dialog" aria-modal="true" aria-labelledby="firstSetupTitle">
+                <h2 class="first-setup-title" id="firstSetupTitle" data-i18n="firstSetupTitle">首次设置</h2>
+                <p class="first-setup-desc" data-i18n="firstSetupDesc">请先确认 Hello 页面与启动自动显示偏好。</p>
+                <label class="toggle-row">
+                    <input id="firstSetupOpenHello" type="checkbox" checked>
+                    <span>
+                        <span class="toggle-title" data-i18n="firstSetupOpenHello">保持 Hello 页面可用</span>
+                        <span class="toggle-desc" data-i18n="firstSetupOpenHelloDesc">当前会立即应用；如取消将关闭本页。</span>
+                    </span>
+                </label>
+                <label class="toggle-row">
+                    <input id="firstSetupStartupHello" type="checkbox" checked>
+                    <span>
+                        <span class="toggle-title" data-i18n="firstSetupStartupHello">启动时自动显示 Hello</span>
+                        <span class="toggle-desc" data-i18n="firstSetupStartupHelloDesc">适合初次使用，后续可在首页设置中修改。</span>
+                    </span>
+                </label>
+                <div class="inline-actions" style="margin-top: 8px;">
+                    <button class="action-link" data-action="submitFirstSetup" data-i18n="firstSetupSave">保存并继续</button>
+                    <button class="action-link" data-action="skipFirstSetup" data-i18n="firstSetupSkip">暂不设置</button>
+                </div>
+            </div>
+        </section>
     </main>
     <script nonce="__NONCE__">window.__HELLO_I18N__ = __I18N_JSON__;</script>
     <script nonce="__NONCE__" src="__SCRIPT_URI__"></script>
