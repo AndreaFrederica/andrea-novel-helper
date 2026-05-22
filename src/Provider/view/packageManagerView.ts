@@ -8,6 +8,7 @@ import { Role } from '../../extension';
 import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
 import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot, isRoleFile } from '../../utils/utils';
+import { detectTxtRoleFilesAll } from '../../utils/txtRoleDetector';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
@@ -387,6 +388,25 @@ class BookRootNode extends vscode.TreeItem {
         this.description = '书籍根目录';
     }
 }
+
+// TXT 角色档案迁移节点（仅在检测到候选且无 JSON5 库时显示）
+class TxtMigrationNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 转换 TXT 角色档案', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'txtMigration';
+        this.iconPath = new vscode.ThemeIcon('arrow-swap');
+        this.description = '将 TXT 角色档案转换为 JSON5 格式';
+        this.command = {
+            command: 'andrea.detectTxtRoleFiles',
+            title: '检测并转换 TXT 角色档案',
+            arguments: []
+        };
+    }
+}
+
 /**
  * Represents a package (folder) or resource file under novel-helper
  */
@@ -655,7 +675,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
         }
 
         if (node instanceof CommonFeaturesRootNode) {
-            return [
+            const children: PackageManagerNode[] = [
                 new HelloPageNode(this.workspaceRoot),
                 new ProjectInitWizardNode(this.workspaceRoot),
                 new ProjectSettingsNode(this.workspaceRoot),
@@ -668,8 +688,15 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 new GenerateLookupKeysNode(this.workspaceRoot),
                 new GuideNode(this.workspaceRoot),
                 new DocCenterNode(this.workspaceRoot),
-                new GraphicalQuickSettingsNode(this.workspaceRoot)
+                new GraphicalQuickSettingsNode(this.workspaceRoot),
             ];
+            // 检测到 TXT 角色档案且无 JSON5 库时，显示迁移入口
+            const candidates = detectTxtRoleFilesAll();
+            const json5Path = path.join(this.workspaceRoot, 'novel-helper', 'character-gallery.json5');
+            if (candidates.length > 0 && !fs.existsSync(json5Path)) {
+                children.unshift(new TxtMigrationNode(this.workspaceRoot));
+            }
+            return children;
         }
 
         if (node instanceof ProjectSettingsFilesRootNode) {

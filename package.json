@@ -928,6 +928,16 @@
         "category": "Andrea Novel Helper"
       },
       {
+        "command": "andrea.detectTxtRoleFiles",
+        "title": "检测 TXT 角色档案并迁移",
+        "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.migrateTxtRoleFile",
+        "title": "迁移 TXT 角色档案",
+        "category": "Andrea Novel Helper"
+      },
+      {
         "command": "andrea.typo.scanDocument",
         "title": "扫描错别字（未扫描段落）",
         "category": "Andrea Novel Helper"

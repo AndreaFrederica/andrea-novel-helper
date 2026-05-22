@@ -234,6 +234,18 @@ Reimu
 </ul>
 <p>也可以通过命令面板执行 <code>AndreaNovelHelper.createCharacterGallery</code> 或 <code>AndreaNovelHelper.createRoleFile</code>。</p>
 
+<h4>TXT 角色档案迁移</h4>
+<p>如果你已经用 TXT 整理了角色档案（例如章节列表中的人设草稿），ANH 可以自动检测并一键转换为标准的 JSON5 或 Markdown 格式：</p>
+<ul>
+    <li>打开项目后，ANH 会自动扫描工作区中文件名包含"角色""人物""登场"等关键词的 <code>.txt</code> 文件</li>
+    <li>如果检测到 TXT 角色档案且项目中尚无 <code>character-gallery.json5</code>，右下角会弹窗提示转换</li>
+    <li>也可以在左侧"常用功能"面板中点击 <b>+ 转换 TXT 角色档案</b>，或通过命令面板 (<code>Ctrl+Shift+P</code>) 搜索 <code>andrea.detectTxtRoleFiles</code>（"检测 TXT 角色档案并迁移"）手动触发</li>
+    <li>选择文件后，ANH 会解析 TXT 中的角色名、属性字段（称号、年龄、外貌、性格等）、分组结构，并生成预览</li>
+    <li>确认后自动备份原 TXT 文件（<code>.txt.bak</code>），输出 JSON5 或 Markdown 到 <code>novel-helper/</code> 目录</li>
+    <li>支持命名约定：<code>截止第N章登场人物信息.txt</code>、<code>角色设定.txt</code>、<code>人物档案.txt</code> 等均可识别</li>
+</ul>
+<p>解析器能够自动处理中文冒号属性行（称号：xxx）、章节标题（一、二、三…）、括号注释（新增）（未正式登场）等常见格式。转换前可预览结果，转换后不会删除原始文件。</p>
+
 <h4>样式字段说明</h4>
 <p>角色外观有两种写法，新版推荐 <code>style</code> 对象，旧版独立字段保持兼容：</p>
 <pre><code>// 新版推荐
