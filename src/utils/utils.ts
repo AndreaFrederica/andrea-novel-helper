@@ -1229,6 +1229,22 @@ function loadDelimitedRoleFile(content: string, filePath: string, packagePath: s
 	}
 }
 
+function isLikelyNonNameLine(line: string): boolean {
+	// 长度 > 50 字大概率是叙事文本，不是人名/词条
+	if (line.length > 50) return true;
+	// 以括号/方括号开头：元信息、章节标记
+	if (/^[（(【[]/.test(line)) return true;
+	// 包含冒号：属性字段 或 标题式冒号结尾
+	if (/[：:]/.test(line) && line.length > 2) return true;
+	// 编号标题：一、 二、 1. 1、 （一） 等
+	if (/^[一二三四五六七八九十0-9]+[、．.)）]/.test(line)) return true;
+	// 含句子标点的长叙述句
+	if (/[，。！？；、]/.test(line) && line.length > 15) return true;
+	// 含有中文括号注释（如 xxx（新增）、"力"（未正式登场））
+	if (/[（(]/.test(line) && /[）)]/.test(line)) return true;
+	return false;
+}
+
 function loadTXTRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const rawLines = content.split(/\r?\n/);
@@ -1249,6 +1265,9 @@ function loadTXTRoleFile(content: string, filePath: string, packagePath: string,
 			line = line.slice(0, cutIdx).trim();
 			if (!line) continue;
 		}
+			// 启发式过滤：跳过明显不是人名/词条的行（长句、元信息、属性字段、章节标题）
+			if (isLikelyNonNameLine(line)) continue;
+
 		const role: Role = {
 			name: line,
 			type: defaultType,
