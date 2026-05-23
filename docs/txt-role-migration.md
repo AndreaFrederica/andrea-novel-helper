@@ -4,8 +4,6 @@
 
 When users already maintain character data as structured `.txt` files outside the `novel-helper/` directory (e.g., `小说设定/角色/截止第三十四章登场人物信息.txt`), ANH now automatically detects them and offers one-click conversion to standard JSON5 or Markdown format.
 
-This bridges the gap between "free-form TXT character notes" and "ANH's structured role system" — users can keep their existing workflow and migrate when ready.
-
 ## Problem
 
 - Many authors write character profiles as free-form TXT files before adopting ANH
@@ -15,19 +13,29 @@ This bridges the gap between "free-form TXT character notes" and "ANH's structur
 
 ## Solution
 
-### Three-layer detection
+### Detection engine (configurable)
 
-| Layer | Method | Purpose |
-|-------|--------|---------|
-| **L1 — Filename** | Keywords: 角色, 人物, character, 登场, 设定, etc. | Quick filter — skip novel chapters and unrelated files |
-| **L2 — Directory** | Boost confidence for files under `小说设定/角色/` etc. | High-confidence directories lower the content scoring threshold (30 vs 50) |
-| **L3 — Content scoring** | Property-line density, short-name-line density, section header count, block structure, long-paragraph penalty | Distinguish character profiles (score 65-77) from novel chapters (score 0) and skill lists (score 0-50, filtered at L1) |
+Three-layer detection with all parameters exposed via VS Code settings:
 
-Each candidate gets a 0-100 score; candidates ≥50 (or ≥30 in high-confidence dirs) are surfaced to the user.
+| Layer | Method | Configurable via |
+|-------|--------|-----------------|
+| **L1 — Filename** | Keywords matched against filename | `txtMigration.detectionKeywords` |
+| **L2 — Directory** | Boost confidence for files under known character dirs | `txtMigration.highConfidenceDirs` |
+| **L3 — Content scoring** | Property-line density, short-name-line density, section header count, block structure | `txtMigration.scoreThreshold` / `txtMigration.highConfidenceScoreThreshold` |
+
+All settings live under `AndreaNovelHelper.txtMigration.*` with sensible defaults. Users can customize via VS Code Settings UI, `settings.json`, or project JSON5 config.
+
+### Feature toggle
+
+`AndreaNovelHelper.txtMigration.enabled` (default `true`). When disabled:
+- Status bar indicator hidden
+- Auto-popup suppressed
+- Sidebar "转换 TXT 角色档案" node hidden
+- Manual command still available
 
 ### Structured TXT parser
 
-Parses common Chinese character-profile formats:
+Parses common Chinese character-profile formats with 30+ field keyword mappings:
 
 ```
 （本档案已更新至第三十五章）     → skipped (meta)
@@ -43,27 +51,29 @@ Parses common Chinese character-profile formats:
 Features:
 - Property extraction: 30+ Chinese field keywords (`称号`→`title`, `外貌`→`appearance`, etc.)
 - Quote/parenthesis stripping: `"力"（新增）` → `力`
+- `&` connector handling: `李佳 & 天一` → `李佳` + `天一` (split)
+- `/` separator preserved for manual review (`蓝湛 / "镜"`)
 - Multi-line field aggregation
 - Section-aware grouping
-- `&` connector handling
+
+### Output
+
+- **Filename**: `<original_name>.json5` or `<original_name>.md` (e.g., `截止第三十四章登场人物信息.json5`)
+- **Location**: `novel-helper/` under the correct workspace root (multi-root safe)
+- **Format**: Proper JSON5 (via `JSON5.stringify`) handling arrays, numbers, and booleans correctly
+- **Safety**: Original `.txt` backed up as `.txt.bak`, overwrite prompt if target exists
 
 ### Migration workflow
 
 ```
-Project open → auto-detect → notification popup (if no JSON5 exists)
-  → click "开始转换" / status bar / command palette
-    → QuickPick: file list with scores and summaries
-      → select file → preview extracted roles and sections
-        → choose format (JSON5 recommended / Markdown)
-          → auto-backup TXT → write character-gallery.json5
+Project open → async detection (non-blocking, 100ms debounce)
+  → auto-popup (if no character-gallery.json5 exists and feature enabled)
+    → click "开始转换" / status bar / command palette / sidebar node
+      → QuickPick: file list with scores and summaries
+        → select file → preview extracted roles and sections
+          → choose format (JSON5 / Markdown)
+            → auto-backup TXT → write to novel-helper/
 ```
-
-Safety measures:
-1. Original `.txt` file backed up as `.txt.bak` before conversion
-2. Conversion preview shows extracted roles before writing
-3. If `character-gallery.json5` already exists, user is prompted before overwrite
-4. `/` separator in names (e.g., `蓝湛 / "镜"`) preserves ambiguity for manual review
-5. Auto-prompt only fires when no JSON5 exists yet
 
 ### UI entry points
 
@@ -71,25 +81,31 @@ Safety measures:
 |-------|---------------|
 | **Auto-popup** | On project open, if TXT candidates detected and no `character-gallery.json5` |
 | **Status bar** | `"N 个 TXT 角色档案"` — click to open file list |
-| **Command palette** | `andrea.detectTxtRoleFiles` ("检测 TXT 角色档案并迁移") |
-| **Common Features panel** | `+ 转换 TXT 角色档案` node in the role management sidebar |
+| **Command palette** | `Ctrl+Shift+P` → `andrea.detectTxtRoleFiles` / "检测 TXT 角色档案并迁移" |
+| **Sidebar** | "常用功能" → `+ 转换 TXT 角色档案` (conditional, uses cached async detection) |
+
+## VS Code Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `AndreaNovelHelper.txtMigration.enabled` | boolean | `true` | Master toggle for TXT migration |
+| `AndreaNovelHelper.txtMigration.detectionKeywords` | string[] | `["角色","人物","character","role"...]` | Filename keywords for L1 |
+| `AndreaNovelHelper.txtMigration.highConfidenceDirs` | string[] | `["角色","人物","characters","roles"]` | Directory names for L2 boost |
+| `AndreaNovelHelper.txtMigration.scoreThreshold` | number | `50` | Content score threshold (non-high-confidence dirs) |
+| `AndreaNovelHelper.txtMigration.highConfidenceScoreThreshold` | number | `30` | Content score threshold (high-confidence dirs) |
 
 ## Verification
 
 Tested against real-world character data (`截止第三十四章登场人物信息.txt`, 301 non-empty lines, ~45 characters):
 
-| Metric | Before | After |
-|--------|--------|-------|
-| Detection score | — | **77/100** (ROLE FILE) |
-| Characters extracted | — | **38** (out of ~39 identifiable, 97%) |
-| Novel chapter (第一章) | — | **0/100** (correctly excluded) |
-| Skill list (火系异能) | — | Filtered at L1 (no role keyword in filename) |
-| Missed: 1 | — | `蓝湛 / "镜"` (`/` reserved for manual review) |
-
-Detection accuracy:
-- Character profiles: correctly identified (score 65-77)
-- Novel chapters: correctly excluded (score 0, long-paragraph penalty)
-- Skill/ability lists: filtered at L1 filename check
+| Metric | Result |
+|--------|--------|
+| Detection score | **77/100** |
+| Characters extracted | **38** (~84%) |
+| Missed | 1 (`蓝湛 / "镜"` — `/` reserved for manual review) |
+| Novel chapter (第一章 云中惊魂.txt) | **0/100** (correctly excluded) |
+| Skill list (火系异能技能.txt) | Filtered at L1 (no role keyword in filename) |
+| JSON5 output validity | Valid, arrays/numbers/booleans handled correctly |
 
 ## Files Changed
 
@@ -97,9 +113,9 @@ Detection accuracy:
 
 | File | Purpose |
 |------|---------|
-| `src/utils/txtRoleDetector.ts` | Three-layer TXT file detection with content scoring |
-| `src/utils/txtRoleParser.ts` | Structured TXT → Role[] parser + JSON5/MD output |
-| `src/commands/txtMigrationCommands.ts` | Auto-popup, status bar, QuickPick UI, migration execution |
+| `src/utils/txtRoleDetector.ts` | Configurable three-layer TXT file detection with content scoring |
+| `src/utils/txtRoleParser.ts` | Structured TXT → Role[] parser + JSON5/MD output (uses JSON5.stringify) |
+| `src/commands/txtMigrationCommands.ts` | Auto-popup, status bar (subscription-safe), QuickPick UI, migration execution (multi-root safe) |
 | `docs/txt-role-migration.md` | This document |
 
 ### Modified files
@@ -107,14 +123,15 @@ Detection accuracy:
 | File | Change |
 |------|--------|
 | `src/activate.ts` | Added import and `registerTxtMigrationCommands(context)` call |
-| `package.json` | Added `andrea.detectTxtRoleFiles` and `andrea.migrateTxtRoleFile` commands |
-| `src/Provider/view/packageManagerView.ts` | Added `TxtMigrationNode` to "常用功能" panel (conditional on TXT candidates) |
-| `media/docs/role-management.html` | Added "TXT 角色档案迁移" section to role management docs |
+| `package.json` | Added 5 VS Code settings + 2 commands |
+| `src/Provider/view/packageManagerView.ts` | Added `TxtMigrationNode` with async cached detection (non-blocking TreeView) + feature toggle check |
+| `media/docs/role-management.html` | Added "TXT 角色档案迁移" section to user-facing docs |
 
 ## Compatibility
 
 - Non-breaking: does not modify existing role loading or parsing code paths
-- Optional: no popup if `character-gallery.json5` already exists
-- No dependency on TXT file format changes — users can keep their existing files
-- Works alongside existing JSON5/MD/CSV role formats
-- All existing security/backup patterns followed (`.bak` before write, user confirmation before destructive action)
+- Optional: feature toggle allows disabling everything
+- Multi-root safe: output goes to the correct workspace folder for each source file
+- Memory safe: statusBarItem properly disposed via context.subscriptions
+- UI non-blocking: detection uses debounced timer, not synchronous in getChildren()
+- All rules/configurations exposed via VS Code settings with defaults matching original behavior
