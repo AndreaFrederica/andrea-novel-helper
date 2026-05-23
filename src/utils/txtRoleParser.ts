@@ -1,5 +1,6 @@
 import type { Role } from '../extension';
 import * as path from 'path';
+import JSON5 from 'json5';
 
 /** 属性字段关键词 → 标准字段名映射 */
 const FIELD_KEYWORD_MAP: Record<string, string> = {
@@ -286,9 +287,7 @@ export function toMarkdown(result: ParsedTxtResult): string {
 }
 
 function serializeRolesToJson5(roles: Role[]): string {
-    const lines: string[] = ['['];
-    for (let i = 0; i < roles.length; i++) {
-        const r = roles[i];
+    const cleaned = roles.map(r => {
         const obj: any = { name: r.name, type: r.type || '角色' };
         if (r.description) obj.description = r.description;
         if (r.aliases?.length) obj.aliases = r.aliases;
@@ -303,21 +302,8 @@ function serializeRolesToJson5(roles: Role[]): string {
                 obj[key] = val;
             }
         }
+        return obj;
+    });
 
-        const entries = Object.entries(obj);
-        const inner = entries.map(([k, v]) => {
-            const escaped = String(v)
-                .replace(/\\/g, '\\\\')
-                .replace(/"/g, '\\"')
-                .replace(/\n/g, '\\n')
-                .replace(/\r/g, '\\r')
-                .replace(/\t/g, '\\t');
-            return `    "${k}": "${escaped}"`;
-        }).join(',\n');
-
-        const comma = i < roles.length - 1 ? ',' : '';
-        lines.push(`  {\n${inner}\n  }${comma}`);
-    }
-    lines.push(']');
-    return lines.join('\n') + '\n';
+    return JSON5.stringify(cleaned, { space: 2, quote: '"' }) + '\n';
 }

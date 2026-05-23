@@ -89,6 +89,20 @@ function resolveFileConflict(dir: string, baseName: string, ext: string): { path
     }
 }
 
+// TXT 角色档案检测缓存（避免在 TreeView getChildren() 中同步扫描阻塞 UI）
+let cachedTxtCandidates: import('../../utils/txtRoleDetector').TxtRoleFileCandidate[] = [];
+let txtCandidateRefreshTimer: NodeJS.Timeout | undefined;
+
+function scheduleTxtCandidateRefresh() {
+    if (txtCandidateRefreshTimer) return;
+    txtCandidateRefreshTimer = setTimeout(() => {
+        txtCandidateRefreshTimer = undefined;
+        try {
+            cachedTxtCandidates = detectTxtRoleFilesAll();
+        } catch { /* 静默失败 */ }
+    }, 100);
+}
+
 class CommonFeaturesRootNode extends vscode.TreeItem {
     public readonly resourceUri: vscode.Uri;
     public readonly id: string;
@@ -690,11 +704,16 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 new DocCenterNode(this.workspaceRoot),
                 new GraphicalQuickSettingsNode(this.workspaceRoot),
             ];
-            // 检测到 TXT 角色档案且无 JSON5 库时，显示迁移入口
-            const candidates = detectTxtRoleFilesAll();
-            const json5Path = path.join(this.workspaceRoot, 'novel-helper', 'character-gallery.json5');
-            if (candidates.length > 0 && !fs.existsSync(json5Path)) {
-                children.unshift(new TxtMigrationNode(this.workspaceRoot));
+            // 检测到 TXT 角色档案且无 JSON5 库时，显示迁移入口（需功能启用，使用缓存避免阻塞 UI）
+            const migrationEnabled = vscode.workspace.getConfiguration('AndreaNovelHelper')
+                .get<boolean>('txtMigration.enabled', true);
+            if (migrationEnabled) {
+                // 异步刷新缓存（不阻塞 TreeView 渲染），首次渲染使用最后一次缓存结果
+                scheduleTxtCandidateRefresh();
+                const json5Path = path.join(this.workspaceRoot, 'novel-helper', 'character-gallery.json5');
+                if (cachedTxtCandidates.length > 0 && !fs.existsSync(json5Path)) {
+                    children.unshift(new TxtMigrationNode(this.workspaceRoot));
+                }
             }
             return children;
         }

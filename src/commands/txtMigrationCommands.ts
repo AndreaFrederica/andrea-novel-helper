@@ -6,6 +6,18 @@ import { parseTxtRoleFile, toJson5, toMarkdown } from '../utils/txtRoleParser';
 
 let statusBarItem: vscode.StatusBarItem | undefined;
 
+/** 根据文件路径找到对应的工作区文件夹，找不到时回退到 workspaceFolders[0] */
+function getWorkspaceRootForFile(filePath: string): string | undefined {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders?.length) return undefined;
+    const normalized = path.resolve(filePath).replace(/\\/g, '/').toLowerCase();
+    for (const f of folders) {
+        const root = path.resolve(f.uri.fsPath).replace(/\\/g, '/').toLowerCase();
+        if (normalized.startsWith(root + '/')) return f.uri.fsPath;
+    }
+    return folders[0].uri.fsPath;
+}
+
 /** 注册检测与迁移命令 */
 export function registerTxtMigrationCommands(context: vscode.ExtensionContext) {
     // 命令：检测 TXT 角色文件
@@ -23,13 +35,21 @@ export function registerTxtMigrationCommands(context: vscode.ExtensionContext) {
     );
 
     // 状态栏：显示检测提示
+    context.subscriptions.push({ dispose: () => statusBarItem?.dispose() });
     updateStatusBar();
     context.subscriptions.push(
         vscode.workspace.onDidChangeWorkspaceFolders(() => updateStatusBar())
     );
 }
 
+function isMigrationEnabled(): boolean {
+    return vscode.workspace.getConfiguration('AndreaNovelHelper')
+        .get<boolean>('txtMigration.enabled', true);
+}
+
 async function updateStatusBar() {
+    if (!isMigrationEnabled()) { statusBarItem?.hide(); return; }
+
     const candidates = detectTxtRoleFilesAll();
     if (candidates.length > 0) {
         if (!statusBarItem) {
@@ -61,6 +81,10 @@ async function updateStatusBar() {
 }
 
 async function detectAndShowResults() {
+    if (!isMigrationEnabled()) {
+        vscode.window.showInformationMessage('TXT 角色档案迁移功能未启用。可在设置中开启 AndreaNovelHelper.txtMigration.enabled。');
+        return;
+    }
     const candidates = detectTxtRoleFilesAll();
 
     if (candidates.length === 0) {
@@ -174,22 +198,22 @@ async function migrateSingleFile(candidate: TxtRoleFileCandidate) {
 
     // 生成目标内容
     const outputContent = format === 'json5' ? toJson5(result) : toMarkdown(result);
-    const outputExt = format === 'json5' ? '.json5' : '.md';
 
-    // 输出到 novel-helper 目录
-    const folders = vscode.workspace.workspaceFolders;
-    if (!folders?.length) return;
-    const novelHelperDir = path.join(folders[0].uri.fsPath, 'novel-helper');
+    // 输出到正确的 novel-helper 目录（按文件所在工作区，不固定取 [0]）
+    const wsRoot = getWorkspaceRootForFile(candidate.filePath);
+    if (!wsRoot) return;
+    const novelHelperDir = path.join(wsRoot, 'novel-helper');
     fs.mkdirSync(novelHelperDir, { recursive: true });
 
-    // 使用标准默认文件名
-    const defaultName = format === 'json5' ? 'character-gallery.json5' : 'character-gallery.md';
-    let outputPath = path.join(novelHelperDir, defaultName);
+    // 使用原名 + 标准后缀
+    const baseName = path.basename(candidate.filePath, '.txt');
+    const outputName = `${baseName}.${format === 'json5' ? 'json5' : 'md'}`;
+    let outputPath = path.join(novelHelperDir, outputName);
 
     // 如果已存在，问用户是覆盖还是取消
     if (fs.existsSync(outputPath)) {
         const action = await vscode.window.showWarningMessage(
-            `${defaultName} 已存在。覆盖会丢失手动修改的内容。`,
+            `${outputName} 已存在。覆盖会丢失手动修改的内容。`,
             { modal: true },
             '覆盖',
             '取消'
@@ -199,7 +223,7 @@ async function migrateSingleFile(candidate: TxtRoleFileCandidate) {
 
     fs.writeFileSync(outputPath, outputContent, 'utf8');
 
-    const relativeOutput = path.relative(folders[0].uri.fsPath, outputPath);
+    const relativeOutput = path.relative(wsRoot, outputPath);
 
     vscode.window.showInformationMessage(
         `已迁移: ${candidate.fileName} → ${relativeOutput} (${result.totalRoles} 个角色)`,

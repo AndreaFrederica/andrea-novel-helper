@@ -2,14 +2,31 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
-/** 文件名角色关键词（第一层过滤） */
-const CHARACTER_FILE_KEYWORDS = [
-    '角色', '人物', 'character', 'role', '主角', '配角',
-    '登场', '设定', '信息', '档案', '介绍',
-];
+/** 从 VS Code 设置读取关键词，带默认值 */
+function getDetectionKeywords(): string[] {
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const keywords = cfg.get<string[]>('txtMigration.detectionKeywords');
+    return (keywords && keywords.length) ? keywords : [
+        '角色', '人物', 'character', 'role', '主角', '配角',
+        '登场', '设定', '信息', '档案', '介绍',
+    ];
+}
 
-/** 高置信度目录名称（第二层辅助） */
-const HIGH_CONFIDENCE_DIRS = ['角色', '人物', 'characters', 'roles'];
+function getHighConfidenceDirs(): string[] {
+    const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
+    const dirs = cfg.get<string[]>('txtMigration.highConfidenceDirs');
+    return (dirs && dirs.length) ? dirs : ['角色', '人物', 'characters', 'roles'];
+}
+
+function getScoreThreshold(): number {
+    return vscode.workspace.getConfiguration('AndreaNovelHelper')
+        .get<number>('txtMigration.scoreThreshold', 50);
+}
+
+function getHighConfidenceThreshold(): number {
+    return vscode.workspace.getConfiguration('AndreaNovelHelper')
+        .get<number>('txtMigration.highConfidenceScoreThreshold', 30);
+}
 
 export interface TxtRoleFileCandidate {
     filePath: string;
@@ -23,13 +40,13 @@ export interface TxtRoleFileCandidate {
 /** 检查文件名是否包含角色相关关键词 */
 function fileNameHasKeyword(fileName: string): boolean {
     const lower = fileName.toLowerCase();
-    return CHARACTER_FILE_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+    return getDetectionKeywords().some(kw => lower.includes(kw.toLowerCase()));
 }
 
 /** 检查文件是否在高置信度目录下 */
 function isInHighConfidenceDir(filePath: string, workspaceRoot: string): boolean {
     const relative = path.relative(workspaceRoot, path.dirname(filePath)).toLowerCase();
-    return HIGH_CONFIDENCE_DIRS.some(dir => relative.includes(dir.toLowerCase()));
+    return getHighConfidenceDirs().some(dir => relative.includes(dir.toLowerCase()));
 }
 
 /** 对文件内容进行特征评分 */
@@ -162,8 +179,8 @@ export function detectTxtRoleFiles(workspaceRoot: string): TxtRoleFileCandidate[
 
             const { score, rationale } = scoreFileContent(content);
 
-            // 高置信度目录直接收录（门槛降到 30），否则需要 ≥50
-            const threshold = highConf ? 30 : 50;
+            // 高置信度目录使用更低的阈值
+            const threshold = highConf ? getHighConfidenceThreshold() : getScoreThreshold();
             if (score < threshold) continue;
 
             candidates.push({
