@@ -6,6 +6,18 @@ import { roles } from '../activate';
 import * as crypto from 'crypto';
 import { tokenizeComplexNames } from './utils';
 
+function isLikelyNonNameWord(word: string): boolean {
+    // 长度 > 25 字符的几乎不可能是人名/词条
+    if (word.length > 25) return true;
+    // 包含中文标点符号
+    if (/[：。，！？；、""''（）【】《》…—]/.test(word)) return true;
+    // 包含英文标点（不含连字符和撇号，因为可能是英文名/缩写）
+    if (/[,.;:!?"()]/.test(word)) return true;
+    // 包含空白字符（多词句子碎片）
+    if (/\s/.test(word)) return true;
+    return false;
+}
+
 export function generateCSpellDictionary() {
     if (!roles.length) return;
 
@@ -47,11 +59,14 @@ export function generateCSpellDictionary() {
         }
     }
 
-    // 2. 排序并准备写入内容
-    const sorted = Array.from(wordSet).sort((a, b) => a.localeCompare(b, 'en'));
+    // 2. 格式无关最终过滤：移除明显不是人名/词条的条目（加密防御层）
+    const filtered = Array.from(wordSet).filter(word => !isLikelyNonNameWord(word));
+
+    // 3. 排序并准备写入内容
+    const sorted = filtered.sort((a, b) => a.localeCompare(b, 'en'));
     const newContent = sorted.join('\n');
 
-    // 3. 如果文件已存在且内容一致，则跳过写入
+    // 4. 如果文件已存在且内容一致，则跳过写入
     if (fs.existsSync(dictPath)) {
         const oldContent = fs.readFileSync(dictPath, 'utf8');
         const hashOld = crypto.createHash('sha256').update(oldContent).digest('hex');
@@ -62,11 +77,11 @@ export function generateCSpellDictionary() {
         }
     }
 
-    // 4. 写入文件
+    // 5. 写入文件
     fs.mkdirSync(vscodeDir, { recursive: true });
     fs.writeFileSync(dictPath, newContent, 'utf8');
 
-    // 5. 更新 settings.json 中 cSpell.customDictionaries
+    // 6. 更新 settings.json 中 cSpell.customDictionaries
     const config = vscode.workspace.getConfiguration();
     const current = config.get('cSpell.customDictionaries') as any ?? {};
 

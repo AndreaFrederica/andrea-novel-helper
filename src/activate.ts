@@ -42,6 +42,7 @@ import { projectInitWizardRunning, registerProjectInitWizard } from './wizard/pr
 import { registerGraphicalProjectInitWizard } from './wizard/projectInitWizardPage';
 import { registerGuidePage } from './guide/guidePage';
 import { registerWhatsNewPage } from './whatsnew/whatsnew-panel';
+import { registerTxtMigrationCommands } from './commands/txtMigrationCommands';
 import { checkAndShowWhatsNew } from './whatsnew/version-check';
 import { clearAllRoleMatchCache } from './context/roleAsyncShared';
 import { initializeRoleUsageStore, disposeRoleUsageStore, renameRoleUsageDirectory, deleteRoleUsageDirectory, clearRoleUsageIndex, updateRoleUsageFromDocument } from './context/roleUsageStore';
@@ -217,6 +218,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerDocViewerPage(context);
         registerHelloPage(context);
         registerWhatsNewPage(context);
+        registerTxtMigrationCommands(context);
         registerQuickSettingsPage(context);
         log('项目初始化/文档向导命令已注册');
     } catch (e) { log('注册 项目初始化/文档向导命令 失败', e); }
