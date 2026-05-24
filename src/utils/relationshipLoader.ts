@@ -6,6 +6,15 @@
 import { globalRelationshipManager } from './globalRelationshipManager';
 import { NodeRoleParser } from '../utils/nodeRoleParser';
 import { roles } from '../activate';
+import { Role } from '../extension';
+import { RoleRelationship } from '../types/relationshipTypes';
+import {
+    hasRoleHierarchyParent,
+    pickRoleHierarchyParentName,
+    pickRoleHierarchyParentUuid,
+    pickRoleHierarchyRelation,
+} from './roleHierarchy';
+import { getRoleLineageRefs, RoleLineageKind } from './roleLineage';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -146,6 +155,151 @@ function buildRoleUuidMapping(): void {
     globalRelationshipManager.setRoleMappings(roleUuidToNameMap);
 }
 
+function findRoleByHierarchyRef(parentName: string | undefined, parentUuid: string | undefined): Role | undefined {
+    if (parentUuid) {
+        const byUuid = roles.find(role => role.uuid === parentUuid);
+        if (byUuid) {
+            return byUuid;
+        }
+    }
+    if (parentName) {
+        return roles.find(role => role.name === parentName);
+    }
+    return undefined;
+}
+
+function addGeneratedRoleRelationshipsFromRoles(): { hierarchy: number; lineage: number } {
+    return {
+        hierarchy: addHierarchyRelationshipsFromRoles(),
+        lineage: addLineageRelationshipsFromRoles(),
+    };
+}
+
+function addHierarchyRelationshipsFromRoles(): number {
+    let added = 0;
+    const seen = new Set<string>();
+
+    for (const child of roles) {
+        if (!hasRoleHierarchyParent(child)) {
+            continue;
+        }
+
+        const declaredParentName = pickRoleHierarchyParentName(child);
+        const declaredParentUuid = pickRoleHierarchyParentUuid(child);
+        const parent = findRoleByHierarchyRef(declaredParentName, declaredParentUuid);
+        const parentName = parent?.name || declaredParentName;
+        const parentUuid = parent?.uuid || declaredParentUuid;
+        if (!parentName || parentName === child.name) {
+            continue;
+        }
+
+        const relationshipType = pickRoleHierarchyRelation(child) || '包含';
+        const relationship: RoleRelationship = {
+            sourceRole: parentName,
+            targetRole: child.name,
+            literalValue: relationshipType,
+            type: relationshipType,
+            metadata: {
+                sourceRoleUuid: parentUuid,
+                targetRoleUuid: child.uuid,
+                isDirectional: true,
+                sourceFile: child.sourcePath,
+                generatedBy: 'roleContainment',
+            }
+        };
+        const dedupeKey = [
+            relationship.metadata?.sourceRoleUuid || relationship.sourceRole,
+            relationship.metadata?.targetRoleUuid || relationship.targetRole,
+            relationship.type,
+        ].join('\n');
+        if (seen.has(dedupeKey)) {
+            continue;
+        }
+        const hasManualEquivalent = globalRelationshipManager
+            .getRelationshipsBetween(parentName, child.name)
+            .some(existing => existing.type === relationship.type
+                && existing.literalValue === relationship.literalValue
+                && existing.metadata?.generatedBy !== 'roleContainment');
+        if (hasManualEquivalent) {
+            continue;
+        }
+        seen.add(dedupeKey);
+        globalRelationshipManager.addRelationship(relationship);
+        added++;
+    }
+
+    return added;
+}
+
+function addLineageRelationshipsFromRoles(): number {
+    let added = 0;
+    const seen = new Set<string>();
+
+    for (const role of roles) {
+        for (const ref of getRoleLineageRefs(role)) {
+            const source = findRoleByHierarchyRef(ref.name, ref.uuid);
+            const sourceName = source?.name || ref.name;
+            const sourceUuid = source?.uuid || ref.uuid;
+            if (!sourceName || sourceName === role.name) {
+                continue;
+            }
+            const relationshipType = ref.relation || defaultLineageRelation(ref.kind);
+            const relationship: RoleRelationship = {
+                sourceRole: sourceName,
+                targetRole: role.name,
+                literalValue: relationshipType,
+                type: relationshipType,
+                metadata: {
+                    sourceRoleUuid: sourceUuid,
+                    targetRoleUuid: role.uuid,
+                    isDirectional: true,
+                    sourceFile: role.sourcePath,
+                    generatedBy: ref.kind === 'inheritance' ? 'roleInheritance' : 'roleDerivation',
+                    lineageKind: ref.kind,
+                }
+            };
+            const dedupeKey = [
+                relationship.metadata?.sourceRoleUuid || relationship.sourceRole,
+                relationship.metadata?.targetRoleUuid || relationship.targetRole,
+                relationship.type,
+                relationship.metadata?.generatedBy,
+            ].join('\n');
+            if (seen.has(dedupeKey)) {
+                continue;
+            }
+            const hasManualEquivalent = globalRelationshipManager
+                .getRelationshipsBetween(sourceName, role.name)
+                .some(existing => existing.type === relationship.type
+                    && existing.literalValue === relationship.literalValue
+                    && !String(existing.metadata?.generatedBy || '').startsWith('role'));
+            if (hasManualEquivalent) {
+                continue;
+            }
+            seen.add(dedupeKey);
+            globalRelationshipManager.addRelationship(relationship);
+            added++;
+        }
+    }
+
+    return added;
+}
+
+function defaultLineageRelation(kind: RoleLineageKind): string {
+    return kind === 'inheritance' ? '继承' : '派生';
+}
+
+function clearGeneratedRoleRelationships(): void {
+    const relationshipsToRemove: string[] = [];
+    for (const relationship of globalRelationshipManager.getAllRelationships()) {
+        if (String(relationship.metadata?.generatedBy || '').startsWith('role')) {
+            relationshipsToRemove.push(generateRelationshipId(relationship));
+        }
+    }
+    for (const relationshipId of relationshipsToRemove) {
+        globalRelationshipManager.removeRelationship(relationshipId);
+    }
+}
+
 /**
  * 加载所有关系表
  * @param novelHelperRoot novel-helper 根目录路径
@@ -168,12 +322,13 @@ export async function loadRelationships(novelHelperRoot: string): Promise<void> 
         buildRoleUuidMapping();
         
         await scanRelationshipFiles(novelHelperRoot, '');
+        const generatedRelationships = addGeneratedRoleRelationshipsFromRoles();
         
         const totalRelationships = globalRelationshipManager.getAllRelationships().length;
         const totalRoles = globalRelationshipManager.getAllRoles().size;
         const loadTime = Date.now() - startTime;
         
-        console.log(`loadRelationships: 加载完成，共 ${totalRelationships} 个关系，涉及 ${totalRoles} 个角色，用时 ${loadTime}ms`);
+        console.log(`loadRelationships: 加载完成，共 ${totalRelationships} 个关系，自动层级关系 ${generatedRelationships.hierarchy} 个，自动继承/派生关系 ${generatedRelationships.lineage} 个，涉及 ${totalRoles} 个角色，用时 ${loadTime}ms`);
         
         // 显示加载结果通知
         if (totalRelationships > 0) {
@@ -202,13 +357,9 @@ export async function updateRelationships(changedFiles: string[], novelHelperRoo
         return isRelationshipFile(fileName);
     });
     
-    if (relationshipFiles.length === 0) {
-        console.log(`updateRelationships: 没有关系文件需要更新`);
-        return;
-    }
-    
     // 重新构建角色UUID映射（因为角色可能有变化）
     buildRoleUuidMapping();
+    clearGeneratedRoleRelationships();
     
     // 清理变更文件对应的旧关系数据
     for (const filePath of relationshipFiles) {
@@ -225,8 +376,10 @@ export async function updateRelationships(changedFiles: string[], novelHelperRoo
             console.error(`updateRelationships: 更新文件失败 ${filePath}: ${error}`);
         }
     }
+
+    const generatedRelationships = addGeneratedRoleRelationshipsFromRoles();
     
-    console.log(`updateRelationships: 增量更新完成`);
+    console.log(`updateRelationships: 增量更新完成，关系文件 ${relationshipFiles.length} 个，自动层级关系 ${generatedRelationships.hierarchy} 个，自动继承/派生关系 ${generatedRelationships.lineage} 个`);
 
     // 不在此处弹窗：通知交由调用方（例如 loadRoles 的增量分支）决定何时向用户展示。
 }

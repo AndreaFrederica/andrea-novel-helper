@@ -18,6 +18,27 @@ import {
     stringifyDelimitedRoleFile,
 } from './delimitedRoleFile';
 import { parseTomlRoles, stringifyRolesAsToml } from './Parser/tomlParser';
+import { JSON_ROLE_CHILD_KEYS } from './roleHierarchy';
+import { tryLosslessJson5UpdateText } from './json5Lossless';
+
+export type RoleUuidAutoFixWrite = {
+    filePath: string;
+    before: string;
+    after: string;
+    reason: 'ensureMissingUuid' | 'fixInvalidUuid';
+};
+
+let autoFixWriteHook: ((event: RoleUuidAutoFixWrite) => void) | undefined;
+
+export function setRoleUuidAutoFixWriteHook(hook: ((event: RoleUuidAutoFixWrite) => void) | undefined): void {
+    autoFixWriteHook = hook;
+}
+
+function notifyAutoFixWrite(event: RoleUuidAutoFixWrite): void {
+    try { autoFixWriteHook?.(event); } catch (error) {
+        console.error('[RoleUuidManager] auto-fix write hook failed:', error);
+    }
+}
 
 /**
  * 为所有角色添加 UUID
@@ -58,7 +79,7 @@ export async function ensureRoleUUIDs(roles: Role[], updateFiles: boolean = true
             // 更新文件
             for (const [filePath, rolesInFile] of fileUpdates) {
                 try {
-                    await updateRoleFile(filePath, rolesInFile);
+                    await updateRoleFile(filePath, rolesInFile, 'ensureMissingUuid');
                 } catch (error) {
                     console.error(`[RoleUuidManager] 更新文件失败: ${filePath}`, error);
                     vscode.window.showErrorMessage(`更新角色文件失败: ${path.basename(filePath)} - ${error}`);
@@ -77,7 +98,7 @@ export async function ensureRoleUUIDs(roles: Role[], updateFiles: boolean = true
  * @param filePath 文件路径
  * @param rolesWithUuid 包含 UUID 的角色列表
  */
-async function updateRoleFile(filePath: string, rolesWithUuid: Role[]): Promise<void> {
+async function updateRoleFile(filePath: string, rolesWithUuid: Role[], reason: RoleUuidAutoFixWrite['reason']): Promise<void> {
     if (!fs.existsSync(filePath)) {
         console.warn(`[RoleUuidManager] 文件不存在: ${filePath}`);
         return;
@@ -87,13 +108,13 @@ async function updateRoleFile(filePath: string, rolesWithUuid: Role[]): Promise<
     
     if (fileName.endsWith('.json5') || fileName.endsWith('.ojson5') || fileName.endsWith('.rjson5')) {
         // .ojson5/.rjson5 视为 JSON5-like 文件，尝试以 JSON5 更新
-        await updateJSON5File(filePath, rolesWithUuid);
+        await updateJSON5File(filePath, rolesWithUuid, reason);
     } else if (fileName.endsWith('.md')) {
-        await updateMarkdownFile(filePath, rolesWithUuid);
+        await updateMarkdownFile(filePath, rolesWithUuid, reason);
     } else if (fileName.endsWith('.csv')) {
-        await updateDelimitedFile(filePath, rolesWithUuid);
+        await updateDelimitedFile(filePath, rolesWithUuid, reason);
     } else if (fileName.endsWith('.toml')) {
-        await updateTomlFile(filePath, rolesWithUuid);
+        await updateTomlFile(filePath, rolesWithUuid, reason);
     } else if (fileName.endsWith('.txt')) {
         // txt 文件无法修改，只在内存中保持 UUID
         console.log(`[RoleUuidManager] txt 文件无法修改，UUID 仅在内存中保持: ${filePath}`);
@@ -105,7 +126,7 @@ async function updateRoleFile(filePath: string, rolesWithUuid: Role[]): Promise<
  * @param filePath 文件路径
  * @param rolesWithUuid 包含 UUID 的角色列表
  */
-async function updateJSON5File(filePath: string, rolesWithUuid: Role[]): Promise<void> {
+async function updateJSON5File(filePath: string, rolesWithUuid: Role[], reason: RoleUuidAutoFixWrite['reason']): Promise<void> {
     try {
         const content = await readTextFileDetectEncoding(filePath);
         if (!content || content.trim() === '') {
@@ -144,20 +165,8 @@ async function updateJSON5File(filePath: string, rolesWithUuid: Role[]): Promise
         // 构建 name -> uuid 映射
         const roleMap = new Map<string | undefined, string | undefined>(rolesWithUuid.map(r => [r.name, r.uuid]));
 
-        // 记录是否有实际变更
-        let changed = false;
-        for (const role of rolesArray) {
-            if (!role || typeof role !== 'object') { continue; }
-            if (!role.name) { continue; }
-            if (roleMap.has(role.name)) {
-                const newUuid = roleMap.get(role.name);
-                // 只有当磁盘上的值与目标值不同才修改
-                if (newUuid && role.uuid !== newUuid) {
-                    role.uuid = newUuid;
-                    changed = true;
-                }
-            }
-        }
+        // 记录是否有实际变更；JSON5 角色文件允许子角色嵌套，UUID 写回需要递归处理。
+        const changed = updateJsonRoleUuidsRecursive(rolesArray, roleMap);
 
         // 重建数据结构，但保持原始的结构形态
         let updatedData: any;
@@ -183,8 +192,13 @@ async function updateJSON5File(filePath: string, rolesWithUuid: Role[]): Promise
             return;
         }
 
-    // 写回文件（添加结尾换行以保持风格一致），写入后刷新全局缓存
-    const updatedContent = updatedNormalized + '\n';
+    // 写回文件（优先保留注释与格式；失败时回退到规范化输出）
+    const lossless = tryLosslessJson5UpdateText(content, updatedData, vscode.Uri.file(filePath));
+    if (lossless.error) {
+        console.warn('[RoleUuidManager] Lossless JSON5 update fallback:', lossless.error);
+    }
+    const updatedContent = lossless.text ?? (updatedNormalized + '\n');
+    notifyAutoFixWrite({ filePath, before: content, after: updatedContent, reason });
     await fs.promises.writeFile(filePath, updatedContent, 'utf8');
     try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
     console.log(`[RoleUuidManager] 已更新 JSON5 文件: ${filePath}`);
@@ -193,12 +207,48 @@ async function updateJSON5File(filePath: string, rolesWithUuid: Role[]): Promise
     }
 }
 
+function updateJsonRoleUuidsRecursive(nodes: unknown[], roleMap: Map<string | undefined, string | undefined>): boolean {
+    let changed = false;
+    for (const node of nodes) {
+        if (!node || typeof node !== 'object' || Array.isArray(node)) { continue; }
+        const role = node as Record<string, any>;
+        if (typeof role.name === 'string' && roleMap.has(role.name)) {
+            const newUuid = roleMap.get(role.name);
+            if (newUuid && role.uuid !== newUuid) {
+                role.uuid = newUuid;
+                changed = true;
+            }
+        }
+        for (const key of JSON_ROLE_CHILD_KEYS) {
+            const children = role[key];
+            if (Array.isArray(children)) {
+                changed = updateJsonRoleUuidsRecursive(children, roleMap) || changed;
+            } else if (children && typeof children === 'object') {
+                for (const [childName, childValue] of Object.entries(children as Record<string, unknown>)) {
+                    if (childValue && typeof childValue === 'object' && !Array.isArray(childValue)) {
+                        const childRole = childValue as Record<string, any>;
+                        const originalName = childRole.name;
+                        if (typeof originalName !== 'string' || !originalName.trim()) {
+                            childRole.name = childName;
+                        }
+                        changed = updateJsonRoleUuidsRecursive([childRole], roleMap) || changed;
+                        if (typeof originalName === 'undefined') {
+                            delete childRole.name;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return changed;
+}
+
 /**
  * 更新 Markdown 文件
  * @param filePath 文件路径
  * @param rolesWithUuid 包含 UUID 的角色列表
  */
-async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Promise<void> {
+async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[], reason: RoleUuidAutoFixWrite['reason']): Promise<void> {
     try {
         const content = await readTextFileDetectEncoding(filePath);
         const lines = content.split(/\r?\n/);
@@ -228,7 +278,17 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
                 contentStart++;
             }
             let contentEnd = contentStart;
-            while (contentEnd < beforeOutputIndex && updatedLines[contentEnd].trim() !== '') {
+            const uuidLevel = (updatedLines[uuidFieldHeaderLine]?.match(/^(#+)/)?.[1]?.length) || 2;
+            while (contentEnd < beforeOutputIndex) {
+                const trimmed = updatedLines[contentEnd].trim();
+                if (!trimmed) {
+                    contentEnd++;
+                    continue;
+                }
+                const headingMatch = trimmed.match(/^(#+)\s+/);
+                if (headingMatch && headingMatch[1].length <= uuidLevel) {
+                    break;
+                }
                 contentEnd++;
             }
 
@@ -303,6 +363,7 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
         }
 
         // 写回文件，并刷新全局缓存
+        notifyAutoFixWrite({ filePath, before: content, after: updatedContent, reason });
         await fs.promises.writeFile(filePath, updatedContent, 'utf8');
         try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
         console.log(`[RoleUuidManager] 已更新 Markdown 文件: ${filePath}`);
@@ -311,7 +372,7 @@ async function updateMarkdownFile(filePath: string, rolesWithUuid: Role[]): Prom
     }
 }
 
-async function updateDelimitedFile(filePath: string, rolesWithUuid: Role[]): Promise<void> {
+async function updateDelimitedFile(filePath: string, rolesWithUuid: Role[], reason: RoleUuidAutoFixWrite['reason']): Promise<void> {
     try {
         const content = await readTextFileDetectEncoding(filePath);
         const packagePath = path.relative(
@@ -353,7 +414,9 @@ async function updateDelimitedFile(filePath: string, rolesWithUuid: Role[]): Pro
             return;
         }
 
-        await fs.promises.writeFile(filePath, `${updatedContent}\n`, 'utf8');
+        const nextContent = `${updatedContent}\n`;
+        notifyAutoFixWrite({ filePath, before: content, after: nextContent, reason });
+        await fs.promises.writeFile(filePath, nextContent, 'utf8');
         try { globalFileCache.refreshFile(filePath); } catch { /* ignore cache refresh errors */ }
         console.log(`[RoleUuidManager] 已更新 CSV 文件: ${filePath}`);
     } catch (error) {
@@ -364,7 +427,7 @@ async function updateDelimitedFile(filePath: string, rolesWithUuid: Role[]): Pro
 /**
  * 更新 TOML 文件，添加 UUID 字段
  */
-async function updateTomlFile(filePath: string, rolesWithUuid: Role[]): Promise<void> {
+async function updateTomlFile(filePath: string, rolesWithUuid: Role[], reason: RoleUuidAutoFixWrite['reason']): Promise<void> {
     try {
         const content = await readTextFileDetectEncoding(filePath);
         if (!content || content.trim() === '') {
@@ -401,6 +464,7 @@ async function updateTomlFile(filePath: string, rolesWithUuid: Role[]): Promise<
             return;
         }
 
+        notifyAutoFixWrite({ filePath, before: content, after: updatedContent, reason });
         await fs.promises.writeFile(filePath, updatedContent, 'utf8');
         try { globalFileCache.refreshFile(filePath); } catch { /* ignore */ }
         console.log(`[RoleUuidManager] 已更新 TOML 文件: ${filePath}`);
@@ -512,7 +576,7 @@ export async function fixInvalidRoleUUIDs(roles: Role[], updateFiles: boolean = 
             
             for (const [filePath, rolesInFile] of fileUpdates) {
                 try {
-                    await updateRoleFile(filePath, rolesInFile);
+                    await updateRoleFile(filePath, rolesInFile, 'fixInvalidUuid');
                 } catch (error) {
                     console.error(`[RoleUuidManager] 修复文件失败: ${filePath}`, error);
                 }

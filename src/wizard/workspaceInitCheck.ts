@@ -2,6 +2,12 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../projectConfig/projectKeywordConfig';
+import {
+  CHARACTER_FILE_KEYWORDS,
+  REGEX_FILE_KEYWORDS,
+  SENSITIVE_FILE_KEYWORDS,
+  VOCABULARY_FILE_KEYWORDS,
+} from '../projectConfig/resourceFileNaming';
 
 const AUTO_OPEN_PROJECT_INIT_KEY = 'andrea.projectInit.autoOpenAfterCreate';
 
@@ -23,11 +29,12 @@ export interface ProjectInitStatus {
 
 function hasAnyResourceFilesUnder(root: string): boolean {
   if (!fs.existsSync(root)) { return false; }
-  const roleFileNameKeywords = [
-    'character-gallery','character','role','roles',
-    'sensitive-words','sensitive','vocabulary','vocab',
-    'regex-patterns','regex'
-  ];
+  const roleFileNameKeywords = Array.from(new Set([
+    ...CHARACTER_FILE_KEYWORDS,
+    ...SENSITIVE_FILE_KEYWORDS,
+    ...VOCABULARY_FILE_KEYWORDS,
+    ...REGEX_FILE_KEYWORDS,
+  ])).map(item => item.toLowerCase());
   const validExts = ['.json5','.txt','.md', '.csv', '.toml'];
   const stack: string[] = [root];
   while (stack.length) {

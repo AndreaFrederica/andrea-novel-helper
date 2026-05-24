@@ -11,21 +11,468 @@ import { Role, segmenter } from "../extension";
 import { getLastWord } from './segmenter';
 import { _onDidChangeRoles, _onDidFinishRoles, cleanRoles, roles, sensitiveSourceFiles } from '../activate';
 import { globalFileCache } from '../context/fileCache';
-import { parseMarkdownRoles } from './Parser/markdownParser';
+import { FIELD_ALIASES, parseMarkdownRoles } from './Parser/markdownParser';
 import { parseTomlRoles } from './Parser/tomlParser';
 import { generateCSpellDictionary } from './generateCSpellDictionary';
 import { generateUUIDv7, generateRoleNameHash } from './uuidUtils';
-import { ensureRoleUUIDs, fixInvalidRoleUUIDs } from './roleUuidManager';
+import { ensureRoleUUIDs, fixInvalidRoleUUIDs, setRoleUuidAutoFixWriteHook, type RoleUuidAutoFixWrite } from './roleUuidManager';
 import { loadRelationships, updateRelationships } from './relationshipLoader';
 import { enhanceAllRolesWithRelationships, clearRelationshipProperties } from './roleRelationshipEnhancer';
 import { SmartRoleAdder } from './roleMerger';
 import { isLikelyDelimitedRoleFileContent, parseDelimitedRoleFile } from './delimitedRoleFile';
 import { getProjectKeywordConfig, mergeProjectKeywordConfigs, type ProjectKeywordConfig } from '../projectConfig/projectKeywordConfig';
+import { DEFAULT_PROJECT_KEYWORD_CONFIG } from '../projectConfig/resourceFileNaming';
 import { applyGeneratedLookupKeys } from './roleLookupKeyGeneration';
 import { shouldIncrementalRoleLoad } from './roleLoadMode';
+import { flattenJsonRoleTree } from './roleHierarchy';
+import { applyRoleLineage } from './roleLineage';
 
 // 创建全局的角色管理器
 export let roleManager: SmartRoleAdder | null = null;
+
+const ROLE_FILE_LOOP_WINDOW_MS = 10_000;
+const ROLE_FILE_LOOP_MAX_REPEATED_SMALL_DIFFS = 3;
+const ROLE_FILE_SMALL_DIFF_MAX_CHARS = 256;
+const ROLE_FILE_SMALL_DIFF_MAX_RATIO = 0.03;
+type RoleFileAutoFixSnapshot = {
+	ts: number;
+	diffStart?: number;
+	diffEnd?: number;
+	streak: number;
+};
+const roleFileAutoFixSnapshots = new Map<string, RoleFileAutoFixSnapshot>();
+const isolatedRoleFiles = new Map<string, { reason: string; detail?: string; ts: number }>();
+const notifiedRoleFileIssues = new Set<string>();
+let roleFileDiagnosticCollection: vscode.DiagnosticCollection | undefined;
+const roleFileIsolationDiagnostics = new Map<string, vscode.Diagnostic[]>();
+const roleFileValidationDiagnostics = new Map<string, Map<string, vscode.Diagnostic[]>>();
+
+function normalizeRoleFileKey(filePath: string): string {
+	const resolved = path.resolve(filePath);
+	return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function getRoleFileDiagnostics(): vscode.DiagnosticCollection {
+	if (!roleFileDiagnosticCollection) {
+		roleFileDiagnosticCollection = vscode.languages.createDiagnosticCollection('Andrea Novel Helper Role Files');
+	}
+	return roleFileDiagnosticCollection;
+}
+
+function severityFromConfig(value: string | undefined, fallback: vscode.DiagnosticSeverity): vscode.DiagnosticSeverity {
+	switch ((value || '').toLowerCase()) {
+		case 'error': return vscode.DiagnosticSeverity.Error;
+		case 'warning': return vscode.DiagnosticSeverity.Warning;
+		case 'information': return vscode.DiagnosticSeverity.Information;
+		case 'hint': return vscode.DiagnosticSeverity.Hint;
+		case 'off':
+		case 'none': return fallback;
+		default: return fallback;
+	}
+}
+
+function roleFileBasicFieldSeverity(filePath: string): vscode.DiagnosticSeverity | undefined {
+	const configured = vscode.workspace.getConfiguration('AndreaNovelHelper', vscode.Uri.file(filePath))
+		.get<string>('roleFile.basicFieldsDiagnosticLevel', 'warning');
+	if (configured === 'off' || configured === 'none') {
+		return undefined;
+	}
+	return severityFromConfig(configured, vscode.DiagnosticSeverity.Warning);
+}
+
+function syncRoleFileDiagnostics(filePath: string): void {
+	const key = normalizeRoleFileKey(filePath);
+	const diagnostics = [
+		...(roleFileIsolationDiagnostics.get(key) || []),
+		...Array.from(roleFileValidationDiagnostics.get(key)?.values() || []).flat(),
+	];
+	try {
+		const collection = getRoleFileDiagnostics();
+		const uri = vscode.Uri.file(filePath);
+		if (diagnostics.length) {
+			collection.set(uri, diagnostics);
+		} else {
+			collection.delete(uri);
+		}
+	} catch { /* ignore */ }
+}
+
+function clearRoleFileIssue(filePath: string): void {
+	const key = normalizeRoleFileKey(filePath);
+	isolatedRoleFiles.delete(key);
+	notifiedRoleFileIssues.delete(key);
+	roleFileIsolationDiagnostics.delete(key);
+	syncRoleFileDiagnostics(filePath);
+}
+
+export function clearRoleFileLoadIssues(): void {
+	isolatedRoleFiles.clear();
+	notifiedRoleFileIssues.clear();
+	roleFileAutoFixSnapshots.clear();
+	roleFileIsolationDiagnostics.clear();
+	roleFileValidationDiagnostics.clear();
+	try { roleFileDiagnosticCollection?.clear(); } catch { /* ignore */ }
+}
+
+function isolateRoleFile(filePath: string, reason: string, detail?: string): void {
+	const key = normalizeRoleFileKey(filePath);
+	isolatedRoleFiles.set(key, { reason, detail, ts: Date.now() });
+
+	const message = detail ? `${reason}: ${detail}` : reason;
+	const diagnostic = new vscode.Diagnostic(
+		new vscode.Range(0, 0, 0, 0),
+		`角色文件已被临时隔离。${message}`,
+		vscode.DiagnosticSeverity.Error
+	);
+	diagnostic.source = 'Andrea Novel Helper';
+	diagnostic.code = 'role-file-isolated';
+	roleFileIsolationDiagnostics.set(key, [diagnostic]);
+	syncRoleFileDiagnostics(filePath);
+
+	if (notifiedRoleFileIssues.has(key)) {
+		return;
+	}
+	notifiedRoleFileIssues.add(key);
+	const fileName = path.basename(filePath);
+	void vscode.window.showWarningMessage(
+		`角色文件格式错误或反复触发加载，已临时跳过：${fileName}`,
+		'打开文件',
+		'重新加载角色库'
+	).then(action => {
+		if (action === '打开文件') {
+			void vscode.window.showTextDocument(vscode.Uri.file(filePath), { preview: false });
+		} else if (action === '重新加载角色库') {
+			void vscode.commands.executeCommand('AndreaNovelHelper.refreshRoles');
+		}
+	});
+}
+
+function isRoleFileIsolated(filePath: string): boolean {
+	return isolatedRoleFiles.has(normalizeRoleFileKey(filePath));
+}
+
+function getChangedRange(previous: string, next: string): { start: number; prevEnd: number; nextEnd: number; prevLen: number; nextLen: number } | undefined {
+	if (previous === next) {
+		return undefined;
+	}
+	let start = 0;
+	const prevLength = previous.length;
+	const nextLength = next.length;
+	while (start < prevLength && start < nextLength && previous.charCodeAt(start) === next.charCodeAt(start)) {
+		start++;
+	}
+
+	let prevEnd = prevLength;
+	let nextEnd = nextLength;
+	while (prevEnd > start && nextEnd > start && previous.charCodeAt(prevEnd - 1) === next.charCodeAt(nextEnd - 1)) {
+		prevEnd--;
+		nextEnd--;
+	}
+
+	return {
+		start,
+		prevEnd,
+		nextEnd,
+		prevLen: prevEnd - start,
+		nextLen: nextEnd - start,
+	};
+}
+
+function rangesOverlapLoosely(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+	const slack = 64;
+	return Math.max(aStart, bStart) <= Math.min(aEnd, bEnd) + slack;
+}
+
+function recordRoleUuidAutoFixWrite(event: RoleUuidAutoFixWrite): void {
+	if (isRoleFileIsolated(event.filePath)) {
+		return;
+	}
+	const diff = getChangedRange(event.before, event.after);
+	if (!diff) {
+		return;
+	}
+
+	const key = normalizeRoleFileKey(event.filePath);
+	const now = Date.now();
+	const previous = roleFileAutoFixSnapshots.get(key);
+
+	const elapsed = previous ? now - previous.ts : Number.POSITIVE_INFINITY;
+	const changedChars = Math.max(diff.prevLen, diff.nextLen);
+	const smallEnough = changedChars <= ROLE_FILE_SMALL_DIFF_MAX_CHARS
+		|| changedChars <= Math.max(event.before.length, event.after.length) * ROLE_FILE_SMALL_DIFF_MAX_RATIO;
+	const sameRegion = !previous || previous.diffStart === undefined || previous.diffEnd === undefined
+		? true
+		: rangesOverlapLoosely(previous.diffStart, previous.diffEnd, diff.start, diff.nextEnd);
+	const countsAsLoopMutation = !!previous && elapsed <= ROLE_FILE_LOOP_WINDOW_MS && smallEnough && sameRegion;
+	const streak = countsAsLoopMutation ? previous.streak + 1 : 0;
+
+	roleFileAutoFixSnapshots.set(key, {
+		ts: now,
+		diffStart: diff.start,
+		diffEnd: diff.nextEnd,
+		streak,
+	});
+
+	if (streak >= ROLE_FILE_LOOP_MAX_REPEATED_SMALL_DIFFS) {
+		isolateRoleFile(
+			event.filePath,
+			'角色文件同一小段内容短时间内反复变化，疑似解析/自动修复回环',
+			`${Math.round(ROLE_FILE_LOOP_WINDOW_MS / 1000)} 秒内同一区域发生 ${streak + 1} 次小范围变更`
+		);
+	}
+}
+
+setRoleUuidAutoFixWriteHook(recordRoleUuidAutoFixWrite);
+
+function reportRoleFileFormatError(filePath: string, fileName: string, error: unknown): void {
+	const message = error instanceof Error ? error.message : String(error);
+	isolateRoleFile(filePath, `角色文件格式错误，已跳过 ${fileName}`, message);
+}
+
+function lineOfFirstMatch(content: string, needle: string | undefined): number {
+	if (!needle) {
+		return 0;
+	}
+	const index = content.indexOf(needle);
+	if (index < 0) {
+		return 0;
+	}
+	return content.slice(0, index).split(/\r?\n/).length - 1;
+}
+
+function setRoleFileValidationDiagnostics(filePath: string, diagnostics: vscode.Diagnostic[], bucket = 'basic'): void {
+	const key = normalizeRoleFileKey(filePath);
+	let buckets = roleFileValidationDiagnostics.get(key);
+	if (!buckets) {
+		buckets = new Map<string, vscode.Diagnostic[]>();
+		roleFileValidationDiagnostics.set(key, buckets);
+	}
+	if (diagnostics.length) {
+		buckets.set(bucket, diagnostics);
+	} else {
+		buckets.delete(bucket);
+		if (buckets.size === 0) {
+			roleFileValidationDiagnostics.delete(key);
+		}
+	}
+	syncRoleFileDiagnostics(filePath);
+}
+
+function validateLoadedRoleBasics(
+	filePath: string,
+	content: string,
+	rolesToValidate: Array<Role | Partial<Role>>,
+	options?: { requireExplicitType?: boolean; explicitType?: (role: Role | Partial<Role>, index: number) => boolean }
+): void {
+	if (filePath.toLowerCase().endsWith('.txt')) {
+		setRoleFileValidationDiagnostics(filePath, []);
+		return;
+	}
+	const severity = roleFileBasicFieldSeverity(filePath);
+	if (severity === undefined) {
+		setRoleFileValidationDiagnostics(filePath, []);
+		return;
+	}
+
+	const diagnostics: vscode.Diagnostic[] = [];
+	rolesToValidate.forEach((role, index) => {
+		const missing: string[] = [];
+		if (!role.name || String(role.name).trim() === '') {
+			missing.push('name/名称');
+		}
+		const hasType = options?.requireExplicitType
+			? !!options.explicitType?.(role, index)
+			: !!role.type && String(role.type).trim() !== '';
+		if (!hasType) {
+			missing.push('type/类型');
+		}
+		if (!missing.length) {
+			return;
+		}
+
+		const line = lineOfFirstMatch(content, role.name ? String(role.name) : undefined);
+		const diagnostic = new vscode.Diagnostic(
+			new vscode.Range(line, 0, line, 0),
+			`角色条目缺少基础字段：${missing.join(', ')}`,
+			severity
+		);
+		diagnostic.source = 'Andrea Novel Helper';
+		diagnostic.code = 'role-file-basic-fields';
+		diagnostics.push(diagnostic);
+	});
+	setRoleFileValidationDiagnostics(filePath, diagnostics);
+}
+
+function escapeRegex(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function markdownRoleHasTypeField(content: string, roleName: string | undefined): boolean {
+	if (!roleName) {
+		return false;
+	}
+	const heading = new RegExp(`^(#{1,6})\\s+${escapeRegex(roleName)}\\s*$`, 'm').exec(content);
+	if (!heading || heading.index === undefined) {
+		return false;
+	}
+	const level = heading[1].length;
+	const bodyStart = heading.index + heading[0].length;
+	const nextHeading = new RegExp(`^#{1,${level}}\\s+`, 'm').exec(content.slice(bodyStart));
+	const body = nextHeading ? content.slice(bodyStart, bodyStart + nextHeading.index) : content.slice(bodyStart);
+	return new RegExp(`^#{${level + 1},6}\\s+(?:type|类型)\\s*$`, 'mi').test(body);
+}
+
+type MarkdownHeadingInfo = { line: number; level: number; text: string };
+type MarkdownHeadingWithField = MarkdownHeadingInfo & { field: string };
+
+function normalizeMarkdownSemanticField(headerText: string): string | undefined {
+	const trimmed = headerText.trim();
+	const lower = trimmed.toLowerCase();
+	for (const key of Object.keys(FIELD_ALIASES)) {
+		if (key.toLowerCase() === lower) {
+			return key;
+		}
+	}
+	for (const [key, value] of Object.entries(FIELD_ALIASES)) {
+		if (value === trimmed) {
+			return key;
+		}
+	}
+	return undefined;
+}
+
+function collectMarkdownHeadings(lines: string[]): MarkdownHeadingInfo[] {
+	const headings: MarkdownHeadingInfo[] = [];
+	lines.forEach((line, index) => {
+		const match = line.trim().match(/^(#{1,6})\s+(.+)$/);
+		if (!match) {
+			return;
+		}
+		headings.push({ line: index, level: match[1].length, text: match[2].trim() });
+	});
+	return headings;
+}
+
+function markdownHeadingChildren(
+	headings: MarkdownHeadingInfo[],
+	headingIndex: number,
+): { start: number; end: number; children: MarkdownHeadingInfo[] } {
+	const heading = headings[headingIndex];
+	const nextSameOrParent = headings.findIndex((item, index) => index > headingIndex && item.level <= heading.level);
+	const end = nextSameOrParent >= 0 ? nextSameOrParent : headings.length;
+	return { start: headingIndex + 1, end, children: headings.slice(headingIndex + 1, end) };
+}
+
+function markdownDirectSemanticFields(
+	headings: MarkdownHeadingInfo[],
+	headingIndex: number,
+): MarkdownHeadingWithField[] {
+	const heading = headings[headingIndex];
+	const { children } = markdownHeadingChildren(headings, headingIndex);
+	return children
+		.filter(item => item.level === heading.level + 1)
+		.map(item => ({ ...item, field: normalizeMarkdownSemanticField(item.text) }))
+		.filter((item): item is MarkdownHeadingWithField => !!item.field);
+}
+
+function updateMarkdownRoleStructureDiagnostics(filePath: string, content: string): void {
+	const diagnostics: vscode.Diagnostic[] = [];
+	const lines = content.split(/\r?\n/);
+	const headings = collectMarkdownHeadings(lines);
+
+	for (let i = 0; i < headings.length; i++) {
+		const heading = headings[i];
+		const fieldName = normalizeMarkdownSemanticField(heading.text);
+		if (fieldName) {
+			continue;
+		}
+
+		const { children: childHeadings } = markdownHeadingChildren(headings, i);
+		if (!childHeadings.length) {
+			continue;
+		}
+
+		const directFields = markdownDirectSemanticFields(headings, i);
+		const fieldGroups = new Map<string, Array<MarkdownHeadingInfo & { field: string }>>();
+		for (const item of directFields) {
+			const group = fieldGroups.get(item.field) || [];
+			group.push(item);
+			fieldGroups.set(item.field, group);
+		}
+		for (const [field, group] of fieldGroups.entries()) {
+			if (group.length <= 1) {
+				continue;
+			}
+			for (const duplicate of group.slice(1)) {
+				const diagnostic = new vscode.Diagnostic(
+					new vscode.Range(duplicate.line, 0, duplicate.line, Math.max(1, lines[duplicate.line]?.length || 1)),
+					`角色条目 "${heading.text}" 内重复定义了语义字段 "${field}"。同一角色的基础语义字段不能重合，请合并或删除重复字段。`,
+					vscode.DiagnosticSeverity.Error
+				);
+				diagnostic.source = 'Andrea Novel Helper';
+				diagnostic.code = 'role-file-duplicate-semantic-field';
+				diagnostics.push(diagnostic);
+			}
+		}
+	}
+
+	setRoleFileValidationDiagnostics(filePath, diagnostics, 'markdown-structure');
+}
+
+function updateMarkdownUuidFieldDiagnostics(filePath: string, content: string): void {
+	const diagnostics: vscode.Diagnostic[] = [];
+	const lines = content.split(/\r?\n/);
+	for (let i = 0; i < lines.length; i++) {
+		const heading = lines[i].trim().match(/^(#{1,6})\s+UUID\s*$/i);
+		if (!heading) {
+			continue;
+		}
+		const level = heading[1].length;
+		let seenUuid = false;
+		for (let j = i + 1; j < lines.length; j++) {
+			const trimmed = lines[j].trim();
+			const nextHeading = trimmed.match(/^(#{1,6})\s+/);
+			if (nextHeading && nextHeading[1].length <= level) {
+				break;
+			}
+			if (!trimmed) {
+				continue;
+			}
+			if (!seenUuid && /\b(?:urn:uuid:)?\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?\b/i.test(trimmed)) {
+				seenUuid = true;
+				continue;
+			}
+			if (seenUuid) {
+				const diagnostic = new vscode.Diagnostic(
+					new vscode.Range(j, 0, j, Math.max(1, lines[j].length)),
+					'UUID 字段包含 UUID 之外的内容。解析器只会读取第一枚 UUID；请把表格、正文或其他字段移出 UUID 段，避免角色库格式错误。',
+					vscode.DiagnosticSeverity.Error
+				);
+				diagnostic.source = 'Andrea Novel Helper';
+				diagnostic.code = 'role-file-dirty-uuid-field';
+				diagnostics.push(diagnostic);
+				break;
+			}
+		}
+	}
+	setRoleFileValidationDiagnostics(filePath, diagnostics, 'dirty-uuid');
+}
+
+function tomlRoleHasTypeField(content: string, roleName: string | undefined): boolean {
+	if (!roleName) {
+		return false;
+	}
+	const namePattern = new RegExp(`^\\s*name\\s*=\\s*["']${escapeRegex(roleName)}["']\\s*$`, 'm');
+	const nameMatch = namePattern.exec(content);
+	if (!nameMatch || nameMatch.index === undefined) {
+		return false;
+	}
+	const sectionStart = content.lastIndexOf('[[', nameMatch.index);
+	const from = sectionStart >= 0 ? sectionStart : nameMatch.index;
+	const nextSectionRel = content.slice(nameMatch.index + nameMatch[0].length).search(new RegExp('^\\s*\\[\\[', 'm'));
+	const to = nextSectionRel >= 0 ? nameMatch.index + nameMatch[0].length + nextSectionRel : content.length;
+	return /^\s*type\s*=/m.test(content.slice(from, to));
+}
 
 /**
  * 智能添加角色到 roles 数组
@@ -559,6 +1006,9 @@ export function mergeStats(a: TextStats, b: TextStats): TextStats {
 export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]) {
 
 	// 如果传入 changedFiles 仍按原先同步增量路径（保持兼容），否则启动异步批次扫描。
+	if (forceRefresh && !changedFiles) {
+		clearRoleFileLoadIssues();
+	}
 
 	const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
 	const folders = vscode.workspace.workspaceFolders;
@@ -606,6 +1056,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	if (shouldIncrementalUpdate) {
 		console.log(`loadRoles: 增量更新 ${changedRoleFiles.length} 个文件`);
 		performIncrementalUpdate(changedRoleFiles, novelHelperRoot);
+		finalizeRoleCollection();
 		
 		// 增量更新关系表
 		updateRelationships(changedRoleFiles, novelHelperRoot).then(() => {
@@ -758,6 +1209,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 				ensureStatusBar();
 			}
 			updateStatusBar(true);
+			finalizeRoleCollection();
 			
 			// 为角色添加 UUID（异步执行，不阻塞主流程）
 			ensureRoleUUIDs(roles, true).catch(error => {
@@ -938,13 +1390,6 @@ function roleFileDetectionLog(message: string): void {
 	}
 }
 
-const DEFAULT_PROJECT_KEYWORD_CONFIG: ProjectKeywordConfig = {
-	characterFileKeywords: ['character-gallery', 'character', 'role', 'roles', '角色', '人物'],
-	sensitiveWordsFileKeywords: ['sensitive-words', 'sensitive', '敏感词'],
-	vocabularyFileKeywords: ['vocabulary', 'vocab', '词汇', '词庫', '词库', '术语'],
-	regexFileKeywords: ['regex-patterns', 'regex', '正则', '正則', '正则表达式', '正則表達式'],
-};
-
 function resolveRoleFileKeywordConfig(fileFullPath?: string): ProjectKeywordConfig {
 	return mergeProjectKeywordConfigs(DEFAULT_PROJECT_KEYWORD_CONFIG, getProjectKeywordConfig(fileFullPath));
 }
@@ -1057,6 +1502,10 @@ export function isRoleFile(fileName: string, fileFullPath?: string): boolean {
  */
 function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 	console.log(`loadRoleFile: 加载文件 ${filePath}`);
+	if (isRoleFileIsolated(filePath)) {
+		console.warn(`loadRoleFile: 文件已被隔离，跳过 ${filePath}`);
+		return;
+	}
 	
 	try {
 		// 使用缓存获取文件内容
@@ -1090,10 +1539,19 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 		try {
 			if (fileType === '敏感词') { sensitiveSourceFiles.add(path.resolve(filePath).toLowerCase()); }
 		} catch { /* ignore */ }
+		clearRoleFileIssue(filePath);
 	} catch (error) {
 		console.error(`loadRoleFile: 加载文件失败 ${filePath}: ${error}`);
-		vscode.window.showErrorMessage(`加载角色文件失败: ${fileName} - ${error}`);
+		reportRoleFileFormatError(filePath, fileName, error);
 	}
+}
+
+function finalizeRoleCollection(): void {
+	applyRoleLineage(roles);
+	for (const role of roles) {
+		applyGeneratedLookupKeys(role, role.sourcePath);
+	}
+	roleManager = new SmartRoleAdder(roles);
 }
 
 /**
@@ -1131,27 +1589,37 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 		
 		// 支持数组格式和对象格式
 		if (Array.isArray(data)) {
-			rolesArray = data;
+			rolesArray = flattenJsonRoleTree(data, defaultType);
 		} else if (typeof data === 'object' && data !== null) {
 			// 如果是对象，可能包含元数据，查找角色数组
 			if (data.roles && Array.isArray(data.roles)) {
-				rolesArray = data.roles;
+				rolesArray = flattenJsonRoleTree(data.roles, defaultType);
 			} else if (data.characters && Array.isArray(data.characters)) {
-				rolesArray = data.characters;
+				rolesArray = flattenJsonRoleTree(data.characters, defaultType);
 			} else {
 				// 将对象的每个属性作为一个角色
-				rolesArray = Object.entries(data).map(([name, roleData]) => ({
-					name,
-					...(typeof roleData === 'object' ? roleData : { type: defaultType }),
-				})) as Role[];
+				rolesArray = flattenJsonRoleTree(
+					Object.entries(data).map(([name, roleData]) => (
+						typeof roleData === 'object' && roleData !== null
+							? { name, ...roleData as Record<string, unknown> }
+							: { name, type: defaultType }
+					)),
+					defaultType
+				);
 			}
 		} else {
 			console.warn(`loadJSON5RoleFile: ${filePath} 包含无效的数据类型: ${typeof data}`);
 			return;
 		}
+
+		validateLoadedRoleBasics(filePath, content, rolesArray, {
+			requireExplicitType: true,
+			explicitType: role => (role as any).__jsonRoleHadExplicitType === true,
+		});
 		
 		// 为每个角色添加路径信息
 		for (const role of rolesArray) {
+			delete (role as any).__jsonRoleHadExplicitType;
 			role.packagePath = packagePath;
 			role.sourcePath = filePath;
 			
@@ -1170,6 +1638,7 @@ function loadJSON5RoleFile(content: string, filePath: string, packagePath: strin
 		// 异步校验并修复（如果 UUID 格式不合法则替换为 UUID v7 并写回文件）
 		void fixInvalidRoleUUIDs(rolesArray, true).catch(err => {
 			console.error('[loadJSON5RoleFile] fixInvalidRoleUUIDs 失败:', err);
+			reportRoleFileFormatError(filePath, path.basename(filePath), err);
 		});
 	} catch (error) {
 		// 提供更详细的错误信息
@@ -1195,6 +1664,12 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 	
 	try {
 		const markdownRoles = parseMarkdownRoles(content, filePath, packagePath, defaultType);
+		validateLoadedRoleBasics(filePath, content, markdownRoles, {
+			requireExplicitType: true,
+			explicitType: role => markdownRoleHasTypeField(content, role.name),
+		});
+		updateMarkdownRoleStructureDiagnostics(filePath, content);
+		updateMarkdownUuidFieldDiagnostics(filePath, content);
 		for (const role of markdownRoles) {
 			addRole(role);
 			if (role.type === '敏感词' && role.sourcePath) {
@@ -1206,6 +1681,7 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 		// 异步校验并修复 UUID
 		void fixInvalidRoleUUIDs(markdownRoles, true).catch(err => {
 			console.error('[loadMarkdownRoleFile] fixInvalidRoleUUIDs 失败:', err);
+			reportRoleFileFormatError(filePath, path.basename(filePath), err);
 		});
 	} catch (error) {
 		console.error(`loadMarkdownRoleFile: 解析 Markdown 文件失败 ${filePath}: ${error}`);
@@ -1216,6 +1692,11 @@ function loadMarkdownRoleFile(content: string, filePath: string, packagePath: st
 function loadDelimitedRoleFile(content: string, filePath: string, packagePath: string, defaultType: string) {
 	try {
 		const parsed = parseDelimitedRoleFile(content, filePath, packagePath, defaultType);
+		const hasTypeHeader = parsed.hasHeader && parsed.headers.some(header => /^(type|类型)$/i.test(header.trim()));
+		validateLoadedRoleBasics(filePath, content, parsed.roles, {
+			requireExplicitType: true,
+			explicitType: () => hasTypeHeader,
+		});
 		for (const role of parsed.roles) {
 			addRole(role);
 			if (role.type === '敏感词' && role.sourcePath) {
@@ -1226,6 +1707,7 @@ function loadDelimitedRoleFile(content: string, filePath: string, packagePath: s
 
 		void fixInvalidRoleUUIDs(parsed.roles, true).catch(err => {
 			console.error('[loadDelimitedRoleFile] fixInvalidRoleUUIDs 失败:', err);
+			reportRoleFileFormatError(filePath, path.basename(filePath), err);
 		});
 	} catch (error) {
 		console.error(`loadDelimitedRoleFile: 解析分隔文本文件失败 ${filePath}: ${error}`);
@@ -1241,6 +1723,10 @@ function loadTomlRoleFile(content: string, filePath: string, packagePath: string
 
 	try {
 		const tomlRoles = parseTomlRoles(content, filePath, packagePath, defaultType);
+		validateLoadedRoleBasics(filePath, content, tomlRoles, {
+			requireExplicitType: true,
+			explicitType: role => tomlRoleHasTypeField(content, role.name),
+		});
 		for (const role of tomlRoles) {
 			addRole(role);
 			if (role.type === '敏感词' && role.sourcePath) {
@@ -1251,6 +1737,7 @@ function loadTomlRoleFile(content: string, filePath: string, packagePath: string
 
 		void fixInvalidRoleUUIDs(tomlRoles, true).catch(err => {
 			console.error('[loadTomlRoleFile] fixInvalidRoleUUIDs 失败:', err);
+			reportRoleFileFormatError(filePath, path.basename(filePath), err);
 		});
 	} catch (error) {
 		console.error(`loadTomlRoleFile: 解析 TOML 文件失败 ${filePath}: ${error}`);

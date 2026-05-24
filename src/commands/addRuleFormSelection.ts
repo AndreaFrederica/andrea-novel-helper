@@ -6,6 +6,7 @@ import { updateDecorations } from '../events/updateDecorations';
 import { selectOrCreateFile } from './addRoleFileSelector';
 import { addRoleToFile } from '../utils/roleFileHandler';
 import { generateRoleNameHash } from '../utils/uuidUtils';
+import { VOCABULARY_FILTER_KEYWORDS } from '../projectConfig/resourceFileNaming';
 
 export const addRoleFromSelection = async () => {
     // 从配置获取默认文件名并处理路径前缀
@@ -30,7 +31,7 @@ export const addRoleFromSelection = async () => {
             customFilter: (fileName: string) => {
                 const lowerFileName = fileName.toLowerCase();
                 // 排除词汇相关文件 - 如果包含词汇关键词就过滤掉
-                const vocabKeywords = ['vocabulary', 'vocab', 'term', '词汇', '术语'];
+                const vocabKeywords = VOCABULARY_FILTER_KEYWORDS;
                 return !vocabKeywords.some(keyword => lowerFileName.includes(keyword));
             }
         }

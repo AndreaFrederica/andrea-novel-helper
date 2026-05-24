@@ -25,6 +25,7 @@ import { addRoleToFile } from '../../utils/roleFileHandler';
 import { loadRoles } from '../../activate';
 import { updateDecorations } from '../../events/updateDecorations';
 import { uniqueRoleKeys } from '../../utils/roleLookupKeys';
+import { VOCABULARY_FILTER_KEYWORDS } from '../../projectConfig/resourceFileNaming';
 
 function buildSpellingLookupVariants(values: Array<string | undefined | null>): string[] {
 	const variants: string[] = [];
@@ -521,7 +522,7 @@ async function createCharacterName(selectedName: any, generationOptions?: any): 
 			includeCsv: true,
 			customFilter: (fileName: string) => {
 				const lowerFileName = fileName.toLowerCase();
-				const vocabKeywords = ['vocabulary', 'vocab', 'term', '词汇', '术语'];
+				const vocabKeywords = VOCABULARY_FILTER_KEYWORDS;
 				return !vocabKeywords.some(keyword => lowerFileName.includes(keyword));
 			}
 		}

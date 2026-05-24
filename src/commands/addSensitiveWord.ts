@@ -6,6 +6,7 @@ import { updateDecorations } from '../events/updateDecorations';
 import { selectOrCreateFile } from './addRoleFileSelector';
 import { addRoleToFile } from '../utils/roleFileHandler';
 import { generateRoleNameHash } from '../utils/uuidUtils';
+import { CHARACTER_FILTER_KEYWORDS, VOCABULARY_FILTER_KEYWORDS } from '../projectConfig/resourceFileNaming';
 
 
 
@@ -32,9 +33,9 @@ export const addSensitiveCmd_obj = async () => {
             customFilter: (fileName: string) => {
                 const lowerFileName = fileName.toLowerCase();
                 // 排除角色相关文件
-                const roleKeywords = ['character', 'role', 'gallery', '角色', '人物'];
+                const roleKeywords = CHARACTER_FILTER_KEYWORDS;
                 // 排除词汇相关文件
-                const vocabKeywords = ['vocabulary', 'vocab', 'term', '词汇', '术语'];
+                const vocabKeywords = VOCABULARY_FILTER_KEYWORDS;
                 return !roleKeywords.some(keyword => lowerFileName.includes(keyword)) &&
                        !vocabKeywords.some(keyword => lowerFileName.includes(keyword));
             }

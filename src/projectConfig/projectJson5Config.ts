@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import JSON5 from 'json5';
 import { isLookupKeyFamily, setExtendedLookupKeyPrefixes, uniqueRoleKeys } from '../utils/roleLookupKeys';
 import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from './constants';
+import { LEGACY_RESOURCE_KEYWORDS } from './resourceFileNaming';
 
 export type ProjectLibraryTargetKey = 'rolesFile' | 'sensitiveWordsFile' | 'vocabularyFile' | 'regexPatternsFile';
 
@@ -24,9 +25,9 @@ export interface ProjectJson5ExtraFieldDefinition {
 }
 
 export const PROJECT_LIBRARY_TARGET_DEFAULTS: Record<ProjectLibraryTargetKey, string> = {
-    rolesFile: 'novel-helper/character-gallery.json5',
-    sensitiveWordsFile: 'novel-helper/sensitive-words.json5',
-    vocabularyFile: 'novel-helper/vocabulary.json5',
+    rolesFile: `novel-helper/${LEGACY_RESOURCE_KEYWORDS.character}.json5`,
+    sensitiveWordsFile: `novel-helper/${LEGACY_RESOURCE_KEYWORDS.sensitive}.json5`,
+    vocabularyFile: `novel-helper/${LEGACY_RESOURCE_KEYWORDS.vocabulary}.json5`,
     regexPatternsFile: 'novel-helper/regex-patterns.json5',
 };
 

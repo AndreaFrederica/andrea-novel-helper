@@ -2,6 +2,9 @@ import * as assert from 'assert';
 import { SmartRoleAdder } from '../utils/roleMerger';
 import { shouldIncrementalRoleLoad } from '../utils/roleLoadMode';
 import { Role } from '../extension';
+import { LEGACY_RESOURCE_KEYWORDS } from '../projectConfig/resourceFileNaming';
+
+const VOCABULARY_FILE = `${LEGACY_RESOURCE_KEYWORDS.vocabulary}.json5`;
 
 function role(name: string, uuid: string, sourcePath: string, extra: Partial<Role> = {}): Role {
     return {
@@ -35,14 +38,14 @@ suite('Role Load Refresh Unit Tests', () => {
     test('reusing SmartRoleAdder after full clear documents stale-map failure mode', () => {
         const loadedRoles = [
             role('Alice', 'uuid-a', 'roles.json5'),
-            role('Bob', 'uuid-b', 'vocabulary.json5'),
+            role('Bob', 'uuid-b', VOCABULARY_FILE),
         ];
         const manager = new SmartRoleAdder(loadedRoles);
 
         loadedRoles.length = 0;
         addAll(manager, [
             role('Alice', 'uuid-a', 'roles.json5'),
-            role('Bob', 'uuid-b', 'vocabulary.json5'),
+            role('Bob', 'uuid-b', VOCABULARY_FILE),
             role('Carol', 'uuid-c', 'sensitive.json5'),
         ]);
 
@@ -56,14 +59,14 @@ suite('Role Load Refresh Unit Tests', () => {
     test('rebuilding SmartRoleAdder after full clear restores all UUID roles', () => {
         const loadedRoles = [
             role('Alice', 'uuid-a', 'roles.json5'),
-            role('Bob', 'uuid-b', 'vocabulary.json5'),
+            role('Bob', 'uuid-b', VOCABULARY_FILE),
         ];
 
         loadedRoles.length = 0;
         const manager = new SmartRoleAdder(loadedRoles);
         addAll(manager, [
             role('Alice', 'uuid-a', 'roles.json5'),
-            role('Bob', 'uuid-b', 'vocabulary.json5'),
+            role('Bob', 'uuid-b', VOCABULARY_FILE),
             role('Carol', 'uuid-c', 'sensitive.json5'),
         ]);
 
@@ -73,16 +76,16 @@ suite('Role Load Refresh Unit Tests', () => {
     test('incremental reload only replaces roles from touched file', () => {
         const loadedRoles = [
             role('Alice', 'uuid-a', 'roles.json5'),
-            role('Bob', 'uuid-b', 'vocabulary.json5'),
-            role('OldTerm', 'uuid-old-term', 'vocabulary.json5'),
+            role('Bob', 'uuid-b', VOCABULARY_FILE),
+            role('OldTerm', 'uuid-old-term', VOCABULARY_FILE),
             role('Carol', 'uuid-c', 'sensitive.json5'),
         ];
         const manager = new SmartRoleAdder(loadedRoles);
 
-        manager.removeRolesByFile('vocabulary.json5');
+        manager.removeRolesByFile(VOCABULARY_FILE);
         addAll(manager, [
-            role('Bob', 'uuid-b', 'vocabulary.json5', { description: 'updated' }),
-            role('NewTerm', 'uuid-new-term', 'vocabulary.json5'),
+            role('Bob', 'uuid-b', VOCABULARY_FILE, { description: 'updated' }),
+            role('NewTerm', 'uuid-new-term', VOCABULARY_FILE),
         ]);
 
         assert.deepStrictEqual(names(loadedRoles), ['Alice', 'Bob', 'Carol', 'NewTerm']);

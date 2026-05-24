@@ -14,6 +14,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import JSON5 from 'json5';
 import { analyzeText, countAndAnalyzeRaw, TextStats } from './wordCountCore';
+import {
+    CHARACTER_FILE_KEYWORDS,
+    REGEX_FILE_KEYWORDS,
+    SENSITIVE_FILE_KEYWORDS,
+    VOCABULARY_FILE_KEYWORDS,
+} from '../../projectConfig/resourceFileNaming';
 
 // ===================== 字段跳过表 =====================
 
@@ -50,11 +56,12 @@ const SKIP_KEYS = new Set([
 // ===================== 文件识别 =====================
 
 /** 对应 utils.ts isRoleFile 的英文关键词表（不依赖 vscode，仅做文件名匹配） */
-const ROLE_EN_KEYWORDS = [
-    'character-gallery', 'character', 'role', 'roles',
-    'sensitive-words', 'sensitive', 'vocabulary', 'vocab',
-    'regex-patterns',
-];
+const ROLE_EN_KEYWORDS = Array.from(new Set([
+    ...CHARACTER_FILE_KEYWORDS,
+    ...SENSITIVE_FILE_KEYWORDS,
+    ...VOCABULARY_FILE_KEYWORDS,
+    ...REGEX_FILE_KEYWORDS,
+])).map(item => item.toLowerCase());
 
 /** 中文关键词（保留原始大小写进行匹配） */
 const ROLE_ZH_KEYWORDS = [

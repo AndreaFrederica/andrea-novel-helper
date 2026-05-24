@@ -7,6 +7,7 @@ import {
     PROJECT_CONFIG_MARKDOWN_FILE_NAME,
     PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME,
 } from './constants';
+import { LEGACY_RESOURCE_KEYWORDS } from './resourceFileNaming';
 export {
     PROJECT_CONFIG_MARKDOWN_FILE_NAME,
     PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME,
@@ -161,9 +162,9 @@ export function generateProjectKeywordConfigTemplate(options?: {
     return [
         '{',
         '  // 项目级资源文件目标路径（相对于工作区根目录）',
-        `  rolesFile: '${(options?.rolesFile || 'novel-helper/character-gallery.json5').replace(/\\/g, '/')}',`,
-        `  sensitiveWordsFile: '${(options?.sensitiveWordsFile || 'novel-helper/sensitive-words.json5').replace(/\\/g, '/')}',`,
-        `  vocabularyFile: '${(options?.vocabularyFile || 'novel-helper/vocabulary.json5').replace(/\\/g, '/')}',`,
+        `  rolesFile: '${(options?.rolesFile || `novel-helper/${LEGACY_RESOURCE_KEYWORDS.character}.json5`).replace(/\\/g, '/')}',`,
+        `  sensitiveWordsFile: '${(options?.sensitiveWordsFile || `novel-helper/${LEGACY_RESOURCE_KEYWORDS.sensitive}.json5`).replace(/\\/g, '/')}',`,
+        `  vocabularyFile: '${(options?.vocabularyFile || `novel-helper/${LEGACY_RESOURCE_KEYWORDS.vocabulary}.json5`).replace(/\\/g, '/')}',`,
         `  regexPatternsFile: '${(options?.regexPatternsFile || 'novel-helper/regex-patterns.json5').replace(/\\/g, '/')}',`,
         '',
         '  // 新建角色时默认补齐的索引键字段（在全局默认基础上扩充，可写后缀或完整字段名）',

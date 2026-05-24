@@ -6,6 +6,13 @@
 import { Role } from '../../extension';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import {
+    CHARACTER_FILE_KEYWORDS,
+    LEGACY_RESOURCE_KEYWORDS,
+    SENSITIVE_FILE_KEYWORDS,
+    VOCABULARY_FILTER_KEYWORDS,
+    VOCABULARY_FILE_KEYWORDS,
+} from '../../projectConfig/resourceFileNaming';
 
 /**
  * 字段的中文别名映射
@@ -77,7 +84,18 @@ export const FIELD_ALIASES: { [key: string]: string } = {
     'flag': '正则标志',
     // 常用控制字段
     'priority': '优先级',
-    'wordSegmentFilter': '分词过滤'
+    'wordSegmentFilter': '分词过滤',
+    // 继承
+    'extend': '继承自',
+    'extends': '继承自',
+    // 派生
+    'derived': '派生自',
+    'derivedFrom': '派生自',
+    // 组合
+    'includes': '包含角色',
+    'composedOf': '组合角色',
+    'uses': '引用角色',
+    'parts': '部件',
 };
 
 /**
@@ -104,6 +122,16 @@ function getStandardFieldName(fieldName: string): string {
     return normalizedField;
 }
 
+function extractFirstUuidLikeValue(text: string): string | undefined {
+    const plain = stripMarkdown(text).trim();
+    const hyphenated = plain.match(/\b(?:urn:uuid:)?\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?\b/i);
+    if (hyphenated) {
+        return hyphenated[0].replace(/^urn:uuid:/i, '').replace(/^\{|\}$/g, '');
+    }
+    const compact = plain.match(/\b[0-9a-f]{30,32}\b/i);
+    return compact ? compact[0] : undefined;
+}
+
 /**
  * 解析 Markdown 内容为角色数组
  */
@@ -119,6 +147,14 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
     let isInRole = false; // 标记是否在角色定义中
     let roleDirectContent: string[] = []; // 角色下面的直接内容（不属于任何字段）
     let fencedBlockMarker: '```' | '~~~' | null = null;
+    type RoleParseState = {
+        role: Partial<Role>;
+        roleHeaderLevel: number;
+        currentField: string;
+        currentContent: string[];
+        roleDirectContent: string[];
+    };
+    const roleStack: RoleParseState[] = [];
 
     const isKnownFieldHeader = (headerText: string): boolean => {
         const standardFieldName = getStandardFieldName(headerText);
@@ -141,6 +177,73 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
             }
         }
         return false;
+    };
+
+    const isRoleHeading = (startIndex: number, headerLevel: number, headerText: string): boolean => {
+        return !isKnownFieldHeader(headerText) &&
+            hasNestedHeadersAfter(startIndex, headerLevel) &&
+            hasDirectFieldHeadersAfter(startIndex, headerLevel);
+    };
+
+    const startRole = (headerText: string, headerLevel: number, sourceOrder: number): void => {
+        currentRole = { name: headerText, __markdownSourceOrder: sourceOrder } as Partial<Role>;
+        roleHeaderLevel = headerLevel;
+        currentField = '';
+        currentContent = [];
+        roleDirectContent = [];
+        isInRole = true;
+    };
+
+    const finishCurrentRole = (): void => {
+        if (currentRole && currentRole.name) {
+            saveCurrentField(currentRole, currentField, currentContent, filePath);
+            saveRoleDirectContent(currentRole, roleDirectContent, filePath);
+            finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
+        }
+    };
+
+    const resetCurrentRole = (): void => {
+        currentRole = null;
+        currentField = '';
+        currentContent = [];
+        roleDirectContent = [];
+        roleHeaderLevel = 0;
+        isInRole = false;
+    };
+
+    const suspendCurrentRole = (): void => {
+        if (!currentRole) {
+            return;
+        }
+        saveCurrentField(currentRole, currentField, currentContent, filePath);
+        roleStack.push({
+            role: currentRole,
+            roleHeaderLevel,
+            currentField: '',
+            currentContent: [],
+            roleDirectContent,
+        });
+    };
+
+    const restoreParentRole = (): boolean => {
+        const parent = roleStack.pop();
+        if (!parent) {
+            return false;
+        }
+        currentRole = parent.role;
+        roleHeaderLevel = parent.roleHeaderLevel;
+        currentField = parent.currentField;
+        currentContent = parent.currentContent;
+        roleDirectContent = parent.roleDirectContent;
+        isInRole = true;
+        return true;
+    };
+
+    const finishCurrentRoleAndRestoreParent = (): void => {
+        finishCurrentRole();
+        if (!restoreParentRole()) {
+            resetCurrentRole();
+        }
     };
 
     const hasNestedHeadersAfter = (startIndex: number, headerLevel: number): boolean => {
@@ -226,38 +329,34 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
             
             // 检查是否有下一个可能的字段标题（子标题）
             const hasSubHeaders = hasNestedHeadersAfter(i, headerLevel);
+            const currentHeadingIsRole = isRoleHeading(i, headerLevel, headerText);
+
+            while (isInRole && currentRole && headerLevel <= roleHeaderLevel) {
+                finishCurrentRoleAndRestoreParent();
+            }
+            
+            if (isInRole && currentRole && headerLevel > roleHeaderLevel && currentHeadingIsRole) {
+                suspendCurrentRole();
+                startRole(headerText, headerLevel, i);
+                continue;
+            }
             
             // 如果这是比当前角色标题级别低或相等的标题，可能是新角色
             if (!isInRole || headerLevel <= roleHeaderLevel) {
                 // 保存当前角色
-                if (currentRole && currentRole.name) {
-                    saveCurrentField(currentRole, currentField, currentContent, filePath);
-                    // 保存角色的直接内容到描述字段（如果没有描述字段的话）
-                    saveRoleDirectContent(currentRole, roleDirectContent, filePath);
-                    finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
-                }
+                finishCurrentRole();
                 
                 // 检查是否是直接字段标题（即下一级标题是已知字段）
-                const hasDirectFieldHeaders = hasDirectFieldHeadersAfter(i, headerLevel);
+                const hasDirectFieldHeaders = currentHeadingIsRole;
                 
                 // 判断是否是角色标题：有子标题且其中包含任何已知的字段标题
                 if (hasSubHeaders && hasDirectFieldHeaders) {
                     // 开始新角色
-                    currentRole = { name: headerText };
-                    roleHeaderLevel = headerLevel;
-                    currentField = '';
-                    currentContent = [];
-                    roleDirectContent = [];
-                    isInRole = true;
+                    startRole(headerText, headerLevel, i);
                     continue;
                 } else if (hasSubHeaders) {
                     // 如果有子标题但不是字段标题，跳过（可能是章节标题）
-                    currentRole = null;
-                    currentField = '';
-                    currentContent = [];
-                    roleDirectContent = [];
-                    roleHeaderLevel = 0;
-                    isInRole = false;
+                    resetCurrentRole();
                     continue;
                 } else {
                     const nextSiblingOrParentHeader = nextHeaderAtOrAbove(i, headerLevel);
@@ -268,12 +367,7 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                         hasDirectFieldHeadersAfter(nextSiblingOrParentHeader.index, headerLevel)
                     ) {
                         // 兼容分组标题与详细条目写成同级标题的旧文档，避免把空分组当作角色反复补 UUID。
-                        currentRole = null;
-                        currentField = '';
-                        currentContent = [];
-                        roleDirectContent = [];
-                        roleHeaderLevel = 0;
-                        isInRole = false;
+                        resetCurrentRole();
                         continue;
                     }
 
@@ -282,16 +376,12 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
                         name: headerText,
                         type: defaultType,
                         packagePath,
-                        sourcePath: filePath
-                    };
+                        sourcePath: filePath,
+                        __markdownSourceOrder: i
+                    } as Role;
                     roles.push(simpleRole);
                     
-                    currentRole = null;
-                    currentField = '';
-                    currentContent = [];
-                    roleDirectContent = [];
-                    roleHeaderLevel = 0;
-                    isInRole = false;
+                    resetCurrentRole();
                     continue;
                 }
             }
@@ -330,11 +420,14 @@ export function parseMarkdownRoles(content: string, filePath: string, packagePat
     }
     
     // 保存最后一个角色
-    if (currentRole && currentRole.name) {
-        saveCurrentField(currentRole, currentField, currentContent, filePath);
-        // 保存角色的直接内容到描述字段（如果没有描述字段的话）
-        saveRoleDirectContent(currentRole, roleDirectContent, filePath);
-        finalizeRole(currentRole, roles, filePath, packagePath, defaultType);
+    finishCurrentRole();
+    while (restoreParentRole()) {
+        finishCurrentRole();
+    }
+
+    roles.sort((a, b) => ((a as any).__markdownSourceOrder ?? Number.MAX_SAFE_INTEGER) - ((b as any).__markdownSourceOrder ?? Number.MAX_SAFE_INTEGER));
+    for (const role of roles) {
+        delete (role as any).__markdownSourceOrder;
     }
     
     return roles;
@@ -392,7 +485,7 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
             role.type = stripMarkdown(processedContent);
             break;
         case 'uuid':
-            role.uuid = stripMarkdown(processedContent);
+            role.uuid = extractFirstUuidLikeValue(processedContent) || stripMarkdown(processedContent);
             break;
         case 'color': {
             // 提取和验证颜色格式
@@ -502,6 +595,36 @@ function saveCurrentField(role: Partial<Role>, fieldName: string, content: strin
                 (role as any).aliases = aliases;
             }
             break;
+        case 'extend':
+        case 'extends':
+        case 'derived':
+        case 'derivedFrom': {
+            const text = stripMarkdown(processedContent).trim();
+            const uuid = extractFirstUuidLikeValue(text);
+            if (uuid) {
+                (role as any)[fieldName] = { uuid };
+            } else {
+                (role as any)[fieldName] = text;
+            }
+            break;
+        }
+        case 'includes':
+        case 'composedOf':
+        case 'uses':
+        case 'parts': {
+            const raw = stripMarkdown(processedContent);
+            const items = raw.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            if (items.length === 1) {
+                const uuid = extractFirstUuidLikeValue(items[0]);
+                (role as any)[fieldName] = uuid ? { uuid } : items[0];
+            } else if (items.length > 1) {
+                (role as any)[fieldName] = items.map(item => {
+                    const uuid = extractFirstUuidLikeValue(item);
+                    return uuid ? { uuid } : item;
+                });
+            }
+            break;
+        }
         default:
             // 其他字段保留 Markdown 格式
             (role as any)[fieldName] = processedContent;
@@ -836,9 +959,9 @@ export { generateMarkdownTemplate } from '../../templates/templateGenerators';
  */
 export function validateMarkdownFileName(fileName: string, roleType: string): boolean {
     const keywords: { [key: string]: string[] } = {
-        '角色': ['character', 'role', 'gallery', '角色', '人物'],
-        '敏感词': ['sensitive', 'word', '敏感', '敏感词'],
-        '词汇': ['vocabulary', 'vocab', 'term', '词汇', '术语']
+        '角色': Array.from(new Set([...CHARACTER_FILE_KEYWORDS, 'gallery'])),
+        '敏感词': Array.from(new Set([...SENSITIVE_FILE_KEYWORDS, 'word', '敏感'])),
+        '词汇': Array.from(new Set([...VOCABULARY_FILE_KEYWORDS, ...VOCABULARY_FILTER_KEYWORDS]))
     };
     
     const fileKeywords = keywords[roleType] || [];
@@ -852,12 +975,12 @@ export function validateMarkdownFileName(fileName: string, roleType: string): bo
  */
 export function generateDefaultFileName(roleType: string): string {
     const defaultNames: { [key: string]: string } = {
-        '角色': 'character-gallery',
-        '敏感词': 'sensitive-words',
-        '词汇': 'vocabulary'
+        '角色': LEGACY_RESOURCE_KEYWORDS.character,
+        '敏感词': LEGACY_RESOURCE_KEYWORDS.sensitive,
+        '词汇': LEGACY_RESOURCE_KEYWORDS.vocabulary
     };
     
-    return defaultNames[roleType] || 'character-gallery';
+    return defaultNames[roleType] || LEGACY_RESOURCE_KEYWORDS.character;
 }
 
 /**
