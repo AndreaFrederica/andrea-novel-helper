@@ -54,6 +54,7 @@ import { PreviewManager, registerPreviewPane, stopAllPreviewTTS } from './Provid
 import { registerCommentsFeature } from './comments/controller';
 import { CommentsPanelSidebarProvider } from './Provider/view/commentsPanelSidebar';
 import { registerCommentsManagerWebview } from './Provider/view/commentsManagerWebview';
+import { registerGlobalRolePanel } from './Provider/view/globalRolePanel';
 import { TypstMemoryProvider } from './Provider/fileSystem/TypstMemoryProvider';
 import { registerAutoPairs } from './typeset/autoPairs';
 import { registerSmartEnter } from './typeset/smartEnter';
@@ -76,6 +77,7 @@ import * as os from 'os'
 import { registerWordCountTypstExport } from './commands/wordCountTypstExport'
 import { registerWordCountClipboard } from './commands/wordCountClipboard'
 import { registerDefCompletions } from './language/defCompletion'
+import { registerObsidianCompat } from './language/obsidianCompat'
 import { registerNativeModuleCheckup } from './utils/nativeModuleLoader';
 
 import {registerRoleCardManager as roleCardManagerActivate} from './Provider/view/roleCradManager/roleCardManager';
@@ -111,6 +113,8 @@ import { createCirclePackingDataProvider } from './data/circlePackingDataProvide
 import { registerRoleUsageIndexCommands } from './commands/roleUsageIndex'
 import { registerFileTrackingMaintenance } from './commands/fileTrackingMaintenance'
 import { registerSettingsView } from './Provider/view/settingView'
+import { registerTagExplorerView } from './Provider/view/tagExplorerView'
+import { registerRoleTrackingView } from './Provider/view/roleTrackingView'
 import { registerProjectSettingsPage } from './Provider/view/projectSettingsPage'
 import { registerEditorSettingsPage } from './Provider/editor/editorSettingsPageProvider'
 import { maybePromptFirstUseSettingsWizard, registerQuickSettingsPage } from './Provider/view/quickSettingsView'
@@ -699,6 +703,7 @@ export async function activate(context: vscode.ExtensionContext) {
         registerWritingDashboardPage(context);
         registerRoleRelationshipGraphView(context);
         registerNotesSidebarViews(context);
+        registerGlobalRolePanel(context);
 
         // 初始化 AhoCorasick 管理器
         initAhoCorasickManager(context);
@@ -1089,6 +1094,9 @@ export async function activate(context: vscode.ExtensionContext) {
         registerWordCountTypstExport(context, wordCountProvider, treeView)
         registerWordCountClipboard(context, wordCountProvider, treeView)
         registerDefCompletions(context)
+        registerObsidianCompat(context)
+        registerTagExplorerView(context)
+        registerRoleTrackingView(context)
 
         // —— 文件/目录 复制 剪切 粘贴 —— 迁移至 src/commands/wordCountClipboard.ts
 

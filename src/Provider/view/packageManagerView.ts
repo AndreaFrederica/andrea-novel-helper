@@ -15,8 +15,23 @@ import { generateCustomFileName, generateDefaultFileName } from '../../utils/Par
 import { globalRelationshipManager } from '../../utils/globalRelationshipManager';
 import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
 import { PROJECT_CONFIG_MARKDOWN_FILE_NAME, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../../projectConfig/constants';
+import { getProjectKeywordConfig, mergeProjectKeywordConfigs, type ProjectKeywordConfig } from '../../projectConfig/projectKeywordConfig';
+import {
+    DEFAULT_PROJECT_KEYWORD_CONFIG,
+    FIXED_RESOURCE_KEYWORDS,
+    LEGACY_RESOURCE_KEYWORDS,
+    RESOURCE_KIND_NAME_KEYWORDS,
+    RESOURCE_FILE_KEYWORD_SEPARATOR
+} from '../../projectConfig/resourceFileNaming';
 
-type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | HelloPageNode | ProjectInitWizardNode | ProjectSettingsNode | WritingDashboardNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
+type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | HelloPageNode | ProjectInitWizardNode | ProjectSettingsNode | WritingDashboardNode | GlobalRolePanelNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
+
+const RESOURCE_KIND_NAME_RE = new RegExp(
+    RESOURCE_KIND_NAME_KEYWORDS
+        .map(keyword => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('|'),
+    'i'
+);
 
 function normalizeFsPathForCompare(p: string): string {
     const normalized = path.resolve(p).replace(/[\\/]+/g, path.sep);
@@ -207,6 +222,24 @@ class RoleRelationshipGraphNode extends vscode.TreeItem {
         this.command = {
             command: 'andrea.openRoleRelationshipGraph',
             title: '打开角色关系图谱',
+            arguments: []
+        };
+    }
+}
+
+// 全局角色面板节点
+class GlobalRolePanelNode extends vscode.TreeItem {
+    public readonly resourceUri: vscode.Uri;
+
+    constructor(public readonly workspaceRoot: string) {
+        super('+ 全局角色面板', vscode.TreeItemCollapsibleState.None);
+        this.resourceUri = vscode.Uri.file(workspaceRoot);
+        this.contextValue = 'globalRolePanel';
+        this.iconPath = new vscode.ThemeIcon('person');
+        this.description = '搜索、浏览和查看所有角色的完整数据';
+        this.command = {
+            command: 'andrea.openGlobalRolePanel',
+            title: '打开全局角色面板',
             arguments: []
         };
     }
@@ -766,6 +799,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 new ProjectInitWizardNode(this.workspaceRoot),
                 new ProjectSettingsNode(this.workspaceRoot),
                 new WritingDashboardNode(this.workspaceRoot),
+                new GlobalRolePanelNode(this.workspaceRoot),
                 new RoleRelationshipGraphNode(this.workspaceRoot),
                 new ReferenceMaintenanceNode(this.workspaceRoot),
                 new ExternalResourceManageNode(this.workspaceRoot),
@@ -825,7 +859,7 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                 const isRelationshipFile = ext === '.rjson5' || ext === '.rjson';
                 const isTimelineFile = ext === '.tjson5';
 
-                if (isRoleFile || isRelationshipFile || isTimelineFile || /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/.test(name)) {
+                if (isRoleFile || isRelationshipFile || isTimelineFile || RESOURCE_KIND_NAME_RE.test(name)) {
                     // 角色相关文件：检查格式并标记错误
                     const allowed = ['.json5', '.txt', '.md', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5', '.toml'];
                     const fileNode = this.createFileNode(full, 'resourceFile');
@@ -1221,15 +1255,15 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     // 统一创建命令：角色库 / 敏感词库 / 词汇库 （内部选择 json5 / txt / md / csv / toml）
     context.subscriptions.push(
         vscode.commands.registerCommand('AndreaNovelHelper.createCharacterGallery', async (node: PackageNode | BookRootNode) => {
-            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'character-gallery', kind: 'character' });
+            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: getLegacyResourceKeyword('character'), kind: 'character' });
             if (file) provider.refresh();
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.createSensitiveWords', async (node: PackageNode | BookRootNode) => {
-            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'sensitive-words', kind: 'sensitive' });
+            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: getLegacyResourceKeyword('sensitive'), kind: 'sensitive' });
             if (file) provider.refresh();
         }),
         vscode.commands.registerCommand('AndreaNovelHelper.createVocabulary', async (node: PackageNode | BookRootNode) => {
-            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: 'vocabulary', kind: 'vocabulary' });
+            const file = await promptForExtensionCustom(node.resourceUri.fsPath, { defaultBase: getLegacyResourceKeyword('vocabulary'), kind: 'vocabulary' });
             if (file) provider.refresh();
         })
     );
@@ -1575,12 +1609,112 @@ async function openExternalScanReportPage(report: ExternalRoleFolderScanReport):
 }
 
 interface ExtensionCustomOptions { defaultBase: string; kind: 'character' | 'sensitive' | 'vocabulary'; }
+const AUTO_KEYWORD_NAMING_SETTING = 'packageManager.enableAutoKeywordNaming';
+
+function isAutoKeywordNamingEnabled(): boolean {
+    return vscode.workspace.getConfiguration('AndreaNovelHelper').get<boolean>(AUTO_KEYWORD_NAMING_SETTING, true) === true;
+}
+
+function getResourceFileKeyword(kind: ExtensionCustomOptions['kind']): string {
+    return FIXED_RESOURCE_KEYWORDS[kind];
+}
+
+function getLegacyResourceKeyword(kind: ExtensionCustomOptions['kind']): string {
+    return LEGACY_RESOURCE_KEYWORDS[kind];
+}
+
+function getKeywordCandidatesForKind(kind: ExtensionCustomOptions['kind'], filePathOrDir?: string): string[] {
+    const mergedKeywordConfig = mergeProjectKeywordConfigs(
+        DEFAULT_PROJECT_KEYWORD_CONFIG,
+        getProjectKeywordConfig(filePathOrDir)
+    );
+
+    const kindKeywords = kind === 'character'
+        ? mergedKeywordConfig.characterFileKeywords
+        : kind === 'sensitive'
+            ? mergedKeywordConfig.sensitiveWordsFileKeywords
+            : mergedKeywordConfig.vocabularyFileKeywords;
+
+    return Array.from(new Set([
+        ...kindKeywords,
+        getLegacyResourceKeyword(kind),
+        getResourceFileKeyword(kind)
+    ].map(item => item.trim()).filter(Boolean)));
+}
+
+function splitResourceBaseNameByKeyword(baseName: string, kind: ExtensionCustomOptions['kind'], filePathOrDir?: string): { namePart: string; keywordPart: string; matched: boolean } {
+    const trimmed = baseName.trim();
+    const normalizedNamePart = trimmed.replace(/\s+/g, '-');
+    const candidates = getKeywordCandidatesForKind(kind, filePathOrDir)
+        .sort((left, right) => right.length - left.length);
+    const lower = trimmed.toLowerCase();
+
+    for (const candidate of candidates) {
+        const candidateLower = candidate.toLowerCase();
+        if (lower === candidateLower) {
+            return { namePart: '', keywordPart: trimmed, matched: true };
+        }
+
+        const suffix = `${RESOURCE_FILE_KEYWORD_SEPARATOR}${candidateLower}`;
+        if (!lower.endsWith(suffix)) {
+            continue;
+        }
+
+        const prefixLength = trimmed.length - candidate.length - RESOURCE_FILE_KEYWORD_SEPARATOR.length;
+        if (prefixLength <= 0) {
+            continue;
+        }
+
+        const namePart = trimmed.slice(0, prefixLength).trim().replace(/\s+/g, '-');
+        const keywordPart = trimmed.slice(trimmed.length - candidate.length);
+        if (!namePart) {
+            continue;
+        }
+
+        return { namePart, keywordPart, matched: true };
+    }
+
+    return { namePart: normalizedNamePart, keywordPart: getResourceFileKeyword(kind), matched: false };
+}
+
+function buildResourceBaseName(customName: string, kind: ExtensionCustomOptions['kind'], autoAppendKeyword: boolean, keywordOverride?: string): string {
+    const normalizedName = customName.trim().replace(/\s+/g, '-');
+    if (!autoAppendKeyword) {
+        return normalizedName;
+    }
+
+    const keyword = keywordOverride?.trim() || getResourceFileKeyword(kind);
+    if (!normalizedName) {
+        return keyword;
+    }
+
+    if (normalizedName.toLowerCase().includes(keyword.toLowerCase())) {
+        return normalizedName;
+    }
+
+    return `${normalizedName}${RESOURCE_FILE_KEYWORD_SEPARATOR}${keyword}`;
+}
+
 async function promptForExtensionCustom(dir: string, opts: ExtensionCustomOptions): Promise<string | undefined> {
-    const baseInput = await vscode.window.showInputBox({ prompt: '输入基础文件名（不含扩展名，留空使用默认）', value: opts.defaultBase });
+    const baseInput = await vscode.window.showInputBox({
+        prompt: '输入基础文件名（不含扩展名，可留空）',
+        placeHolder: '例如: 主要人物、禁用词汇等'
+    });
     if (baseInput === undefined) return; // 取消
-    const baseNameRaw = (baseInput.trim() || opts.defaultBase).replace(/\s+/g,'-');
+
     const extPick = await vscode.window.showQuickPick(['json5','txt','md','csv','toml'], { placeHolder: '选择文件格式 (json5 / txt / md / csv / toml)' });
     if (!extPick) return;
+
+    const autoKeywordNaming = isAutoKeywordNamingEnabled();
+    const baseNameRaw = autoKeywordNaming
+        ? buildResourceBaseName(baseInput, opts.kind, true)
+        : (baseInput.trim() || opts.defaultBase).replace(/\s+/g, '-');
+
+    if (!baseNameRaw) {
+        vscode.window.showWarningMessage('文件名为空且未自动添加关键词，请输入文件名或开启自动添加关键词。');
+        return;
+    }
+
     const fileInfo = resolveFileConflict(dir, baseNameRaw, '.'+extPick);
     let initialContent = '';
     if (extPick === 'json5') {
@@ -1677,17 +1811,23 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
 
     // 检测当前文件类型
     let detectedType = '角色';
-    if (/sensitive-words|sensitive/i.test(baseName)) {
+    const lowerBaseName = baseName.toLowerCase();
+    if (getKeywordCandidatesForKind('sensitive', oldPath).some(keyword => lowerBaseName.includes(keyword.toLowerCase()))) {
         detectedType = '敏感词';
-    } else if (/vocabulary|vocab/i.test(baseName)) {
+    } else if (getKeywordCandidatesForKind('vocabulary', oldPath).some(keyword => lowerBaseName.includes(keyword.toLowerCase()))) {
         detectedType = '词汇';
-    } else if (/character-gallery|character|role|roles/i.test(baseName)) {
+    } else if (getKeywordCandidatesForKind('character', oldPath).some(keyword => lowerBaseName.includes(keyword.toLowerCase()))) {
         detectedType = '角色';
     }
 
-    if (ext === '.md') {
-        // Markdown 解析器函数已静态导入
-        
+    const keywordManagedExtensions = new Set(['.json5', '.txt', '.csv', '.md', '.toml']);
+    if (keywordManagedExtensions.has(ext)) {
+        const roleTypeToKind = (roleType: '角色' | '敏感词' | '词汇'): ExtensionCustomOptions['kind'] => {
+            if (roleType === '敏感词') return 'sensitive';
+            if (roleType === '词汇') return 'vocabulary';
+            return 'character';
+        };
+
         // 选择文件类型
         const roleType = await vscode.window.showQuickPick(
             ['角色', '敏感词', '词汇'], 
@@ -1697,66 +1837,84 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
             }
         );
         if (!roleType) return;
-        if (!roleType) return;
 
-        // 询问自定义文件名
+        const selectedKind = roleTypeToKind(roleType as '角色' | '敏感词' | '词汇');
+        const autoKeywordNaming = isAutoKeywordNamingEnabled();
+
+        if (!autoKeywordNaming) {
+            // 关闭设置时，保持老行为（用户手动管理关键词）
+            if (ext === '.md') {
+                const customName = await vscode.window.showInputBox({
+                    prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
+                    placeHolder: '例如: 主要人物、禁用词汇等'
+                });
+
+                let newFileName: string;
+                if (customName && customName.trim()) {
+                    newFileName = generateCustomFileName(customName.trim(), roleType);
+                } else {
+                    newFileName = generateDefaultFileName(roleType);
+                }
+
+                const newPath = path.join(dir, `${newFileName}${ext}`);
+                if (newPath === oldPath) {
+                    return;
+                }
+                if (fs.existsSync(newPath)) {
+                    vscode.window.showErrorMessage(`文件 ${newFileName}${ext} 已存在`);
+                    return;
+                }
+                fs.renameSync(oldPath, newPath);
+                return newPath;
+            }
+
+            const customName = await vscode.window.showInputBox({
+                prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
+                placeHolder: '例如: 主要人物、禁用词汇等'
+            });
+
+            let newFileName: string;
+            if (customName && customName.trim()) {
+                newFileName = buildResourceBaseName(customName.trim(), selectedKind, true, getLegacyResourceKeyword(selectedKind));
+            } else {
+                newFileName = getLegacyResourceKeyword(selectedKind);
+            }
+
+            const newPath = path.join(dir, `${newFileName}${ext}`);
+            if (newPath === oldPath) {
+                return;
+            }
+            if (fs.existsSync(newPath)) {
+                vscode.window.showErrorMessage(`文件 ${newFileName}${ext} 已存在`);
+                return;
+            }
+            fs.renameSync(oldPath, newPath);
+            return newPath;
+        }
+
+        const splitInfo = splitResourceBaseNameByKeyword(baseName, selectedKind, oldPath);
+        const oldFileMatchesSpec = isRoleFile(`${baseName}${ext}`, oldPath);
+        const preferredKeyword = splitInfo.matched && oldFileMatchesSpec
+            ? splitInfo.keywordPart
+            : getResourceFileKeyword(selectedKind);
+
+        // 新机制：始终自动添加关键词，不再单独询问第三步
         const customName = await vscode.window.showInputBox({
-            prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
+            prompt: `输入${roleType}文件的自定义名称（可留空）`,
+            value: splitInfo.namePart,
             placeHolder: '例如: 主要人物、禁用词汇等'
         });
+        if (customName === undefined) return;
         
-        // 生成新文件名
-        let newFileName: string;
-        if (customName && customName.trim()) {
-            newFileName = generateCustomFileName(customName.trim(), roleType);
-        } else {
-            newFileName = generateDefaultFileName(roleType);
-        }
-        
-        const newPath = path.join(dir, `${newFileName}.md`);
-        
-        if (newPath === oldPath) {
-            return; // 没有变化
-        }
-        
-        if (fs.existsSync(newPath)) {
-            vscode.window.showErrorMessage(`文件 ${newFileName}.md 已存在`);
+        const newFileName = buildResourceBaseName(customName, selectedKind, true, preferredKeyword);
+        if (!newFileName) {
+            vscode.window.showWarningMessage('文件名为空，请输入名称。');
             return;
         }
-        
-        // 重命名文件
-        fs.renameSync(oldPath, newPath);
-        return newPath;
-    } 
-    // 对于 .json5 / .txt / .csv 文件，使用简化的重命名流程
-    else if (ext === '.json5' || ext === '.txt' || ext === '.csv') {
-        // 选择文件类型
-        const roleType = await vscode.window.showQuickPick(
-            ['角色', '敏感词', '词汇'], 
-            { 
-                placeHolder: '选择文件类型',
-                title: `重命名文件: ${oldName}`
-            }
-        );
-        if (!roleType) return;
 
-        // 询问自定义文件名前缀
-        const customName = await vscode.window.showInputBox({
-            prompt: `输入${roleType}文件的自定义名称（留空使用默认名称）`,
-            placeHolder: '例如: 主要人物、禁用词汇等'
-        });
-        
-        // 生成新文件名
-        let newFileName: string;
-        if (customName && customName.trim()) {
-            // 生成格式：自定义名字_关键词
-            const keyword = roleType === '角色' ? 'character-gallery' : 
-                           roleType === '敏感词' ? 'sensitive-words' : 'vocabulary';
-            newFileName = `${customName.trim()}_${keyword}`;
-        } else {
-            // 使用默认名称
-            newFileName = roleType === '角色' ? 'character-gallery' : 
-                         roleType === '敏感词' ? 'sensitive-words' : 'vocabulary';
+        if (!isRoleFile(`${newFileName}${ext}`, path.join(dir, `${newFileName}${ext}`))) {
+            vscode.window.showWarningMessage(`重命名结果不符合资源文件关键词规范：${newFileName}${ext}`);
+            return;
         }
         
         const newPath = path.join(dir, `${newFileName}${ext}`);
@@ -1770,7 +1928,6 @@ async function promptForFileRename(node: PackageNode): Promise<string | undefine
             return;
         }
         
-        // 重命名文件
         fs.renameSync(oldPath, newPath);
         return newPath;
     } else {

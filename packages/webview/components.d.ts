@@ -25,6 +25,7 @@ declare module 'vue' {
     ExampleComponent: typeof import('./src/components/ExampleComponent.vue')['default']
     ExplorerTree: typeof import('./src/components/ExplorerTree.vue')['default']
     LoopbackEdge: typeof import('./src/components/LoopbackEdge.vue')['default']
+    MarkdownRenderer: typeof import('./src/components/MarkdownRenderer.vue')['default']
     NodeEditDialog: typeof import('./src/components/NodeEditDialog.vue')['default']
     NodeHoverTooltip: typeof import('./src/components/NodeHoverTooltip.vue')['default']
     RandomRoleGenerator: typeof import('./src/components/RandomRoleGenerator.vue')['default']

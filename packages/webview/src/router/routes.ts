@@ -83,6 +83,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/CommentsManagerPage.vue'),
   },
 
+  {
+    path: '/global-role-panel',
+    component: () => import('pages/GlobalRolePanelPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

@@ -31,6 +31,10 @@ export interface Role {
 	priority?: number;
 	/** 敏感词可替换修复候选（仅对 type==='敏感词' 使用；别名不自动补全，修复项需要可补全） */
 	fixes?: string[]; // 修复 (向后兼容旧字段 fixs)
+	/** 角色头像图片路径（支持本地绝对/相对路径或 URL） */
+	avatar?: string;
+	/** 角色设定图列表（支持本地绝对/相对路径或 URL） */
+	illustrations?: string[];
 	// 可以有自定义kv对
 	[key: string]: any;
 }

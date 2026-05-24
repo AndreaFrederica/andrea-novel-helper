@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
+import { LEGACY_RESOURCE_KEYWORDS } from '../projectConfig/resourceFileNaming';
 
 let currentPanel: vscode.WebviewPanel | undefined;
 let extensionPath: string = '';
@@ -46,9 +47,9 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
             'project-config-file': 'project-config.json5',
             'gitignore-file': '.gitignore',
             'wcignore-file': '.wcignore',
-            'character-gallery-file': 'character-gallery.*',
-            'sensitive-words-file': 'sensitive-words.*',
-            'vocabulary-file': 'vocabulary.*',
+            'character-gallery-file': `${LEGACY_RESOURCE_KEYWORDS.character}.*`,
+            'sensitive-words-file': `${LEGACY_RESOURCE_KEYWORDS.sensitive}.*`,
+            'vocabulary-file': `${LEGACY_RESOURCE_KEYWORDS.vocabulary}.*`,
             'regex-patterns-file': 'regex-patterns.*',
             'roles-markdown-file': 'roles.md',
             'mcp-config-file': 'mcp.json',
