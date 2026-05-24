@@ -6,6 +6,7 @@ import { loadRoles } from '../../utils/utils';
 import { roles } from '../../activate';
 import { getAllTrackedFiles } from '../../utils/tracker/globalFileTracking';
 import * as path from 'path';
+import { tryLosslessJson5UpdateText } from '../../utils/json5Lossless';
 
 /* =========================
    时间线数据类型定义
@@ -196,7 +197,11 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
      */
     private syncJsonDataChange(document: vscode.TextDocument, timelineData: TimelineJsonData): void {
         const key = document.uri.toString();
-        const newJsonText = JSON5.stringify(timelineData, null, 2) + '\n';
+        const lossless = tryLosslessJson5UpdateText(document.getText(), timelineData, document.uri);
+        if (lossless.error) {
+            console.warn('[TimelineJson5EditorProvider] Lossless JSON5 update fallback:', lossless.error);
+        }
+        const newJsonText = lossless.text ?? (JSON5.stringify(timelineData, null, 2) + '\n');
         
         // 检查数据是否真的发生了变化
         const currentData = this.currentJsonData.get(key);
@@ -407,7 +412,11 @@ export class TimelineJson5EditorProvider implements vscode.CustomTextEditorProvi
                         console.log('[TimelineJson5EditorProvider] Saving TimelineJsonData with events:', timelineData.events.length);
                         
                         // 直接保存数据格式，确保前端数据完全覆盖后端
-                        const text = JSON5.stringify(timelineData, null, 2) + '\n';
+                        const lossless = tryLosslessJson5UpdateText(document.getText(), timelineData, document.uri);
+                        if (lossless.error) {
+                            console.warn('[TimelineJson5EditorProvider] Lossless JSON5 update fallback:', lossless.error);
+                        }
+                        const text = lossless.text ?? (JSON5.stringify(timelineData, null, 2) + '\n');
                         const fullRange = new vscode.Range(
                             document.positionAt(0),
                             document.positionAt(document.getText().length)

@@ -9,6 +9,7 @@ import {
 } from './relationship-types';
 import { buildHtml } from '../utils/html-builder';
 import { roles } from '../../activate';
+import { tryLosslessJson5UpdateText } from '../../utils/json5Lossless';
 
 /* =========================
    规则与工具
@@ -161,7 +162,11 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
      */
     private syncJsonDataChange(document: vscode.TextDocument, rgData: RGJsonData): void {
         const key = document.uri.toString();
-        const newJsonText = JSON5.stringify(rgData, null, 2) + '\n';
+        const lossless = tryLosslessJson5UpdateText(document.getText(), rgData, document.uri);
+        if (lossless.error) {
+            console.warn('[RelationshipJson5EditorProvider] Lossless JSON5 update fallback:', lossless.error);
+        }
+        const newJsonText = lossless.text ?? (JSON5.stringify(rgData, null, 2) + '\n');
         
         // 检查数据是否真的发生了变化
         const currentData = this.currentJsonData.get(key);
@@ -547,7 +552,11 @@ export class RelationshipJson5EditorProvider implements vscode.CustomTextEditorP
                         rgData.nodes.map(n => ({ id: n.id, x: n.x, y: n.y })));
                     
                     // 直接保存图形格式，确保前端数据完全覆盖后端
-                    const text = JSON5.stringify(rgData, null, 2) + '\n';
+                    const lossless = tryLosslessJson5UpdateText(document.getText(), rgData, document.uri);
+                    if (lossless.error) {
+                        console.warn('[RelationshipJson5EditorProvider] Lossless JSON5 update fallback:', lossless.error);
+                    }
+                    const text = lossless.text ?? (JSON5.stringify(rgData, null, 2) + '\n');
 
                     // 按 autosave 策略写入/排队
                     this.scheduleWrite(document, text);

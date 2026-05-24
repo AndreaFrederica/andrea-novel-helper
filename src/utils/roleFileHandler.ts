@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 import JSON5 from 'json5';
 import { Role } from '../extension';
 import { parseMarkdownRoles } from './Parser/markdownParser';
@@ -10,6 +11,7 @@ import {
     stringifyDelimitedRoleFile,
 } from './delimitedRoleFile';
 import { parseTomlRoles, stringifyRolesAsToml } from './Parser/tomlParser';
+import { tryLosslessJson5UpdateText } from './json5Lossless';
 
 export interface RoleFileData {
     roles: Role[];
@@ -143,8 +145,21 @@ export function writeRoleFile(
             break;
         case 'ojson5':
         case 'json5':
-            // JSON5/OJSON5 格式
-            content = JSON5.stringify(roles, null, 2);
+            // JSON5/OJSON5 格式：优先使用 lossless 写回以保留注释与样式
+            if (fs.existsSync(filePath)) {
+                const original = fs.readFileSync(filePath, 'utf8');
+                const lossless = tryLosslessJson5UpdateText(original, roles, vscode.Uri.file(filePath));
+                if (lossless.text) {
+                    content = lossless.text;
+                } else {
+                    if (lossless.error) {
+                        console.warn('[roleFileHandler] Lossless JSON5 update fallback:', lossless.error);
+                    }
+                    content = JSON5.stringify(roles, null, 2);
+                }
+            } else {
+                content = JSON5.stringify(roles, null, 2);
+            }
             break;
         case 'toml':
             content = stringifyRolesAsToml(roles);

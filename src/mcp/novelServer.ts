@@ -36,6 +36,8 @@ import { getSupportedExtensions, getSupportedLanguages, isHugeFile, typeColorMap
 import { addRoleToFile, readRoleFile, writeRoleFile, type RoleFileData } from '../utils/roleFileHandler'
 import { mdToPlainText } from '../utils/md_plain'
 import { txtToPlainText } from '../utils/txt_plain'
+import { tryLosslessJson5UpdateText } from '../utils/json5Lossless'
+import { RESOURCE_KIND_NAME_KEYWORDS } from '../projectConfig/resourceFileNaming'
 
 // --------------------------------------------------------------------------
 // Constants
@@ -47,7 +49,12 @@ const FULL_DETAIL_THRESHOLD = 50
 /** Per-type list threshold – types with more roles than this get a summary hint */
 const TYPE_LIST_THRESHOLD = 50
 const NOVEL_HELPER_IGNORED_DIRS = new Set(['.anh-fsdb', 'outline', 'typo', 'comments'])
-const RESOURCE_KIND_NAME_RE = /character-gallery|character|role|roles|sensitive-words|sensitive|vocabulary|vocab|regex-patterns|regex|-relationship|timeline/i
+const RESOURCE_KIND_NAME_RE = new RegExp(
+  RESOURCE_KIND_NAME_KEYWORDS
+    .map(keyword => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|'),
+  'i'
+)
 const MANAGED_RESOURCE_EXTS = new Set(['.json5', '.txt', '.md', '.csv', '.ojson', '.rjson', '.rjson5', '.ojson5', '.tjson5', '.toml'])
 
 // --------------------------------------------------------------------------
@@ -871,7 +878,21 @@ function saveJson5LikeFilePayload(filePath: string, expectedExts: string[], cont
   }
 
   try {
-    const text = JSON5.stringify(content, null, 2)
+    let text: string
+    if (fs.existsSync(checked.resolvedPath)) {
+      const original = fs.readFileSync(checked.resolvedPath, 'utf-8')
+      const lossless = tryLosslessJson5UpdateText(original, content, vscode.Uri.file(checked.resolvedPath))
+      if (lossless.text) {
+        text = lossless.text.trimEnd()
+      } else {
+        if (lossless.error) {
+          console.warn('[novelServer] Lossless JSON5 update fallback:', lossless.error)
+        }
+        text = JSON5.stringify(content, null, 2)
+      }
+    } else {
+      text = JSON5.stringify(content, null, 2)
+    }
     fs.writeFileSync(checked.resolvedPath, `${text}\n`, 'utf-8')
     return {
       ok: true,
@@ -899,7 +920,11 @@ function appendJson5ArrayItemPayload(filePath: string, expectedExts: string[], a
     if (!Array.isArray(root[arrayField])) root[arrayField] = []
     ;(root[arrayField] as unknown[]).push(item)
 
-    const text = JSON5.stringify(root, null, 2)
+    const lossless = tryLosslessJson5UpdateText(raw, root, vscode.Uri.file(checked.resolvedPath))
+    if (lossless.error) {
+      console.warn('[novelServer] Lossless JSON5 update fallback:', lossless.error)
+    }
+    const text = (lossless.text ?? JSON5.stringify(root, null, 2)).trimEnd()
     fs.writeFileSync(checked.resolvedPath, `${text}\n`, 'utf-8')
 
     return {

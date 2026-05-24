@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as JSON5 from 'json5';
+import { tryLosslessJson5UpdateText } from '../../utils/json5Lossless';
 import { hoverRangesMap } from '../hoverProvider';
 import {
     applyGeneratedLookupKeys,
@@ -487,8 +488,8 @@ function validateRoleJson5Text(text: string): { ok: boolean; reason?: string } {
     return { ok: true };
 }
 
-function stringifyRolesToJson5(roles: RoleFlat[]): string {
-    const arr = roles.map(r => {
+function rolesToSerializableJson(roles: RoleFlat[]): Record<string, any>[] {
+    return roles.map(r => {
         const rec: Record<string, any> = {};
         const put = (k: string, v: any) => { if (!isEmptyish(v)) rec[k] = v; };
 
@@ -523,7 +524,10 @@ function stringifyRolesToJson5(roles: RoleFlat[]): string {
         }
         return rec;
     });
+}
 
+function stringifyRolesToJson5(roles: RoleFlat[]): string {
+    const arr = rolesToSerializableJson(roles);
     return JSON5.stringify(arr, null, 2) + '\n';
 }
 
@@ -1035,7 +1039,12 @@ export class RoleJson5EditorProvider implements vscode.CustomTextEditorProvider 
 
                     const list: RoleCardModelWithId[] = Array.isArray(msg.list) ? msg.list : [];
                     const merged = cardModelsToRoles(list, this.existingById).map(role => applyGeneratedLookupKeys(role, document.uri.fsPath));
-                    const text = stringifyRolesToJson5(merged);
+                    const nextValue = rolesToSerializableJson(merged);
+                    const lossless = tryLosslessJson5UpdateText(document.getText(), nextValue, document.uri);
+                    if (lossless.error) {
+                        console.warn('[RoleJson5EditorProvider] Lossless JSON5 update fallback:', lossless.error);
+                    }
+                    const text = lossless.text ?? JSON5.stringify(nextValue, null, 2) + '\n';
 
                     // 更新 existingById（即便 off 也要更新，用于后续合并）
                     this.existingById.clear();
