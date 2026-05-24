@@ -77,6 +77,9 @@
     <li>代码块内容保留</li>
     <li>图片替换为 <code>[image]</code> 占位符</li>
     <li>链接只保留文字，URL 被去除</li>
+    <li>Obsidian 双链按显示名或文件名输出，例如 <code>[[设定/星港|星港]]</code> 输出为 <code>星港</code></li>
+    <li>Obsidian 标签默认保留；关闭 <code>AndreaNovelHelper.obsidian.renderTags</code> 后，<code>#标签</code> 会从预览和导出结果中隐藏</li>
+    <li><code>\#标签</code> 默认保持转义写法；开启 <code>AndreaNovelHelper.obsidian.renderEscapedTags</code> 后会输出为 <code>#标签</code></li>
     <li>注释（<code>&lt;!-- --&gt;</code>、<code>%% %%</code>）被去除</li>
 </ul>
 
@@ -133,6 +136,9 @@
     <li><code>andrea.typst.cliPath</code> — Typst CLI 路径</li>
     <li><code>andrea.typst.templatesDir</code> — 模板目录</li>
     <li><code>andrea.typst.cleanupTemp</code> — 导出后清理临时文件</li>
+    <li><code>AndreaNovelHelper.obsidian.renderWikilinks</code> — 预览和导出时把 <code>[[双链]]</code> 渲染为可读文本</li>
+    <li><code>AndreaNovelHelper.obsidian.renderTags</code> — 预览和导出时是否保留 <code>#标签</code> 文本</li>
+    <li><code>AndreaNovelHelper.obsidian.renderEscapedTags</code> — 是否把 <code>\#标签</code> 渲染为 <code>#标签</code></li>
 </ul>
 
 <p><b>Typst 导出支持的 Markdown 元数据（&amp;Def）：</b></p>

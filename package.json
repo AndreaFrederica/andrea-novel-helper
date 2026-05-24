@@ -53,6 +53,7 @@
     "onFileSystem:andrea-outline",
     "onCommand:andrea.openWritingDashboard",
     "onCommand:andrea.openWritingDashboardWidget",
+    "onCommand:andrea.openGlobalRolePanel",
     "onCommand:andrea.openRoleRelationshipGraph",
     "onCommand:AndreaNovelHelper.openHello",
     "onCommand:AndreaNovelHelper.forceShowHelloFirstSetup",
@@ -72,6 +73,7 @@
     "onWebviewPanel:andrea.writingDashboard.logs",
     "onWebviewPanel:andrea.writingDashboard.timer",
     "onWebviewPanel:andrea.roleRelationshipGraph",
+    "onWebviewPanel:andrea.globalRolePanel",
     "onWebviewPanel:andrea.guide",
     "onWebviewPanel:andrea.guideDoc",
     "onWebviewPanel:andrea.hello",
@@ -254,6 +256,12 @@
           "title": "%sidebar.notes.title%",
           "icon": "$(notebook)",
           "when": "andrea.anh.enabled"
+        },
+        {
+          "id": "AndreaTagsSidebar",
+          "title": "%sidebar.tags.title%",
+          "icon": "$(tag)",
+          "when": "andrea.anh.enabled"
         }
       ]
     },
@@ -326,6 +334,12 @@
         "title": "独立打开创作工作台组件",
         "category": "Andrea Novel Helper",
         "icon": "$(window)"
+      },
+      {
+        "command": "andrea.openGlobalRolePanel",
+        "title": "打开全局角色面板",
+        "category": "Andrea Novel Helper",
+        "icon": "$(person)"
       },
       {
         "command": "andrea.notes.refreshOutlineTree",
@@ -1175,6 +1189,102 @@
         "command": "AndreaNovelHelper.database.healthCheck",
         "title": "数据库健康检查",
         "category": "Andrea Novel Helper"
+      },
+      {
+        "command": "andrea.tags.refresh",
+        "title": "%command.tags.refresh.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "andrea.tags.openFile",
+        "title": "%command.tags.openFile.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "andrea.tags.showReferences",
+        "title": "%command.tags.showReferences.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(references)"
+      },
+      {
+        "command": "andrea.tags.createRoleFromTag",
+        "title": "%command.tags.createRoleFromTag.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(account)"
+      },
+      {
+        "command": "andrea.tags.bindRole",
+        "title": "%command.tags.bindRole.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(link)"
+      },
+      {
+        "command": "andrea.tags.unbindRole",
+        "title": "%command.tags.unbindRole.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "andrea.tags.openRole",
+        "title": "%command.tags.openRole.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "andrea.roleTracking.refresh",
+        "title": "%command.roleTracking.refresh.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "andrea.roleTracking.addGroup",
+        "title": "%command.roleTracking.addGroup.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "andrea.roleTracking.renameGroup",
+        "title": "%command.roleTracking.renameGroup.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "andrea.roleTracking.deleteGroup",
+        "title": "%command.roleTracking.deleteGroup.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "andrea.roleTracking.addRole",
+        "title": "%command.roleTracking.addRole.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(add)"
+      },
+      {
+        "command": "andrea.roleTracking.removeRole",
+        "title": "%command.roleTracking.removeRole.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(remove)"
+      },
+      {
+        "command": "andrea.roleTracking.moveRole",
+        "title": "%command.roleTracking.moveRole.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "andrea.roleTracking.openRole",
+        "title": "%command.roleTracking.openRole.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "andrea.roleTracking.showReferences",
+        "title": "%command.roleTracking.showReferences.title%",
+        "category": "Andrea Novel Helper",
+        "icon": "$(references)"
       },
       {
         "command": "AndreaNovelHelper.database.optimize",
@@ -2143,6 +2253,12 @@
           "default": true,
           "description": "是否默认使用角色卡管理器打开 JSON5 角色文件"
         },
+        "AndreaNovelHelper.json5.losslessEditorEnabled": {
+          "anhName": "JSON5 无损写回",
+          "type": "boolean",
+          "default": true,
+          "description": "启用后，JSON5/OJSON5/RJSON5/TJSON5 编辑器与 UUID 自动回写优先使用无损写回，尽量保留注释、空白与原有格式。"
+        },
         "AndreaNovelHelper.roleEditor.localizedKeyLabels": {
           "anhName": "角色编辑器字段显示名本地化",
           "type": "boolean",
@@ -2328,6 +2444,12 @@
           },
           "markdownDescription": "%config.customVocabularyFileKeywords.description%"
         },
+        "AndreaNovelHelper.packageManager.enableAutoKeywordNaming": {
+          "anhName": "包管理器自动关键词命名",
+          "type": "boolean",
+          "default": true,
+          "description": "开启时使用新命名机制：创建/重命名资源文件时自动追加固定英文关键词（role/sensitive/vocab），并隐藏“是否自动添加关键词”步骤。关闭时恢复旧的手动命名行为。"
+        },
         "AndreaNovelHelper.customRegexFileKeywords": {
           "anhName": "自定义正则文件关键词",
           "type": "array",
@@ -2375,6 +2497,56 @@
           "minimum": 20,
           "maximum": 50,
           "description": "%config.markdownToolbarHeight.description%"
+        },
+        "AndreaNovelHelper.obsidian.renderWikilinks": {
+          "anhName": "渲染 Obsidian 双链",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.obsidian.renderWikilinks.description%"
+        },
+        "AndreaNovelHelper.obsidian.renderTags": {
+          "anhName": "渲染 Obsidian 标签",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.obsidian.renderTags.description%"
+        },
+        "AndreaNovelHelper.obsidian.renderEscapedTags": {
+          "anhName": "渲染转义标签",
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.obsidian.renderEscapedTags.description%"
+        },
+        "AndreaNovelHelper.markdown.separatorRenderMode": {
+          "anhName": "Markdown 分割线处理",
+          "type": "string",
+          "enum": [
+            "render",
+            "hidden",
+            "preserve"
+          ],
+          "default": "preserve",
+          "markdownDescription": "%config.markdown.separatorRenderMode.description%",
+          "enumDescriptions": [
+            "%config.markdown.separatorRenderMode.render%",
+            "%config.markdown.separatorRenderMode.hidden%",
+            "%config.markdown.separatorRenderMode.preserve%"
+          ]
+        },
+        "AndreaNovelHelper.markdown.txtExportSeparatorMode": {
+          "anhName": "TXT 导出分割线处理",
+          "type": "string",
+          "enum": [
+            "follow",
+            "hidden",
+            "preserve"
+          ],
+          "default": "preserve",
+          "markdownDescription": "%config.markdown.txtExportSeparatorMode.description%",
+          "enumDescriptions": [
+            "%config.markdown.txtExportSeparatorMode.follow%",
+            "%config.markdown.txtExportSeparatorMode.hidden%",
+            "%config.markdown.txtExportSeparatorMode.preserve%"
+          ]
         },
         "AndreaNovelHelper.timeStats.enabledLanguages": {
           "anhName": "统计启用语言",
@@ -2782,6 +2954,19 @@
           "type": "boolean",
           "default": false,
           "description": "%config.debug.roleFileDetection.description%"
+        },
+        "AndreaNovelHelper.roleFile.basicFieldsDiagnosticLevel": {
+          "anhName": "角色文件基础字段诊断级别",
+          "type": "string",
+          "enum": [
+            "off",
+            "error",
+            "warning",
+            "information",
+            "hint"
+          ],
+          "default": "warning",
+          "markdownDescription": "非 TXT 角色文件中，角色条目缺少基础字段 `name/名称` 或 `type/类型` 时的 Problems 诊断级别。设置为 `off` 可关闭。"
         },
         "AndreaNovelHelper.debug.smartRoleAdder": {
           "anhName": "角色合并调试",
@@ -3851,6 +4036,30 @@
           "icon": "$(refresh)"
         },
         {
+          "command": "andrea.tags.refresh",
+          "when": "view == andrea.tagsView",
+          "group": "navigation@1",
+          "icon": "$(refresh)"
+        },
+        {
+          "command": "andrea.roleTracking.addRole",
+          "when": "view == andrea.roleTrackingView",
+          "group": "navigation@1",
+          "icon": "$(add)"
+        },
+        {
+          "command": "andrea.roleTracking.addGroup",
+          "when": "view == andrea.roleTrackingView",
+          "group": "navigation@2",
+          "icon": "$(new-folder)"
+        },
+        {
+          "command": "andrea.roleTracking.refresh",
+          "when": "view == andrea.roleTrackingView",
+          "group": "navigation@3",
+          "icon": "$(refresh)"
+        },
+        {
           "command": "andrea.openProjectSettings",
           "when": "view == andrea.settingsView",
           "group": "navigation@1",
@@ -3924,6 +4133,75 @@
         }
       ],
       "view/item/context": [
+        {
+          "when": "view == andrea.tagsView && (viewItem == andreaTagRoleMatch || viewItem == andreaTagBoundRole || viewItem == andreaColorTagRoleMatch || viewItem == andreaColorTagBoundRole || viewItem == andreaTagRoleNode || viewItem == andreaTagRoleNodeBound)",
+          "command": "andrea.tags.openRole",
+          "group": "inline@1",
+          "icon": "$(go-to-file)"
+        },
+        {
+          "when": "view == andrea.tagsView && (viewItem == andreaTag || viewItem == andreaTagRoleMatch || viewItem == andreaTagBoundRole || viewItem == andreaColorTag || viewItem == andreaColorTagRoleMatch || viewItem == andreaColorTagBoundRole)",
+          "command": "andrea.tags.showReferences",
+          "group": "inline@2",
+          "icon": "$(references)"
+        },
+        {
+          "when": "view == andrea.tagsView && (viewItem == andreaTag || viewItem == andreaTagRoleMatch || viewItem == andreaTagBoundRole)",
+          "command": "andrea.tags.createRoleFromTag",
+          "group": "1_role@1"
+        },
+        {
+          "when": "view == andrea.tagsView && (viewItem == andreaTag || viewItem == andreaTagRoleMatch || viewItem == andreaTagBoundRole || viewItem == andreaColorTag || viewItem == andreaColorTagRoleMatch || viewItem == andreaColorTagBoundRole)",
+          "command": "andrea.tags.showReferences",
+          "group": "0_refs@1"
+        },
+        {
+          "when": "view == andrea.tagsView && (viewItem == andreaTag || viewItem == andreaTagRoleMatch || viewItem == andreaTagBoundRole || viewItem == andreaColorTag || viewItem == andreaColorTagRoleMatch || viewItem == andreaColorTagBoundRole)",
+          "command": "andrea.tags.bindRole",
+          "group": "1_role@2"
+        },
+        {
+          "when": "view == andrea.tagsView && (viewItem == andreaTagBoundRole || viewItem == andreaColorTagBoundRole || viewItem == andreaTagRoleNodeBound)",
+          "command": "andrea.tags.unbindRole",
+          "group": "1_role@3"
+        },
+        {
+          "when": "view == andrea.roleTrackingView && viewItem == roleTrackingRole",
+          "command": "andrea.roleTracking.openRole",
+          "group": "inline@1",
+          "icon": "$(go-to-file)"
+        },
+        {
+          "when": "view == andrea.roleTrackingView && viewItem == roleTrackingRole",
+          "command": "andrea.roleTracking.showReferences",
+          "group": "inline@2",
+          "icon": "$(references)"
+        },
+        {
+          "when": "view == andrea.roleTrackingView && (viewItem == roleTrackingGroup || viewItem == roleTrackingDefaultGroup)",
+          "command": "andrea.roleTracking.addRole",
+          "group": "1_group@1"
+        },
+        {
+          "when": "view == andrea.roleTrackingView && viewItem == roleTrackingGroup",
+          "command": "andrea.roleTracking.renameGroup",
+          "group": "1_group@2"
+        },
+        {
+          "when": "view == andrea.roleTrackingView && viewItem == roleTrackingGroup",
+          "command": "andrea.roleTracking.deleteGroup",
+          "group": "1_group@3"
+        },
+        {
+          "when": "view == andrea.roleTrackingView && (viewItem == roleTrackingRole || viewItem == roleTrackingMissingRole)",
+          "command": "andrea.roleTracking.moveRole",
+          "group": "2_role@1"
+        },
+        {
+          "when": "view == andrea.roleTrackingView && (viewItem == roleTrackingRole || viewItem == roleTrackingMissingRole)",
+          "command": "andrea.roleTracking.removeRole",
+          "group": "2_role@2"
+        },
         {
           "when": "view == packageManagerView && (viewItem == newFile || viewItem == package || viewItem == externalRoleFolder)",
           "command": "AndreaNovelHelper.createCharacterGallery",
@@ -4682,6 +4960,18 @@
           "name": "%view.notes.custom.name%",
           "icon": "note"
         }
+      ],
+      "AndreaTagsSidebar": [
+        {
+          "id": "andrea.tagsView",
+          "name": "%view.tags.name%",
+          "icon": "tag"
+        },
+        {
+          "id": "andrea.roleTrackingView",
+          "name": "%view.roleTracking.name%",
+          "icon": "references"
+        }
       ]
     },
     "keybindings": [
@@ -4712,6 +5002,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "test:role-load-refresh": "npm run compile && mocha --ui tdd --require ./scripts/register-node-unit-test-env.js \"out/test/roleLoadRefresh.unit.test.js\"",
+    "test:json5-lossless": "npm run compile && mocha --ui tdd --require ./scripts/register-node-unit-test-env.js \"out/test/json5Lossless.test.js\" \"out/test/json5Lossless.editorFlow.test.js\" \"out/test/json5Lossless.templateVariants.test.js\" \"out/test/roleFileHandler.lossless.test.js\" \"out/test/roleUuidManager.lossless.test.js\"",
     "publish:artifacts": "node scripts/publish-artifacts.js",
     "mcp:test": "ts-node scripts/mcp-test.ts",
     "mcp:run": "ts-node scripts/mcp-run.ts",
@@ -4735,6 +5026,7 @@
   "dependencies": {
     "@anh/enigo-keyboard": "^0.1.0",
     "@cfworker/json-schema": "^4.1.1",
+    "@croct/json5-parser": "^0.2.2",
     "@faker-js/faker": "^10.1.0",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "@node-rs/jieba": "^2.0.1",

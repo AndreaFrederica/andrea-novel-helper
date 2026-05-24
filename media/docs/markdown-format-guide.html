@@ -88,6 +88,22 @@ ___
 &gt; @林小满: 引用的对话
 </code></pre>
 
+<h4>Obsidian 风格双链和标签</h4>
+<p>如果你从 Obsidian 迁入，ANH 可以直接识别常见的双链和标签写法：</p>
+<pre><code>今天林小满去了 [[第02章 失控的货舱]]。
+这个伏笔来自 [[世界观/星辉议会#议会禁令|议会禁令]]。
+
+#伏笔 #人物/林小满 #世界观</code></pre>
+<ul>
+  <li><code>[[文件名]]</code>：跳转到同名 Markdown / TXT 文件。</li>
+  <li><code>[[文件名|显示名]]</code>：显示名可以和真实文件名不同。</li>
+  <li><code>[[文件名#标题]]</code>：跳转到目标文件里的标题。</li>
+  <li><code>#标签</code>、<code>#父标签/子标签</code>：用于保留 Obsidian 式标签整理习惯。</li>
+  <li><code>#FF6B6B</code> 这类颜色值也会作为颜色标签识别，方便追踪角色颜色、敏感词颜色和其他视觉标记。</li>
+  <li><code>\#标签</code>：默认按普通转义文本保留；如需在预览和导出中显示为 <code>#标签</code>，可开启“渲染转义标签”。</li>
+</ul>
+<div class="doc-note">双链补全会从当前工作区里的 Markdown / TXT 文件名生成候选；标签补全会从工作区已有标签中生成候选。ANH 会把双链、标题和标签索引缓存到当前项目的 <code>novel-helper/.anh-fsdb/obsidian-index.json</code>，后续只增量更新变更文件。左侧“标签”侧边栏按“标签 → 文件”的结构展示已有标签，其中颜色标签会单独分组，并用对应颜色渲染节点图标。普通标签可以直接查看引用，也可以在右键菜单中基于标签创建角色或绑定到已有角色；绑定关系使用角色 UUID，保存到 <code>novel-helper/.anh-fsdb/tag-role-bindings.json</code>。绑定不会改写角色语义，也不会把标签变成另一套角色来源；角色仍由原角色文件和角色系统负责，但绑定后的 <code>#标签</code> 会作为该角色的外部别名键参与识别、补全和 hover，角色详情中也会把已绑定标签作为元数据展示。预览、复制纯文本、TXT 导出、Typst 预览和 Typst 导出会按设置渲染双链和标签；可关闭标签渲染，让 <code>#标签</code> 只作为整理标记存在于源文件中。</div>
+
 <h4>二、角色/资源文件格式</h4>
 <p>ANH 支持多种格式编写角色库、词汇表、敏感词库等资源文件：</p>
 <table style="width:100%;font-size:13px;border-collapse:collapse;">

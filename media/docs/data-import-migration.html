@@ -286,8 +286,13 @@
     <li>先在 <code>novel-helper/</code> 下建 <code>cast-main/</code> 和 <code>world/</code> 两个包。</li>
     <li>把 <code>人物卡/</code> 里的关键信息整理进 <code>novel-helper/cast-main/roles.md</code>。</li>
     <li>把 <code>术语.md</code> 整理进 <code>novel-helper/world/vocabulary.md</code>。</li>
-    <li>双链、标签、frontmatter 不是不能留，但不要让它们妨碍你先完成迁移。</li>
+    <li>Obsidian 的 <code>[[双链]]</code> 和 <code>#标签</code> 可以先保留；ANH 会给它们做基础高亮、跳转、补全和标签侧边栏索引。frontmatter 可以保留作普通 Markdown 内容，后续再决定是否整理成 ANH 资源字段。</li>
 </ol>
+
+<p>例如，原来的正文里有：</p>
+<pre><code>她想起了 [[女主]] 在 [[第2章#雨夜追踪]] 里留下的话。 #伏笔/角色</code></pre>
+<p>迁进 ANH 后，只要工作区里有 <code>女主.md</code> 或 <code>第2章.md</code>，双链就可以继续作为跳转线索使用。你不需要在迁移第一天把所有双链都改写成别的格式。</p>
+<p>标签侧边栏会按“标签 → 文件”的方式显示结果，例如 <code>#伏笔/角色</code> 下面列出所有包含这个标签的章节或设定文件。<code>#FF6B6B</code> 这类颜色标签会进入“颜色标签”分组，并用对应颜色作为节点图标。</p>
 
 <h4>例子 C：把旧项目目录的一部分先标成“外部包”</h4>
 <p>如果你有一批旧资料暂时不想塞进 <code>novel-helper/</code>，但又想让 ANH 先识别它，更适合这样做：</p>
