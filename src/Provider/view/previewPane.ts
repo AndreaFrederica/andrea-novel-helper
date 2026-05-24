@@ -21,7 +21,7 @@ const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
     正则表达式: '#FFA500',
 };
 
-type Block = MarkdownPlainBlock;
+type Block = MarkdownPlainBlock & { previewContinuation?: boolean };
 type ImgCtx = { srcLines: string[]; docDir: string; webview: vscode.Webview };
 type PreviewTextChange = { start: number; end: number; text: string; lineDelta: number };
 type RoleTextStyle = {
@@ -34,6 +34,7 @@ type RoleTextStyle = {
 };
 const EPS = 0.02;     // 2% 死区
 const MUTE_MS = 350;  // 与 webview 一致的“静音窗口”
+const PREVIEW_TEXT_FRAGMENT_CHARS = 72;
 
 export function registerPreviewPane(context: vscode.ExtensionContext) {
     const manager = new PreviewManager(context);
@@ -103,13 +104,96 @@ export class PreviewManager {
     private previewMode = new Map<string, 'scroll' | 'paged'>();
 
     private makeHtmlFromBlocks(blocks: Block[], imgCtx?: ImgCtx): string {
-        return blocks.map((b, idx) => {
+        const renderBlocks = this.normalizeBlocksForPreview(blocks);
+        return renderBlocks.map((b, idx) => {
             if (imgCtx) {
-                const nextLine = idx + 1 < blocks.length ? blocks[idx + 1].srcLine : imgCtx.srcLines.length;
+                const nextLine = idx + 1 < renderBlocks.length ? renderBlocks[idx + 1].srcLine : imgCtx.srcLines.length;
                 return this.renderBlockHtml(b, nextLine, imgCtx);
             }
             return this.renderPlainBlockHtml(b);
         }).join('\n');
+    }
+
+    private normalizeBlocksForPreview(blocks: Block[]): Block[] {
+        const out: Block[] = [];
+        for (const block of blocks) {
+            if (this.shouldNormalizeListBlock(block)) {
+                out.push(...this.fragmentListBlock(block));
+            } else if (this.shouldNormalizeTextBlock(block)) {
+                out.push(...this.fragmentTextBlock(block));
+            } else {
+                out.push(block);
+            }
+        }
+        return out;
+    }
+
+    private shouldNormalizeTextBlock(block: Block): boolean {
+        if (block.kind === 'image' || block.kind === 'separator' || block.kind === 'heading' || block.kind === 'list') {
+            return false;
+        }
+        if (block.inlineParts?.some(part => part.kind === 'image')) {
+            return false;
+        }
+        return block.text.includes('\n') || block.text.length > PREVIEW_TEXT_FRAGMENT_CHARS;
+    }
+
+    private shouldNormalizeListBlock(block: Block): boolean {
+        return block.kind === 'list' && (block.text.includes('\n') || block.text.length > PREVIEW_TEXT_FRAGMENT_CHARS);
+    }
+
+    private fragmentTextBlock(block: Block): Block[] {
+        const lines = block.text.split('\n');
+        const out: Block[] = [];
+        let offset = 0;
+        lines.forEach((line, lineIndex) => {
+            const lineStart = offset;
+            const lineEnd = lineStart + line.length;
+            offset = lineEnd + 1;
+            const fragments = this.fragmentTextLine(line);
+            fragments.forEach((fragment, fragmentIndex) => {
+                const fragStart = lineStart + fragment.start;
+                const fragEnd = lineStart + fragment.end;
+                out.push({
+                    ...block,
+                    srcLine: block.srcLine + lineIndex,
+                    text: fragment.text,
+                    inlineStyles: this.sliceInlineStyles(block.inlineStyles || [], fragStart, fragEnd, fragment.text.length),
+                    inlineParts: block.inlineParts?.length ? this.sliceInlineParts(block.inlineParts, fragStart, fragEnd) : undefined,
+                    previewContinuation: lineIndex < lines.length - 1 || fragmentIndex < fragments.length - 1,
+                });
+            });
+        });
+        return out;
+    }
+
+    private fragmentListBlock(block: Block): Block[] {
+        const lines = block.text.split('\n');
+        const markers = block.listMarkers || [];
+        const out: Block[] = [];
+        let offset = 0;
+        lines.forEach((line, lineIndex) => {
+            const lineStart = offset;
+            const lineEnd = lineStart + line.length;
+            offset = lineEnd + 1;
+            const lineParts = block.listItemInlineParts?.[lineIndex];
+            const fragments = this.fragmentTextLine(line);
+            fragments.forEach((fragment, fragmentIndex) => {
+                const fragStart = lineStart + fragment.start;
+                const fragEnd = lineStart + fragment.end;
+                const fragmentParts = lineParts?.length ? this.sliceInlineParts(lineParts, fragment.start, fragment.end) : undefined;
+                out.push({
+                    ...block,
+                    srcLine: block.srcLine + lineIndex,
+                    text: fragment.text,
+                    listMarkers: [fragmentIndex === 0 ? (markers[lineIndex] ?? '•') : ''],
+                    inlineStyles: this.sliceInlineStyles(block.inlineStyles || [], fragStart, fragEnd, fragment.text.length),
+                    listItemInlineParts: fragmentParts ? [fragmentParts] : undefined,
+                    previewContinuation: lineIndex < lines.length - 1 || fragmentIndex < fragments.length - 1,
+                });
+            });
+        });
+        return out;
     }
     private postWholeHtml(panel: vscode.WebviewPanel, doc: vscode.TextDocument, htmlBody: string) {
         panel.webview.postMessage({ type: 'docRender', sameDoc: true, html: htmlBody });
@@ -1019,6 +1103,9 @@ export class PreviewManager {
         if (block.kind === 'image' && block.imageSrc) {
             return this.renderStandaloneImageBlock(block, docDir, webview);
         }
+        if (block.inlineParts?.some(part => part.kind === 'image')) {
+            return this.renderPlainBlockHtml(block, imgCtx);
+        }
         // 快速判断：block 文本中是否包含图片占位符
         if (!block.text.includes('[image')) {
             return this.renderPlainBlockHtml(block, imgCtx);
@@ -1074,33 +1161,162 @@ export class PreviewManager {
             return this.wrapRenderedBlock(block, `<pre>${this.escapeHtml(block.text)}</pre>`);
         }
         if (block.kind === 'list') {
-            const lines = block.text.split('\n');
-            const markers = block.listMarkers || [];
-            let offset = 0;
-            const inner = lines.map((line, index) => {
-                const marker = markers[index] || '•';
-                const start = offset;
-                const end = start + line.length;
-                offset = end + 1;
-                const lineParts = block.listItemInlineParts?.[index];
-                const lineStyles = (block.inlineStyles || [])
-                    .filter(style => style.start < end && start < style.end)
-                    .map(style => ({
-                        ...style,
-                        start: Math.max(0, style.start - start),
-                        end: Math.min(line.length, style.end - start),
-                    }));
-                const textHtml = lineParts?.length
-                    ? this.renderInlinePartsHtml(lineParts, lineStyles, imgCtx)
-                    : this.renderInlineHtml(line, lineStyles);
-                return `<span class="md-list-line"><span class="md-list-marker" aria-hidden="true">${this.escapeHtml(marker)}</span><span class="md-list-text">${textHtml}</span></span>`;
-            }).join('\n');
-            return this.wrapRenderedBlock(block, `<pre>${inner}</pre>`);
+            return this.renderListBlockHtml(block, imgCtx);
+        }
+        if (this.shouldFragmentTextBlock(block)) {
+            return this.renderFragmentedTextBlockHtml(block, imgCtx);
         }
         const inlineHtml = block.inlineParts?.length
             ? this.renderInlinePartsHtml(block.inlineParts, block.inlineStyles || [], imgCtx)
             : this.renderInlineHtml(block.text, block.inlineStyles || []);
         return this.wrapRenderedBlock(block, `<pre>${inlineHtml}</pre>`);
+    }
+
+    private shouldFragmentTextBlock(block: Block): boolean {
+        if (block.kind === 'image' || block.kind === 'separator' || block.kind === 'heading') {
+            return false;
+        }
+        return block.text.includes('\n') || block.text.length > PREVIEW_TEXT_FRAGMENT_CHARS;
+    }
+
+    private renderListBlockHtml(block: Block, imgCtx?: ImgCtx): string {
+        const lines = block.text.split('\n');
+        const markers = block.listMarkers || [];
+        let offset = 0;
+        const html: string[] = [];
+        lines.forEach((line, index) => {
+            const lineStart = offset;
+            const lineEnd = lineStart + line.length;
+            offset = lineEnd + 1;
+            const lineParts = block.listItemInlineParts?.[index];
+            const fragments = this.fragmentTextLine(line);
+            fragments.forEach((fragment, fragmentIndex) => {
+                const marker = fragmentIndex === 0 ? (markers[index] ?? '•') : '';
+                const fragStart = lineStart + fragment.start;
+                const fragEnd = lineStart + fragment.end;
+                const lineStyles = this.sliceInlineStyles(block.inlineStyles || [], fragStart, fragEnd, fragment.text.length);
+                const fragmentParts = lineParts?.length ? this.sliceInlineParts(lineParts, fragment.start, fragment.end) : undefined;
+                const textHtml = fragmentParts?.length
+                    ? this.renderInlinePartsHtml(fragmentParts, lineStyles, imgCtx)
+                    : this.renderInlineHtml(fragment.text, lineStyles);
+                const inner = `<span class="md-list-line"><span class="md-list-marker" aria-hidden="true">${this.escapeHtml(marker)}</span><span class="md-list-text">${textHtml}</span></span>`;
+                html.push(this.wrapRenderedBlock(
+                    { ...block, srcLine: block.srcLine + index, text: fragment.text, inlineStyles: lineStyles, inlineParts: fragmentParts },
+                    `<pre>${inner}</pre>`,
+                    (index < lines.length - 1 || fragmentIndex < fragments.length - 1) ? { continuation: true } : undefined
+                ));
+            });
+        });
+        return html.join('\n');
+    }
+
+    private renderFragmentedTextBlockHtml(block: Block, imgCtx?: ImgCtx): string {
+        const lines = block.text.split('\n');
+        let offset = 0;
+        const html: string[] = [];
+        lines.forEach((line, index) => {
+            const start = offset;
+            const end = start + line.length;
+            offset = end + 1;
+            const fragments = this.fragmentTextLine(line);
+            fragments.forEach((fragment, fragmentIndex) => {
+                const fragStart = start + fragment.start;
+                const fragEnd = start + fragment.end;
+                const lineStyles = this.sliceInlineStyles(block.inlineStyles || [], fragStart, fragEnd, fragment.text.length);
+                const lineParts = block.inlineParts?.length
+                    ? this.sliceInlineParts(block.inlineParts, fragStart, fragEnd)
+                    : undefined;
+                const inlineHtml = lineParts?.length
+                    ? this.renderInlinePartsHtml(lineParts, lineStyles, imgCtx)
+                    : this.renderInlineHtml(fragment.text, lineStyles);
+                html.push(this.wrapRenderedBlock(
+                    { ...block, srcLine: block.srcLine + index, text: fragment.text, inlineStyles: lineStyles, inlineParts: lineParts },
+                    `<pre>${inlineHtml}</pre>`,
+                    (index < lines.length - 1 || fragmentIndex < fragments.length - 1) ? { continuation: true } : undefined
+                ));
+            });
+        });
+        return html.join('\n');
+    }
+
+    private fragmentTextLine(line: string): Array<{ start: number; end: number; text: string }> {
+        if (line.length <= PREVIEW_TEXT_FRAGMENT_CHARS) {
+            return [{ start: 0, end: line.length, text: line }];
+        }
+        const fragments: Array<{ start: number; end: number; text: string }> = [];
+        let start = 0;
+        while (start < line.length) {
+            let end = Math.min(line.length, start + PREVIEW_TEXT_FRAGMENT_CHARS);
+            if (end < line.length) {
+                const windowStart = Math.max(start + Math.floor(PREVIEW_TEXT_FRAGMENT_CHARS * 0.55), start + 1);
+                const slice = line.slice(windowStart, end);
+                const punct = Math.max(
+                    slice.lastIndexOf('。'),
+                    slice.lastIndexOf('！'),
+                    slice.lastIndexOf('？'),
+                    slice.lastIndexOf('；'),
+                    slice.lastIndexOf(';'),
+                    slice.lastIndexOf('.'),
+                    slice.lastIndexOf('!'),
+                    slice.lastIndexOf('?'),
+                    slice.lastIndexOf('，'),
+                    slice.lastIndexOf(','),
+                    slice.lastIndexOf('、'),
+                    slice.lastIndexOf(' ')
+                );
+                if (punct >= 0) {
+                    end = windowStart + punct + 1;
+                }
+            }
+            fragments.push({ start, end, text: line.slice(start, end) });
+            start = end;
+        }
+        return fragments;
+    }
+
+    private sliceInlineStyles(styles: NonNullable<Block['inlineStyles']>, start: number, end: number, lineLength: number): NonNullable<Block['inlineStyles']> {
+        return styles
+            .filter(style => style.start < end && start < style.end)
+            .map(style => ({
+                ...style,
+                start: Math.max(0, style.start - start),
+                end: Math.min(lineLength, style.end - start),
+            }))
+            .filter(style => style.end > style.start);
+    }
+
+    private sliceInlineParts(parts: MarkdownInlinePart[], start: number, end: number): MarkdownInlinePart[] {
+        const out: MarkdownInlinePart[] = [];
+        let offset = 0;
+        for (const part of parts) {
+            const partText = part.kind === 'image' ? part.placeholder : part.text;
+            const partStart = offset;
+            const partEnd = partStart + partText.length;
+            offset = partEnd;
+            if (partEnd <= start || partStart >= end) {
+                continue;
+            }
+            if (part.kind === 'image') {
+                if (partStart >= start && partEnd <= end) {
+                    out.push({ ...part });
+                }
+                continue;
+            }
+            const sliceStart = Math.max(start, partStart);
+            const sliceEnd = Math.min(end, partEnd);
+            const localStart = sliceStart - partStart;
+            const localEnd = sliceEnd - partStart;
+            const text = part.text.slice(localStart, localEnd);
+            if (!text) {
+                continue;
+            }
+            out.push({
+                kind: 'text',
+                text,
+                styles: this.sliceInlineStyles(part.styles || [], localStart, localEnd, text.length),
+            });
+        }
+        return out;
     }
 
     private renderInlinePartsHtml(parts: MarkdownInlinePart[], fallbackStyles: NonNullable<Block['inlineStyles']>, imgCtx?: ImgCtx): string {
@@ -1172,10 +1388,11 @@ export class PreviewManager {
         return html;
     }
 
-    private wrapRenderedBlock(block: Block, innerHtml: string): string {
+    private wrapRenderedBlock(block: Block, innerHtml: string, options?: { continuation?: boolean }): string {
         const attrs = [`data-line="${block.srcLine}"`];
         if (block.kind) { attrs.push(`data-md-kind="${block.kind}"`); }
         if (block.level) { attrs.push(`data-md-level="${block.level}"`); }
+        if (options?.continuation || block.previewContinuation) { attrs.push('data-md-continuation="true"'); }
         return `<div ${attrs.join(' ')}>${innerHtml}</div>`;
     }
 

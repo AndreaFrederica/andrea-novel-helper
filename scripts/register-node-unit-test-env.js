@@ -29,9 +29,47 @@ const vscodeMock = {
       return { fsPath };
     },
   },
+  languages: {
+    createDiagnosticCollection() {
+      return { set() {}, clear() {}, delete() {}, dispose() {} };
+    },
+  },
+  DiagnosticSeverity: {
+    Error: 0,
+    Warning: 1,
+    Information: 2,
+    Hint: 3,
+  },
+  EventEmitter: class {
+    constructor() {
+      this.event = () => ({ dispose() {} });
+    }
+    fire() {}
+    dispose() {}
+  },
+  TreeItem: class {
+    constructor(label, collapsibleState) {
+      this.label = label;
+      this.collapsibleState = collapsibleState;
+    }
+  },
+  TreeItemCollapsibleState: {
+    None: 0,
+    Collapsed: 1,
+    Expanded: 2,
+  },
 };
 
 Module._load = function loadWithNodeUnitTestStubs(request, parent, isMain) {
+  if (
+    request.endsWith('/activate') ||
+    request.endsWith('\\activate') ||
+    request === '../../activate' ||
+    request === '../activate'
+  ) {
+    return { roles: [] };
+  }
+
   if (
     request === './utils' &&
     parent &&

@@ -105,6 +105,10 @@
             margin-bottom: 0;
         }
 
+        .reader-content [data-md-continuation="true"] pre {
+            margin-bottom: 0;
+        }
+
         .reader-content .md-list-line {
             display: block;
         }
@@ -470,6 +474,20 @@
             margin: 8px 0 4px;
         }
 
+        .rs-debug-output {
+            display: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 180px;
+            overflow: auto;
+            margin: 8px 0 4px 80px;
+            padding: 8px;
+            border: 1px solid #5557;
+            border-radius: 6px;
+            background: color-mix(in srgb, currentColor 8%, transparent);
+            font: 11px/1.45 var(--reader-font-family, Consolas, 'Courier New', monospace);
+        }
+
         .rs-footer {
             text-align: right;
             margin-top: 4px;
@@ -711,6 +729,11 @@
         </div>
         <div class="rs-help">* 高度模式=自动 时忽略高度输入按窗口高度(减去余量)分页；手动时用输入值（高度=0 也视为自动）。分页翻页：PgUp/PgDn/空格/方向键；TTS
             自动跨页。列数仅在滚动模式生效。</div>
+        <div class="rs-row">
+            <label>调试</label>
+            <button class="rs-toggle" id="rs-pageDebug" type="button">分页诊断</button>
+        </div>
+        <pre class="rs-debug-output" id="rs-pageDebugOutput"></pre>
         <div class="rs-footer"><button id="rs-reset">重置默认</button></div>
     </div>
 

@@ -85,13 +85,13 @@ export function mdToPlainText(src: string, inlineOptions?: ObsidianInlineRenderO
         }
 
         // 1) Fenced code block ```lang / ~~~
-        const fence = line.match(/^(```+|~~~+)\s*(\w+)?\s*$/);
+        const fence = line.match(/^\s*(```+|~~~+)\s*(\w+)?\s*$/);
         if (fence) {
             const start = i;
             const mark = fence[1];
             i++;
             const buf: string[] = [];
-            while (i < lines.length && !new RegExp(`^${mark}\\s*$`).test(lines[i])) {
+            while (i < lines.length && !new RegExp(`^\\s*${mark}\\s*$`).test(lines[i])) {
                 buf.push(lines[i]);
                 i++;
             }
@@ -161,19 +161,7 @@ export function mdToPlainText(src: string, inlineOptions?: ObsidianInlineRenderO
             continue;
         }
 
-        // 6) Indented code block
-        if (/^(?: {4}|\t)/.test(line)) {
-            const start = i;
-            const buf: string[] = [];
-            while (i < lines.length && (lines[i].trim() === '' || /^(?: {4}|\t)/.test(lines[i]))) {
-                buf.push(lines[i].replace(/^(?: {4}|\t)/, ''));
-                i++;
-            }
-            pushBlock(start, buf.join('\n'), { kind: 'code' });
-            continue;
-        }
-
-        // 7) Table（简化处理）
+        // 6) Table（简化处理）
         if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?\s*[-:| ]+\|[-:| ]+\s*\|?\s*$/.test(lines[i + 1])) {
             const start = i;
             const buf: string[] = [];
@@ -187,7 +175,7 @@ export function mdToPlainText(src: string, inlineOptions?: ObsidianInlineRenderO
             continue;
         }
 
-        // 8.5) Standalone image paragraph
+        // 7) Standalone image paragraph
         const standaloneImage = parseStandaloneImageLine(line, refDefs);
         if (standaloneImage) {
             pushBlock(i, formatImageText(standaloneImage.alt), {
@@ -200,11 +188,11 @@ export function mdToPlainText(src: string, inlineOptions?: ObsidianInlineRenderO
             continue;
         }
 
-        // 9) Paragraph / 连续非空行 或 空行：保留空行为独立空块
+        // 8) Paragraph / 连续非空行 或 空行：保留空行为独立空块
         const start = i;
         const buf: string[] = [];
         while (i < lines.length && lines[i].trim() !== '') {
-            if (/^(```+|~~~+)\s*\w*\s*$/.test(lines[i]) || /^\s*>/.test(lines[i]) || /^\s*([*+\-]|\d+\.)\s+/.test(lines[i]) || /^(?: {4}|\t)/.test(lines[i])) { break; }
+            if (/^\s*(```+|~~~+)\s*\w*\s*$/.test(lines[i]) || /^\s*>/.test(lines[i]) || /^\s*([*+\-]|\d+\.)\s+/.test(lines[i])) { break; }
             buf.push(lines[i]);
             i++;
         }

@@ -974,6 +974,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var fontFamilySelect = document.getElementById('rs-fontFamily');
     var btnReloadFonts = document.getElementById('rs-reloadFonts');
     var btnReset = document.getElementById('rs-reset');
+    var btnPageDebug = document.getElementById('rs-pageDebug');
+    var pageDebugOutput = document.getElementById('rs-pageDebugOutput');
     var presetSelect = document.getElementById('rs-preset');
     var btnSavePreset = document.getElementById('rs-savePreset');
     var btnDelPreset = document.getElementById('rs-delPreset');
@@ -1585,6 +1587,30 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             try { vscode.postMessage({ type: 'requestVscodeFontFamily' }); } catch (_) { }
         }
     } catch (_) { }
+    function renderPageDebugInfo() {
+        if (!pageDebugOutput) { return; }
+        var info = null;
+        try {
+            if (typeof window.__anhPreviewPaginationDebug === 'function') {
+                info = window.__anhPreviewPaginationDebug();
+            } else if (window.DomPager && window.DomPager.debugInfo) {
+                info = window.DomPager.debugInfo();
+            }
+        } catch (e) {
+            info = { error: String((e && e.message) || e) };
+        }
+        if (!info) {
+            info = {
+                active: false,
+                reason: 'DomPager debug API is not ready',
+                bodyPaged: document.body.classList.contains('reader-paged'),
+                dataLineNodes: document.querySelectorAll('#reader-content [data-line]').length
+            };
+        }
+        pageDebugOutput.style.display = 'block';
+        pageDebugOutput.textContent = JSON.stringify(info, null, 2);
+    }
+    if (btnPageDebug) { btnPageDebug.addEventListener('click', renderPageDebugInfo); }
     if (btnReset) { btnReset.addEventListener('click', function () { state = JSON.parse(JSON.stringify(DEFAULTS)); try { presets[activePresetName] = JSON.parse(JSON.stringify(state)); savePresets(presets); } catch (_) { } reflect(); }); }
     function openSettingsPanel() {
         panel.classList.add('open');
@@ -1824,6 +1850,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         var originalHTML = '';
         var pageStarts = [];   // 每页第一个 data-line 的行号（单调）
         var cfg = { pageHeight: 0 };
+        var lastDebug = null;
 
         function pagerAutoHeight() {
             var base = window.innerHeight;
@@ -1849,12 +1876,21 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             var maxH = cfg.pageHeight > 0 ? cfg.pageHeight : pagerAutoHeight();
             if (maxH < 120) { maxH = pagerAutoHeight(); }
             var groups = []; var cur = []; var hSum = 0;
+            var maxElH = 0;
             els.forEach(function (el) {
                 var h = el.offsetHeight;
+                if (h > maxElH) { maxElH = h; }
                 if (hSum + h > maxH && cur.length > 0) { groups.push(cur); cur = [el]; hSum = h; }
                 else { cur.push(el); hSum += h; }
             });
             if (cur.length) { groups.push(cur); }
+            lastDebug = {
+                sourceChildren: els.length,
+                pageHeight: maxH,
+                maxElementHeight: maxElH,
+                groups: groups.length,
+                totalContentHeight: els.reduce(function (sum, el) { return sum + el.offsetHeight; }, 0)
+            };
             return groups;
         }
 
@@ -1930,6 +1966,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             pages.forEach(function (p, i) { p.style.display = (i === current) ? '' : 'none'; });
             window.scrollTo({ top: 0, behavior: 'auto' });
             if (typeof rebuildIndexNow === 'function') { rebuildIndexNow(); }
+            if (typeof window.applyRoleColors === 'function') { setTimeout(window.applyRoleColors, 0); }
         }
 
         function enable(options) {
@@ -1990,6 +2027,14 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         function totalPages() { return pages.length; }
         function currentPage() { return current; }
         function getPageStarts() { return pageStarts; }
+        function debugInfo() {
+            return Object.assign({
+                active: active,
+                totalPages: pages.length,
+                currentPage: current,
+                pageStarts: pageStarts.slice(0, 20)
+            }, lastDebug || {});
+        }
         function pageOfElement(el) {
             while (el && el !== container) { if (el.classList && el.classList.contains('anh-page')) { return parseInt(el.getAttribute('data-page') || '0', 10); } el = el.parentElement; }
             return -1;
@@ -2116,12 +2161,19 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
 
         window.addEventListener('resize', throttle(function () { if (active) { rebuild(); } }, 250));
-        return { enable, disable, rebuild, setContent, goto, next, prev, isActive, totalPages, currentPage, pageOfElement, pageOfLine, updatePageHTML, _pageStarts: getPageStarts };
+        return { enable, disable, rebuild, setContent, goto, next, prev, isActive, totalPages, currentPage, pageOfElement, pageOfLine, updatePageHTML, _pageStarts: getPageStarts, debugInfo: debugInfo };
 
     })();
 
     // 将 DomPager 暴露到全局，供其他独立作用域（如 initScrollSync）访问
     try { window.DomPager = DomPager; } catch (_) { }
+    try {
+        window.__anhPreviewPaginationDebug = function () {
+            var info = DomPager.debugInfo ? DomPager.debugInfo() : {};
+            try { console.table(info); } catch (_) { console.log(info); }
+            return info;
+        };
+    } catch (_) { }
 
     /* ======= 分页模式：按页增量渲染入口 ======= */
     (function enablePagedIncrementalUpdate() {
