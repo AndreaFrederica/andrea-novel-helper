@@ -8,6 +8,8 @@ import { spawn } from 'child_process'
 import { parseSingleFileTemplate } from './singleFileTemplate'
 import { templateRegistry } from './templateRegistry'
 import { renderTypstWithRegisteredRenderer, scriptExtensionRegistry } from '../mcp/scriptExtensions'
+import { getObsidianInlineRenderOptions } from '../utils/obsidianInlineConfig'
+import { renderObsidianInlineText } from '../utils/obsidianInline'
 
 // 全局typstFS引用（由activate.ts在初始化时设置）
 let _typstFS: any = undefined
@@ -45,7 +47,7 @@ export function mapTypstToMemory(typContent: string, sourceUri?: vscode.Uri): vs
 
 function mdToTypstInline(s: string): string {
   if (!s) return s
-  return s
+  return renderObsidianInlineText(s, getObsidianInlineRenderOptions())
     .replace(/\*\*([^*]+)\*\*/g, '#text(lang: "zh", weight: "bold")[$1]')
     .replace(/__([^_]+)__/g, '#text(lang: "zh", weight: "bold")[$1]')
     .replace(/\*([^*]+)\*/g, '#text(lang: "zh", style: "italic")[$1]')

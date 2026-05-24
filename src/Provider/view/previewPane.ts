@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as fontList from 'font-list';
-import { mdToPlainText, type MarkdownPlainBlock } from '../../utils/md_plain';
+import { mdToPlainText, type MarkdownInlinePart, type MarkdownPlainBlock } from '../../utils/md_plain';
 import { txtToPlainText } from '../../utils/txt_plain';
 import { setActivePreview } from '../../context/previewRedirect';
 import { getRoleLookupKeys } from '../../utils/roleLookupKeys';
@@ -11,6 +11,7 @@ import { collectRoleUsageRanges } from '../../utils/roleUsageCollector';
 import { ahoCorasickManager } from '../../utils/AhoCorasick/ahoCorasickManager';
 import { renderPlainTextWithProcessor, scriptExtensionRegistry } from '../../mcp/scriptExtensions';
 import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
+import { getObsidianInlineRenderOptions, getTxtExportObsidianInlineRenderOptions } from '../../utils/obsidianInlineConfig';
 
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
 const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
@@ -22,6 +23,7 @@ const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
 
 type Block = MarkdownPlainBlock;
 type ImgCtx = { srcLines: string[]; docDir: string; webview: vscode.Webview };
+type PreviewTextChange = { start: number; end: number; text: string; lineDelta: number };
 type RoleTextStyle = {
     color?: string;
     backgroundColor?: string;
@@ -58,8 +60,9 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
                 if (sel) {
                     // If selection exists, copy its plain text (use appropriate processor for markdown/plaintext)
                     let text: string;
-                    if (doc.languageId === 'markdown') { text = mdToPlainText(sel).text; }
-                    else if (doc.languageId === 'plaintext') { text = txtToPlainText(sel).text; }
+                    const inlineOptions = getObsidianInlineRenderOptions(doc.uri);
+                    if (doc.languageId === 'markdown') { text = mdToPlainText(sel, inlineOptions).text; }
+                    else if (doc.languageId === 'plaintext') { text = txtToPlainText(sel, inlineOptions).text; }
                     else { text = sel; }
                     vscode.env.clipboard.writeText(text);
                     vscode.window.setStatusBarMessage('已复制纯文本（选区）', 1200);
@@ -83,7 +86,7 @@ export class PreviewManager {
     private panels = new Map<string, vscode.WebviewPanel>();
     // 防抖 / 节流：用 Map 持有 timer，保证同一文档跨事件共享状态
     private _updateTimers = new Map<string, NodeJS.Timeout>();
-    private _updatePendingChanges = new Map<string, { start: number; end: number; text: string }[]>();
+    private _updatePendingChanges = new Map<string, PreviewTextChange[]>();
     private _scrollTimers = new Map<string, NodeJS.Timeout>();
     private _scrollLast = new Map<string, number>();
     private loopGuard = new Map<string, number>();
@@ -121,10 +124,21 @@ export class PreviewManager {
         return ranges;
     }
 
+    private blocksContainImagePlaceholder(blocks: Block[], startIdx: number, endIdx: number): boolean {
+        const from = Math.max(0, startIdx - 1);
+        const to = Math.min(blocks.length - 1, endIdx + 1);
+        for (let i = from; i <= to; i++) {
+            if (blocks[i]?.kind !== 'image' && blocks[i]?.text?.includes('[image')) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private applyIncrementalUpdate(
         panel: vscode.WebviewPanel,
         doc: vscode.TextDocument,
-        changes: { start: number; end: number; text: string }[]
+        changes: PreviewTextChange[]
     ) {
         const key = doc.uri.toString();
         const oldBlocks = this.lastBlocks.get(key);
@@ -132,6 +146,17 @@ export class PreviewManager {
             ? { srcLines: doc.getText().split(/\r?\n/), docDir: path.dirname(doc.uri.fsPath), webview: panel.webview }
             : undefined;
         if (!oldBlocks || changes.length === 0) {
+            const { blocks: newBlocks } = this.renderToPlainText(doc);
+            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks, imgCtx));
+            this.lastBlocks.set(key, newBlocks);
+            return;
+        }
+
+        // data-line is embedded in every rendered block and the webview patcher uses it
+        // as the DOM anchor. If a text edit inserts/removes source lines, unchanged DOM
+        // nodes after the edit keep stale data-line values, so later patches can delete
+        // or insert against the wrong nodes. In that case repaint this document in place.
+        if (changes.some(c => c.lineDelta !== 0)) {
             const { blocks: newBlocks } = this.renderToPlainText(doc);
             this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks, imgCtx));
             this.lastBlocks.set(key, newBlocks);
@@ -167,6 +192,13 @@ export class PreviewManager {
         const oldEndIdx = findCoverEnd(oldRanges);
         const newStartIdx = findCoverStart(newRanges);
         const newEndIdx = findCoverEnd(newRanges);
+
+        if (this.blocksContainImagePlaceholder(oldBlocks, oldStartIdx, oldEndIdx)
+            || this.blocksContainImagePlaceholder(newBlocks, newStartIdx, newEndIdx)) {
+            this.postWholeHtml(panel, doc, this.makeHtmlFromBlocks(newBlocks, imgCtx));
+            this.lastBlocks.set(key, newBlocks);
+            return;
+        }
 
         // 取更稳的替换边界（两边并齐）
         const patchFrom = Math.min(
@@ -222,7 +254,8 @@ export class PreviewManager {
                 const incoming = ev.contentChanges.map(c => ({
                     start: c.range.start.line,
                     end: c.range.end.line,
-                    text: c.text
+                    text: c.text,
+                    lineDelta: c.text.split('\n').length - 1 - (c.range.end.line - c.range.start.line)
                 }));
                 const accumulated = this._updatePendingChanges.get(key) ?? [];
                 accumulated.push(...incoming);
@@ -307,6 +340,33 @@ export class PreviewManager {
             const roles = this._getRoles ? this._getRoles() : [];
             panel.webview.postMessage({ type: 'roleColors', roles: this.buildRoleColorPayload(roles) });
         } catch { }
+    }
+
+    private sendObsidianRenderOptions(panel: vscode.WebviewPanel, doc: vscode.TextDocument): void {
+        try {
+            const options = getObsidianInlineRenderOptions(doc.uri);
+            panel.webview.postMessage({
+                type: 'obsidianRenderOptions',
+                renderWikilinks: options.renderWikilinks !== false,
+                renderTags: options.tagRenderMode !== 'hidden',
+                renderEscapedTags: !!options.renderEscapedTags,
+                separatorRenderMode: options.separatorRenderMode || 'preserve',
+            });
+        } catch { }
+    }
+
+    private async updateObsidianRenderOptions(doc: vscode.TextDocument, msg: any): Promise<void> {
+        const target = vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+        const updates: Thenable<void>[] = [];
+        const cfg = vscode.workspace.getConfiguration('AndreaNovelHelper.obsidian', doc.uri);
+        const markdownCfg = vscode.workspace.getConfiguration('AndreaNovelHelper.markdown', doc.uri);
+        if (typeof msg.renderWikilinks === 'boolean') { updates.push(cfg.update('renderWikilinks', msg.renderWikilinks, target)); }
+        if (typeof msg.renderTags === 'boolean') { updates.push(cfg.update('renderTags', msg.renderTags, target)); }
+        if (typeof msg.renderEscapedTags === 'boolean') { updates.push(cfg.update('renderEscapedTags', msg.renderEscapedTags, target)); }
+        if (msg.separatorRenderMode === 'render' || msg.separatorRenderMode === 'hidden' || msg.separatorRenderMode === 'preserve') {
+            updates.push(markdownCfg.update('separatorRenderMode', msg.separatorRenderMode, target));
+        }
+        await Promise.all(updates);
     }
 
     private createVirtualDocument(text: string, sourceUri: vscode.Uri): vscode.TextDocument {
@@ -473,6 +533,7 @@ export class PreviewManager {
                 docUri: key,
                 isPrimary: (this.primaryPanel === panel)
             });
+            this.sendObsidianRenderOptions(panel, doc);
         } catch { }
         // Webview 脚本加载完成后会主动 requestRoleColors；这里不抢先推送，避免消息在页面重建时丢失。
     }
@@ -575,7 +636,7 @@ export class PreviewManager {
             fileName: doc.fileName,
             processorId,
         });
-        const rendered = this.renderToPlainText(doc);
+        const rendered = this.renderToPlainText(doc, getTxtExportObsidianInlineRenderOptions(doc.uri));
         const text = await renderPlainTextWithProcessor(doc, rendered.text, processorId);
         const uri = await vscode.window.showSaveDialog({
             defaultUri: doc.uri.with({ path: doc.uri.path.replace(/\.[^/\\.]+$/, '') + '.txt' }),
@@ -749,6 +810,23 @@ export class PreviewManager {
             if (panel) { this.sendRoleColors(panel); }
             return;
         }
+        if (msg?.type === 'requestObsidianRenderOptions') {
+            const panel = this.panels.get(key);
+            if (panel) { this.sendObsidianRenderOptions(panel, doc); }
+            return;
+        }
+        if (msg?.type === 'setObsidianRenderOptions') {
+            void this.updateObsidianRenderOptions(doc, msg).then(() => {
+                const panel = this.panels.get(key);
+                if (!panel) { return; }
+                this.updatePanel(panel, doc);
+                this.sendObsidianRenderOptions(panel, doc);
+            }).catch(error => {
+                console.warn('[Preview] Failed to update Obsidian render options', error);
+                vscode.window.showWarningMessage('更新 Obsidian 预览渲染设置失败');
+            });
+            return;
+        }
         if (msg?.type === 'requestRoleHighlights') {
             const panel = this.panels.get(key);
             const enabledTypes = Array.isArray(msg.enabledTypes)
@@ -916,31 +994,34 @@ export class PreviewManager {
             const htmlBody = this.makeHtmlFromBlocks(blocks, imgCtx);
             return { htmlBody, blocks };
         } else {
-            const text = doc.getText();
-            const { blocks } = txtToPlainText(text);
+            const { blocks } = this.renderToPlainText(doc);
             const htmlBody = blocks.map(b => this.renderPlainBlockHtml(b)).join('\n');
             return { htmlBody, blocks };
         }
     }
 
 
-    private renderToPlainText(doc: vscode.TextDocument): { text: string; blocks: Block[] } {
+    private renderToPlainText(doc: vscode.TextDocument, inlineOptions = getObsidianInlineRenderOptions(doc.uri)): { text: string; blocks: Block[] } {
         if (doc.languageId === 'markdown' || /\.md(i|own)?$/i.test(doc.fileName)) {
             const src = doc.getText();
-            return mdToPlainText(src);
+            return mdToPlainText(src, inlineOptions);
         }
         const text = doc.getText();
-        const blocks = (doc.languageId === 'plaintext') ? txtToPlainText(text).blocks : [{ srcLine: 0, text }];
-        const outText = (doc.languageId === 'plaintext') ? txtToPlainText(text).text : text;
+        const rendered = (doc.languageId === 'plaintext') ? txtToPlainText(text, inlineOptions) : undefined;
+        const blocks = rendered ? rendered.blocks : [{ srcLine: 0, text }];
+        const outText = rendered ? rendered.text : text;
         return { text: outText, blocks };
     }
 
     /** 渲染单个 Block 为 HTML，若包含图片则生成 <img> 标签 */
     private renderBlockHtml(block: Block, nextLine: number, imgCtx: ImgCtx): string {
         const { srcLines, docDir, webview } = imgCtx;
+        if (block.kind === 'image' && block.imageSrc) {
+            return this.renderStandaloneImageBlock(block, docDir, webview);
+        }
         // 快速判断：block 文本中是否包含图片占位符
         if (!block.text.includes('[image')) {
-            return this.renderPlainBlockHtml(block);
+            return this.renderPlainBlockHtml(block, imgCtx);
         }
         // 收集本 block 原始源行中所有图片
         const blockEnd = Math.min(nextLine, srcLines.length);
@@ -954,7 +1035,7 @@ export class PreviewManager {
             }
         }
         if (!images.length) {
-            return this.renderPlainBlockHtml(block);
+            return this.renderPlainBlockHtml(block, imgCtx);
         }
         // 判断 block 是否为纯图片（文本仅包含 [image...] 占位）
         const trimmed = block.text.trim();
@@ -978,7 +1059,17 @@ export class PreviewManager {
         return this.wrapRenderedBlock(block, `<pre>${html}</pre>`);
     }
 
-    private renderPlainBlockHtml(block: Block): string {
+    private renderStandaloneImageBlock(block: Block, docDir: string, webview: vscode.Webview): string {
+        const resolvedSrc = this.resolveImageSrc(block.imageSrc || '', docDir, webview);
+        const alt = this.escapeHtml(block.imageAlt || '');
+        const titleAttr = block.imageTitle ? ` title="${this.escapeHtml(block.imageTitle)}"` : '';
+        return this.wrapRenderedBlock(block, `<figure style="margin:0.5em 0;text-align:center"><img src="${resolvedSrc}" alt="${alt}"${titleAttr} style="max-width:100%;height:auto;" loading="lazy"></figure>`);
+    }
+
+    private renderPlainBlockHtml(block: Block, imgCtx?: ImgCtx): string {
+        if (block.kind === 'separator') {
+            return this.wrapRenderedBlock(block, '<div class="md-separator" aria-hidden="true"><hr style="border:none;border-top:1px solid var(--vscode-editor-foreground);opacity:.28;margin:.9em 0;"></div>');
+        }
         if (block.kind === 'code') {
             return this.wrapRenderedBlock(block, `<pre>${this.escapeHtml(block.text)}</pre>`);
         }
@@ -991,6 +1082,7 @@ export class PreviewManager {
                 const start = offset;
                 const end = start + line.length;
                 offset = end + 1;
+                const lineParts = block.listItemInlineParts?.[index];
                 const lineStyles = (block.inlineStyles || [])
                     .filter(style => style.start < end && start < style.end)
                     .map(style => ({
@@ -998,11 +1090,36 @@ export class PreviewManager {
                         start: Math.max(0, style.start - start),
                         end: Math.min(line.length, style.end - start),
                     }));
-                return `<span class="md-list-line"><span class="md-list-marker" aria-hidden="true">${this.escapeHtml(marker)}</span><span class="md-list-text">${this.renderInlineHtml(line, lineStyles)}</span></span>`;
+                const textHtml = lineParts?.length
+                    ? this.renderInlinePartsHtml(lineParts, lineStyles, imgCtx)
+                    : this.renderInlineHtml(line, lineStyles);
+                return `<span class="md-list-line"><span class="md-list-marker" aria-hidden="true">${this.escapeHtml(marker)}</span><span class="md-list-text">${textHtml}</span></span>`;
             }).join('\n');
             return this.wrapRenderedBlock(block, `<pre>${inner}</pre>`);
         }
-        return this.wrapRenderedBlock(block, `<pre>${this.renderInlineHtml(block.text, block.inlineStyles || [])}</pre>`);
+        const inlineHtml = block.inlineParts?.length
+            ? this.renderInlinePartsHtml(block.inlineParts, block.inlineStyles || [], imgCtx)
+            : this.renderInlineHtml(block.text, block.inlineStyles || []);
+        return this.wrapRenderedBlock(block, `<pre>${inlineHtml}</pre>`);
+    }
+
+    private renderInlinePartsHtml(parts: MarkdownInlinePart[], fallbackStyles: NonNullable<Block['inlineStyles']>, imgCtx?: ImgCtx): string {
+        if (!parts.length) {
+            return '';
+        }
+        return parts.map(part => {
+            if (part.kind === 'image') {
+                return this.renderInlineImageHtml(part, imgCtx);
+            }
+            return this.renderInlineHtml(part.text, part.styles || fallbackStyles);
+        }).join('');
+    }
+
+    private renderInlineImageHtml(part: Extract<MarkdownInlinePart, { kind: 'image' }>, imgCtx?: ImgCtx): string {
+        const src = imgCtx ? this.resolveImageSrc(part.src, imgCtx.docDir, imgCtx.webview) : this.escapeHtml(part.src);
+        const alt = this.escapeHtml(part.alt);
+        const titleAttr = part.title ? ` title="${this.escapeHtml(part.title)}"` : '';
+        return `<img src="${src}" alt="${alt}"${titleAttr} style="max-width:100%;height:auto;vertical-align:middle;" loading="lazy">`;
     }
 
     private renderInlineHtml(text: string, styles: NonNullable<Block['inlineStyles']>): string {

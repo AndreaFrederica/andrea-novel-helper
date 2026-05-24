@@ -7,6 +7,7 @@ import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
 import { Role } from '../extension';
 import { FIELD_ALIASES, getExtensionFields } from '../utils/Parser/markdownParser';
 import { roleMatchesKey } from '../utils/roleLookupKeys';
+import { getTagRoleBindingsForRole } from '../language/tagRoleBridge';
 
 // // Hover 专用输出通道
 // const _anh_hover_channel = vscode.window.createOutputChannel('Andrea Novel Helper:Hover');
@@ -267,6 +268,10 @@ export function buildRoleMarkdown(r: Role): vscode.MarkdownString {
     if (r.sourcePath) {
         const fileName = r.sourcePath.split(/[/\\]/).pop() || r.sourcePath;
         md.appendMarkdown(`**源文件**: ${fileName}\n\n`);
+    }
+    const boundTags = getTagRoleBindingsForRole(r);
+    if (boundTags.length > 0) {
+        md.appendMarkdown(`**绑定标签 / 外部别名**: ${boundTags.map(binding => `\`${binding.tag}\``).join('， ')}\n\n`);
     }
     const extensionFields = getExtensionFields(r);
     for (const [fieldName, value] of extensionFields) {

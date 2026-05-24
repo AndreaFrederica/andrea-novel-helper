@@ -9,9 +9,10 @@ import { templateRegistry } from '../typst/templateRegistry'
 import { renderFromTemplate, compileTypstWithLog } from '../typst/exportService'
 import { parseMarkdownDoc, firstH1, firstHeading, Block } from '../typst/mdParser'
 import { scriptExtensionRegistry } from '../mcp/scriptExtensions'
+import { getObsidianInlineRenderOptions } from '../utils/obsidianInlineConfig'
 
-function parseBlocks(text: string): { blocks: Block[] } {
-  const doc = parseMarkdownDoc(text)
+function parseBlocks(text: string, scope?: vscode.ConfigurationScope): { blocks: Block[] } {
+  const doc = parseMarkdownDoc(text, getObsidianInlineRenderOptions(scope))
   return { blocks: doc.blocks as Block[] }
 }
 
@@ -75,7 +76,7 @@ export async function exportFromWordCount(provider: WordCountProvider, treeView:
   for (const f of files) {
     try {
       const text = fs.readFileSync(f, 'utf8')
-      const docParsed = parseMarkdownDoc(text)
+      const docParsed = parseMarkdownDoc(text, getObsidianInlineRenderOptions(vscode.Uri.file(f)))
       const blocks = docParsed.blocks as Block[]
       const baseTitle = path.basename(f).replace(/\.[^\.]+$/, '')
       const h1 = firstH1(blocks)

@@ -4,6 +4,7 @@ import { registerCompletion } from './registrations/completion'
 import { activateHover } from '../Provider/hoverProvider'
 import { activateDef } from '../Provider/defProv'
 import { registerRoleReferenceProvider } from '../Provider/roleReferenceProvider'
+import { registerTagReferenceProvider } from '../Provider/tagReferenceProvider'
 import { activateDefLinks } from '../Provider/defLinksProvider'
 import { registerFixsCodeAction } from '../Provider/fixsCodeActionProvider'
 import { registerDecorationWatchers } from '../events/updateDecorations'
@@ -25,6 +26,7 @@ export class LocalAdapter implements LanguageFeaturesAdapter {
 
   registerReferences(context: vscode.ExtensionContext): vscode.Disposable[] {
     registerRoleReferenceProvider(context)
+    registerTagReferenceProvider(context)
     return []
   }
 

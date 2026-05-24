@@ -1,3 +1,4 @@
+/* eslint-disable curly */
 /* eslint-disable semi */
 import * as vscode from 'vscode'
 import * as fs from 'fs'
@@ -8,9 +9,10 @@ import { renderFromTemplate, compileTypstWithLog, mapTypstToMemory } from '../ty
 import { ensureBuildTempBase } from '../typst/tempPaths'
 import { parseMarkdownDoc, firstH1, firstHeading, Block } from '../typst/mdParser'
 import { scriptExtensionRegistry } from '../mcp/scriptExtensions'
+import { getObsidianInlineRenderOptions } from '../utils/obsidianInlineConfig'
 
-function parseMarkdownLight(text: string): { meta: Record<string, any>; blocks: Block[] } {
-    const doc = parseMarkdownDoc(text)
+function parseMarkdownLight(text: string, scope?: vscode.ConfigurationScope): { meta: Record<string, any>; blocks: Block[] } {
+    const doc = parseMarkdownDoc(text, getObsidianInlineRenderOptions(scope))
     return { meta: doc.meta, blocks: doc.blocks as Block[] }
 }
 
@@ -123,7 +125,7 @@ export function registerTypstExport(context: vscode.ExtensionContext) {
         const selectedTemplate = await pickTemplate(defaultTemplate)
         
         const md = doc.getText()
-        const docParsed = parseMarkdownDoc(md)
+        const docParsed = parseMarkdownDoc(md, getObsidianInlineRenderOptions(doc.uri))
         const ctx = { meta: docParsed.meta, blocks: docParsed.blocks as Block[] }
         const filename = path.basename(doc.uri.fsPath).replace(/\.[^\.]+$/, '')
         const h1 = firstH1(ctx.blocks)

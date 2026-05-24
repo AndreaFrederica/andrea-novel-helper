@@ -9,6 +9,7 @@ import { TypstMemoryProvider } from '../Provider/fileSystem/TypstMemoryProvider'
 import { TypstPreviewStatusBar } from '../Provider/typstPreviewStatusBar'
 import { ensureBuildTempBase } from '../typst/tempPaths'
 import { scriptExtensionRegistry } from '../mcp/scriptExtensions'
+import { getObsidianInlineRenderOptions } from '../utils/obsidianInlineConfig'
 
 /**
  * 全局状态栏管理器
@@ -71,7 +72,7 @@ export async function openTypstPreview(typstFS: TypstMemoryProvider | undefined,
         }
         
         const md = doc.getText();
-        const docParsed = parseMarkdownDoc(md);
+        const docParsed = parseMarkdownDoc(md, getObsidianInlineRenderOptions(doc.uri));
         const blocks = docParsed.blocks as any[];
         
         const h1 = firstH1(blocks);
@@ -211,7 +212,7 @@ export function createOnChangeTypstPreview(typstFS: TypstMemoryProvider | undefi
                 const defaultTemplate = cfg.get<string>('defaultTemplate') || 'sample';
                 
                 const md = doc.getText();
-                const docParsed = parseMarkdownDoc(md);
+                const docParsed = parseMarkdownDoc(md, getObsidianInlineRenderOptions(doc.uri));
                 const blocks = docParsed.blocks as any[];
                 
                 const h1 = firstH1(blocks);

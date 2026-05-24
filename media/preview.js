@@ -959,6 +959,8 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
     var modeGroup = document.getElementById('rs-modes');
     var alignGroup = document.getElementById('rs-aligns');
     var markdownStylesGroup = document.getElementById('rs-markdownStyles');
+    var obsidianRenderGroup = document.getElementById('rs-obsidianRender');
+    var separatorModeGroup = document.getElementById('rs-separatorMode');
     var headingStyleGroup = document.getElementById('rs-headingStyle');
     var listStyleGroup = document.getElementById('rs-listStyle');
     var colsGroup = document.getElementById('rs-cols');
@@ -1013,6 +1015,10 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
         markdownStrike: false,
         markdownBlockquotes: false,
         markdownCode: false,
+        obsidianRenderWikilinks: true,
+        obsidianRenderTags: true,
+        obsidianRenderEscapedTags: false,
+        separatorRenderMode: 'preserve',
         markdownHeadingStyle: 'left',
         markdownListStyle: 'indent',
         cols: 1,
@@ -1292,6 +1298,21 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
                 );
             });
         }
+        if (obsidianRenderGroup) {
+            Array.from(obsidianRenderGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
+                var kind = b.getAttribute('data-obsidian');
+                b.classList.toggle('active',
+                    (kind === 'wikilinks' && !!state.obsidianRenderWikilinks) ||
+                    (kind === 'tags' && !!state.obsidianRenderTags) ||
+                    (kind === 'escapedTags' && !!state.obsidianRenderEscapedTags)
+                );
+            });
+        }
+        if (separatorModeGroup) {
+            Array.from(separatorModeGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
+                b.classList.toggle('active', b.getAttribute('data-separator-mode') === (state.separatorRenderMode || 'preserve'));
+            });
+        }
         if (headingStyleGroup) {
             Array.from(headingStyleGroup.querySelectorAll('.rs-toggle')).forEach(function (b) {
                 b.classList.toggle('active', b.getAttribute('data-heading-style') === (state.markdownHeadingStyle || 'left'));
@@ -1358,6 +1379,39 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             else if (kind === 'strike') { state.markdownStrike = !state.markdownStrike; reflect(); }
             else if (kind === 'blockquote') { state.markdownBlockquotes = !state.markdownBlockquotes; reflect(); }
             else if (kind === 'code') { state.markdownCode = !state.markdownCode; reflect(); }
+        });
+    }
+    if (obsidianRenderGroup) {
+        obsidianRenderGroup.addEventListener('click', function (e) {
+            var kind = e.target && e.target.getAttribute('data-obsidian');
+            if (kind === 'wikilinks') { state.obsidianRenderWikilinks = !state.obsidianRenderWikilinks; }
+            else if (kind === 'tags') { state.obsidianRenderTags = !state.obsidianRenderTags; }
+            else if (kind === 'escapedTags') { state.obsidianRenderEscapedTags = !state.obsidianRenderEscapedTags; }
+            else { return; }
+            reflect();
+            if (vscode) {
+                vscode.postMessage({
+                    type: 'setObsidianRenderOptions',
+                    renderWikilinks: !!state.obsidianRenderWikilinks,
+                    renderTags: !!state.obsidianRenderTags,
+                    renderEscapedTags: !!state.obsidianRenderEscapedTags,
+                    separatorRenderMode: state.separatorRenderMode || 'preserve'
+                });
+            }
+        });
+    }
+    if (separatorModeGroup) {
+        separatorModeGroup.addEventListener('click', function (e) {
+            var mode = e.target && e.target.getAttribute('data-separator-mode');
+            if (!mode) { return; }
+            state.separatorRenderMode = mode;
+            reflect();
+            if (vscode) {
+                vscode.postMessage({
+                    type: 'setObsidianRenderOptions',
+                    separatorRenderMode: state.separatorRenderMode || 'preserve'
+                });
+            }
         });
     }
     if (headingStyleGroup) {
@@ -1468,6 +1522,12 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
             if (typeof window.applyRoleHighlights === 'function') { window.applyRoleHighlights(msg.highlights); }
         } else if (msg?.type === 'roleColorsChanged') {
             requestRoleColors('roles-changed');
+        } else if (msg?.type === 'obsidianRenderOptions') {
+            state.obsidianRenderWikilinks = msg.renderWikilinks !== false;
+            state.obsidianRenderTags = msg.renderTags !== false;
+            state.obsidianRenderEscapedTags = !!msg.renderEscapedTags;
+            state.separatorRenderMode = msg.separatorRenderMode || 'preserve';
+            if (typeof reflect === 'function') { reflect(); }
         }
         // [PREVIEW_PERSIST:B2] message handlers for persistence
         if (msg?.type === 'init') {
@@ -1517,6 +1577,7 @@ window.addEventListener('resize', throttle(adjustForTTSControls, 200));
 
     // 首次尝试填充字体（异步）
     loadLocalFonts(false).catch(function () { });
+    try { if (vscode) { vscode.postMessage({ type: 'requestObsidianRenderOptions' }); } } catch (_) { }
     requestRoleColors('init');
     // 启动时主动请求扩展下发 editor.fontFamily，便于“跟随 VS Code”立即生效
     try {

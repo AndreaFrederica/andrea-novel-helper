@@ -3,6 +3,34 @@
   "injectionSelector": "L:text.html.markdown, L:text.plain",
   "patterns": [
     {
+      "comment": "Obsidian-style wikilink [[Page]], [[Page#Heading]], [[Page|Alias]]",
+      "name": "markup.underline.link.obsidian.andrea-novel",
+      "begin": "!?\\[\\[",
+      "beginCaptures": { "0": { "name": "punctuation.definition.link.begin.obsidian.andrea-novel" } },
+      "end": "\\]\\]",
+      "endCaptures": { "0": { "name": "punctuation.definition.link.end.obsidian.andrea-novel" } },
+      "patterns": [
+        {
+          "name": "punctuation.separator.alias.obsidian.andrea-novel",
+          "match": "\\|"
+        },
+        {
+          "name": "punctuation.separator.heading.obsidian.andrea-novel",
+          "match": "#"
+        }
+      ]
+    },
+    {
+      "comment": "Color tag / color label such as #FF6B6B",
+      "name": "entity.name.tag.color.obsidian.andrea-novel",
+      "match": "#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\\b"
+    },
+    {
+      "comment": "Obsidian-style inline tag #tag and #tag/subtag",
+      "name": "entity.name.tag.obsidian.andrea-novel",
+      "match": "(^|(?<=[\\s(\\[{>]))(#[A-Za-z0-9_\\-\\u4e00-\\u9fff]+(?:/[A-Za-z0-9_\\-\\u4e00-\\u9fff]+)*)"
+    },
+    {
       "name": "meta.definition.andrea",
       "match": "^\\s*&Def\\s+([^=]+?)\\s*=\\s*(.+)\\s*$",
       "captures": {

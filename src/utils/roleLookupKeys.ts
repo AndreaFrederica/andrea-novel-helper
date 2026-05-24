@@ -1,4 +1,5 @@
 import type { Role } from '../extension';
+import { getTagsForRoleUuid } from '../language/tagRoleBridge';
 
 export const LOOKUP_KEY_PREFIXES = [
     'lookupkeys',
@@ -114,8 +115,13 @@ export function getRoleDisplayNames(role: Role, aliasLikeKinds: readonly LookupK
     return uniqueRoleKeys([
         role.name,
         ...(role.aliases || []),
+        ...getRoleBoundTagKeys(role),
         ...getRoleLookupKeysByKinds(role, aliasLikeKinds),
     ]);
+}
+
+export function getRoleBoundTagKeys(role: Role): string[] {
+    return uniqueRoleKeys(getTagsForRoleUuid(role.uuid));
 }
 
 export function getRoleLookupKeyEntries(role: Role): Array<{ key: string; values: string[]; kind: LookupKeyKind }> {
@@ -149,7 +155,10 @@ export function getRoleLookupKeysByKinds(role: Role, kinds: readonly LookupKeyKi
 }
 
 export function getRoleLookupKeys(role: Role): string[] {
-    return uniqueRoleKeys(getRoleLookupKeyEntries(role).flatMap(entry => entry.values));
+    return uniqueRoleKeys([
+        ...getRoleLookupKeyEntries(role).flatMap(entry => entry.values),
+        ...getRoleBoundTagKeys(role),
+    ]);
 }
 
 export function getRoleMatchKeys(role: Role): string[] {

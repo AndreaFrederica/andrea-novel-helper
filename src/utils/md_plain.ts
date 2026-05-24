@@ -1,12 +1,42 @@
 // md_plain.ts
 // 零依赖 Markdown → 纯文本；返回整体文本与“块首行”映射用于滚动对齐
+import { ObsidianInlineRenderOptions, renderObsidianInlineText } from './obsidianInline';
+
+type MarkdownReferenceDefinition = {
+    url: string;
+    title?: string;
+};
+
+type MarkdownReferenceDefinitionMap = Map<string, MarkdownReferenceDefinition>;
+
+export type MarkdownInlineTextPart = {
+    kind: 'text';
+    text: string;
+    styles: MarkdownInlineStyleRange[];
+};
+
+export type MarkdownInlineImagePart = {
+    kind: 'image';
+    alt: string;
+    src: string;
+    title?: string;
+    placeholder: string;
+};
+
+export type MarkdownInlinePart = MarkdownInlineTextPart | MarkdownInlineImagePart;
+
 export type MarkdownPlainBlock = {
     srcLine: number;
     text: string;
-    kind?: 'heading' | 'list' | 'blockquote' | 'code';
+    kind?: 'heading' | 'list' | 'blockquote' | 'code' | 'image' | 'separator';
     level?: number;
     listMarkers?: string[];
     inlineStyles?: MarkdownInlineStyleRange[];
+    inlineParts?: MarkdownInlinePart[];
+    listItemInlineParts?: MarkdownInlinePart[][];
+    imageAlt?: string;
+    imageSrc?: string;
+    imageTitle?: string;
 };
 
 export type MarkdownInlineStyleRange = {
@@ -15,19 +45,20 @@ export type MarkdownInlineStyleRange = {
     kind: 'bold' | 'italic' | 'boldItalic' | 'strike' | 'code';
 };
 
-export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlainBlock[] } {
+export function mdToPlainText(src: string, inlineOptions?: ObsidianInlineRenderOptions): { text: string; blocks: MarkdownPlainBlock[] } {
     const rawLines = src.split(/\r?\n/);
     const lines = stripCommentsFromLines(rawLines);
     const blocks: MarkdownPlainBlock[] = [];
     let i = 0;
     const refDefs = collectRefDefinitions(lines);
+    const separatorMode = inlineOptions?.separatorRenderMode ?? 'preserve';
 
     const pushBlock = (start: number, text: string, meta?: Omit<MarkdownPlainBlock, 'srcLine' | 'text'>) =>
         blocks.push({ srcLine: start, text: text.replace(/\s+$/, ''), ...meta });
 
-    const pushRichBlock = (start: number, raw: string, meta?: Omit<MarkdownPlainBlock, 'srcLine' | 'text' | 'inlineStyles'>) => {
-        const rich = stripInlineRich(raw, refDefs);
-        pushBlock(start, rich.text, { ...meta, inlineStyles: rich.styles });
+    const pushRichBlock = (start: number, raw: string, meta?: Omit<MarkdownPlainBlock, 'srcLine' | 'text' | 'inlineStyles' | 'inlineParts'>) => {
+        const rich = stripInlineRich(raw, refDefs, inlineOptions);
+        pushBlock(start, rich.text, { ...meta, inlineStyles: rich.styles, inlineParts: rich.parts });
     };
 
     while (i < lines.length) {
@@ -36,6 +67,19 @@ export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlai
         // Reference-style link definition: keep line mapping but drop content
         if (isReferenceDefinitionLine(line)) {
             pushBlock(i, '');
+            i++;
+            continue;
+        }
+
+        const separator = parseSeparatorLine(lines, i);
+        if (separator) {
+            if (separatorMode === 'hidden') {
+                pushBlock(i, '');
+            } else if (separatorMode === 'render') {
+                pushBlock(i, formatRenderedSeparatorText(separator.raw), { kind: 'separator' });
+            } else {
+                pushBlock(i, separator.raw);
+            }
             i++;
             continue;
         }
@@ -57,7 +101,7 @@ export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlai
         }
 
         // 2) ATX Heading
-        const atx = line.match(/^(#{1,6})\s*(.+?)\s*#*\s*$/);
+        const atx = line.match(/^(#{1,6})(?:\s+(.+?)\s*#*\s*)$/);
         if (atx) {
             pushRichBlock(i, atx[2], { kind: 'heading', level: atx[1].length });
             i++;
@@ -88,16 +132,32 @@ export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlai
             const start = i;
             const buf: string[] = [];
             const markers: string[] = [];
+            const listItemInlineParts: MarkdownInlinePart[][] = [];
+            const inlineStyles: MarkdownInlineStyleRange[] = [];
+            let inlineOffset = 0;
             while (i < lines.length && /^\s*([*+\-]|\d+\.)\s+/.test(lines[i])) {
                 const markerMatch = lines[i].match(/^\s*(\d+\.|[*+\-])\s+/);
                 markers.push(markerMatch && /\d+\./.test(markerMatch[1]) ? markerMatch[1] : '•');
                 const li = lines[i]
                     .replace(/^\s*(?:\d+\.|[*+\-])\s+/, '')
                     .replace(/^\[([ xX])\]\s+/, (_m, g1) => (g1 === 'x' || g1 === 'X') ? '[x] ' : '[ ] ');
-                buf.push(li);
+                const rich = stripInlineRich(li, refDefs, inlineOptions);
+                buf.push(rich.text);
+                listItemInlineParts.push(rich.parts);
+                rich.styles.forEach(style => inlineStyles.push({
+                    ...style,
+                    start: style.start + inlineOffset,
+                    end: style.end + inlineOffset,
+                }));
+                inlineOffset += rich.text.length + 1;
                 i++;
             }
-            pushRichBlock(start, buf.join('\n'), { kind: 'list', listMarkers: markers });
+            pushBlock(start, buf.join('\n'), {
+                kind: 'list',
+                listMarkers: markers,
+                inlineStyles,
+                listItemInlineParts,
+            });
             continue;
         }
 
@@ -117,19 +177,25 @@ export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlai
         if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?\s*[-:| ]+\|[-:| ]+\s*\|?\s*$/.test(lines[i + 1])) {
             const start = i;
             const buf: string[] = [];
-            buf.push(stripTableRow(line, refDefs));
+            buf.push(stripTableRow(line, refDefs, inlineOptions));
             i += 2; // skip separator
             while (i < lines.length && /\|/.test(lines[i])) {
-                buf.push(stripTableRow(lines[i], refDefs));
+                buf.push(stripTableRow(lines[i], refDefs, inlineOptions));
                 i++;
             }
             pushBlock(start, buf.join('\n'));
             continue;
         }
 
-        // 8) Horizontal rule
-        if (/^\s*([-*_]\s*){3,}\s*$/.test(line)) {
-            pushBlock(i, ''); // 不输出分隔符文本
+        // 8.5) Standalone image paragraph
+        const standaloneImage = parseStandaloneImageLine(line, refDefs);
+        if (standaloneImage) {
+            pushBlock(i, formatImageText(standaloneImage.alt), {
+                kind: 'image',
+                imageAlt: standaloneImage.alt,
+                imageSrc: standaloneImage.src,
+                imageTitle: standaloneImage.title,
+            });
             i++;
             continue;
         }
@@ -166,43 +232,217 @@ export function mdToPlainText(src: string): { text: string; blocks: MarkdownPlai
 }
 
 /* —— 行内清理：去掉强调/链接/图片/行内代码/标签/实体 —— */
-export function stripInline(s: string, refDefs?: Set<string>): string {
-    return stripInlineRich(s, refDefs).text;
+export function stripInline(s: string, refDefs?: MarkdownReferenceDefinitionMap, inlineOptions?: ObsidianInlineRenderOptions): string {
+    return stripInlineRich(s, refDefs, inlineOptions).text;
 }
 
-export function stripInlineRich(s: string, refDefs?: Set<string>): { text: string; styles: MarkdownInlineStyleRange[] } {
-    let t = s;
+export function stripInlineRich(s: string, refDefs?: MarkdownReferenceDefinitionMap, inlineOptions?: ObsidianInlineRenderOptions): { text: string; styles: MarkdownInlineStyleRange[]; parts: MarkdownInlinePart[] } {
+    const imageTokens = collectInlineImageTokens(s, refDefs);
+    const tokenized = imageTokens.length ? buildTokenizedInlineSource(s, imageTokens) : s;
+    const richText = stripInlineTextRich(tokenized, refDefs, inlineOptions);
+    if (!imageTokens.length) {
+        return {
+            text: richText.text,
+            styles: richText.styles,
+            parts: richText.text ? [{ kind: 'text', text: richText.text, styles: richText.styles }] : [],
+        };
+    }
+
+    const parts: MarkdownInlinePart[] = [];
+    const styles: MarkdownInlineStyleRange[] = [];
+    let text = '';
+    let cursor = 0;
+    for (const token of imageTokens) {
+        const marker = inlineImageMarker(token.index);
+        const markerIndex = richText.text.indexOf(marker, cursor);
+        if (markerIndex === -1) {
+            continue;
+        }
+        appendInlineTextSegment(richText, cursor, markerIndex, text.length, parts, styles, segment => {
+            text += segment;
+        });
+        const placeholder = formatImageText(token.alt);
+        text += placeholder;
+        parts.push({ kind: 'image', alt: token.alt, src: token.src, title: token.title, placeholder });
+        cursor = markerIndex + marker.length;
+    }
+    appendInlineTextSegment(richText, cursor, richText.text.length, text.length, parts, styles, segment => {
+        text += segment;
+    });
+    return { text, styles, parts };
+}
+
+export function stripTableRow(line: string, refDefs?: MarkdownReferenceDefinitionMap, inlineOptions?: ObsidianInlineRenderOptions): string {
+    const cells = line.trim()
+        .replace(/^\||\|$/g, '')
+        .split('|')
+        .map(c => stripInline(c.trim(), refDefs, inlineOptions));
+    return cells.join('\t'); // 用制表符拼列
+}
+
+function formatImageText(alt?: string): string {
+    const text = (alt || '').trim();
+    return text ? `[image: ${text}]` : '[image]';
+}
+
+function formatRenderedSeparatorText(_raw: string): string {
+    return '------';
+}
+
+function parseSeparatorLine(lines: string[], index: number): { raw: string } | undefined {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+    const compact = trimmed.replace(/\s+/g, '');
+    if (/^[-*_]{3,}$/.test(compact)) {
+        return { raw: trimmed };
+    }
+    if (/^~{5,}$/.test(compact) && isSeparatorBlankBoundary(lines, index)) {
+        return { raw: trimmed };
+    }
+    return undefined;
+}
+
+function isSeparatorBlankBoundary(lines: string[], index: number): boolean {
+    const prev = index > 0 ? lines[index - 1].trim() : '';
+    const next = index + 1 < lines.length ? lines[index + 1].trim() : '';
+    return !prev && !next;
+}
+
+function parseStandaloneImageLine(line: string, refDefs?: MarkdownReferenceDefinitionMap): { alt: string; src: string; title?: string } | undefined {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('![')) {
+        return undefined;
+    }
+    const parsed = parseInlineImageAt(trimmed, 0, refDefs);
+    if (!parsed || parsed.end !== trimmed.length) {
+        return undefined;
+    }
+    return { alt: parsed.alt, src: parsed.src, title: parsed.title };
+}
+
+function normalizeRefLabel(label: string): string {
+    return label.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function collectRefDefinitions(lines: string[]): MarkdownReferenceDefinitionMap {
+    const defs: MarkdownReferenceDefinitionMap = new Map();
+    for (const line of lines) {
+        const parsed = parseReferenceDefinitionLine(line);
+        if (parsed) {
+            defs.set(normalizeRefLabel(parsed.label), { url: parsed.url, title: parsed.title });
+        }
+    }
+    return defs;
+}
+
+function parseReferenceDefinitionLine(line: string): { label: string; url: string; title?: string } | undefined {
+    const labelMatch = line.match(/^\s*\[([^\]]+)\]\s*:\s*/);
+    if (!labelMatch) {
+        return undefined;
+    }
+    const label = labelMatch[1];
+    const rest = line.slice(labelMatch[0].length).trim();
+    const target = parseImageTarget(rest, false);
+    if (!target || target.end !== rest.length) {
+        return undefined;
+    }
+    return { label, url: target.src, title: target.title };
+}
+
+type InlineImageToken = {
+    index: number;
+    start: number;
+    end: number;
+    alt: string;
+    src: string;
+    title?: string;
+};
+
+function collectInlineImageTokens(text: string, refDefs?: MarkdownReferenceDefinitionMap): InlineImageToken[] {
+    const tokens: InlineImageToken[] = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+        const bang = text.indexOf('![', cursor);
+        if (bang === -1) {
+            break;
+        }
+        const parsed = parseInlineImageAt(text, bang, refDefs);
+        if (!parsed) {
+            cursor = bang + 2;
+            continue;
+        }
+        tokens.push({ index: tokens.length, ...parsed });
+        cursor = parsed.end;
+    }
+    return tokens;
+}
+
+function buildTokenizedInlineSource(text: string, tokens: InlineImageToken[]): string {
+    let cursor = 0;
+    let out = '';
+    for (const token of tokens) {
+        out += text.slice(cursor, token.start);
+        out += inlineImageMarker(token.index);
+        cursor = token.end;
+    }
+    out += text.slice(cursor);
+    return out;
+}
+
+function inlineImageMarker(index: number): string {
+    return `\uE000IMG${index}\uE001`;
+}
+
+function appendInlineTextSegment(
+    rich: { text: string; styles: MarkdownInlineStyleRange[] },
+    start: number,
+    end: number,
+    outputOffset: number,
+    parts: MarkdownInlinePart[],
+    styles: MarkdownInlineStyleRange[],
+    appendText: (segment: string) => void,
+): void {
+    if (end <= start) {
+        return;
+    }
+    const segment = rich.text.slice(start, end);
+    if (!segment) {
+        return;
+    }
+    const segmentStyles = rich.styles
+        .filter(style => style.start < end && start < style.end)
+        .map(style => ({
+            ...style,
+            start: Math.max(0, style.start - start),
+            end: Math.min(segment.length, style.end - start),
+        }))
+        .filter(style => style.end > style.start);
+    appendText(segment);
+    parts.push({ kind: 'text', text: segment, styles: segmentStyles });
+    segmentStyles.forEach(style => styles.push({
+        ...style,
+        start: style.start + outputOffset,
+        end: style.end + outputOffset,
+    }));
+}
+
+function stripInlineTextRich(text: string, refDefs?: MarkdownReferenceDefinitionMap, inlineOptions?: ObsidianInlineRenderOptions): { text: string; styles: MarkdownInlineStyleRange[] } {
+    let t = text;
     const styles: MarkdownInlineStyleRange[] = [];
 
-    const formatImageText = (alt?: string) => {
-        const text = (alt || '').trim();
-        return text ? `[image: ${text}]` : '[image]';
-    };
-
-    // 图片必须先于链接处理，否则链接正则会先吃掉 [alt](url) 部分，留下多余的 !
-    // 图片 ![alt](src) → [image: alt]
-    t = t.replace(/!\[([^\]]*?)\]\([^)]+\)/g, (_m, a1) => formatImageText(a1));
-    // Reference-style image ![alt][id] → [image: alt]
-    t = t.replace(/!\[([^\]]*?)\]\s*\[[^\]]*?\]/g, (_m, a1) => formatImageText(a1));
-
-    // 链接 [text](url) → text；使用负向后顾排除图片（![ 已被上面处理过，此处做双重保险）
     t = t.replace(/\[([^\]]*?)\]\(([^)]+)\)/g, (_m, a1) => a1 || '');
-    // Reference-style link [text][id] / [text][] → text
     t = t.replace(/\[([^\]]+?)\]\s*\[[^\]]*?\]/g, (_m, a1) => a1 || '');
-    // Shortcut reference link [text] (only if defined)
     if (refDefs && refDefs.size) {
         t = t.replace(/\[([^\]]+?)\](?!\()/g, (m, a1) => {
             const key = normalizeRefLabel(a1);
             return refDefs.has(key) ? a1 : m;
         });
     }
-    // Autolink <https://...> or <mailto:...>
     t = t.replace(/<((?:https?:\/\/|mailto:)[^>]+)>/gi, '$1');
-
-    // 删除 HTML 标签（保留内容）
     t = t.replace(/<\/?[^>]+>/g, '');
-
-    // 实体
     t = t.replace(/&nbsp;/g, ' ')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
@@ -210,8 +450,10 @@ export function stripInlineRich(s: string, refDefs?: Set<string>): { text: strin
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, '\'');
 
-    // 常见行内样式：在去掉 Markdown 标记的同时记录纯文本范围。
-    // 这里按单层常见写法处理，避免多次 replace 后 offset 漂移。
+    if (inlineOptions) {
+        t = renderObsidianInlineText(t, inlineOptions);
+    }
+
     const inlineStyle = /(`+)([\s\S]*?)\1|~~([\s\S]*?)~~|(\*{3,}|_{3,})([\s\S]*?)\4|(\*\*|__)([\s\S]*?)\6|(\*|_)([\s\S]*?)\8/g;
     let out = '';
     let last = 0;
@@ -219,25 +461,18 @@ export function stripInlineRich(s: string, refDefs?: Set<string>): { text: strin
     while ((match = inlineStyle.exec(t)) !== null) {
         out += t.slice(last, match.index);
         const content = match[2] ?? match[3] ?? match[5] ?? match[7] ?? match[9] ?? '';
-        const start = out.length;
+        const contentStart = out.length;
         out += content;
         let kind: MarkdownInlineStyleRange['kind'] = 'italic';
         if (match[1]) { kind = 'code'; }
         else if (match[3] !== undefined) { kind = 'strike'; }
         else if (match[4]) { kind = 'boldItalic'; }
         else if (match[6]) { kind = 'bold'; }
-        styles.push({
-            start,
-            end: start + content.length,
-            kind,
-        });
+        styles.push({ start: contentStart, end: contentStart + content.length, kind });
         last = match.index + match[0].length;
     }
     out += t.slice(last);
-    t = out;
-
-    // 行尾空白
-    const trimmed = t.replace(/[ \t]+$/gm, '');
+    const trimmed = out.replace(/[ \t]+$/gm, '');
     const max = trimmed.length;
     return {
         text: trimmed,
@@ -248,27 +483,92 @@ export function stripInlineRich(s: string, refDefs?: Set<string>): { text: strin
     };
 }
 
-export function stripTableRow(line: string, refDefs?: Set<string>): string {
-    const cells = line.trim()
-        .replace(/^\||\|$/g, '')
-        .split('|')
-        .map(c => stripInline(c.trim(), refDefs));
-    return cells.join('\t'); // 用制表符拼列
+function parseInlineImageAt(text: string, start: number, refDefs?: MarkdownReferenceDefinitionMap): { start: number; end: number; alt: string; src: string; title?: string } | undefined {
+    if (text.slice(start, start + 2) !== '![') {
+        return undefined;
+    }
+    const altEnd = text.indexOf(']', start + 2);
+    if (altEnd === -1) {
+        return undefined;
+    }
+    const rawAlt = text.slice(start + 2, altEnd);
+    const alt = stripInlineTextRich(rawAlt, refDefs).text;
+    const next = text[altEnd + 1];
+    if (next === '(') {
+        const target = parseImageTarget(text.slice(altEnd + 2), true);
+        if (!target) {
+            return undefined;
+        }
+        return { start, end: altEnd + 2 + target.end + 1, alt, src: target.src, title: target.title };
+    }
+    if (next === '[') {
+        const labelEnd = text.indexOf(']', altEnd + 2);
+        if (labelEnd === -1) {
+            return undefined;
+        }
+        const label = text.slice(altEnd + 2, labelEnd) || rawAlt;
+        const ref = refDefs?.get(normalizeRefLabel(label));
+        if (!ref) {
+            return undefined;
+        }
+        return { start, end: labelEnd + 1, alt, src: ref.url, title: ref.title };
+    }
+    const shortcut = refDefs?.get(normalizeRefLabel(rawAlt));
+    if (shortcut) {
+        return { start, end: altEnd + 1, alt, src: shortcut.url, title: shortcut.title };
+    }
+    return undefined;
 }
 
-function normalizeRefLabel(label: string): string {
-    return label.trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-function collectRefDefinitions(lines: string[]): Set<string> {
-    const defs = new Set<string>();
-    for (const line of lines) {
-        const m = line.match(/^\s*\[([^\]]+)\]\s*:\s*\S+/);
-        if (m) {
-            defs.add(normalizeRefLabel(m[1]));
+function parseImageTarget(text: string, requireClosingParen: boolean): { src: string; title?: string; end: number } | undefined {
+    let index = 0;
+    while (index < text.length && /\s/.test(text[index])) {
+        index++;
+    }
+    if (index >= text.length) {
+        return undefined;
+    }
+    let src = '';
+    if (text[index] === '<') {
+        const close = text.indexOf('>', index + 1);
+        if (close === -1) {
+            return undefined;
+        }
+        src = text.slice(index + 1, close).trim();
+        index = close + 1;
+    } else {
+        const srcStart = index;
+        while (index < text.length && text[index] !== ')' && !/\s/.test(text[index])) {
+            index++;
+        }
+        src = text.slice(srcStart, index).trim();
+    }
+    if (!src) {
+        return undefined;
+    }
+    while (index < text.length && /\s/.test(text[index])) {
+        index++;
+    }
+    let title: string | undefined;
+    if (text[index] === '"' || text[index] === '\'') {
+        const quote = text[index];
+        const close = text.indexOf(quote, index + 1);
+        if (close === -1) {
+            return undefined;
+        }
+        title = text.slice(index + 1, close);
+        index = close + 1;
+        while (index < text.length && /\s/.test(text[index])) {
+            index++;
         }
     }
-    return defs;
+    if (requireClosingParen) {
+        if (text[index] !== ')') {
+            return undefined;
+        }
+        return { src, title, end: index };
+    }
+    return { src, title, end: index };
 }
 
 /**

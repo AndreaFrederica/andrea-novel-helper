@@ -1,3 +1,4 @@
+/* eslint-disable curly */
 /* eslint-disable semi */
 import * as vscode from 'vscode'
 import * as fs from 'fs'
@@ -7,6 +8,7 @@ import { renderFromTemplate, compileTypstWithLog } from '../typst/exportService'
 import { templateRegistry } from '../typst/templateRegistry'
 import { parseMarkdownDoc, firstH1, firstHeading, Block } from '../typst/mdParser'
 import { scriptExtensionRegistry } from '../mcp/scriptExtensions'
+import { getObsidianInlineRenderOptions } from '../utils/obsidianInlineConfig'
 
 function listSupported(dir: string): string[] {
   const out: string[] = []
@@ -64,7 +66,7 @@ export async function exportFromExplorer(uri?: vscode.Uri, uris?: vscode.Uri[]) 
   for (const f of supported) {
     try {
       const text = fs.readFileSync(f, 'utf8')
-      const docParsed = parseMarkdownDoc(text)
+      const docParsed = parseMarkdownDoc(text, getObsidianInlineRenderOptions(vscode.Uri.file(f)))
       const blocks = docParsed.blocks as Block[]
       const baseTitle = path.basename(f).replace(/\.[^\.]+$/, '')
       const h1 = firstH1(blocks)

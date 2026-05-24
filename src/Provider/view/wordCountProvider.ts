@@ -13,9 +13,11 @@ import { getFileTracker } from '../../utils/tracker/fileTracker';
 import * as timeStatsModule from '../../timeStats';
 import { mdToPlainText } from '../../utils/md_plain';
 import { getFileByPath, updateFileWritingStats, getFileUuid, registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
+import { txtToPlainText } from '../../utils/txt_plain';
 import { getCutClipboard } from '../../utils/WordCount/wordCountCutHelper';
 import { WordCountOrderManager } from '../../utils/Order/wordCountOrder';
 import { pickPlainTextProcessor, renderPlainTextWithProcessor, scriptExtensionRegistry } from '../../mcp/scriptExtensions';
+import { getObsidianInlineRenderOptions, getTxtExportObsidianInlineRenderOptions } from '../../utils/obsidianInlineConfig';
 
 // 特殊文件（无扩展名但需要显示）
 function isSpecialVisibleFile(name: string): boolean {
@@ -2656,7 +2658,7 @@ export function registerWordCountPlainTextCommands(context: vscode.ExtensionCont
                     const active = vscode.window.activeTextEditor;
                     if (active && active.document.uri.toString() === doc.uri.toString() && !active.selection.isEmpty) {
                         const sel = active.document.getText(active.selection);
-                        const text = (doc.languageId === 'markdown') ? mdToPlainText(sel).text : sel;
+                        const text = (doc.languageId === 'markdown') ? mdToPlainText(sel, getObsidianInlineRenderOptions(doc.uri)).text : sel;
                         await vscode.env.clipboard.writeText(text);
                         vscode.window.setStatusBarMessage('已复制纯文本（选区）', 1200);
                         return;
@@ -2668,9 +2670,9 @@ export function registerWordCountPlainTextCommands(context: vscode.ExtensionCont
                 try {
                     const maybe = (provider as any).renderToPlainText ? (provider as any).renderToPlainText(doc) : null;
                     if (maybe && typeof maybe.text === 'string') text = maybe.text;
-                    else text = mdToPlainText(doc.getText()).text;
+                    else text = mdToPlainText(doc.getText(), getTxtExportObsidianInlineRenderOptions(doc.uri)).text;
                 } catch {
-                    text = mdToPlainText(doc.getText()).text;
+                    text = mdToPlainText(doc.getText(), getTxtExportObsidianInlineRenderOptions(doc.uri)).text;
                 }
                 text = await renderPlainTextWithProcessor(doc, text);
 
@@ -2708,15 +2710,22 @@ export function registerWordCountPlainTextCommands(context: vscode.ExtensionCont
                 if (!uri) return;
 
                 const doc = await vscode.workspace.openTextDocument(uri);
+                const inlineOptions = getTxtExportObsidianInlineRenderOptions(doc.uri);
 
                 // Always render the file from disk (not relying on active editor content)
                 let text: string;
                 try {
-                    const maybe = (provider as any).renderToPlainText ? (provider as any).renderToPlainText(doc) : null;
-                    if (maybe && typeof maybe.text === 'string') text = maybe.text;
-                    else text = mdToPlainText(doc.getText()).text;
+                    if (doc.languageId === 'markdown') { text = mdToPlainText(doc.getText(), inlineOptions).text; }
+                    else if (doc.languageId === 'plaintext') { text = txtToPlainText(doc.getText(), inlineOptions).text; }
+                    else {
+                        const maybe = (provider as any).renderToPlainText ? (provider as any).renderToPlainText(doc) : null;
+                        if (maybe && typeof maybe.text === 'string') { text = maybe.text; }
+                        else { text = doc.getText(); }
+                    }
                 } catch {
-                    text = mdToPlainText(doc.getText()).text;
+                    if (doc.languageId === 'markdown') { text = mdToPlainText(doc.getText(), inlineOptions).text; }
+                    else if (doc.languageId === 'plaintext') { text = txtToPlainText(doc.getText(), inlineOptions).text; }
+                    else { text = doc.getText(); }
                 }
                 await scriptExtensionRegistry.emit('beforePlainTextExport', {
                     uri: doc.uri.toString(),

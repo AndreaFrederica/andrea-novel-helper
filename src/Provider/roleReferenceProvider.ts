@@ -87,7 +87,7 @@ function roleFromPosition(document: vscode.TextDocument, position: vscode.Positi
 /**
  * 检查文件路径是否应该被过滤（typo、数据库等内部文件）
  */
-function shouldFilterPath(fsPath: string | undefined): boolean {
+export function shouldFilterReferencePath(fsPath: string | undefined): boolean {
     if (!fsPath) {
         return false;
     }
@@ -115,11 +115,11 @@ function shouldFilterPath(fsPath: string | undefined): boolean {
     return false;
 }
 
-function toLocations(hit: RoleReferenceHit): vscode.Location[] {
+export function roleReferenceHitToLocations(hit: RoleReferenceHit): vscode.Location[] {
     const locations: vscode.Location[] = [];
     
     // 过滤 typo 和内部文件
-    if (shouldFilterPath(hit.fsPath)) {
+    if (shouldFilterReferencePath(hit.fsPath)) {
         return locations;
     }
     
@@ -135,7 +135,7 @@ function toLocations(hit: RoleReferenceHit): vscode.Location[] {
     }
     
     // 再次检查解析后的 URI 路径
-    if (shouldFilterPath(uri.fsPath)) {
+    if (shouldFilterReferencePath(uri.fsPath)) {
         return locations;
     }
     
@@ -151,10 +151,59 @@ function toLocations(hit: RoleReferenceHit): vscode.Location[] {
     return locations;
 }
 
-function locationKey(loc: vscode.Location): string {
+export function referenceLocationKey(loc: vscode.Location): string {
     const start = loc.range.start;
     const end = loc.range.end;
     return loc.uri.toString() + '#' + start.line + ',' + start.character + '-' + end.line + ',' + end.character;
+}
+
+export function getRoleReferenceLocations(role: Role, token?: vscode.CancellationToken, fallbackDocument?: vscode.TextDocument): vscode.Location[] | null {
+    if (!role || token?.isCancellationRequested) {
+        return null;
+    }
+
+    const hits = getRoleReferencesForRole(role);
+    console.log('[RoleReferenceProvider] 找到索引数据:', hits.length, '个文件');
+
+    const dedupe = new Set<string>();
+    const results: vscode.Location[] = [];
+    for (const hit of hits) {
+        if (token?.isCancellationRequested) { return null; }
+        for (const loc of roleReferenceHitToLocations(hit)) {
+            const key = referenceLocationKey(loc);
+            if (!dedupe.has(key)) {
+                dedupe.add(key);
+                results.push(loc);
+            }
+        }
+    }
+    const maybeAddDefinition = (def: vscode.Location | null) => {
+        if (!def) { return; }
+        if (shouldFilterReferencePath(def.uri.fsPath)) {
+            return;
+        }
+        const key = referenceLocationKey(def);
+        if (!dedupe.has(key)) {
+            dedupe.add(key);
+            results.push(def);
+        }
+    };
+
+    if (role.sourcePath) {
+        if (!shouldFilterReferencePath(role.sourcePath)) {
+            maybeAddDefinition(findDefinitionInFile(role, role.sourcePath));
+        }
+    }
+    if (!role.sourcePath || results.length === 0) {
+        const currentPath = fallbackDocument?.uri.fsPath;
+        if (!shouldFilterReferencePath(currentPath)) {
+            const fallback = currentPath ? findDefinitionInFile(role, currentPath) : null;
+            maybeAddDefinition(fallback);
+        }
+    }
+
+    console.log('[RoleReferenceProvider] 过滤后返回引用数量:', results.length);
+    return results;
 }
 
 class RoleReferenceProvider implements vscode.ReferenceProvider {
@@ -172,51 +221,7 @@ class RoleReferenceProvider implements vscode.ReferenceProvider {
             return null;
         }
         
-        const hits = getRoleReferencesForRole(role);
-        console.log('[RoleReferenceProvider] 找到索引数据:', hits.length, '个文件');
-        
-        const dedupe = new Set<string>();
-        const results: vscode.Location[] = [];
-        for (const hit of hits) {
-            if (token.isCancellationRequested) { return null; }
-            for (const loc of toLocations(hit)) {
-                const key = locationKey(loc);
-                if (!dedupe.has(key)) {
-                    dedupe.add(key);
-                    results.push(loc);
-                }
-            }
-        }
-        const maybeAddDefinition = (def: vscode.Location | null) => {
-            if (!def) { return; }
-            // 过滤 typo 和内部文件的定义位置
-            if (shouldFilterPath(def.uri.fsPath)) {
-                return;
-            }
-            const key = locationKey(def);
-            if (!dedupe.has(key)) {
-                dedupe.add(key);
-                results.push(def);
-            }
-        };
-
-        if (role.sourcePath) {
-            // 只有当 sourcePath 不是内部文件时才添加定义
-            if (!shouldFilterPath(role.sourcePath)) {
-                maybeAddDefinition(findDefinitionInFile(role, role.sourcePath));
-            }
-        }
-        if (!role.sourcePath || results.length === 0) {
-            const currentPath = document.uri.fsPath;
-            if (!shouldFilterPath(currentPath)) {
-                const fallback = findDefinitionInFile(role, currentPath);
-                maybeAddDefinition(fallback);
-            }
-        }
-        
-        console.log('[RoleReferenceProvider] 过滤后返回引用数量:', results.length);
-        
-        return results;
+        return getRoleReferenceLocations(role, token, document);
     }
 }
 

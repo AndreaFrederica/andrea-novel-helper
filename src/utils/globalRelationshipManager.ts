@@ -32,6 +32,17 @@ export class GlobalRelationshipManager {
     }
 
     /**
+     * 获取角色名称到UUID的映射快照
+     */
+    getRoleNameToUuidMappings(): Map<string, string> {
+        const mappings = new Map<string, string>();
+        for (const [uuid, name] of this.roleUuidToNameMap.entries()) {
+            mappings.set(name, uuid);
+        }
+        return mappings;
+    }
+
+    /**
      * 批量设置角色映射
      * @param mappings 角色UUID到名称的映射对象
      */

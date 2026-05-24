@@ -1,6 +1,6 @@
 /* eslint-disable curly */
 import * as vscode from 'vscode';
-import { hoverRanges, roles, setHoverRanges } from '../activate';
+import { decorationTypes, hoverRanges, roles, setHoverRanges } from '../activate';
 import { Role } from '../extension';
 import { getSupportedLanguages, getSupportedExtensions, rangesOverlap, typeColorMap, isHugeFile } from '../utils/utils';
 // 不再读取文件内容进行敏感词库判断，使用加载阶段记录的集合
@@ -11,6 +11,8 @@ import { getRoleMatches } from '../context/roleAsyncShared';
 import { updateDocumentRoleOccurrences, clearDocumentRoleOccurrences } from '../context/documentRolesCache';
 import { updateRoleUsageFromDocument } from '../context/roleUsageStore';
 import { collectRoleUsageRanges } from '../utils/roleUsageCollector';
+import { isColorTag, normalizeColor } from '../language/obsidianIndex';
+import { resolveTagRole } from '../language/tagRoleBridge';
 
 // // 输出到扩展统一的 OutputChannel（替代 console.log）
 // const _anh_log_channel = vscode.window.createOutputChannel('Andrea Novel Helper:Decorations');
@@ -138,6 +140,11 @@ interface DecoMeta {
 }
 const decorationMeta = new Map<string, DecoMeta>();
 
+const TAG_IN_TEXT_RE = /(^|[\s([{>])(#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b|#(?:[A-Za-z0-9_\-\u4e00-\u9fff]+)(?:\/[A-Za-z0-9_\-\u4e00-\u9fff]+)*)/g;
+const UNBOUND_TAG_DECORATION_KEY = '__anh_unbound_tag_default__';
+const COLOR_TAG_DECORATION_PREFIX = '__anh_unbound_color_tag__:';
+const colorTagDecorationMeta = new Map<string, vscode.TextEditorDecorationType>();
+
 /** 文本样式配置接口 */
 interface TextStyleOptions {
     color?: string;
@@ -186,6 +193,96 @@ function buildFontStyle(style: TextStyleOptions): string | undefined {
 function buildFontWeight(style: TextStyleOptions): string | undefined {
     if (style.bold) return 'bold';
     return undefined;
+}
+
+function ensureUnboundTagDecoration(): vscode.TextEditorDecorationType {
+    let deco = decorationTypes.get(UNBOUND_TAG_DECORATION_KEY);
+    if (!deco) {
+        deco = vscode.window.createTextEditorDecorationType({
+            rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+            color: new vscode.ThemeColor('textLink.foreground'),
+            backgroundColor: new vscode.ThemeColor('editor.wordHighlightBackground'),
+            border: '1px solid',
+            borderColor: new vscode.ThemeColor('editor.wordHighlightBorder'),
+        });
+        decorationTypes.set(UNBOUND_TAG_DECORATION_KEY, deco);
+    }
+    return deco;
+}
+
+function ensureColorTagDecoration(tag: string): vscode.TextEditorDecorationType {
+    const color = normalizeColor(tag).toUpperCase();
+    const key = `${COLOR_TAG_DECORATION_PREFIX}${color}`;
+    let deco = colorTagDecorationMeta.get(key);
+    if (!deco) {
+        deco = vscode.window.createTextEditorDecorationType({
+            rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+            backgroundColor: withAlpha(color, 0.22),
+            border: `1px solid ${withAlpha(color, 0.85)}`,
+        });
+        colorTagDecorationMeta.set(key, deco);
+        decorationTypes.set(key, deco);
+    }
+    return deco;
+}
+
+function updateUnboundTagDecorations(editor: vscode.TextEditor, fullText?: string): void {
+    const text = fullText ?? editor.document.getText();
+    const normalRanges: vscode.Range[] = [];
+    const colorRangesByKey = new Map<string, vscode.Range[]>();
+
+    TAG_IN_TEXT_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = TAG_IN_TEXT_RE.exec(text))) {
+        const tag = match[2];
+        const resolvedRole = resolveTagRole(tag, roles);
+        if (resolvedRole.binding && resolvedRole.role) continue;
+
+        const startOffset = match.index + match[1].length;
+        const start = editor.document.positionAt(startOffset);
+        const end = editor.document.positionAt(startOffset + tag.length);
+        const range = new vscode.Range(start, end);
+
+        if (isColorTag(tag)) {
+            const color = normalizeColor(tag).toUpperCase();
+            const key = `${COLOR_TAG_DECORATION_PREFIX}${color}`;
+            const ranges = colorRangesByKey.get(key) || [];
+            ranges.push(range);
+            colorRangesByKey.set(key, ranges);
+        } else {
+            normalRanges.push(range);
+        }
+    }
+
+    editor.setDecorations(ensureUnboundTagDecoration(), normalRanges);
+
+    const activeColorKeys = new Set(colorRangesByKey.keys());
+    for (const [key, ranges] of colorRangesByKey) {
+        const tagColor = key.slice(COLOR_TAG_DECORATION_PREFIX.length);
+        editor.setDecorations(ensureColorTagDecoration(tagColor), ranges);
+    }
+    for (const [key, deco] of colorTagDecorationMeta) {
+        if (!activeColorKeys.has(key)) editor.setDecorations(deco, []);
+    }
+}
+
+function clearUnboundTagDecorations(editor: vscode.TextEditor): void {
+    const normalDeco = decorationTypes.get(UNBOUND_TAG_DECORATION_KEY);
+    if (normalDeco) editor.setDecorations(normalDeco, []);
+    for (const deco of colorTagDecorationMeta.values()) {
+        editor.setDecorations(deco, []);
+    }
+}
+
+function withAlpha(color: string, alpha: number): string {
+    const expanded = color.replace(/^#([A-Fa-f0-9])([A-Fa-f0-9])([A-Fa-f0-9])$/, '#$1$1$2$2$3$3');
+    const match = /^#([A-Fa-f0-9]{6})$/.exec(expanded);
+    if (!match) return color;
+    const value = match[1];
+    const red = parseInt(value.slice(0, 2), 16);
+    const green = parseInt(value.slice(2, 4), 16);
+    const blue = parseInt(value.slice(4, 6), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${Math.max(0, Math.min(alpha, 1))})`;
 }
 
 /** 初始化（或重建）自动机 & patternMap */
@@ -311,6 +408,7 @@ export async function updateDecorations() {
         
         // 跳过输出面板、调试控制台等非文件类型的文档
         if (doc.uri.scheme === 'output' || doc.uri.scheme === 'debug' || doc.uri.scheme === 'vscode') {
+            clearUnboundTagDecorations(editor);
             continue;
         }
         const bigCfg = vscode.workspace.getConfiguration('AndreaNovelHelper');
@@ -318,6 +416,7 @@ export async function updateDecorations() {
         const suppress = bigCfg.get<boolean>('hugeFile.suppressWarning', false)!;
         if (isHugeFile(doc, hugeTh)) {
             // 跳过高成本标注
+            clearUnboundTagDecorations(editor);
             if (!suppress && !hugeWarnedFiles.has(doc.uri.fsPath)) {
                 hugeWarnedFiles.add(doc.uri.fsPath);
                 vscode.window.showInformationMessage('该文件体积较大，已关闭自动机角色高亮与敏感词正则扫描，仅保留基础统计 (可在设置中修改 hugeFile.thresholdBytes)。');
@@ -331,6 +430,7 @@ export async function updateDecorations() {
         const extMatch = fileNameLower.match(/\.([a-z0-9_\-]+)$/);
         const ext = extMatch ? extMatch[1] : '';
         if (!supportedLangs.includes(doc.languageId) && !supportedExts.has(ext)) {
+            clearUnboundTagDecorations(editor);
             continue;
         }
         const folders = vscode.workspace.workspaceFolders;
@@ -342,6 +442,7 @@ export async function updateDecorations() {
         const docKeyEarly = doc.uri.toString();
         const cooldownUntil = restoreCooldown.get(docKeyEarly) || 0;
         if (Date.now() >= cooldownUntil && tryRestoreFromCache(editor, docKeyEarly)) {
+            updateUnboundTagDecorations(editor);
             setTimeout(() => {
                 // 冷却后触发一次标准更新，确保与文件内容一致
                 updateDecorations();
@@ -382,6 +483,8 @@ export async function updateDecorations() {
         for (const entry of hoverEntries) {
             hoverRanges.push(entry);
         }
+
+        updateUnboundTagDecorations(editor, fullText);
 
         currentRangesByDoc.set(doc.uri.toString(), new Map(snapshot));
 

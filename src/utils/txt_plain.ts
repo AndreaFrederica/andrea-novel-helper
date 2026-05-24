@@ -1,15 +1,17 @@
 // txt_plain.ts
 // 将纯文本按段落/空行分块，保留原始空行数量（每个空行作为独立块）
 // 返回格式与 mdToPlainText 保持兼容：{ text, blocks: { srcLine, text }[] }
+import { ObsidianInlineRenderOptions, renderObsidianInlineText } from './obsidianInline';
 
-export function txtToPlainText(src: string): { text: string; blocks: { srcLine: number; text: string }[] } {
+export function txtToPlainText(src: string, inlineOptions?: ObsidianInlineRenderOptions): { text: string; blocks: { srcLine: number; text: string }[] } {
     const lines = src.split(/\r?\n/);
     const blocks: { srcLine: number; text: string }[] = [];
     let i = 0;
 
     const pushBlock = (start: number, text: string) => {
         // 去除行尾多余空白，但保留段内换行
-        blocks.push({ srcLine: start, text: text.replace(/[ \t]+$/gm, '') });
+        const plain = text.replace(/[ \t]+$/gm, '');
+        blocks.push({ srcLine: start, text: inlineOptions ? renderObsidianInlineText(plain, inlineOptions) : plain });
     };
 
     while (i < lines.length) {

@@ -58,6 +58,7 @@ function buildRoleRelationshipMapping(): Map<string, RoleRelationshipMapping> {
     const startTime = Date.now();
     
     const mappingTable = new Map<string, RoleRelationshipMapping>();
+    const roleNameToUuid = globalRelationshipManager.getRoleNameToUuidMappings();
     
     // 获取所有关系
     const allRelationships = globalRelationshipManager.getAllRelationships();
@@ -65,8 +66,16 @@ function buildRoleRelationshipMapping(): Map<string, RoleRelationshipMapping> {
     
     // 遍历所有关系，构建映射表
     for (const relationship of allRelationships) {
-        const sourceUuid = relationship.metadata?.sourceRoleUuid;
-        const targetUuid = relationship.metadata?.targetRoleUuid;
+        const sourceUuid = relationship.metadata?.sourceRoleUuid || roleNameToUuid.get(relationship.sourceRole);
+        const targetUuid = relationship.metadata?.targetRoleUuid || roleNameToUuid.get(relationship.targetRole);
+        const relationshipWithResolvedUuids: RoleRelationship = {
+            ...relationship,
+            metadata: {
+                ...(relationship.metadata || {}),
+                sourceRoleUuid: sourceUuid,
+                targetRoleUuid: targetUuid,
+            }
+        };
         
         // 处理源角色
         if (sourceUuid) {
@@ -84,12 +93,12 @@ function buildRoleRelationshipMapping(): Map<string, RoleRelationshipMapping> {
             
             const sourceMapping = mappingTable.get(sourceUuid);
             if (sourceMapping) {
-                sourceMapping.allRelationships.push(relationship);
+                sourceMapping.allRelationships.push(relationshipWithResolvedUuids);
                 
-                if (!sourceMapping.relationshipsByType.has(relationship.type)) {
-                    sourceMapping.relationshipsByType.set(relationship.type, []);
+                if (!sourceMapping.relationshipsByType.has(relationshipWithResolvedUuids.type)) {
+                    sourceMapping.relationshipsByType.set(relationshipWithResolvedUuids.type, []);
                 }
-                sourceMapping.relationshipsByType.get(relationship.type)!.push(relationship);
+                sourceMapping.relationshipsByType.get(relationshipWithResolvedUuids.type)!.push(relationshipWithResolvedUuids);
             }
         }
         
@@ -109,12 +118,12 @@ function buildRoleRelationshipMapping(): Map<string, RoleRelationshipMapping> {
             
             const targetMapping = mappingTable.get(targetUuid);
             if (targetMapping) {
-                targetMapping.allRelationships.push(relationship);
+                targetMapping.allRelationships.push(relationshipWithResolvedUuids);
                 
-                if (!targetMapping.relationshipsByType.has(relationship.type)) {
-                    targetMapping.relationshipsByType.set(relationship.type, []);
+                if (!targetMapping.relationshipsByType.has(relationshipWithResolvedUuids.type)) {
+                    targetMapping.relationshipsByType.set(relationshipWithResolvedUuids.type, []);
                 }
-                targetMapping.relationshipsByType.get(relationship.type)!.push(relationship);
+                targetMapping.relationshipsByType.get(relationshipWithResolvedUuids.type)!.push(relationshipWithResolvedUuids);
             }
         }
     }

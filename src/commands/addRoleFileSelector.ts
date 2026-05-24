@@ -124,7 +124,7 @@ export async function selectOrCreateFile(
     }
 
     // 根据文件类型调整选项
-    let finalScanOptions = { excludeSensitive, includeMd, includeOjson5, includeCsv };
+    let finalScanOptions = { excludeSensitive, includeMd, includeOjson5, includeCsv, includeToml };
 
     // 如果是敏感词类型，不过滤敏感词文件
     if (fileType.includes('敏感词')) {
