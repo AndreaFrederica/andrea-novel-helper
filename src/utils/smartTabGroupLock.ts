@@ -137,6 +137,7 @@ export class SmartTabGroupLockManager {
 
                 'andrea.webdavPanel',
                 'myPreview',  // 预览面板
+                'myPreview.patchouli',  // Patchouli 预览面板
                 'andrea.commentsPanel',  // 批注面板
                 'timeStatsDashboard',
                 '写作统计仪表板',

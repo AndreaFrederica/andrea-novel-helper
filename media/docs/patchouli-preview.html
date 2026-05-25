@@ -1,0 +1,70 @@
+<div class="doc-section beginner">
+<h4>Patchouli 新预览是什么</h4>
+<p>Patchouli 新预览是 ANH 新增的阅读器式预览面板，基于 <a href="https://github.com/AndreaFrederica/patchouli.js">AndreaFrederica/patchouli.js</a> 改造并作为本项目的本地子包集成。它保留 ANH 原预览的核心能力，同时提供更接近阅读器的滚动和分页体验。</p>
+<p>如果你只是想模拟小说网站发布效果，继续使用普通写作预览也可以；如果你需要更强的分页、页边距、角色 hover 和阅读器设置，可以打开 Patchouli 新预览。</p>
+
+<h4>如何打开</h4>
+<ol>
+    <li>打开一篇 Markdown 或 TXT 正文。</li>
+    <li>按 <kbd>Ctrl+Shift+P</kbd> 打开命令面板。</li>
+    <li>输入 <b>Patchouli 预览</b>，选择 <b>打开 Patchouli 预览</b>。</li>
+</ol>
+<p>命令 ID：<code>myPreview.openPatchouli</code>。打开后，预览面板会跟随当前编辑器中的文章切换，并能被 ANH 的分组锁识别为预览窗口。</p>
+
+<h4>右下角设置</h4>
+<p>点击右下角齿轮可以打开设置面板。新预览的设置和老预览相互独立，不会互相覆盖。</p>
+<ul>
+    <li><b>外观</b>：字体、字号、行间距、段落间距、页面宽高、主题。</li>
+    <li><b>页边距</b>：支持上、右、下、左分别调整，也可以锁定上下或左右成组联动。</li>
+    <li><b>显示方式</b>：滚动模式和分页模式。</li>
+    <li><b>Markdown</b>：标题、列表、粗体、斜体、引用、代码等样式可分别开关。</li>
+    <li><b>角色</b>：角色着色、类型过滤、Hover 模式和 Hover 内容量。</li>
+    <li><b>调试</b>：可查看分页数量、页面高度、内容分组等调试信息。</li>
+</ul>
+
+<h4>角色 Hover</h4>
+<p>角色着色开启后，鼠标悬停在角色名上可以查看角色信息。Hover 有三种模式：</p>
+<ul>
+    <li><b>自定义</b>：使用 ANH 自己绘制的浮层，位置会尽量贴近鼠标并利用可用屏幕空间。</li>
+    <li><b>原生</b>：使用浏览器默认 <code>title</code> 提示。</li>
+    <li><b>关闭</b>：不显示 Hover。</li>
+</ul>
+<p>自定义 Hover 还可以调整内容量：精简、标准、完整。完整模式会显示更多调试字段，内容太长时会在浮层内部滚动。</p>
+
+<h4>分页和滚动</h4>
+<ul>
+    <li><b>滚动模式</b>：连续阅读，可以用鼠标滚轮上下滚动。</li>
+    <li><b>分页模式</b>：按页面高度切分内容，可以用底部翻页按钮、键盘或鼠标滚轮翻页。</li>
+    <li><b>同步</b>：编辑器滚动时，预览会尝试同步到相近位置。</li>
+</ul>
+<p>如果分页数量明显不对，可以在设置面板的调试区域查看 <code>totalPages</code>、<code>pageHeight</code>、<code>sourceChildren</code>、<code>groups</code> 等字段。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>实现说明</h4>
+<p>Patchouli 新预览由三层组成：</p>
+<ul>
+    <li><code>packages/patchouli-reader</code>：本地子包，封装从 Patchouli.js 改造来的阅读器组件。</li>
+    <li><code>packages/webview/src/pages/PatchouliPreviewPage.vue</code>：ANH webview 页面，负责设置、TTS、角色着色、Hover、滚轮翻页和 VS Code 消息交互。</li>
+    <li><code>src/Provider/view/previewPane.ts</code>：VS Code 侧面板管理，负责打开、恢复、跟随活动文档、发送 HTML 和角色高亮信息。</li>
+</ul>
+
+<h4>与普通预览的关系</h4>
+<p>普通预览仍然存在，Patchouli 新预览是独立入口。两者的设置、面板状态和 webview 路由彼此分离。普通预览继续用于轻量发布效果确认；Patchouli 新预览用于更完整的阅读器式调试。</p>
+
+<h4>角色着色和 Monaco 保持一致</h4>
+<p>新预览的角色高亮数据由 VS Code 扩展侧统一计算，复用与 Monaco 编辑器一致的角色匹配范围。预览页面只负责把这些范围映射回渲染后的文本节点，避免预览和编辑器使用两套不同的正则规则。</p>
+
+<h4>Markdown 代码块规则</h4>
+<p>ANH 的定制 Markdown 解析规则中，只有围栏代码块（例如 <code>```</code>）会被当成代码块。单纯由空格或 Tab 缩进的行会作为带缩进的正文处理，以适配小说正文中常见的缩进写法。</p>
+
+<h4>调试建议</h4>
+<ul>
+    <li>分页异常时，先看设置面板中的调试 JSON，确认 <code>totalPages</code>、<code>pageStarts</code> 和 <code>maxElementHeight</code> 是否合理。</li>
+    <li>需要命令行复现时，可以使用 <code>scripts/preview-pagination-smoke.js</code> 读取指定 Markdown 文件进行分页烟测。</li>
+    <li>角色着色异常时，先确认角色着色开关、类型过滤和 Hover 模式；再对比 Monaco 编辑器中的高亮结果。</li>
+</ul>
+
+<h4>Patchouli.js 资源</h4>
+<p>设置面板的关于区域包含 Patchouli.js 的 logo、标题图和原始仓库链接。相关静态资源放在 <code>packages/webview/public/patchouli/</code>，会随 webview 构建一起发布。</p>
+</div>

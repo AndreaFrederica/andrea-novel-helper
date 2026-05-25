@@ -550,6 +550,14 @@
         }
       },
       {
+        "command": "myPreview.openPatchouli",
+        "title": "打开 Patchouli 预览",
+        "icon": {
+          "light": "images/preview_light.svg",
+          "dark": "images/preview_dark.svg"
+        }
+      },
+      {
         "command": "andrea.typst.exportCurrent",
         "title": "导出：使用Typst模板为PDF/图片"
       },
@@ -4736,6 +4744,11 @@
           "group": "navigation"
         },
         {
+          "command": "myPreview.openPatchouli",
+          "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
+          "group": "navigation@100"
+        },
+        {
           "command": "andrea.comments.open",
           "when": "(editorLangId == markdown || editorLangId == plaintext) && resourceScheme == file",
           "group": "navigation@101"
@@ -4989,7 +5002,8 @@
   },
   "workspaces": [
     "packages/webview",
-    "packages/enigo-keyboard"
+    "packages/enigo-keyboard",
+    "packages/patchouli-reader"
   ],
   "scripts": {
     "bundle:ext": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --main-fields=module,main --outfile=out/extension.js --sourcemap",

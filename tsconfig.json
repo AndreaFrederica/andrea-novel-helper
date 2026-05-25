@@ -20,6 +20,7 @@
 	"exclude": [
 		"packages/webview",
 		"packages/enigo-keyboard",
+		"packages/patchouli-reader",
 		"scripts"
 	] // 避免把前端也编进来
 }

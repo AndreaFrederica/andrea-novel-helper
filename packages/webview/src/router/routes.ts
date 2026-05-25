@@ -88,6 +88,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('pages/GlobalRolePanelPage.vue'),
   },
 
+  {
+    path: '/patchouli-preview',
+    component: () => import('pages/PatchouliPreviewPage.vue'),
+  },
+
   // Always leave this as last one,
   // but you can also remove it
   {

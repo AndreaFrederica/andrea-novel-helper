@@ -27,6 +27,7 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
             'status-bar': '状态栏功能',
             'vscode-settings': 'VS Code 基础',
             'writing-preview': '写作预览',
+            'patchouli-preview': 'Patchouli 新预览',
         }
     },
     concepts: {

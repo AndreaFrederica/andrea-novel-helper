@@ -28,6 +28,7 @@ declare module 'vue' {
     MarkdownRenderer: typeof import('./src/components/MarkdownRenderer.vue')['default']
     NodeEditDialog: typeof import('./src/components/NodeEditDialog.vue')['default']
     NodeHoverTooltip: typeof import('./src/components/NodeHoverTooltip.vue')['default']
+    PreviewSettingsPanel: typeof import('./src/components/PreviewSettingsPanel.vue')['default']
     RandomRoleGenerator: typeof import('./src/components/RandomRoleGenerator.vue')['default']
     RelationGraphToolBar: typeof import('./src/components/RelationGraphToolBar.vue')['default']
     RelationshipCard: typeof import('./src/components/RelationshipCard.vue')['default']

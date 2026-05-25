@@ -8,12 +8,14 @@ import { txtToPlainText } from '../../utils/txt_plain';
 import { setActivePreview } from '../../context/previewRedirect';
 import { getRoleLookupKeys } from '../../utils/roleLookupKeys';
 import { collectRoleUsageRanges } from '../../utils/roleUsageCollector';
-import { ahoCorasickManager } from '../../utils/AhoCorasick/ahoCorasickManager';
 import { renderPlainTextWithProcessor, scriptExtensionRegistry } from '../../mcp/scriptExtensions';
 import { setWebviewPanelIcon } from '../utils/webviewPanelIcon';
+import { buildHtml } from '../utils/html-builder';
 import { getObsidianInlineRenderOptions, getTxtExportObsidianInlineRenderOptions } from '../../utils/obsidianInlineConfig';
+import { FIELD_ALIASES, getExtensionFields } from '../../utils/Parser/markdownParser';
 
 const PREVIEW_STATE_KEY = 'myPreview.primaryDoc';
+const PATCHOULI_PREVIEW_STATE_KEY = 'myPreview.patchouliDoc';
 const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
     主角: '#FFD700',
     配角: '#ADD8E6',
@@ -21,7 +23,7 @@ const PREVIEW_TYPE_COLOR_MAP: Record<string, string> = {
     正则表达式: '#FFA500',
 };
 
-type Block = MarkdownPlainBlock & { previewContinuation?: boolean };
+type Block = MarkdownPlainBlock & { previewContinuation?: boolean; previewOffset?: number };
 type ImgCtx = { srcLines: string[]; docDir: string; webview: vscode.Webview };
 type PreviewTextChange = { start: number; end: number; text: string; lineDelta: number };
 type RoleTextStyle = {
@@ -46,7 +48,15 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
                 });
             }
         }),
+        vscode.window.registerWebviewPanelSerializer('myPreview.patchouli', {
+            deserializeWebviewPanel: async (panel, state) => {
+                await manager.deserializePatchouli(panel, state).catch(() => {
+                    try { panel.dispose(); } catch { }
+                });
+            }
+        }),
         vscode.commands.registerCommand('myPreview.open', () => manager.openPreviewForActiveEditor()),
+        vscode.commands.registerCommand('myPreview.openPatchouli', () => manager.openPatchouliPreviewForActiveEditor()),
         vscode.commands.registerCommand('myPreview.exportTxt', () => manager.exportTxtOfActiveEditor()),
         vscode.commands.registerCommand('myPreview.ttsPlay', () => manager.sendTTSCommand('play')),
         vscode.commands.registerCommand('myPreview.ttsPause', () => manager.sendTTSCommand('pause')),
@@ -85,8 +95,10 @@ export function registerPreviewPane(context: vscode.ExtensionContext) {
 
 export class PreviewManager {
     private panels = new Map<string, vscode.WebviewPanel>();
+    private patchouliPanels = new Map<string, vscode.WebviewPanel>();
     // 防抖 / 节流：用 Map 持有 timer，保证同一文档跨事件共享状态
     private _updateTimers = new Map<string, NodeJS.Timeout>();
+    private _patchouliUpdateTimers = new Map<string, NodeJS.Timeout>();
     private _updatePendingChanges = new Map<string, PreviewTextChange[]>();
     private _scrollTimers = new Map<string, NodeJS.Timeout>();
     private _scrollLast = new Map<string, number>();
@@ -94,8 +106,13 @@ export class PreviewManager {
     private scrollState = new Map<string, { isScrolling: boolean; lastDirection: 'editor' | 'preview' }>();
     /** 当前被“跟随活动编辑器”复用的主预览面板（用户首次点击按钮后进入跟随模式） */
     private primaryPanel: vscode.WebviewPanel | undefined;
-    private primaryDocUri: string | undefined;    // 角色列表 getter，由 activate.ts 注入
-    private _getRoles: (() => any[]) | undefined;    // 记录“刚刚是预览端拉我”的状态，用于 sendEditorTop 抑制回传
+    private primaryDocUri: string | undefined;
+    /** Patchouli 新预览的主面板，行为应与老预览跟随活动编辑器一致 */
+    private primaryPatchouliPanel: vscode.WebviewPanel | undefined;
+    private primaryPatchouliDocUri: string | undefined;
+    // 角色列表 getter，由 activate.ts 注入
+    private _getRoles: (() => any[]) | undefined;
+    // 记录“刚刚是预览端拉我”的状态，用于 sendEditorTop 抑制回传
     private lastAppliedFromPreview = new Map<string, { ratio: number, ts: number }>();
 
     // 记录每个文档上一次的 blocks 快照（做增量用）
@@ -161,6 +178,7 @@ export class PreviewManager {
                     inlineStyles: this.sliceInlineStyles(block.inlineStyles || [], fragStart, fragEnd, fragment.text.length),
                     inlineParts: block.inlineParts?.length ? this.sliceInlineParts(block.inlineParts, fragStart, fragEnd) : undefined,
                     previewContinuation: lineIndex < lines.length - 1 || fragmentIndex < fragments.length - 1,
+                    previewOffset: fragment.start,
                 });
             });
         });
@@ -190,6 +208,7 @@ export class PreviewManager {
                     inlineStyles: this.sliceInlineStyles(block.inlineStyles || [], fragStart, fragEnd, fragment.text.length),
                     listItemInlineParts: fragmentParts ? [fragmentParts] : undefined,
                     previewContinuation: lineIndex < lines.length - 1 || fragmentIndex < fragments.length - 1,
+                    previewOffset: fragment.start,
                 });
             });
         });
@@ -333,6 +352,16 @@ export class PreviewManager {
             vscode.workspace.onDidChangeTextDocument(ev => {
                 const key = ev.document.uri.toString();
                 const panel = this.panels.get(key);
+                const patchouliPanel = this.patchouliPanels.get(key);
+                if (patchouliPanel) {
+                    const oldPatchouliTimer = this._patchouliUpdateTimers.get(key);
+                    if (oldPatchouliTimer !== undefined) { clearTimeout(oldPatchouliTimer); }
+                    const patchouliTimer = setTimeout(() => {
+                        this._patchouliUpdateTimers.delete(key);
+                        this.updatePatchouliPanel(patchouliPanel, ev.document);
+                    }, 120);
+                    this._patchouliUpdateTimers.set(key, patchouliTimer);
+                }
                 if (!panel) { return; }
                 // 把需要的信息提前拍扁，并累积当前防抖窗口内的所有变更行范围
                 const incoming = ev.contentChanges.map(c => ({
@@ -358,12 +387,12 @@ export class PreviewManager {
 
             vscode.window.onDidChangeTextEditorVisibleRanges(ev => {
                 const key = ev.textEditor.document.uri.toString();
-                if (!this.panels.has(key)) { return; }
+                if (!this.panels.has(key) && !this.patchouliPanels.has(key)) { return; }
                 this._throttledScroll(ev.textEditor.document, 100);
             }),
             vscode.window.onDidChangeTextEditorSelection(ev => {
                 const key = ev.textEditor.document.uri.toString();
-                if (!this.panels.has(key)) { return; }
+                if (!this.panels.has(key) && !this.patchouliPanels.has(key)) { return; }
                 this._throttledScroll(ev.textEditor.document, 100);
             }),
             // 跟随活动编辑器：若已经打开过一个预览（primaryPanel），则切换文件时复用该面板显示新文件，并在切换前停止 TTS
@@ -419,6 +448,68 @@ export class PreviewManager {
             });
     }
 
+    private stringifyHoverValue(value: any): string {
+        if (value === undefined || value === null) { return ''; }
+        if (Array.isArray(value)) { return value.map(v => this.stringifyHoverValue(v)).filter(Boolean).join('，'); }
+        if (typeof value === 'object') {
+            try { return JSON.stringify(value); } catch { return String(value); }
+        }
+        return String(value);
+    }
+
+    private buildPreviewRoleHover(role: any, entry: any, style: RoleTextStyle) {
+        const fields: Array<{ label: string; value: string }> = [];
+        const push = (label: string, value: any) => {
+            const text = this.stringifyHoverValue(value).trim();
+            if (text) { fields.push({ label, value: text }); }
+        };
+
+        push('描述', role.description);
+        push('类型', role.type);
+        push('从属', role.affiliation);
+        push('别名', role.aliases);
+        push('修复', role.fixes || role.fixs);
+        push('包路径', role.packagePath);
+        if (role.sourcePath) { push('源文件', path.basename(String(role.sourcePath))); }
+        if (role.type === '正则表达式') {
+            push('正则', role.regex);
+            push('正则标志', role.regexFlags);
+        }
+
+        for (const [fieldName, value] of getExtensionFields(role)) {
+            if (fieldName === 'style' && value && typeof value === 'object') {
+                const parts: string[] = [];
+                if (value.color) { parts.push(`前景色: ${value.color}`); }
+                if (value.backgroundColor) { parts.push(`背景色: ${value.backgroundColor}`); }
+                if (value.bold) { parts.push('粗体'); }
+                if (value.italic) { parts.push('斜体'); }
+                if (value.strikethrough) { parts.push('删除线'); }
+                if (value.underline) { parts.push('下划线'); }
+                push('样式', parts.join('，'));
+                continue;
+            }
+            if (['backgroundColor', 'bold', 'italic', 'strikethrough', 'underline'].includes(fieldName)) {
+                if (fieldName === 'backgroundColor') { push('背景色', value); }
+                else if (value === true) { push(FIELD_ALIASES[fieldName] || fieldName, '是'); }
+                continue;
+            }
+            push(FIELD_ALIASES[fieldName] || fieldName, value);
+        }
+
+        push('匹配文本', entry.matchedText);
+        if (entry.matchSource === 'regex') { push('匹配来源', '正则表达式'); }
+        else if (entry.matchSource) { push('匹配来源', entry.matchSource); }
+        if (entry.partial) { push('部分命中', '是'); }
+        push('颜色', style.color);
+
+        return {
+            name: String(role.name || ''),
+            type: typeof role.type === 'string' && role.type ? role.type : '角色',
+            color: style.color,
+            fields,
+        };
+    }
+
     private sendRoleColors(panel: vscode.WebviewPanel): void {
         try {
             const roles = this._getRoles ? this._getRoles() : [];
@@ -453,93 +544,30 @@ export class PreviewManager {
         await Promise.all(updates);
     }
 
-    private createVirtualDocument(text: string, sourceUri: vscode.Uri): vscode.TextDocument {
-        const lineStarts: number[] = [0];
-        for (let i = 0; i < text.length; i++) {
-            if (text.charCodeAt(i) === 10) {
-                lineStarts.push(i + 1);
-            }
-        }
-        const positionAt = (offset: number): vscode.Position => {
-            const safeOffset = Math.max(0, Math.min(offset, text.length));
-            let low = 0;
-            let high = lineStarts.length - 1;
-            while (low <= high) {
-                const mid = (low + high) >> 1;
-                if (lineStarts[mid] <= safeOffset) {
-                    low = mid + 1;
-                } else {
-                    high = mid - 1;
-                }
-            }
-            const line = Math.max(0, high);
-            return new vscode.Position(line, safeOffset - lineStarts[line]);
-        };
-        const offsetAt = (position: vscode.Position): number => {
-            const line = Math.max(0, Math.min(position.line, lineStarts.length - 1));
-            const nextStart = line + 1 < lineStarts.length ? lineStarts[line + 1] : text.length + 1;
-            return Math.max(lineStarts[line], Math.min(lineStarts[line] + position.character, nextStart - 1, text.length));
-        };
-        return {
-            uri: sourceUri,
-            fileName: sourceUri.fsPath,
-            isUntitled: false,
-            languageId: 'plaintext',
-            version: 1,
-            encoding: 'utf8',
-            isDirty: false,
-            isClosed: false,
-            eol: vscode.EndOfLine.LF,
-            lineCount: lineStarts.length,
-            getText: () => text,
-            positionAt,
-            offsetAt,
-            lineAt: (lineOrPosition: number | vscode.Position) => {
-                const line = typeof lineOrPosition === 'number' ? lineOrPosition : lineOrPosition.line;
-                const start = lineStarts[line] ?? text.length;
-                const nextStart = line + 1 < lineStarts.length ? lineStarts[line + 1] : text.length;
-                const end = text.charCodeAt(nextStart - 1) === 10 ? nextStart - 1 : nextStart;
-                const lineText = text.slice(start, end);
-                const range = new vscode.Range(line, 0, line, lineText.length);
-                return {
-                    lineNumber: line,
-                    text: lineText,
-                    range,
-                    rangeIncludingLineBreak: new vscode.Range(line, 0, line, Math.max(lineText.length, nextStart - start)),
-                    firstNonWhitespaceCharacterIndex: lineText.search(/\S|$/),
-                    isEmptyOrWhitespace: /^\s*$/.test(lineText),
-                } as vscode.TextLine;
-            },
-            getWordRangeAtPosition: () => undefined,
-            validateRange: (range: vscode.Range) => range,
-            validatePosition: (position: vscode.Position) => position,
-            save: async () => false,
-        } as vscode.TextDocument;
-    }
-
     private async sendRoleHighlights(panel: vscode.WebviewPanel, doc: vscode.TextDocument, enabledTypes?: string[]): Promise<void> {
         const enabledTypeSet = Array.isArray(enabledTypes) && enabledTypes.length > 0 ? new Set(enabledTypes) : undefined;
-        const { blocks } = this.renderToPlainText(doc);
         const highlights: any[] = [];
-        for (const block of blocks) {
-            if (!block.text) { continue; }
-            const virtualDoc = this.createVirtualDocument(block.text, doc.uri);
-            const rawHits = ahoCorasickManager.search(block.text);
-            const hits = rawHits.map(([endIdx, pat]) => [endIdx, Array.isArray(pat) ? pat : [pat]] as [number, string[]]);
-            const result = await collectRoleUsageRanges(virtualDoc, { fullText: block.text, hits });
-            for (const entry of result.decorationEntries) {
-                const roleType = typeof entry.role.type === 'string' && entry.role.type ? entry.role.type : '角色';
-                if (enabledTypeSet && !enabledTypeSet.has(roleType)) { continue; }
-                const style = this.getTextStyleFromRole(entry.role, vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor') || '#7aa2f7');
+        const result = await collectRoleUsageRanges(doc);
+        for (const entry of result.decorationEntries) {
+            const roleType = typeof entry.role.type === 'string' && entry.role.type ? entry.role.type : '角色';
+            if (enabledTypeSet && !enabledTypeSet.has(roleType)) { continue; }
+            const style = this.getTextStyleFromRole(entry.role, vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor') || '#7aa2f7');
+            const hover = this.buildPreviewRoleHover(entry.role, entry, style);
+            for (let line = entry.range.start.line; line <= entry.range.end.line; line++) {
+                const startChar = line === entry.range.start.line ? entry.range.start.character : 0;
+                const lineText = doc.lineAt(line).text;
+                const endChar = line === entry.range.end.line ? entry.range.end.character : lineText.length;
+                if (endChar <= startChar) { continue; }
                 highlights.push({
-                    srcLine: block.srcLine,
-                    start: virtualDoc.offsetAt(entry.range.start),
-                    end: virtualDoc.offsetAt(entry.range.end),
+                    srcLine: line,
+                    start: startChar,
+                    end: endChar,
                     role: {
                         name: entry.role.name,
                         type: roleType,
                         style,
                     },
+                    hover,
                     matchSource: entry.matchSource,
                     partial: entry.partial,
                 });
@@ -661,9 +689,9 @@ export class PreviewManager {
     }
 
     /** 扩展侧枚举本机字体并回发给 webview */
-    private async sendFontFamilies(doc: vscode.TextDocument) {
+    private async sendFontFamilies(doc: vscode.TextDocument, targetPanel?: vscode.WebviewPanel) {
         const key = doc.uri.toString();
-        const panel = this.panels.get(key);
+        const panel = targetPanel ?? this.panels.get(key);
         if (!panel) { return; }
 
         try {
@@ -708,6 +736,242 @@ export class PreviewManager {
             this.primaryPanel = panel;
             this.primaryDocUri = doc.uri.toString();
             this.persistPrimaryDoc(this.primaryDocUri);
+        });
+    }
+
+    openPatchouliPreviewForActiveEditor() {
+        const doc = vscode.window.activeTextEditor?.document;
+        if (!doc) { return; }
+        if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) { return; }
+        this.openPatchouliPreviewForDocument(doc);
+    }
+
+    private openPatchouliPreviewForDocument(doc: vscode.TextDocument) {
+        const key = doc.uri.toString();
+        let panel = this.patchouliPanels.get(key);
+        if (!panel) {
+            const workspaceRoots = vscode.workspace.workspaceFolders?.map(f => f.uri) ?? [];
+            const docRoot = doc.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(doc.uri.fsPath))] : [];
+            panel = vscode.window.createWebviewPanel(
+                'myPreview.patchouli',
+                `Patchouli Preview: ${path.basename(doc.fileName)}`,
+                vscode.ViewColumn.Beside,
+                {
+                    enableScripts: true,
+                    retainContextWhenHidden: true,
+                    localResourceRoots: [
+                        vscode.Uri.joinPath(this.context.extensionUri, 'packages', 'webview', 'dist', 'spa'),
+                        vscode.Uri.joinPath(this.context.extensionUri, 'packages', 'webview', 'dist', 'spa', 'assets'),
+                        vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+                        ...workspaceRoots,
+                        ...docRoot,
+                    ],
+                },
+            );
+            setWebviewPanelIcon(panel, this.context.extensionPath, 'book');
+            this.patchouliPanels.set(key, panel);
+
+            panel.onDidDispose(() => {
+                this.deletePatchouliPanelMapping(panel!, key);
+                if (this.primaryPatchouliPanel === panel) {
+                    this.primaryPatchouliPanel = undefined;
+                    this.primaryPatchouliDocUri = undefined;
+                }
+            }, null, this.context.subscriptions);
+
+            panel.webview.onDidReceiveMessage(msg => {
+                const currentDoc = this.resolvePatchouliPanelDocument(panel!, doc);
+                if (msg?.type === 'patchouliPreviewReady') {
+                    this.updatePatchouliPanel(panel!, currentDoc);
+                    return;
+                }
+                if (msg?.type === 'patchouliPreviewDebug') {
+                    console.debug('[ANH][PatchouliPreview]', msg.debugInfo);
+                    return;
+                }
+                if (msg?.type === 'patchouliWheelDebug') {
+                    console.debug('[ANH][PatchouliPreview][Wheel]', msg);
+                    return;
+                }
+                this.onPatchouliWebviewMessage(panel!, currentDoc, msg);
+            }, null, this.context.subscriptions);
+
+            panel.webview.html = this.wrapPatchouliHtml(panel);
+        }
+
+        this.context.workspaceState.update(PATCHOULI_PREVIEW_STATE_KEY, key).then(undefined, () => { });
+        this.primaryPatchouliPanel = panel;
+        this.primaryPatchouliDocUri = key;
+        panel.title = `Patchouli Preview: ${path.basename(doc.fileName)}`;
+        panel.reveal(vscode.ViewColumn.Beside);
+        setTimeout(() => this.updatePatchouliPanel(panel!, doc), 80);
+    }
+
+    private updatePatchouliPanel(panel: vscode.WebviewPanel, doc: vscode.TextDocument) {
+        const { htmlBody, blocks } = this.render(doc, panel.webview);
+        const key = doc.uri.toString();
+        this.lastBlocks.set(key, blocks);
+        panel.webview.postMessage({ type: 'init', docUri: key, isPatchouli: true });
+        panel.webview.postMessage({ type: 'docRender', sameDoc: true, html: htmlBody });
+        this.sendRoleHighlights(panel, doc).catch(() => { });
+    }
+
+    private resolvePatchouliPanelDocument(panel: vscode.WebviewPanel, fallbackDoc: vscode.TextDocument): vscode.TextDocument {
+        const currentEntry = Array.from(this.patchouliPanels.entries()).find(([, candidate]) => candidate === panel);
+        if (currentEntry) {
+            const currentDoc = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === currentEntry[0]);
+            if (currentDoc) { return currentDoc; }
+        }
+        return fallbackDoc;
+    }
+
+    private deletePatchouliPanelMapping(panel: vscode.WebviewPanel, fallbackKey?: string) {
+        for (const [key, candidate] of Array.from(this.patchouliPanels.entries())) {
+            if (candidate === panel) {
+                try { this.patchouliPanels.delete(key); } catch { }
+                const timer = this._patchouliUpdateTimers.get(key);
+                if (timer !== undefined) { clearTimeout(timer); }
+                this._patchouliUpdateTimers.delete(key);
+            }
+        }
+        if (fallbackKey) {
+            try { this.patchouliPanels.delete(fallbackKey); } catch { }
+            const timer = this._patchouliUpdateTimers.get(fallbackKey);
+            if (timer !== undefined) { clearTimeout(timer); }
+            this._patchouliUpdateTimers.delete(fallbackKey);
+        }
+    }
+
+    async deserializePatchouli(panel: vscode.WebviewPanel, state: any) {
+        const savedDoc = this.context.workspaceState.get<string | undefined>(PATCHOULI_PREVIEW_STATE_KEY);
+        const docUriStr = (state && typeof state.docUri === 'string') ? state.docUri : savedDoc;
+        if (!docUriStr) { throw new Error('No persisted Patchouli docUri'); }
+
+        const uri = vscode.Uri.parse(docUriStr);
+        if (uri.scheme !== 'file') { throw new Error('Unsupported scheme'); }
+        const doc = await vscode.workspace.openTextDocument(uri);
+        if (!(doc.languageId === 'markdown' || doc.languageId === 'plaintext')) {
+            throw new Error('Unsupported language');
+        }
+
+        const workspaceRoots = vscode.workspace.workspaceFolders?.map(f => f.uri) ?? [];
+        const docRoot = doc.uri.scheme === 'file' ? [vscode.Uri.file(path.dirname(doc.uri.fsPath))] : [];
+        panel.webview.options = {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(this.context.extensionUri, 'packages', 'webview', 'dist', 'spa'),
+                vscode.Uri.joinPath(this.context.extensionUri, 'packages', 'webview', 'dist', 'spa', 'assets'),
+                vscode.Uri.joinPath(this.context.extensionUri, 'media'),
+                ...workspaceRoots,
+                ...docRoot,
+            ],
+        };
+
+        const key = doc.uri.toString();
+        this.patchouliPanels.set(key, panel);
+        this.primaryPatchouliPanel = panel;
+        this.primaryPatchouliDocUri = key;
+        setWebviewPanelIcon(panel, this.context.extensionPath, 'book');
+        panel.title = `Patchouli Preview: ${path.basename(doc.fileName)}`;
+
+        panel.onDidDispose(() => {
+            this.deletePatchouliPanelMapping(panel, key);
+            if (this.primaryPatchouliPanel === panel) {
+                this.primaryPatchouliPanel = undefined;
+                this.primaryPatchouliDocUri = undefined;
+            }
+        }, null, this.context.subscriptions);
+
+        panel.webview.onDidReceiveMessage(msg => {
+            const currentDoc = this.resolvePatchouliPanelDocument(panel, doc);
+            if (msg?.type === 'patchouliPreviewReady') {
+                this.updatePatchouliPanel(panel, currentDoc);
+                return;
+            }
+            if (msg?.type === 'patchouliPreviewDebug') {
+                console.debug('[ANH][PatchouliPreview]', msg.debugInfo);
+                return;
+            }
+            if (msg?.type === 'patchouliWheelDebug') {
+                console.debug('[ANH][PatchouliPreview][Wheel]', msg);
+                return;
+            }
+            this.onPatchouliWebviewMessage(panel, currentDoc, msg);
+        }, null, this.context.subscriptions);
+
+        panel.webview.html = this.wrapPatchouliHtml(panel);
+        this.context.workspaceState.update(PATCHOULI_PREVIEW_STATE_KEY, key).then(undefined, () => { });
+
+        setTimeout(() => {
+            this.updatePatchouliPanel(panel, doc);
+            if (typeof state?.scrollRatio === 'number') {
+                try { panel.webview.postMessage({ type: 'editorScroll', ratio: state.scrollRatio }); } catch { }
+            }
+        }, 120);
+    }
+
+    private onPatchouliWebviewMessage(panel: vscode.WebviewPanel, doc: vscode.TextDocument, msg: any) {
+        if (msg?.type === 'previewScroll' || msg?.type === 'previewTopLine' || msg?.type === 'previewViewport') {
+            this.onWebviewMessage(doc, msg);
+            return;
+        }
+        if (msg?.type === 'requestFonts') {
+            this.sendFontFamilies(doc, panel);
+            return;
+        }
+        if (msg?.type === 'requestVscodeFontFamily') {
+            let editorFontFamily = '';
+            try {
+                const cfg = vscode.workspace.getConfiguration('editor', doc.uri);
+                editorFontFamily = String(cfg.get<string>('fontFamily') || '');
+            } catch (_) { editorFontFamily = ''; }
+            try { panel.webview.postMessage({ type: 'vscodeFontFamily', value: editorFontFamily }); } catch { }
+            return;
+        }
+        if (msg?.type === 'requestRoleColors') {
+            this.sendRoleColors(panel);
+            return;
+        }
+        if (msg?.type === 'requestRoleHighlights') {
+            const enabledTypes = Array.isArray(msg.enabledTypes)
+                ? msg.enabledTypes.filter((type: unknown): type is string => typeof type === 'string' && type.length > 0)
+                : undefined;
+            this.sendRoleHighlights(panel, doc, enabledTypes).catch(() => { });
+            return;
+        }
+        if (msg?.type === 'requestObsidianRenderOptions') {
+            this.sendObsidianRenderOptions(panel, doc);
+            return;
+        }
+        if (msg?.type === 'setObsidianRenderOptions') {
+            void this.updateObsidianRenderOptions(doc, msg).then(() => {
+                this.updatePatchouliPanel(panel, doc);
+                this.sendObsidianRenderOptions(panel, doc);
+            }).catch(error => {
+                console.warn('[PatchouliPreview] Failed to update Obsidian render options', error);
+                vscode.window.showWarningMessage('更新 Obsidian 预览渲染设置失败');
+            });
+            return;
+        }
+        if (msg?.type === 'copyPlainText') {
+            const text: string = String(msg.text ?? '');
+            vscode.env.clipboard.writeText(text);
+            vscode.window.setStatusBarMessage('已复制纯文本', 1200);
+        }
+    }
+
+    private wrapPatchouliHtml(panel: vscode.WebviewPanel): string {
+        const spaRoot = vscode.Uri.joinPath(this.context.extensionUri, 'packages', 'webview', 'dist', 'spa');
+        const mapperFile = vscode.Uri.joinPath(this.context.extensionUri, 'media', 'resource-mapper.js');
+        let resourceMapperScriptUri: string | undefined;
+        try {
+            resourceMapperScriptUri = panel.webview.asWebviewUri(mapperFile).toString();
+        } catch { }
+        return buildHtml(panel.webview, {
+            spaRoot,
+            route: '/patchouli-preview',
+            resourceMapperScriptUri,
+            editorTitle: 'Patchouli Preview',
         });
     }
 
@@ -797,7 +1061,12 @@ export class PreviewManager {
 
     /** 处理活动编辑器变化：复用 primaryPanel 展示新文档，切换前先停止旧文档的 TTS */
     private handleActiveEditorChange(newDoc: vscode.TextDocument) {
-        if (!this.primaryPanel) { return; } // 用户尚未开启任何预览
+        this.handlePrimaryPreviewActiveEditorChange(newDoc);
+        this.handlePrimaryPatchouliActiveEditorChange(newDoc);
+    }
+
+    private handlePrimaryPreviewActiveEditorChange(newDoc: vscode.TextDocument) {
+        if (!this.primaryPanel) { return; } // 用户尚未开启任何老预览
         // 仅跟随 markdown / plaintext 且来自本地文件系统的文档
         if (!(newDoc.uri.scheme === 'file' && (newDoc.languageId === 'markdown' || newDoc.languageId === 'plaintext'))) { return; }
         const newKey = newDoc.uri.toString();
@@ -847,6 +1116,32 @@ export class PreviewManager {
                 setTimeout(() => this.sendEditorTop(newDoc), 50);
             }).catch(() => { });
             return;
+        }
+    }
+
+    private handlePrimaryPatchouliActiveEditorChange(newDoc: vscode.TextDocument) {
+        if (!this.primaryPatchouliPanel) { return; }
+        if (!(newDoc.uri.scheme === 'file' && (newDoc.languageId === 'markdown' || newDoc.languageId === 'plaintext'))) { return; }
+        const newKey = newDoc.uri.toString();
+        if (this.primaryPatchouliDocUri === newKey) { return; }
+
+        try { this.primaryPatchouliPanel.webview.postMessage({ type: 'ttsControl', command: 'stop' }); } catch { }
+
+        if (this.primaryPatchouliDocUri) {
+            try { this.patchouliPanels.delete(this.primaryPatchouliDocUri); } catch { }
+        }
+        try {
+            this.patchouliPanels.set(newKey, this.primaryPatchouliPanel);
+            this.primaryPatchouliDocUri = newKey;
+            this.context.workspaceState.update(PATCHOULI_PREVIEW_STATE_KEY, newKey).then(undefined, () => { });
+            this.primaryPatchouliPanel.title = `Patchouli Preview: ${path.basename(newDoc.fileName)}`;
+            this.updatePatchouliPanel(this.primaryPatchouliPanel, newDoc);
+            setTimeout(() => this.sendEditorTop(newDoc), 50);
+        } catch {
+            this.primaryPatchouliPanel = undefined;
+            this.primaryPatchouliDocUri = undefined;
+            try { this.patchouliPanels.delete(newKey); } catch { }
+            this.openPatchouliPreviewForDocument(newDoc);
         }
     }
 
@@ -1203,7 +1498,10 @@ export class PreviewManager {
                 html.push(this.wrapRenderedBlock(
                     { ...block, srcLine: block.srcLine + index, text: fragment.text, inlineStyles: lineStyles, inlineParts: fragmentParts },
                     `<pre>${inner}</pre>`,
-                    (index < lines.length - 1 || fragmentIndex < fragments.length - 1) ? { continuation: true } : undefined
+                    {
+                        continuation: index < lines.length - 1 || fragmentIndex < fragments.length - 1,
+                        offset: fragment.start,
+                    }
                 ));
             });
         });
@@ -1232,7 +1530,10 @@ export class PreviewManager {
                 html.push(this.wrapRenderedBlock(
                     { ...block, srcLine: block.srcLine + index, text: fragment.text, inlineStyles: lineStyles, inlineParts: lineParts },
                     `<pre>${inlineHtml}</pre>`,
-                    (index < lines.length - 1 || fragmentIndex < fragments.length - 1) ? { continuation: true } : undefined
+                    {
+                        continuation: index < lines.length - 1 || fragmentIndex < fragments.length - 1,
+                        offset: fragment.start,
+                    }
                 ));
             });
         });
@@ -1388,8 +1689,10 @@ export class PreviewManager {
         return html;
     }
 
-    private wrapRenderedBlock(block: Block, innerHtml: string, options?: { continuation?: boolean }): string {
+    private wrapRenderedBlock(block: Block, innerHtml: string, options?: { continuation?: boolean; offset?: number }): string {
         const attrs = [`data-line="${block.srcLine}"`];
+        const offset = typeof options?.offset === 'number' ? options.offset : block.previewOffset;
+        if (typeof offset === 'number' && offset > 0) { attrs.push(`data-md-offset="${offset}"`); }
         if (block.kind) { attrs.push(`data-md-kind="${block.kind}"`); }
         if (block.level) { attrs.push(`data-md-level="${block.level}"`); }
         if (options?.continuation || block.previewContinuation) { attrs.push('data-md-continuation="true"'); }
@@ -1413,8 +1716,8 @@ export class PreviewManager {
 
     private sendEditorTop(doc: vscode.TextDocument) {
         const key = doc.uri.toString();
-        const panel = this.panels.get(key);
-        if (!panel) { return; }
+        const targetPanels = [this.panels.get(key), this.patchouliPanels.get(key)].filter((panel): panel is vscode.WebviewPanel => !!panel);
+        if (!targetPanels.length) { return; }
         const editor = this.findEditor(doc);
         if (!editor) { return; }
 
@@ -1448,7 +1751,7 @@ export class PreviewManager {
             editorFontFamily = String(cfg.get<string>('fontFamily') || '');
         } catch (_) { editorFontFamily = ''; }
 
-        panel.webview.postMessage({
+        const payload = {
             type: 'editorScroll',
             ratio: ratio4,
             editorScrollHeight: metrics.scrollHeight,
@@ -1457,6 +1760,9 @@ export class PreviewManager {
             bottomLine: bottomVisible,
             totalLines: totalLines,
             vscodeFontFamily: editorFontFamily
+        };
+        targetPanels.forEach(panel => {
+            try { panel.webview.postMessage(payload); } catch { }
         });
 
         setTimeout(() => {

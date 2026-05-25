@@ -15,6 +15,7 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@anh/patchouli-reader": "file:../patchouli-reader",
     "@devui-design/icons": "^1.4.0",
     "@he-tree/vue": "^2.9.4",
     "@infectoone/vue-ganttastic": "^2.3.2",
