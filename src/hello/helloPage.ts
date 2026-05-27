@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { spawn } from 'child_process';
 import { setWebviewPanelIcon } from '../Provider/utils/webviewPanelIcon';
+import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../projectConfig/projectKeywordConfig';
 import { getProjectInitStatus } from '../wizard/workspaceInitCheck';
 
 interface RecommendedExtensionEntry {
@@ -180,19 +181,60 @@ function setupHelloPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
         localResourceRoots: [vscode.Uri.file(path.join(extensionPath, 'media'))]
     };
     panel.webview.html = getHelloHtml(panel.webview);
+    let pendingRefresh: ReturnType<typeof setTimeout> | undefined;
+    const refreshState = () => {
+        if (currentPanel !== panel) {
+            return;
+        }
+        void postState(panel, context);
+    };
+    const scheduleStateRefresh = () => {
+        if (pendingRefresh) {
+            clearTimeout(pendingRefresh);
+        }
+        pendingRefresh = setTimeout(() => {
+            pendingRefresh = undefined;
+            refreshState();
+        }, 150);
+    };
     panel.onDidDispose(() => {
         if (currentPanel === panel) {
             currentPanel = undefined;
         }
+        if (pendingRefresh) {
+            clearTimeout(pendingRefresh);
+            pendingRefresh = undefined;
+        }
         themeWatcher.dispose();
+        stateWatcher.dispose();
+        workspaceWatcher.dispose();
+        projectKeywordWatcher.dispose();
+        novelHelperWatcher.dispose();
     }, undefined, context.subscriptions);
 
     const themeWatcher = vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('workbench.colorTheme') || e.affectsConfiguration('editor.tokenColorCustomizations')) {
             sendThemeColors(panel);
         }
+        if (e.affectsConfiguration('AndreaNovelHelper')) {
+            scheduleStateRefresh();
+        }
     });
+    const stateWatcher = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        scheduleStateRefresh();
+    });
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const workspaceWatcher = workspaceFolder
+        ? createHelloFileWatcher(new vscode.RelativePattern(workspaceFolder, 'anhproject.md'), scheduleStateRefresh)
+        : new vscode.Disposable(() => undefined);
+    const projectKeywordWatcher = workspaceFolder
+        ? createHelloFileWatcher(new vscode.RelativePattern(workspaceFolder, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME), scheduleStateRefresh)
+        : new vscode.Disposable(() => undefined);
+    const novelHelperWatcher = workspaceFolder
+        ? createHelloFileWatcher(new vscode.RelativePattern(workspaceFolder, 'novel-helper/**'), scheduleStateRefresh)
+        : new vscode.Disposable(() => undefined);
     context.subscriptions.push(themeWatcher);
+    context.subscriptions.push(stateWatcher, workspaceWatcher, projectKeywordWatcher, novelHelperWatcher);
     panel.webview.onDidReceiveMessage(async message => {
         try {
             switch (message?.command) {
@@ -259,6 +301,7 @@ function setupHelloPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
                 case 'runCommand':
                     if (typeof message.id === 'string') {
                         await vscode.commands.executeCommand(message.id, message.arg);
+                        scheduleStateRefresh();
                     }
                     break;
                 case 'openDoc':
@@ -283,6 +326,14 @@ function setupHelloPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionCo
             vscode.window.showErrorMessage(`Hello 页面操作失败: ${text}`);
         }
     }, undefined, context.subscriptions);
+}
+
+function createHelloFileWatcher(pattern: vscode.GlobPattern, onChange: () => void): vscode.Disposable {
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern, false, false, false);
+    watcher.onDidCreate(onChange);
+    watcher.onDidChange(onChange);
+    watcher.onDidDelete(onChange);
+    return watcher;
 }
 
 function hasExistingHelloTab(): boolean {
@@ -615,7 +666,9 @@ async function openAnhSettingsPicker(): Promise<void> {
         title: '选择打开 ANH 设置的方式',
         placeHolder: '选择一个设置界面'
     });
-    if (!choice) return;
+    if (!choice) {
+        return;
+    }
     await vscode.commands.executeCommand(choice.command, choice.arg);
 }
 
@@ -763,7 +816,7 @@ const HELLO_I18N_ZH_CN: Record<string, string> = {
     followVsCode: '只跟随 VS Code 扩展开关',
     followVsCodeDesc: '运行时绕过旧工作区禁用判断，不改写原托管设置。',
     dismiss: '下次不自动显示',
-    walkthrough: '演练',
+    walkthrough: '常用功能',
     initProject: '初始化小说项目',
     initProjectDesc: '生成项目配置、角色库、敏感词、词汇、正则和基础目录。',
     startButton: '开始',
@@ -878,7 +931,7 @@ const HELLO_I18N_EN: Record<string, string> = {
     followVsCode: 'Follow VS Code extension state only',
     followVsCodeDesc: 'Bypass legacy workspace-disable checks without rewriting the original managed setting.',
     dismiss: 'Do not show automatically again',
-    walkthrough: 'Walkthroughs',
+    walkthrough: 'Common Features',
     initProject: 'Initialize Novel Project',
     initProjectDesc: 'Generate project config, role library, sensitive words, vocabulary, regex rules, and base folders.',
     startButton: 'Start',
@@ -951,7 +1004,7 @@ const HELLO_I18N_JA: Record<string, string> = {
     start: '開始',
     current: '現在',
     recent: '最近',
-    walkthrough: 'チュートリアル',
+    walkthrough: 'よく使う機能',
     docs: 'ドキュメント',
     recommendedExtensions: 'おすすめ拡張機能',
     faqTitle: 'よくある質問'

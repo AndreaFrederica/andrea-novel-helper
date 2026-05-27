@@ -185,6 +185,51 @@
             gap: 14px;
         }
 
+        .mode-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .mode-option {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 8px;
+            padding: 14px;
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .mode-option:hover,
+        .mode-option.selected {
+            border-color: var(--vscode-focusBorder);
+            background: color-mix(in srgb, var(--vscode-focusBorder) 8%, transparent);
+        }
+
+        .mode-option input {
+            width: auto;
+            margin-top: 3px;
+            accent-color: var(--vscode-button-background);
+        }
+
+        .mode-copy {
+            display: grid;
+            gap: 4px;
+        }
+
+        .mode-copy strong {
+            font-size: 13px;
+        }
+
+        .mode-copy span {
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
         .field {
             display: flex;
             flex-direction: column;
@@ -276,7 +321,7 @@
 
         .log>div {
             padding: 4px 0;
-            border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent);
+            border-bottom: 1px solid var(--vscode-panel-border);
         }
 
         .log>div:last-child {
@@ -379,6 +424,32 @@
             min-height: 48px;
         }
 
+        .mode-defaults {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 6px;
+            border: 1px solid var(--vscode-panel-border);
+            background: color-mix(in srgb, var(--vscode-editor-background) 94%, var(--vscode-focusBorder));
+        }
+
+        .mode-defaults strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .mode-defaults ul {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+            line-height: 1.7;
+        }
+
+        .mode-defaults.hidden {
+            display: none !important;
+        }
+
         .git-actions {
             justify-content: flex-start;
             margin-top: 10px;
@@ -392,7 +463,8 @@
             }
 
             .grid,
-            .checks {
+            .checks,
+            .mode-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -499,6 +571,31 @@
                     Git，最后确认要创建的文件和忽略规则。</div>
                 <p class="hint">如果你不熟悉 Git，按默认推荐项继续即可。向导会在需要时提示你创建本机 Git
                     用户名和邮箱。</p>
+                <div class="mode-grid" role="radiogroup" aria-label="初始化向导模式">
+                    <label class="mode-option selected" data-mode-option="novice">
+                        <input type="radio" name="wizardMode" value="novice" checked>
+                        <span class="mode-copy">
+                            <strong>小白版</strong>
+                            <span>只保留常用项，项目配置和大部分高级选项直接使用推荐默认值。</span>
+                        </span>
+                    </label>
+                    <label class="mode-option" data-mode-option="pro">
+                        <input type="radio" name="wizardMode" value="pro">
+                        <span class="mode-copy">
+                            <strong>专业版</strong>
+                            <span>完整显示资源文件目标、索引键、文件识别关键词和 Git 细项，适合已有明确习惯的用户。</span>
+                        </span>
+                    </label>
+                </div>
+                <div id="noviceDefaults" class="mode-defaults">
+                    <strong>小白版会直接使用这些推荐默认值</strong>
+                    <ul>
+                        <li>资源文件路径使用 novel-helper 下的标准文件名</li>
+                        <li>角色索引键和文件识别关键词沿用系统默认</li>
+                        <li>创建示例资源结构，并默认忽略 .history、.vscode、.out-of-code-insights</li>
+                        <li>写作统计数据库默认不纳入版本控制</li>
+                    </ul>
+                </div>
             </div>
         </section>
 

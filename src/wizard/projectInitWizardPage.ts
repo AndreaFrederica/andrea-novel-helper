@@ -87,6 +87,13 @@ export function registerGraphicalProjectInitWizard(context: vscode.ExtensionCont
                     case 'openGitDownload':
                         await vscode.env.openExternal(vscode.Uri.parse('https://git-scm.com/downloads'));
                         break;
+                    case 'warnGitMissing': {
+                        const action = await vscode.window.showWarningMessage('未检测到 Git。你可以先安装 Git，再继续配置 Git 仓库和提交。', '打开 Git 下载页');
+                        if (action === '打开 Git 下载页') {
+                            await vscode.env.openExternal(vscode.Uri.parse('https://git-scm.com/downloads'));
+                        }
+                        break;
+                    }
                     case 'openGuide':
                         await vscode.commands.executeCommand('AndreaNovelHelper.showGuide');
                         break;
