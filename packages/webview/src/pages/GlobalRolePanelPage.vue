@@ -155,6 +155,7 @@
                   </h2>
                   <div class="detail-type-row">
                     <q-chip dense :label="selectedRole.type" :style="{ background: getTypeColor(selectedRole.type), color: '#fff' }" />
+                    <q-btn v-if="selectedRole.sourcePath" dense flat size="sm" icon="data_object" label="Raw" class="q-ml-sm" @click="openRawDialog(selectedRole)" />
                     <q-btn v-if="selectedRole.sourcePath" dense flat size="sm" icon="open_in_new" label="打开源文件" class="q-ml-sm" @click="openSource(selectedRole.sourcePath!)" />
                     <q-btn v-if="selectedRole.sourcePath" dense flat size="sm" icon="folder_open" label="所在目录" class="q-ml-xs" @click="openSourceDir(selectedRole.sourcePath!)" />
                   </div>
@@ -258,6 +259,54 @@
             <p class="text-grey-6 q-mt-md">选择一个角色查看详情</p>
           </section>
         </main>
+
+        <q-dialog v-model="rawDialog" maximized persistent>
+          <q-card class="raw-dialog-card">
+            <q-card-section class="raw-dialog-header">
+              <div>
+                <div class="text-h6">原始数据</div>
+                <div class="text-caption text-grey-6">
+                  {{ rawSourcePath || '未绑定源文件' }}
+                </div>
+                <div class="text-caption text-grey-6 q-mt-xs">
+                  这里编辑的是该角色对应源文件的完整原文；如果多个角色共用同一文件，保存会一并改动这个文件。
+                </div>
+                <div v-if="rawDirty" class="raw-info q-mt-sm">
+                  当前编辑区是未保存草稿。只有点击“保存”才会写入源文件。
+                </div>
+                <div v-if="rawExternalChanged" class="raw-warning q-mt-sm">
+                  检测到源文件已被外部修改。为避免覆盖当前草稿，编辑区没有自动替换；点“重新加载”可查看最新版，或继续保存以覆盖源文件。
+                </div>
+              </div>
+            </q-card-section>
+
+            <q-separator />
+
+            <q-card-section class="raw-dialog-body">
+              <div v-if="rawError" class="raw-error">{{ rawError }}</div>
+              <div v-if="rawLoading" class="notice">
+                <q-spinner size="24px" color="primary" />
+                <span class="q-ml-sm">加载原始数据…</span>
+              </div>
+              <textarea
+                v-else
+                v-model="rawContent"
+                class="raw-textarea"
+                spellcheck="false"
+                placeholder="暂无原始数据"
+              />
+            </q-card-section>
+
+            <q-separator />
+
+            <q-card-actions align="right" class="raw-dialog-actions">
+              <q-btn flat icon="refresh" label="重新加载" :disable="!rawSourcePath || rawLoading || rawSaving" @click="reloadRawContent" />
+              <q-btn flat icon="open_in_new" label="打开源文件" :disable="!rawSourcePath || rawLoading || rawSaving" @click="openSource(rawSourcePath)" />
+              <q-btn flat label="关闭" :disable="rawSaving" @click="closeRawDialog" />
+              <q-btn color="primary" icon="save" label="保存" :loading="rawSaving" :disable="!rawSourcePath || rawLoading || !rawDirty" @click="saveRawContent" />
+            </q-card-actions>
+          </q-card>
+        </q-dialog>
       </q-page>
     </q-page-container>
   </q-layout>
@@ -282,6 +331,7 @@ interface RoleMessage {
   command: string;
   added?: RoleData[]; removed?: { uuid?: string; name: string }[];
   modified?: RoleData[]; allRoles?: RoleData[]; error?: string;
+  sourcePath?: string; content?: string;
   roleEditorSettings?: Partial<RoleEditorSettings>;
 }
 
@@ -332,10 +382,19 @@ const sidebarCollapsed = ref(saved.sidebarCollapsed ?? false);
 const filterDialog = ref(false);
 const filterTypes = ref<string[]>(saved.filterTypes ?? []);
 const filterPackages = ref<string[]>(saved.filterPackages ?? []);
+const rawDialog = ref(false);
+const rawSourcePath = ref('');
+const rawContent = ref('');
+const rawOriginalContent = ref('');
+const rawLoading = ref(false);
+const rawSaving = ref(false);
+const rawError = ref('');
+const rawExternalChanged = ref(false);
 const roleEditorSettings = ref<RoleEditorSettings>({
   localizedKeyLabels: true,
   displayLanguage: getCurrentRoleKeyLanguage(),
 });
+const rawDirty = computed(() => rawContent.value !== rawOriginalContent.value);
 
 // ========== 收藏 ==========
 function toggleFavorite(name: string) {
@@ -447,11 +506,62 @@ function fieldLabel(key: string): string {
 function selectRole(role: RoleData) { selectedRole.value = role; }
 function requestData() { isLoading.value = true; lastError.value = ''; vscode?.postMessage({ command: 'globalRolePanel.ready' }); }
 function openSource(path: string) { vscode?.postMessage({ command: 'globalRolePanel.openSource', sourcePath: path }); }
+function openRawDialog(role: RoleData) {
+  if (!role.sourcePath) return;
+  if (rawDialog.value && rawDirty.value && rawSourcePath.value && rawSourcePath.value !== role.sourcePath) {
+    const confirmed = window.confirm('当前 Raw 窗口里有未保存草稿，切换到其他源文件会丢失草稿。确定继续吗？');
+    if (!confirmed) {
+      return;
+    }
+  }
+  rawDialog.value = true;
+  rawSourcePath.value = role.sourcePath;
+  rawError.value = '';
+  rawExternalChanged.value = false;
+  loadRawContent(role.sourcePath);
+}
 function openSourceDir(sourcePath: string) {
   const dir = sourcePath.replace(/[/\\][^/\\]+$/, '');
   if (dir) vscode?.postMessage({ command: 'globalRolePanel.openSource', sourcePath: dir });
 }
 function openImage(src: string) { vscode?.postMessage({ command: 'globalRolePanel.openSource', sourcePath: src }); }
+function closeRawDialog() {
+  if (rawDirty.value) {
+    const confirmed = window.confirm('当前 Raw 窗口里有未保存草稿。确定关闭并丢弃草稿吗？');
+    if (!confirmed) {
+      return;
+    }
+  }
+  rawDialog.value = false;
+  rawSourcePath.value = '';
+  rawContent.value = '';
+  rawOriginalContent.value = '';
+  rawLoading.value = false;
+  rawSaving.value = false;
+  rawError.value = '';
+  rawExternalChanged.value = false;
+  vscode?.postMessage({ command: 'globalRolePanel.closeRaw' });
+}
+function reloadRawContent() {
+  if (!rawSourcePath.value) return;
+  rawExternalChanged.value = false;
+  loadRawContent(rawSourcePath.value);
+}
+function loadRawContent(sourcePath: string) {
+  rawLoading.value = true;
+  rawError.value = '';
+  vscode?.postMessage({ command: 'globalRolePanel.requestRaw', sourcePath });
+}
+function saveRawContent() {
+  if (!rawSourcePath.value || rawSaving.value) return;
+  rawSaving.value = true;
+  rawError.value = '';
+  vscode?.postMessage({
+    command: 'globalRolePanel.saveRaw',
+    sourcePath: rawSourcePath.value,
+    content: rawContent.value,
+  });
+}
 function onSearchChange() { currentPage.value = 1; selectedRole.value = null; }
 function onFilterChange() { currentPage.value = 1; selectedRole.value = null; saveState(); }
 function clearAllFilters() {
@@ -481,6 +591,46 @@ function handleMessage(event: MessageEvent) {
     case 'globalRolePanel.error':
       isLoading.value = false;
       lastError.value = msg.error || '未知错误';
+      break;
+    case 'globalRolePanel.rawData':
+      if (msg.sourcePath && msg.sourcePath === rawSourcePath.value) {
+        rawLoading.value = false;
+        rawSaving.value = false;
+        rawError.value = '';
+        rawExternalChanged.value = false;
+        rawContent.value = msg.content || '';
+        rawOriginalContent.value = msg.content || '';
+      }
+      break;
+    case 'globalRolePanel.rawExternalUpdate':
+      if (msg.sourcePath && msg.sourcePath === rawSourcePath.value) {
+        rawLoading.value = false;
+        rawSaving.value = false;
+        rawError.value = '';
+        if (rawDirty.value) {
+          rawExternalChanged.value = true;
+        } else {
+          rawExternalChanged.value = false;
+          rawContent.value = msg.content || '';
+          rawOriginalContent.value = msg.content || '';
+        }
+      }
+      break;
+    case 'globalRolePanel.rawSaved':
+      if (!msg.sourcePath || msg.sourcePath === rawSourcePath.value) {
+        rawLoading.value = false;
+        rawSaving.value = false;
+        rawError.value = '';
+        rawExternalChanged.value = false;
+        rawOriginalContent.value = rawContent.value;
+      }
+      break;
+    case 'globalRolePanel.rawError':
+      if (!msg.sourcePath || msg.sourcePath === rawSourcePath.value) {
+        rawLoading.value = false;
+        rawSaving.value = false;
+        rawError.value = msg.error || '原始数据操作失败';
+      }
       break;
   }
 }
@@ -615,6 +765,62 @@ onMounted(() => {
 }
 .illustration-card:hover { transform: scale(1.03); border-color: var(--vscode-focusBorder, #007acc); }
 .illustration-img { width: 100%; height: 100%; object-fit: cover; }
+
+.raw-dialog-card {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-height: 100vh;
+}
+.raw-dialog-header {
+  flex: 0 0 auto;
+}
+.raw-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 12px;
+}
+.raw-dialog-actions {
+  flex: 0 0 auto;
+}
+.raw-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  resize: none;
+  border: 1px solid var(--vscode-input-border, rgba(127,127,127,0.35));
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--vscode-input-background, rgba(127,127,127,0.08));
+  color: var(--vscode-input-foreground, inherit);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.raw-textarea:focus {
+  outline: 1px solid var(--vscode-focusBorder, #007acc);
+}
+.raw-error {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: var(--vscode-errorForeground);
+  background: color-mix(in srgb, var(--vscode-errorForeground) 10%, transparent);
+}
+.raw-info {
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(in srgb, var(--vscode-descriptionForeground) 12%, transparent);
+}
+.raw-warning {
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 14%, transparent);
+}
 
 /* 过滤弹窗 */
 .filter-dialog { width: 420px; max-width: 90vw; }

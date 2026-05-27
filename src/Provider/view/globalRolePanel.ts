@@ -9,7 +9,10 @@ import type { Role } from '../../extension';
 // ========== 类型定义 ==========
 type GlobalRolePanelMessage =
   | { command: 'globalRolePanel.ready' }
-  | { command: 'globalRolePanel.openSource'; sourcePath: string };
+  | { command: 'globalRolePanel.openSource'; sourcePath: string }
+  | { command: 'globalRolePanel.requestRaw'; sourcePath: string }
+  | { command: 'globalRolePanel.closeRaw' }
+  | { command: 'globalRolePanel.saveRaw'; sourcePath: string; content: string };
 
 const ROLE_EDITOR_LOCALIZED_KEY_LABELS = 'roleEditor.localizedKeyLabels';
 
@@ -205,6 +208,9 @@ export class GlobalRolePanelProvider {
   private panel: vscode.WebviewPanel | undefined;
   private previousSnapshots: RoleSnapshot[] = [];
   private disposables: vscode.Disposable[] = [];
+  private rawSourceWatcher: vscode.FileSystemWatcher | undefined;
+  private watchedRawSourcePath: string | undefined;
+  private readonly rawSourceMuteUntil = new Map<string, number>();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -279,6 +285,18 @@ export class GlobalRolePanelProvider {
             await this.openSourceFile(message.sourcePath);
             break;
           }
+          case 'globalRolePanel.requestRaw': {
+            await this.sendRawSource(message.sourcePath);
+            break;
+          }
+          case 'globalRolePanel.closeRaw': {
+            this.disposeRawSourceWatcher();
+            break;
+          }
+          case 'globalRolePanel.saveRaw': {
+            await this.saveRawSource(message.sourcePath, message.content);
+            break;
+          }
         }
       },
       undefined,
@@ -290,6 +308,7 @@ export class GlobalRolePanelProvider {
         this.panel = undefined;
         this.previousSnapshots = [];
       }
+      this.disposeRawSourceWatcher();
     }, null, this.disposables);
   }
 
@@ -305,6 +324,138 @@ export class GlobalRolePanelProvider {
     const uri = vscode.Uri.file(sourcePath);
     const doc = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(doc, vscode.ViewColumn.Active);
+  }
+
+  private async sendRawSource(sourcePath: string): Promise<void> {
+    if (!this.panel) { return; }
+    try {
+      const normalizedPath = this.normalizeSourcePath(sourcePath);
+      this.ensureRawSourceWatcher(normalizedPath);
+      const content = await this.readRawSource(normalizedPath);
+      await this.panel.webview.postMessage({
+        command: 'globalRolePanel.rawData',
+        sourcePath: normalizedPath,
+        content,
+      });
+    } catch (error) {
+      await this.postRawError(sourcePath, error);
+    }
+  }
+
+  private async saveRawSource(sourcePath: string, content: string): Promise<void> {
+    if (!this.panel) { return; }
+    try {
+      const normalizedPath = this.normalizeSourcePath(sourcePath);
+      if (!normalizedPath || !fs.existsSync(normalizedPath)) {
+        throw new Error(`找不到源文件: ${sourcePath || '(空)'}`);
+      }
+      this.ensureRawSourceWatcher(normalizedPath);
+      this.rawSourceMuteUntil.set(normalizedPath, Date.now() + 1500);
+      const uri = vscode.Uri.file(normalizedPath);
+      const document = await vscode.workspace.openTextDocument(uri);
+      const currentText = document.getText();
+      if (currentText !== content) {
+        const edit = new vscode.WorkspaceEdit();
+        const fullRange = new vscode.Range(document.positionAt(0), document.positionAt(currentText.length));
+        edit.replace(uri, fullRange, content);
+        const ok = await vscode.workspace.applyEdit(edit);
+        if (!ok) {
+          throw new Error('无法写入原始数据到源文件');
+        }
+      }
+      const updatedDocument = await vscode.workspace.openTextDocument(uri);
+      const saved = await updatedDocument.save();
+      if (!saved) {
+        throw new Error('源文件保存失败');
+      }
+      await this.panel.webview.postMessage({
+        command: 'globalRolePanel.rawSaved',
+        sourcePath: normalizedPath,
+      });
+    } catch (error) {
+      await this.postRawError(sourcePath, error);
+    }
+  }
+
+  private async readRawSource(sourcePath: string): Promise<string> {
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+      throw new Error(`找不到源文件: ${sourcePath || '(空)'}`);
+    }
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(sourcePath));
+    return document.getText();
+  }
+
+  private normalizeSourcePath(sourcePath: string): string {
+    return path.resolve(sourcePath);
+  }
+
+  private ensureRawSourceWatcher(sourcePath: string): void {
+    if (!sourcePath) {
+      this.disposeRawSourceWatcher();
+      return;
+    }
+    if (this.watchedRawSourcePath === sourcePath && this.rawSourceWatcher) {
+      return;
+    }
+
+    this.disposeRawSourceWatcher();
+    this.watchedRawSourcePath = sourcePath;
+
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(path.dirname(sourcePath), path.basename(sourcePath)),
+      false,
+      false,
+      false,
+    );
+    const onSourceChanged = () => {
+      void this.handleWatchedRawSourceChange(sourcePath);
+    };
+
+    watcher.onDidChange(onSourceChanged);
+    watcher.onDidCreate(onSourceChanged);
+    watcher.onDidDelete(() => {
+      void this.postRawError(sourcePath, new Error(`找不到源文件: ${sourcePath}`));
+    });
+
+    this.rawSourceWatcher = watcher;
+  }
+
+  private disposeRawSourceWatcher(): void {
+    this.rawSourceWatcher?.dispose();
+    this.rawSourceWatcher = undefined;
+    this.watchedRawSourcePath = undefined;
+  }
+
+  private async handleWatchedRawSourceChange(sourcePath: string): Promise<void> {
+    if (!this.panel || this.watchedRawSourcePath !== sourcePath) {
+      return;
+    }
+    const muteUntil = this.rawSourceMuteUntil.get(sourcePath) ?? 0;
+    if (muteUntil > Date.now()) {
+      return;
+    }
+    this.rawSourceMuteUntil.delete(sourcePath);
+
+    try {
+      const content = await this.readRawSource(sourcePath);
+      await this.panel.webview.postMessage({
+        command: 'globalRolePanel.rawExternalUpdate',
+        sourcePath,
+        content,
+      });
+    } catch (error) {
+      await this.postRawError(sourcePath, error);
+    }
+  }
+
+  private async postRawError(sourcePath: string, error: unknown): Promise<void> {
+    if (!this.panel) { return; }
+    const message = error instanceof Error ? error.message : String(error);
+    await this.panel.webview.postMessage({
+      command: 'globalRolePanel.rawError',
+      sourcePath,
+      error: message,
+    });
   }
 
   private async sendAllRoles(): Promise<void> {
