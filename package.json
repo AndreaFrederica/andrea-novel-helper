@@ -2458,6 +2458,48 @@
           "default": true,
           "description": "开启时使用新命名机制：创建/重命名资源文件时自动追加固定英文关键词（role/sensitive/vocab），并隐藏“是否自动添加关键词”步骤。关闭时恢复旧的手动命名行为。"
         },
+        "AndreaNovelHelper.packageManager.hideOutlineStorage": {
+          "anhName": "隐藏大纲存储目录",
+          "type": "boolean",
+          "default": true,
+          "description": "在包管理器中隐藏大纲存储目录，例如 outline 和 free-outline。只影响显示，不会删除文件。"
+        },
+        "AndreaNovelHelper.packageManager.hideCommentsFolder": {
+          "anhName": "隐藏批注目录",
+          "type": "boolean",
+          "default": true,
+          "description": "在包管理器中隐藏 novel-helper/comments 目录。只影响显示，不影响批注系统工作。"
+        },
+        "AndreaNovelHelper.packageManager.hideTypoFolder": {
+          "anhName": "隐藏错别字目录",
+          "type": "boolean",
+          "default": true,
+          "description": "在包管理器中隐藏 novel-helper/typo 目录。只影响显示，不影响错别字检查功能。"
+        },
+        "AndreaNovelHelper.packageManager.hideDashboardFolder": {
+          "anhName": "隐藏创作工作台目录",
+          "type": "boolean",
+          "default": false,
+          "description": "在包管理器中隐藏 novel-helper/dashboard 目录。适合不想在资源树里看到工作台内部数据的场景。"
+        },
+        "AndreaNovelHelper.packageManager.hideDocsFolder": {
+          "anhName": "隐藏项目文档目录",
+          "type": "boolean",
+          "default": false,
+          "description": "在包管理器中隐藏 novel-helper/docs 目录。只影响显示，不影响文档释放和查看。"
+        },
+        "AndreaNovelHelper.packageManager.showGeneralResourceFiles": {
+          "anhName": "显示普通资源文件",
+          "type": "boolean",
+          "default": true,
+          "description": "关闭后，包管理器只显示角色/关系/时间线/命中资源关键词的文件，不再显示普通杂项文件。"
+        },
+        "AndreaNovelHelper.packageManager.showRoleFileChangeNotifications": {
+          "anhName": "显示角色文件变更提示",
+          "type": "boolean",
+          "default": false,
+          "description": "开启后，当包管理器检测到角色文件被创建、修改、删除或重命名时，会弹出提示消息。"
+        },
         "AndreaNovelHelper.customRegexFileKeywords": {
           "anhName": "自定义正则文件关键词",
           "type": "array",
@@ -2505,6 +2547,12 @@
           "minimum": 20,
           "maximum": 50,
           "description": "%config.markdownToolbarHeight.description%"
+        },
+        "AndreaNovelHelper.obsidian.index.enabled": {
+          "anhName": "启用 Obsidian 索引",
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.obsidian.index.enabled.description%"
         },
         "AndreaNovelHelper.obsidian.renderWikilinks": {
           "anhName": "渲染 Obsidian 双链",

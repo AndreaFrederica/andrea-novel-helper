@@ -50,6 +50,7 @@
     "config.customRegexFileKeywords.description": "附加的正则文件名关键词。会与 anhproject.md 和 project-config.json5 中声明的关键词合并。",
     "config.markdownToolbarEnabled.description": "启用 Markdown 选区工具条",
     "config.markdownToolbarHeight.description": "Markdown 工具条高度（像素）",
+    "config.obsidian.index.enabled.description": "启用 Obsidian 兼容索引。关闭后，启动时不会扫描工作区中的双链、标题和标签；预览与导出渲染仍然可用。",
     "config.obsidian.renderWikilinks.description": "在预览和导出中渲染 Obsidian 风格双链。开启后，`[[文件|别名]]` 会输出为 `别名`，`[[文件]]` 会输出为 `文件`。",
     "config.obsidian.renderTags.description": "在预览和导出中渲染 Obsidian 风格标签。关闭后，`#标签` 会从渲染结果中隐藏，但源文件内容保持不变。",
     "config.obsidian.renderEscapedTags.description": "在预览和导出中把 `\\#标签` 这类转义标签渲染为可见的 `#标签` 文本。默认关闭，以保持与 Obsidian 的行为一致。",

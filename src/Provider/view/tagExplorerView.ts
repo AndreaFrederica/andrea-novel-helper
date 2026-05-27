@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { roles, onDidChangeRoles, loadRoles } from '../../activate';
-import { getObsidianProjectIndex, normalizeColor, ObsidianTagEntry, ObsidianTagFileHit, onDidChangeObsidianIndex, registerObsidianIndex } from '../../language/obsidianIndex';
+import { getObsidianProjectIndex, isObsidianIndexEnabled, normalizeColor, ObsidianTagEntry, ObsidianTagFileHit, onDidChangeObsidianIndex, registerObsidianIndex } from '../../language/obsidianIndex';
 import { bindTagToRole, cleanTag, refreshTagRoleBindings, resolveTagRole, ResolvedTagRole, tagToAffiliation, tagToRoleNameCandidates, unbindTagRole } from '../../language/tagRoleBridge';
 import { Role } from '../../extension';
 import { clearAllRoleMatchCache } from '../../context/roleAsyncShared';
@@ -108,6 +108,9 @@ class TagTreeProvider implements vscode.TreeDataProvider<TagTreeItem> {
         if (!vscode.workspace.workspaceFolders?.length) {
             return [new TagTreeItem('info', '未打开工作区', vscode.TreeItemCollapsibleState.None)];
         }
+        if (!isObsidianIndexEnabled()) {
+            return [new TagTreeItem('info', 'Obsidian 索引已关闭', vscode.TreeItemCollapsibleState.None)];
+        }
 
         const entries = await this.getEntries();
         if (!element) {
@@ -142,6 +145,7 @@ class TagTreeProvider implements vscode.TreeDataProvider<TagTreeItem> {
     }
 
     private async getEntries(): Promise<TagEntry[]> {
+        if (!isObsidianIndexEnabled()) return [];
         if (this.cachedEntries) return this.cachedEntries;
         this.cachedEntries = await getObsidianProjectIndex()?.getTagEntries() || [];
         return this.cachedEntries;
@@ -162,6 +166,11 @@ export function registerTagExplorerView(context: vscode.ExtensionContext) {
 
     const refresh = () => provider.refresh();
     const forceRefresh = async () => {
+        if (!isObsidianIndexEnabled()) {
+            vscode.window.showInformationMessage('Obsidian 索引已关闭，可在设置中开启 AndreaNovelHelper.obsidian.index.enabled。');
+            provider.refresh();
+            return;
+        }
         refreshTagRoleBindings();
         await getObsidianProjectIndex()?.refresh();
         provider.refresh();

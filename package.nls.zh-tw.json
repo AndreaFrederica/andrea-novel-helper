@@ -32,7 +32,8 @@
     "config.customCharacterFileKeywords.description": "附加的角色檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
     "config.customSensitiveWordsFileKeywords.description": "附加的敏感詞檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
     "config.customVocabularyFileKeywords.description": "附加的詞彙檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
-    "config.customRegexFileKeywords.description": "附加的正則檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。"
+    "config.customRegexFileKeywords.description": "附加的正則檔案名關鍵詞。會與 anhproject.md 和 project-config.json5 中宣告的關鍵詞合併。",
+    "config.obsidian.index.enabled.description": "啟用 Obsidian 相容索引。關閉後，啟動時不會掃描工作區中的雙向連結、標題和標籤；預覽與匯出渲染仍可使用。"
     ,
     "command.openTimeStats.title": "打開寫作統計",
     "sidebar.webdav.title": "小說助手:雲端同步",

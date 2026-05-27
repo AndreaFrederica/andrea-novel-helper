@@ -104,6 +104,11 @@ const sectionNames: Record<string, Record<SectionLocale, string>> = {
         ja: 'センシティブワード設定',
         en: 'Sensitive Words'
     },
+    'AndreaNovelHelper.obsidian': {
+        zh: 'Obsidian 兼容',
+        ja: 'Obsidian 互換',
+        en: 'Obsidian Compatibility'
+    },
     'AndreaNovelHelper.smartTabGroupLock': {
         zh: '智能标签组锁定',
         ja: 'スマートタブグループロック',

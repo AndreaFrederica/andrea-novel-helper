@@ -70,16 +70,45 @@ const EXCLUDED_SEGMENTS = new Set(['.git', '.vscode', 'node_modules', 'dist', 'b
 const WIKI_LINK_RE = /!??\[\[([^\]\n]+)\]\]/g;
 const TAG_RE = /(^|[\s([{>])(#(?:[A-Za-z0-9_\-\u4e00-\u9fff]+)(?:\/[A-Za-z0-9_\-\u4e00-\u9fff]+)*)/g;
 const COLOR_RE = /#(?:[A-Fa-f0-9]{3}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})\b/g;
+const STARTUP_BACKGROUND_SYNC_DELAY_MS = 5000;
 
 let projectIndex: ObsidianProjectIndex | undefined;
 let watcherRegistered = false;
+let lifecycleRegistered = false;
+let watcherDisposables: vscode.Disposable[] = [];
+let startupSyncTimer: NodeJS.Timeout | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
 const onDidChangeEmitter = new vscode.EventEmitter<void>();
 
 export const onDidChangeObsidianIndex = onDidChangeEmitter.event;
 
+export function isObsidianIndexEnabled(scope?: vscode.ConfigurationScope): boolean {
+    return vscode.workspace.getConfiguration('AndreaNovelHelper.obsidian', scope).get<boolean>('index.enabled', true);
+}
+
 export function registerObsidianIndex(context: vscode.ExtensionContext): void {
     extensionContext = context;
+    if (!lifecycleRegistered) {
+        lifecycleRegistered = true;
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeConfiguration(event => {
+                if (!event.affectsConfiguration('AndreaNovelHelper.obsidian.index.enabled')) return;
+                if (isObsidianIndexEnabled()) {
+                    registerObsidianIndex(context);
+                    onDidChangeEmitter.fire();
+                } else {
+                    disposeObsidianIndexRuntime();
+                    onDidChangeEmitter.fire();
+                }
+            }),
+            onDidChangeEmitter,
+            { dispose: () => disposeObsidianIndexRuntime() },
+        );
+    }
+    if (!isObsidianIndexEnabled()) {
+        disposeObsidianIndexRuntime();
+        return;
+    }
     if (watcherRegistered) return;
     watcherRegistered = true;
 
@@ -96,7 +125,7 @@ export function registerObsidianIndex(context: vscode.ExtensionContext): void {
         });
     };
 
-    context.subscriptions.push(
+    watcherDisposables = [
         watcher,
         ignoreWatcher,
         watcher.onDidCreate(update),
@@ -105,20 +134,47 @@ export function registerObsidianIndex(context: vscode.ExtensionContext): void {
         ignoreWatcher.onDidCreate(() => { getObsidianProjectIndex()?.refreshIgnoreRules(); onDidChangeEmitter.fire(); }),
         ignoreWatcher.onDidChange(() => { getObsidianProjectIndex()?.refreshIgnoreRules(); onDidChangeEmitter.fire(); }),
         ignoreWatcher.onDidDelete(() => { getObsidianProjectIndex()?.refreshIgnoreRules(); onDidChangeEmitter.fire(); }),
-        onDidChangeEmitter,
-        { dispose: () => { void projectIndex?.flush(); obsidianScanWorker.dispose(); } },
-    );
+    ];
+    context.subscriptions.push(...watcherDisposables);
 
-    void getObsidianProjectIndex()?.ensureReady();
+    const index = getObsidianProjectIndex();
+    void index?.warmFromCache();
+    scheduleStartupBackgroundSync();
 }
 
 export function getObsidianProjectIndex(): ObsidianProjectIndex | undefined {
+    if (!isObsidianIndexEnabled()) return undefined;
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) return undefined;
     if (!projectIndex || !samePath(projectIndex.workspaceRoot, workspaceRoot)) {
         projectIndex = new ObsidianProjectIndex(workspaceRoot);
     }
     return projectIndex;
+}
+
+function disposeObsidianIndexRuntime(): void {
+    if (startupSyncTimer) {
+        clearTimeout(startupSyncTimer);
+        startupSyncTimer = undefined;
+    }
+    if (projectIndex) {
+        void projectIndex.flush();
+        projectIndex = undefined;
+    }
+    obsidianScanWorker.dispose();
+    for (const disposable of watcherDisposables) {
+        try { disposable.dispose(); } catch { /* noop */ }
+    }
+    watcherDisposables = [];
+    watcherRegistered = false;
+}
+
+function scheduleStartupBackgroundSync(): void {
+    if (startupSyncTimer) clearTimeout(startupSyncTimer);
+    startupSyncTimer = setTimeout(() => {
+        startupSyncTimer = undefined;
+        void getObsidianProjectIndex()?.refresh();
+    }, STARTUP_BACKGROUND_SYNC_DELAY_MS);
 }
 
 class ObsidianIndexScanWorker {
@@ -209,6 +265,10 @@ export class ObsidianProjectIndex {
     private ignoreParser: CombinedIgnoreParser | undefined;
 
     constructor(public readonly workspaceRoot: string) {}
+
+    async warmFromCache(): Promise<void> {
+        await this.load();
+    }
 
     async ensureReady(force = false): Promise<void> {
         await this.load();

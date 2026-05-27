@@ -26,6 +26,10 @@ import {
 
 type PackageManagerNode = PackageNode | CommonFeaturesRootNode | ProjectSettingsFilesRootNode | ProjectConfigFileNode | HelloPageNode | ProjectInitWizardNode | ProjectSettingsNode | WritingDashboardNode | GlobalRolePanelNode | ReferenceMaintenanceNode | ExternalResourceManageNode | CopilotDocsManageNode | McpStdioScriptNode | GenerateLookupKeysNode | GuideNode | DocCenterNode | BookRootNode | AnyNode;
 
+const PACKAGE_MANAGER_CONFIG_SECTION = 'AndreaNovelHelper.packageManager';
+const PACKAGE_CONFIG_SECTION = 'AndreaNovelHelper.package';
+const ALWAYS_HIDDEN_INTERNAL_DIRS = new Set(['.anh-fsdb']);
+
 const RESOURCE_KIND_NAME_RE = new RegExp(
     RESOURCE_KIND_NAME_KEYWORDS
         .map(keyword => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -501,6 +505,58 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
         this.rescanExternalRoleFolders(false);
     }
 
+    private getPackageManagerConfig(): vscode.WorkspaceConfiguration {
+        return vscode.workspace.getConfiguration('AndreaNovelHelper', vscode.Uri.file(this.workspaceRoot));
+    }
+
+    public showGeneralResourceFiles(): boolean {
+        return this.getPackageManagerConfig().get<boolean>('packageManager.showGeneralResourceFiles', true);
+    }
+
+    public showRoleFileChangeNotifications(): boolean {
+        return this.getPackageManagerConfig().get<boolean>('packageManager.showRoleFileChangeNotifications', false);
+    }
+
+    public shouldHideHelperEntry(fullPath: string): boolean {
+        const helperRoot = path.join(this.workspaceRoot, 'novel-helper');
+        if (!isPathUnderAnyRoot(fullPath, [helperRoot])) {
+            return false;
+        }
+
+        const relativePath = path.relative(helperRoot, fullPath);
+        if (!relativePath) {
+            return false;
+        }
+
+        const segments = relativePath.split(path.sep).filter(Boolean);
+        if (segments.length === 0) {
+            return false;
+        }
+
+        if (isOutlineStoragePath(this.workspaceRoot, fullPath)) {
+            return this.getPackageManagerConfig().get<boolean>('packageManager.hideOutlineStorage', true);
+        }
+
+        const topLevel = segments[0];
+        if (ALWAYS_HIDDEN_INTERNAL_DIRS.has(topLevel)) {
+            return true;
+        }
+
+        const config = this.getPackageManagerConfig();
+        switch (topLevel) {
+            case 'comments':
+                return config.get<boolean>('packageManager.hideCommentsFolder', true);
+            case 'typo':
+                return config.get<boolean>('packageManager.hideTypoFolder', true);
+            case 'dashboard':
+                return config.get<boolean>('packageManager.hideDashboardFolder', false);
+            case 'docs':
+                return config.get<boolean>('packageManager.hideDocsFolder', false);
+            default:
+                return false;
+        }
+    }
+
     refresh(): void {
         this._onDidChange.fire();
     }
@@ -842,8 +898,11 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
             const full = path.join(dir, name);
             const stat = fs.statSync(full);
 
+            if (this.shouldHideHelperEntry(full)) {
+                return nodes;
+            }
+
             if (stat.isDirectory()) {
-                if (name === '.anh-fsdb') { return nodes; }
                 // 根据保存的状态决定子目录展开状态
                 const isExpanded = this.expandedNodes.has(full);
                 nodes.push(
@@ -889,6 +948,9 @@ export class PackageManagerProvider implements vscode.TreeDataProvider<PackageMa
                     nodes.push(fileNode);
                 } else {
                     // 其他资源文件：全部显示，设置为普通资源文件
+                    if (!this.showGeneralResourceFiles()) {
+                        return nodes;
+                    }
                     const fileNode = this.createFileNode(full, 'generalResourceFile'); // 普通资源文件，不被监视
 
                     applyExpandableFileIcon(fileNode, full);
@@ -1365,15 +1427,22 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
 
         // helperRoot 下继续沿用原有排除规则
         if (isHelperPath(filePath)) {
-            const relativePath = path.relative(helperRoot, filePath);
-            if (relativePath.startsWith('outline' + path.sep) || relativePath === 'outline') {
+            if (provider.shouldHideHelperEntry(filePath)) {
                 return false;
             }
-            if (relativePath === '.anh-fsdb' || relativePath.startsWith('.anh-fsdb' + path.sep)) {
-                return false;
+            if (!provider.showGeneralResourceFiles()) {
+                const baseName = path.basename(filePath);
+                if (!isExternalResourceMarkerFile(baseName) && !isRoleFile(baseName, filePath)) {
+                    try {
+                        if (!fs.existsSync(filePath) || !fs.statSync(filePath).isDirectory()) {
+                            return false;
+                        }
+                    } catch {
+                        return false;
+                    }
+                }
             }
-            if (relativePath.startsWith('typo' + path.sep) || relativePath === 'typo' ||
-                relativePath.startsWith('comments' + path.sep) || relativePath === 'comments') {
+            if (normalizeFsPathForCompare(filePath) === normalizeFsPathForCompare(helperRoot)) {
                 return false;
             }
         }
@@ -1456,7 +1525,9 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
                     'change': '修改',
                     'rename': '重命名'
                 };
-                vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[event.type]}: ${fileName}`);
+                if (provider.showRoleFileChangeNotifications()) {
+                    vscode.window.showInformationMessage(`检测到角色文件${changeTypeMap[event.type]}: ${fileName}`);
+                }
             } catch (error) {
                 console.error(`角色数据更新失败: ${error}`);
             }
@@ -1540,6 +1611,12 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(saveWatcher);
+
+    context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration(PACKAGE_MANAGER_CONFIG_SECTION) || event.affectsConfiguration(PACKAGE_CONFIG_SECTION)) {
+            provider.refresh();
+        }
+    }));
 
     // 清理函数：取消注册文件追踪回调
     context.subscriptions.push({

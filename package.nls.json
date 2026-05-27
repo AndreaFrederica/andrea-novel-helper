@@ -50,6 +50,7 @@
     "config.customRegexFileKeywords.description": "Additional filename keywords for regex-pattern files. Merged with keywords from anhproject.md and project-config.json5.",
     "config.markdownToolbarEnabled.description": "Enable Markdown selection toolbar",
     "config.markdownToolbarHeight.description": "Height of the Markdown toolbar (in pixels)",
+    "config.obsidian.index.enabled.description": "Enable the Obsidian compatibility index. When disabled, startup will not scan the workspace for wikilinks, headings, or tags; preview and export rendering still work.",
     "config.obsidian.renderWikilinks.description": "Render Obsidian-style wikilinks in preview and exports. When enabled, `[[File|Alias]]` becomes `Alias`, and `[[File]]` becomes `File`.",
     "config.obsidian.renderTags.description": "Render Obsidian-style tags in preview and exports. Disable this to hide `#tag` text from rendered output while keeping it in source files.",
     "config.obsidian.renderEscapedTags.description": "Render escaped tags such as `\\#tag` as visible `#tag` text in preview and exports. Disabled by default to match Obsidian's behavior.",

@@ -31,7 +31,8 @@
     "config.customCharacterFileKeywords.description": "キャラクターファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
     "config.customSensitiveWordsFileKeywords.description": "センシティブワードファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
     "config.customVocabularyFileKeywords.description": "語彙ファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
-    "config.customRegexFileKeywords.description": "正規表現ファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。"
+    "config.customRegexFileKeywords.description": "正規表現ファイル名に使う追加キーワード。anhproject.md と project-config.json5 の設定と結合されます。",
+    "config.obsidian.index.enabled.description": "Obsidian 互換インデックスを有効にします。無効にすると、起動時にワークスペース内のウィキリンク、見出し、タグをスキャンしません。プレビューとエクスポートのレンダリングは引き続き利用できます。"
     ,
     "command.openTimeStats.title": "タイム統計を開く",
     "sidebar.webdav.title": "Andrea 小説アシスタント: クラウド同期",

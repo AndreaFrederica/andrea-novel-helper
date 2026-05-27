@@ -2,7 +2,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getObsidianProjectIndex, OBSIDIAN_INDEX_EXCLUDE, registerObsidianIndex, stripKnownExtension } from './obsidianIndex';
+import { getObsidianProjectIndex, isObsidianIndexEnabled, OBSIDIAN_INDEX_EXCLUDE, registerObsidianIndex, stripKnownExtension } from './obsidianIndex';
 
 type WikiLinkAtPosition = {
   range: vscode.Range;
@@ -140,8 +140,10 @@ async function resolveWikiFile(document: vscode.TextDocument, filePart: string):
 
   const normalizedLower = stripKnownExtension(path.basename(normalized)).toLowerCase();
   if (!normalizedLower) return undefined;
-  return await getObsidianProjectIndex()?.resolveWikiFileByName(normalized)
-    || await findExistingWorkspaceWikiFile(document, normalized);
+  const index = getObsidianProjectIndex();
+  const indexedMatch = await index?.resolveWikiFileByName(normalized);
+  if (indexedMatch || !isObsidianIndexEnabled()) return indexedMatch;
+  return await findExistingWorkspaceWikiFile(document, normalized);
 }
 
 async function resolveExplicitPath(document: vscode.TextDocument, filePart: string): Promise<vscode.Uri | undefined> {
@@ -225,6 +227,7 @@ function getTagCompletionPrefix(document: vscode.TextDocument, position: vscode.
 }
 
 async function collectWorkspaceTags(): Promise<string[]> {
+  if (!isObsidianIndexEnabled()) return [];
   return getObsidianProjectIndex()?.getTags() || [];
 }
 
