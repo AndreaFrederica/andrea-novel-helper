@@ -1,0 +1,54 @@
+<div class="doc-section beginner">
+<h4>这一组文档在解决什么问题</h4>
+<p>很多用户知道 VS Code 可以装扩展，但并不清楚<strong>扩展视图、扩展市场、VSIX 安装包、工作区推荐、OpenVSX、兼容编辑器</strong>之间到底是什么关系。这一组文档就是把这些边界讲清楚。</p>
+
+<h4>最短理解路径</h4>
+<ol>
+    <li><a class="doc-ref-link" data-doc="extension-marketplace"><strong>VS Code 扩展市场详解</strong></a>：先搞清官方 VS Code 默认连接的是什么、日常怎么搜和装。</li>
+    <li><a class="doc-ref-link" data-doc="openvsx-compatible-editors"><strong>OpenVSX 与兼容编辑器</strong></a>：再搞清为什么在 VSCodium 或其他 code-compatible editor 里，扩展来源可能不是同一个市场。</li>
+    <li>回到 <a class="doc-ref-link" data-doc="vscode-settings-customization"><strong>设置、配置与扩展</strong></a>，把扩展安装和工作区配置串起来。</li>
+</ol>
+
+<h4>先记住三个结论</h4>
+<ul>
+    <li><b>官方 VS Code 默认讲的是 Visual Studio Marketplace</b>，这也是官网扩展文档的默认语境。</li>
+    <li><b>OpenVSX 是另一套开放扩展注册表</b>，常见于一些基于开源 Code 构建的兼容编辑器。</li>
+    <li><b>“能不能装某个扩展”不只取决于界面像不像 VS Code</b>，还取决于发行版配置的扩展源、扩展本身的发布渠道，以及某些功能对微软服务的依赖。</li>
+</ul>
+
+<h4>对 ANH 用户最重要的实际问题</h4>
+<ul>
+    <li>怎样快速判断一个扩展该去哪里装。</li>
+    <li>为什么别人说“在扩展市场搜一下就有”，你这里却搜不到。</li>
+    <li>怎样在多台机器、多个编辑器之间维持接近一致的扩展工作流。</li>
+    <li>怎样判断一个扩展是“只装在当前工作流里”还是“所有项目都启用”。</li>
+</ul>
+
+<div class="doc-note">如果你现在只是想安装 ANH 之外的一两个常用扩展，先读 <a class="doc-ref-link" data-doc="extension-marketplace"><strong>VS Code 扩展市场详解</strong></a> 就够了；如果你正在使用 code-compatible editor，直接连着读 <a class="doc-ref-link" data-doc="openvsx-compatible-editors"><strong>OpenVSX 与兼容编辑器</strong></a>。</div>
+</div>
+
+<div class="doc-section pro">
+<h4>为什么这里要单独成类</h4>
+<p>之前把“扩展”塞进 VS Code 基础设置页里，只能覆盖“怎么打开扩展视图、怎么点 Install”。但当用户进入稍微复杂一点的场景时，问题会立刻升级：</p>
+<ul>
+    <li>为什么在一台机器能搜到扩展，另一台机器搜不到。</li>
+    <li>为什么教程写的是 Marketplace，而你用的编辑器文档提的是 OpenVSX。</li>
+    <li>为什么有的扩展能从 VSIX 离线安装，有的扩展强依赖在线服务。</li>
+    <li>为什么同一组扩展在某个工作区里应该临时禁用，而不是全局卸载。</li>
+    <li>为什么企业环境还会牵涉 allowlist、签名和来源限制。</li>
+    <li>为什么“扩展生态”不等于“所有编辑器都共用同一个官方商店”。</li>
+</ul>
+
+<h4>和 ANH 的关系</h4>
+<p>ANH 自身就是扩展，所以你对扩展体系的理解，会直接影响你怎么装依赖扩展、怎么排查冲突、怎么在多个工作流之间切换。尤其当你同时用 AI、Markdown、拼写检查、主题、Git 工具链时，扩展来源和管理方式就不再是边角问题，而是整个编辑器工作流的一部分。</p>
+
+<h4>建议形成的长期习惯</h4>
+<ol>
+    <li>先分清你当前用的是官方 VS Code 还是其他兼容编辑器。</li>
+    <li>再确认当前编辑器默认连接的是哪个扩展源。</li>
+    <li>装扩展前先判断它是“项目需要”还是“个人偏好”。</li>
+    <li>把推荐扩展、工作区推荐和个人全局扩展分层管理。</li>
+    <li>遇到搜不到扩展时，优先检查扩展源，而不是先怀疑 ANH 或网络。</li>
+    <li>对重要扩展保留版本、发布渠道和替代来源的意识。</li>
+ </ol>
+</div>

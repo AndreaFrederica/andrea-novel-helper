@@ -1,0 +1,80 @@
+<div class="doc-section beginner">
+<h4>标签系统是什么</h4>
+<p>标签系统让你用 <code>#标签名</code> 的方式给文档中的内容打标签，并且可以把标签和角色绑定起来。绑定后，标签就和角色关联了——在标签浏览器里能看到角色信息，角色追踪里也能看到标签。</p>
+
+<h4>标签和角色怎么关联</h4>
+<p>有两种方式：</p>
+<ol>
+    <li><b>自动匹配</b> — 如果标签名和某个角色的名字或别名相同，ANH 会自动关联</li>
+    <li><b>手动绑定</b> — 在标签浏览器里右键标签，选择"绑定到角色"，从列表中选择目标角色</li>
+</ol>
+
+<h4>怎么使用标签</h4>
+<p>在 Markdown 文件里直接写 <code>#角色名</code> 就行了。ANH 会自动识别标签，并在标签浏览器侧边栏中列出所有标签。</p>
+
+<h4>标签浏览器</h4>
+<p>在活动栏点击标签图标可以打开标签浏览器。它会：</p>
+<ul>
+    <li>列出项目中所有用到的标签</li>
+    <li>显示每个标签在哪些文件中出现</li>
+    <li>显示已绑定的角色信息</li>
+    <li>支持按类型或颜色分组</li>
+</ul>
+
+<h4>标签支持的操作</h4>
+<ul>
+    <li><b>绑定角色</b> — 把标签关联到一个已有角色</li>
+    <li><b>解绑角色</b> — 取消标签和角色的关联</li>
+    <li><b>从标签创建角色</b> — 如果标签没有对应角色，可以直接创建一个</li>
+    <li><b>跳转到文件</b> — 打开标签所在的文件</li>
+    <li><b>查看引用</b> — 查看标签在哪些地方被使用</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>标签-角色桥接</h4>
+<p>标签系统的核心实现在 <code>src/language/tagRoleBridge.ts</code>，通过持久化的绑定文件 <code>novel-helper/.anh-fsdb/tag-role-bindings.json</code> 存储标签到角色 UUID 的映射。</p>
+
+<h4>标签解析优先级</h4>
+<p>当遇到一个标签时，ANH 按以下顺序尝试解析对应角色：</p>
+<ol>
+    <li><b>显式绑定</b> — 检查 <code>tag-role-bindings.json</code> 中是否有该标签的绑定记录</li>
+    <li><b>名字匹配</b> — 将标签名（去掉 <code>#</code>）与角色 <code>name</code> 字段比对（大小写不敏感）</li>
+    <li><b>别名匹配</b> — 将标签名与角色 <code>aliases</code> 数组中的值比对</li>
+</ol>
+
+<h4>标签路径解析</h4>
+<p>标签支持路径语法 <code>#父级/标签名</code>。ANH 会取路径最后一段作为角色名候选，前面的部分作为归属信息。例如 <code>#势力/博丽</code> 会解析出角色名候选"博丽"和归属"势力"。</p>
+
+<h4>绑定数据格式</h4>
+<pre><code>{
+  "version": 1,
+  "bindings": {
+    "博丽灵梦": {
+      "tag": "博丽灵梦",
+      "roleUuid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "roleNameSnapshot": "博丽灵梦",
+      "createdAt": 1700000000000,
+      "updatedAt": 1700000000000
+    }
+  }
+}</code></pre>
+
+<h4>相关命令</h4>
+<ul>
+    <li><code>andrea.tags.refresh</code> — 刷新标签索引</li>
+    <li><code>andrea.tags.openFile</code> — 打开标签所在文件</li>
+    <li><code>andrea.tags.showReferences</code> — 查看标签引用</li>
+    <li><code>andrea.tags.createRoleFromTag</code> — 从标签创建角色</li>
+    <li><code>andrea.tags.bindRole</code> — 绑定标签到角色</li>
+    <li><code>andrea.tags.unbindRole</code> — 解绑标签和角色</li>
+    <li><code>andrea.tags.openRole</code> — 打开标签关联的角色文件</li>
+</ul>
+
+<h4>标签补全</h4>
+<p>在编辑器中输入 <code>#</code> 后会触发标签补全，列出项目中所有已知标签。这由 <code>src/language/obsidianCompat.ts</code> 中的 <code>ObsidianCompletionProvider</code> 提供。</p>
+
+<h4>配置</h4>
+<p>标签-角色绑定数据存储在工作区的 <code>novel-helper/.anh-fsdb/tag-role-bindings.json</code> 中。该文件支持版本号，便于后续格式升级。</p>
+<div class="doc-note">标签系统与 Obsidian 的标签语法兼容。如果你有从 Obsidian 迁移过来的笔记，里面的标签可以直接被 ANH 识别和使用。</div>
+</div>

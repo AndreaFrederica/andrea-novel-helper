@@ -1,0 +1,60 @@
+<div class="doc-section beginner">
+<h4>自动滚动是什么</h4>
+<p>自动滚动让你在写作时，编辑器自动跟随光标滚到文档末尾附近。这样你不用手动翻页，打字时光标始终保持在屏幕的指定位置。</p>
+
+<h4>怎么使用</h4>
+<ol>
+    <li>点击状态栏的"自动滚动"按钮</li>
+    <li>或者用命令面板输入"自动滚动"相关命令</li>
+    <li>在弹出的菜单中选择"启用/禁用"、"设置比例"或"立即滚动"</li>
+</ol>
+
+<h4>滚动比例</h4>
+<p>滚动比例控制光标在屏幕中的位置：</p>
+<ul>
+    <li><b>100%</b>（默认）— 光标始终在屏幕最底部</li>
+    <li><b>70%</b> — 光标在屏幕下方 30% 处</li>
+    <li><b>50%</b> — 光标在屏幕中间</li>
+    <li><b>30%</b> — 光标在屏幕上方 30% 处</li>
+    <li>也可以自定义 0.1 ~ 0.7 之间的值</li>
+</ul>
+
+<h4>使用场景</h4>
+<ul>
+    <li><b>边写边看</b> — 启用后写作时不用手动翻页</li>
+    <li><b>直播式写作</b> — 适合屏幕分享或演示时使用</li>
+    <li><b>长文续写</b> — 继续在文档末尾写作时非常方便</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>自动滚动由 <code>src/Provider/autoScrollProvider.ts</code> 实现，监听文档变化事件并按配置的延迟时间自动滚动。</p>
+
+<h4>命令</h4>
+<ul>
+    <li><code>andrea.autoScroll.toggleMenu</code> — 打开自动滚动设置菜单</li>
+    <li><code>andrea.autoScroll.toggle</code> — 切换启用/禁用</li>
+    <li><code>andrea.autoScroll.setRatio</code> — 设置滚动比例</li>
+    <li><code>andrea.autoScroll.scrollNow</code> / <code>andrea.autoScroll.scrollToEnd</code> — 立即滚动到末尾</li>
+</ul>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.autoScroll.enabled</code> — 是否启用自动滚动（默认 false）</li>
+    <li><code>AndreaNovelHelper.autoScroll.ratio</code> — 滚动比例，0.1-1.0（默认 1.0，即最底部）</li>
+    <li><code>AndreaNovelHelper.autoScroll.debounceDelay</code> — 防抖延迟，毫秒（默认 0，即立即滚动）。设为大于 0 的值可避免频繁滚动</li>
+</ul>
+
+<h4>工作原理</h4>
+<ul>
+    <li>监听 <code>onDidChangeTextDocument</code> 事件</li>
+    <li>只在文档行数增加或同一行内有内容变化时触发滚动</li>
+    <li>使用防抖机制避免频繁滚动影响性能</li>
+    <li>切换活动编辑器时也会触发一次滚动</li>
+    <li>配置保存为全局设置，属于个人使用习惯</li>
+</ul>
+
+<h4>状态栏显示</h4>
+<p>状态栏显示当前启用状态和比例：启用时显示 <code>↓ 自动滚动 70%</code>，禁用时显示 <code>↻ 自动滚动 70%</code>。点击可打开设置菜单。</p>
+</div>

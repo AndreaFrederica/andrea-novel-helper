@@ -35,7 +35,13 @@
     <li>自动在段落之间插入空行，保持阅读节奏</li>
     <li>支持配置空行数（0-6），通过快速设置面板或 <code>andrea.typeset.blankLinesBetweenParas</code> 调整</li>
     <li>智能合并多余空行，避免连续多个空行</li>
-    <li>可自定义句末标点 <code>addBlanks.sentenceEnders</code> 和前后括号列表</li>
+    <li>可自定义句末标点和前后括号列表：
+        <ul>
+            <li><code>andrea.typeset.addBlanks.sentenceEnders</code> — 句末标点列表，默认 <code>["。","！","？","…","；","：","!","?",";",":","."]</code></li>
+            <li><code>andrea.typeset.addBlanks.trailingClosers</code> — 后置括号列表（如 <code>」</code>、<code>』</code>、<code>》</code>、<code>）</code> 等），句末标点后紧跟的括号不触发空行</li>
+            <li><code>andrea.typeset.addBlanks.leadingOpeners</code> — 前导括号列表（如 <code>「</code>、<code>『</code>、<code>（</code>、<code>《</code> 等），段首括号不触发空行</li>
+        </ul>
+    </li>
 </ul>
 
 <h4>3. 去尾空格</h4>

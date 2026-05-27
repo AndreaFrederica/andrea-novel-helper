@@ -1,0 +1,45 @@
+<div class="doc-section beginner">
+<h4>这一组文档在解决什么问题</h4>
+<p>ANH 的角色系统不是一个“人物名单小功能”，而是整个资源模型的核心。现在把角色相关文档独立成类，就是为了把<strong>角色建模、文件格式、全局面板、补全、关系图、时间线</strong>这些原本分散的话题串成完整路径。</p>
+
+<h4>建议阅读顺序</h4>
+<ol>
+    <li><a class="doc-ref-link" data-doc="everything-is-role"><strong>一切皆角色</strong></a>：先理解 ANH 为什么把很多资源统一抽象成 role。</li>
+    <li><a class="doc-ref-link" data-doc="role-management"><strong>角色管理</strong></a>：掌握字段、类型、继承、派生、组合等核心规则。</li>
+    <li><a class="doc-ref-link" data-doc="roles-markdown-file"><strong>roles.md</strong></a>：看最推荐的 Markdown 角色写法。</li>
+    <li><a class="doc-ref-link" data-doc="character-gallery-file"><strong>character-gallery.*</strong></a>：看 JSON5、CSV 等角色库文件的场景和边界。</li>
+    <li><a class="doc-ref-link" data-doc="global-role-panel"><strong>全局角色面板</strong></a>：学会集中查看、筛选和 Raw 编辑。</li>
+    <li><a class="doc-ref-link" data-doc="role-completion"><strong>角色补全</strong></a>：把角色数据接回正文写作。</li>
+    <li><a class="doc-ref-link" data-doc="relationship"><strong>角色关系图</strong></a>、<a class="doc-ref-link" data-doc="role-relationship-graph"><strong>角色关系图谱</strong></a>、<a class="doc-ref-link" data-doc="timeline"><strong>时间线</strong></a>：进一步处理关系和事件结构。</li>
+ </ol>
+
+<h4>先记住的核心观念</h4>
+<ul>
+    <li><b>角色系统不只存人物</b>，也能承载词汇、敏感词、正则规则等“可识别资源”。</li>
+    <li><b>Markdown 是最推荐的人手维护格式</b>，但不是唯一格式。</li>
+    <li><b>全局角色面板看的是工作区里已加载的统一视图</b>，不是某一个文件的局部表格。</li>
+    <li><b>关系图和时间线不是装饰品</b>，它们是角色系统往结构化创作继续延伸的能力。</li>
+ </ul>
+</div>
+
+<div class="doc-section pro">
+<h4>为什么角色系统要单独成类</h4>
+<p>因为角色系统同时覆盖了四层事情：</p>
+<ul>
+    <li><b>数据模型</b>：字段、类型、别名、查询键、继承和派生。</li>
+    <li><b>文件格式</b>：Markdown、JSON5、CSV、OJSON5。</li>
+    <li><b>交互界面</b>：角色卡编辑器、全局角色面板、图谱、时间线。</li>
+    <li><b>写作联动</b>：高亮、补全、引用、预览、导出。</li>
+ </ul>
+<p>如果这些内容继续分散在“核心概念”“项目文件”“高级功能”“写作辅助”里，用户会知道 ANH 有很多入口，但不知道它们其实都围着同一套角色模型在工作。</p>
+
+<h4>推荐的建模顺序</h4>
+<ol>
+    <li>先把最重要的人物和世界观名词建起来。</li>
+    <li>再补别名、颜色、类型和必要字段，让识别与补全稳定。</li>
+    <li>再决定哪些关系应该显式建模，哪些只留在正文里。</li>
+    <li>最后再引入关系图、时间线和更复杂的继承派生结构。</li>
+ </ol>
+
+<div class="doc-note">如果你现在最具体的需求是“我想集中看全部角色并直接改原始数据”，下一步直接去看 <a class="doc-ref-link" data-doc="global-role-panel"><strong>全局角色面板</strong></a>。</div>
+</div>

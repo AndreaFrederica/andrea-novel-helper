@@ -1,0 +1,40 @@
+<div class="doc-section beginner">
+<h4>更新日志是什么</h4>
+<p>更新日志记录了 ANH 每个版本的新功能、改进和修复。你可以在扩展中查看更新日志，了解最新版本带来了哪些变化。</p>
+
+<h4>怎么查看</h4>
+<ol>
+    <li>打开命令面板（<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>）</li>
+    <li>输入"更新日志"或"What's New"</li>
+    <li>点击打开更新日志面板</li>
+</ol>
+
+<h4>自动显示</h4>
+<p>ANH 在版本更新后会自动弹出更新日志，让你了解新版本的变化。你可以在设置中关闭自动弹出。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>更新日志由 <code>src/whatsnew/</code> 目录下的文件实现：</p>
+<ul>
+    <li><code>whatsnew-panel.ts</code> — 更新日志面板（Webview）</li>
+    <li><code>whatsnew-data.ts</code> — 版本数据和变更内容</li>
+    <li><code>version-check.ts</code> — 版本检查逻辑</li>
+</ul>
+
+<h4>命令</h4>
+<ul>
+    <li><code>andrea.openWhatsNew</code> — 打开更新日志面板</li>
+</ul>
+
+<h4>配置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.whatsNew.showOnUpdate</code> — 版本更新时自动显示更新日志</li>
+</ul>
+
+<h4>版本数据</h4>
+<p>更新日志数据存储在 <code>whatsnew/</code> 目录下的 Markdown 文件中，按版本号组织。面板会读取这些文件并渲染为可视化的更新日志。</p>
+
+<h4>历史版本</h4>
+<p>ANH 维护了从 v0.4.65 到最新版本的完整更新日志，记录了所有重要的功能添加、改进和修复。</p>
+</div>

@@ -1,0 +1,69 @@
+<div class="doc-section beginner">
+<h4>Obsidian 兼容性是什么</h4>
+<p>ANH 提供了与 Obsidian 类似的 Markdown 增强功能，让你在 VS Code 中也能使用 Obsidian 风格的双链语法和标签。</p>
+
+<h4>Wiki 链接</h4>
+<p>你可以使用 <code>[[文件名]]</code> 语法创建文档间的链接：</p>
+<ul>
+    <li><code>[[角色设定]]</code> — 链接到名为"角色设定"的文件</li>
+    <li><code>[[角色设定#外貌]]</code> — 链接到"角色设定"文件中的"外貌"标题</li>
+    <li><code>[[角色设定|显示文本]]</code> — 链接并自定义显示文本</li>
+</ul>
+
+<h4>标签补全</h4>
+<p>在编辑器中输入 <code>#</code> 后，会自动弹出项目中所有已知标签的补全列表，方便快速输入。</p>
+
+<h4>文件链接</h4>
+<p>Wiki 链接会自动解析为可点击的链接。Ctrl+Click 即可跳转到目标文件。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>兼容性功能由 <code>src/language/obsidianCompat.ts</code> 和 <code>src/language/obsidianIndex.ts</code> 实现，提供三个语言服务提供者：</p>
+
+<h4>文档链接提供者</h4>
+<p><code>ObsidianDocumentLinkProvider</code> — 将 <code>[[...]]</code> 语法渲染为可点击的文档链接。支持解析文件名、标题锚点和别名语法。</p>
+
+<h4>定义提供者</h4>
+<p><code>ObsidianDefinitionProvider</code> — Ctrl+Click <code>[[...]]</code> 时跳转到目标文件的对应位置。解析优先级：</p>
+<ol>
+    <li>精确路径（含 <code>/</code> 或文件扩展名）→ 按相对路径查找</li>
+    <li>Obsidian 索引 → 按文件名匹配</li>
+    <li>工作区搜索 → 按文件名模糊匹配</li>
+</ol>
+
+<h4>补全提供者</h4>
+<p><code>ObsidianCompletionProvider</code> — 提供两种补全：</p>
+<ul>
+    <li><b>Wiki 链接补全</b> — 输入 <code>[[</code> 后列出项目中的文本文件（.md, .markdown）。输入 <code>#</code> 后列出目标文件中的标题</li>
+    <li><b>标签补全</b> — 输入 <code>#</code> 后列出项目中所有已知标签</li>
+</ul>
+
+<h4>支持的语法</h4>
+<ul>
+    <li><code>[[文件名]]</code> — 基本链接</li>
+    <li><code>[[文件名#标题]]</code> — 标题链接</li>
+    <li><code>[[文件名|别名]]</code> — 带别名的链接</li>
+    <li><code>![[文件名]]</code> — 嵌入引用（图片等）</li>
+    <li><code>#标签名</code> — 标签语法</li>
+    <li><code>#父级/标签名</code> — 层级标签</li>
+</ul>
+
+<h4>索引机制</h4>
+<p>ANH 维护一个 Obsidian 兼容的索引（<code>src/language/obsidianIndex.ts</code>），包含：</p>
+<ul>
+    <li>项目中所有文本文件的路径和标题</li>
+    <li>每个文件中使用的所有标签</li>
+    <li>文件间的链接关系</li>
+</ul>
+<p>索引会缓存到 <code>novel-helper/.anh-fsdb/obsidian-index.json</code>，启动后优先读取缓存，并延迟在后台增量更新，避免和插件启动阶段争用磁盘。</p>
+<p>如果不需要全局标签、标题和双链补全，可以关闭设置 <code>AndreaNovelHelper.obsidian.index.enabled</code>。关闭后，预览和导出中的双链/标签渲染仍然可用，但不会在启动时扫描工作区建立索引。</p>
+
+<h4>兼容性说明</h4>
+<ul>
+    <li>链接解析大小写不敏感</li>
+    <li>支持省略 <code>.md</code> 扩展名</li>
+    <li>同名文件会优先匹配同目录下的文件</li>
+    <li>支持相对路径和绝对路径语法</li>
+</ul>
+</div>

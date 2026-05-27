@@ -1,0 +1,61 @@
+<div class="doc-section beginner">
+<h4>这一页讲什么</h4>
+<p>这页讲 Markdown 写作里最容易踩坑的三个点：<strong>链接、图片、预览</strong>。官方 VS Code 的 Markdown 工作流对这三块支持已经很完整，但前提是你要知道它的边界。</p>
+
+<h4>链接的常见写法</h4>
+<ul>
+    <li><b>站外链接</b>：例如网页资料。</li>
+    <li><b>同工作区文件链接</b>：例如章节之间互跳、世界观索引页。</li>
+    <li><b>标题链接</b>：直接跳到某份 Markdown 文档里的指定标题。</li>
+ </ul>
+
+<h4>图片路径为什么总容易错</h4>
+<p>因为 Markdown 图片通常依赖相对路径，而长篇项目又经常有深层目录。最稳的做法是：</p>
+<ul>
+    <li>保持图片目录结构长期稳定。</li>
+    <li>尽量通过 VS Code 内部的拖拽或粘贴流程插入图片。</li>
+    <li>不要频繁在编辑器外直接搬动目录。</li>
+ </ul>
+
+<h4>预览怎么和编辑配合</h4>
+<ul>
+    <li><b>侧边预览</b>：一边写一边看渲染结果。</li>
+    <li><b>锁定预览</b>：防止每次切文件都把预览页带跑。</li>
+    <li><b>预览滚动联动</b>：大致对应编辑位置和渲染位置。</li>
+ </ul>
+<p>对写小说的人来说，预览的价值不只是“好看”，更是检查段落断行、引用块、表格、图片说明和导出前结构。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-markdown-preview.png" alt="VS Code 官方 Markdown 预览界面示意图" style="width:100%;max-width:820px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">官方 Markdown 预览示意图。新手最容易忽略的不是语法，而是“编辑区”和“预览区”应该并排协作。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：Preview 'Readme.md' = Readme.md 的预览页；EXPLORER = 资源管理器；WORKING FILES = 当前工作文件；Readme.md = 当前正在预览的源 Markdown 文件。</div>
+
+<h4>ANH 环境下要额外注意什么</h4>
+<ul>
+    <li>ANH 预览和 VS Code 原生预览有不同定位，前者更偏小说阅读与扩展渲染，后者更偏原生 Markdown 工作流。</li>
+    <li>双链、标签、角色着色这些增强能力，最好配合稳定的文件命名和目录结构使用。</li>
+    <li>如果你准备 Typst 导出，源 Markdown 的标题、分隔和图片组织应尽早保持一致。</li>
+ </ul>
+</div>
+
+<div class="doc-section pro">
+<h4>官方 Markdown 文档里和这页直接相关的能力</h4>
+<ul>
+    <li><b>Link validation</b>：帮你发现失效链接。</li>
+    <li><b>Update links on file move</b>：文件移动时更新链接。</li>
+    <li><b>Rename headers and update links</b>：标题改名时同步相关引用。</li>
+    <li><b>Drag and drop / paste image</b>：通过编辑器动作生成图片引用。</li>
+    <li><b>Markdown preview</b>：原生预览与预览安全设置。</li>
+    <li><b>Preview of changes</b>：查看 Markdown 文件的差异预览。</li>
+ </ul>
+
+<h4>对大型小说项目的建议</h4>
+<ol>
+    <li>把“目录结构稳定”当成链接稳定的前提。</li>
+    <li>对核心索引文档启用更严格的链接检查意识。</li>
+    <li>移动章节文件时尽量在 VS Code 内完成，让链接更新机制接手。</li>
+    <li>对插图、地图、人物图统一约定目录，不要一半在正文旁边、一半在随机文件夹里。</li>
+ </ol>
+
+<div class="doc-note">如果你想继续补 Mermaid 图表、公式和更高级的 Markdown 块，下一步去看 <a class="doc-ref-link" data-doc="markdown-diagrams-math"><strong>Mermaid、KaTeX 与高级块</strong></a>。</div>
+</div>

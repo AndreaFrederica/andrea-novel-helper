@@ -8,6 +8,11 @@
     <li><b>设置侧边栏</b> — 点击左侧活动栏的"ANH 设置"图标，是一个完整的设置界面</li>
     <li><b>编辑器设置增强版</b> — 独立的设置面板，交互更友好</li>
 </ul>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/anh/anh-editor-setting.png" alt="ANH 编辑器设置增强版截图" style="width:100%;max-width:1200px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">编辑器设置增强版实拍图。左边是分类，右边是当前分类下的完整配置项，适合想一次性系统调整 ANH 行为的用户。</figcaption>
+</figure>
+<div class="doc-note"><b>这张图重点看</b>：顶部“全局设置 / 工作区设置”切换作用域；左栏是分类导航；右栏是具体设置项和说明；右上“保存更改”是明确提交，不是边改边自动写入。</div>
 
 <h4>常用的设置分类</h4>
 <p>设置页面把选项分成了很多类，你可以按需查找：</p>
@@ -16,6 +21,7 @@
     <li><b>排版设置</b> — 自动空行、首行缩进等</li>
     <li><b>字数统计</b> — 统计方式和显示格式</li>
     <li><b>角色显示</b> — 左侧角色面板的分组方式、角色类型排序、详情展开和颜色显示</li>
+    <li><b>包管理器 / 角色文件</b> — 资源文件命名、角色文件诊断、JSON5 编辑行为</li>
     <li><b>拼写检查</b> — 校对功能的开关和模式</li>
     <li><b>翻译设置</b> — 目标语言和默认行为</li>
     <li><b>自动补全</b> — 角色提示的触发方式</li>
@@ -47,6 +53,9 @@
     <li><b>翻译设置</b>（AndreaNovelHelper.translate）— 目标语言、默认处理方式</li>
     <li><b>批注设置</b>（AndreaNovelHelper.comments）— 批注面板行为</li>
     <li><b>角色设置</b>（AndreaNovelHelper.roles）— 默认角色文件路径</li>
+    <li><b>角色文件</b>（AndreaNovelHelper.roleFile）— 角色文件基础字段缺失时的 Problems 诊断级别</li>
+    <li><b>JSON5</b>（AndreaNovelHelper.json5 / andrea.roleJson5）— JSON5 无损写回、角色卡管理器相关配置</li>
+    <li><b>包管理器</b>（AndreaNovelHelper.package / AndreaNovelHelper.packageManager）— 拖放策略、图标样式、自动关键词命名</li>
     <li><b>分词设置</b>（AndreaNovelHelper.wordSegment）— 分词器配置</li>
     <li><b>角色 JSON5</b>（andrea.roleJson5）— 角色卡管理器相关配置</li>
     <li><b>大纲设置</b>（AndreaNovelHelper.outline）— 懒加载模式</li>
@@ -68,4 +77,16 @@
 <h4>作用域切换</h4>
 <p>设置侧边栏支持"工作区"和"全局"两种作用域切换。工作区设置仅对当前项目生效，全局设置对所有项目生效。切换后页面会自动重新加载对应作用域的配置值。</p>
 <div class="doc-note">配置优先级：项目配置（project-config.json5）> VSCode 设置（工作区/全局）> 插件默认值。部分设置（如排版开关）可在底部状态栏快速切换，无需打开设置页面。</div>
+
+<h4>这次新增、最值得知道的几个设置</h4>
+<ul>
+    <li><b><code>AndreaNovelHelper.json5.losslessEditorEnabled</code></b> — 控制 JSON5 / OJSON5 / RJSON5 / TJSON5 编辑器和 UUID 自动写回是否优先保留原有注释、空白和字段顺序。默认开启。</li>
+    <li><b><code>AndreaNovelHelper.packageManager.enableAutoKeywordNaming</code></b> — 控制包管理器在创建/重命名角色、敏感词、词汇资源文件时，是否自动追加固定英文关键词 <code>role</code> / <code>sensitive</code> / <code>vocab</code>。默认开启。</li>
+    <li><b><code>AndreaNovelHelper.packageManager.hideOutlineStorage</code></b>、<b><code>AndreaNovelHelper.packageManager.hideCommentsFolder</code></b>、<b><code>AndreaNovelHelper.packageManager.hideTypoFolder</code></b>、<b><code>AndreaNovelHelper.packageManager.hideDashboardFolder</code></b>、<b><code>AndreaNovelHelper.packageManager.hideDocsFolder</code></b> — 控制包管理器是否隐藏内部工作目录，适合把资源树收敛到你真正想维护的资料文件。</li>
+    <li><b><code>AndreaNovelHelper.packageManager.showGeneralResourceFiles</code></b> — 关闭后，包管理器会隐藏那些没有命中资源识别规则的普通文件，只保留角色/敏感词/词汇/关系/时间线等资源文件。</li>
+    <li><b><code>AndreaNovelHelper.packageManager.showRoleFileChangeNotifications</code></b> — 控制包管理器检测到角色文件变化时，是否弹出提示消息。适合在批量处理时关闭，在排查同步问题时开启。</li>
+    <li><b><code>AndreaNovelHelper.roleFile.basicFieldsDiagnosticLevel</code></b> — 控制非 TXT 角色文件里缺少 <code>name</code> / <code>type</code> 等基础字段时，在 Problems 面板里显示为 error、warning、information、hint 还是关闭。</li>
+    <li><b><code>AndreaNovelHelper.obsidian.renderWikilinks</code></b>、<b><code>AndreaNovelHelper.obsidian.renderTags</code></b>、<b><code>AndreaNovelHelper.obsidian.renderEscapedTags</code></b> — 控制 Obsidian 双链、标签、转义标签在预览和导出中的渲染策略。</li>
+</ul>
+<div class="doc-note">上面这些包管理器相关开关，除了在完整设置页里搜索，也已经进入“图形化快速设置”的“包管理器”分组，适合做日常调节。</div>
 </div>

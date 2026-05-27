@@ -1,0 +1,59 @@
+<div class="doc-section beginner">
+<h4>角色卡管理器是什么</h4>
+<p>角色卡管理器是一个可视化的角色卡片界面，让你像浏览名片一样查看和编辑所有角色信息。每个角色显示为一张卡片，包含基本信息、扩展字段和自定义字段。</p>
+
+<h4>怎么打开</h4>
+<ol>
+    <li>打开命令面板（<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>）</li>
+    <li>输入"角色卡管理器"或"Role Card Manager"</li>
+    <li>或者在 ANH 侧边栏中点击相应入口</li>
+</ol>
+
+<h4>卡片内容</h4>
+<p>每张角色卡包含三个区域：</p>
+<ul>
+    <li><b>基础信息</b> — 名字、类型、所属、颜色、优先级、描述、别名</li>
+    <li><b>扩展字段</b> — 角色的额外属性（如外貌、性格、背景、技能等）</li>
+    <li><b>自定义字段</b> — 你自定义的任意字段（如称号、备注等）</li>
+</ul>
+
+<h4>支持的角色类型</h4>
+<p>角色卡管理器支持所有角色类型：主角、配角、联动角色、敏感词、词汇、正则表达式，以及你自定义的类型。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>角色卡管理器由 <code>src/Provider/view/roleCradManager/roleCardManager.ts</code> 实现，使用 Webview SPA 面板。前端基于 Vue/Quasar 构建，通过消息机制与扩展通信。</p>
+
+<h4>命令</h4>
+<ul>
+    <li><code>andrea.roleCardManager.open</code> — 打开角色卡管理器面板</li>
+</ul>
+
+<h4>数据模型</h4>
+<p>角色卡使用三层数据结构：</p>
+<ul>
+    <li><code>base</code> — 基础字段（name, type, uuid, color, style, priority, description, affiliation, aliases, fixes, regex, regexFlags）</li>
+    <li><code>extended</code> — 扩展字段（Record&lt;string, JsonValue&gt;）</li>
+    <li><code>custom</code> — 自定义字段（Record&lt;string, JsonValue&gt;）</li>
+</ul>
+
+<h4>文本样式</h4>
+<p>角色支持丰富的文本样式配置（<code>style</code> 字段）：</p>
+<ul>
+    <li><code>color</code> — 前景色</li>
+    <li><code>backgroundColor</code> — 背景色</li>
+    <li><code>bold</code> — 粗体</li>
+    <li><code>italic</code> — 斜体</li>
+    <li><code>strikethrough</code> — 删除线</li>
+    <li><code>underline</code> — 下划线</li>
+</ul>
+
+<h4>设置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.roleEditor.localizedKeyLabels</code> — 是否显示本地化的字段标签（默认 true）</li>
+</ul>
+
+<h4>注意事项</h4>
+<p>角色卡管理器目前处于开发阶段，数据持久化功能尚在完善中。当前保存操作会在控制台打印数据但不会写入文件。</p>
+</div>

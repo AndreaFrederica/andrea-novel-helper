@@ -77,5 +77,45 @@
 <h4>选中角色与关系元数据</h4>
 <p>点击角色后，左侧面板会显示该角色的一跳关系。点击关系卡片可以查看来源、类型、权重、方向、字段命中、来源文件等元数据。</p>
 
+<h4>.rjson5 关系文件格式</h4>
+<p>关系表使用 <code>.rjson5</code> 或 <code>*relationship*.json5</code> 扩展名。双击会打开关系图编辑器。</p>
+<pre><code>{
+  // 关系节点（角色）
+  nodes: [
+    { id: "reimu", label: "博丽灵梦", type: "character", color: "#e94152" },
+    { id: "marisa", label: "雾雨魔理沙", type: "character", color: "#FFD700" }
+  ],
+  // 关系连线
+  edges: [
+    {
+      source: "reimu",
+      target: "marisa",
+      label: "朋友",
+      type: "friendship",
+      strength: 3,       // 关系强度 1-5
+      directed: false     // 是否有向
+    }
+  ]
+}</code></pre>
+
+<h4>关系节点字段</h4>
+<ul>
+    <li><code>id</code> — 节点唯一标识（必填）</li>
+    <li><code>label</code> — 显示名称（必填）</li>
+    <li><code>type</code> — 节点类型：<code>character</code>（角色）、<code>location</code>（地点）、<code>item</code>（物品）</li>
+    <li><code>color</code> — 节点颜色</li>
+    <li><code>position</code> — 布局坐标 <code>{ x, y }</code></li>
+</ul>
+
+<h4>关系连线字段</h4>
+<ul>
+    <li><code>source</code> — 起始节点 id（必填）</li>
+    <li><code>target</code> — 目标节点 id（必填）</li>
+    <li><code>label</code> — 连线标签（如"朋友"、"敌人"）</li>
+    <li><code>type</code> — 关系类型：<code>friendship</code>、<code>enemy</code>、<code>family</code>、<code>romantic</code>、<code>other</code></li>
+    <li><code>strength</code> — 关系强度，1-5（影响连线粗细）</li>
+    <li><code>directed</code> — 是否有向（默认 false）</li>
+</ul>
+
 <div class="doc-note">角色关系图谱主要用于观察关系网络，不直接修改角色文件或关系表。需要编辑单张关系图时，请打开对应的 <code>.rjson5</code> 文件。</div>
 </div>

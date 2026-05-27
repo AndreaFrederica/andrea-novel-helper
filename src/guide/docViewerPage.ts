@@ -25,20 +25,58 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
             'plugin-settings': '插件设置',
             'quick-settings': '快速设置',
             'status-bar': '状态栏功能',
-            'vscode-settings': 'VS Code 基础',
             'writing-preview': '写作预览',
             'patchouli-preview': 'Patchouli 新预览',
         }
     },
-    concepts: {
-        title: '核心概念',
+    vscodeBasics: {
+        title: 'VS Code 基础',
         docs: {
-            'everything-is-role': '一切皆角色',
+            'vscode-settings': '总览与学习路径',
+            'vscode-interface': '界面与布局',
+            'vscode-files-search': '文件、标签与全局搜索',
+            'vscode-editing': '编辑器与高效编辑',
+            'vscode-terminal-workspace': '终端、任务与工作区',
+            'vscode-settings-customization': '设置、配置与扩展',
+            'vscode-keybindings': '命令面板与快捷键',
+        }
+    },
+    extensions: {
+        title: '扩展与市场',
+        docs: {
+            'extension-marketplace-overview': '总览与安装路径',
+            'extension-marketplace': 'VS Code 扩展市场详解',
+            'openvsx-compatible-editors': 'OpenVSX 与兼容编辑器',
+        }
+    },
+    projectConcepts: {
+        title: '项目结构与机制',
+        docs: {
             'package-manager': '包管理器',
             'package-mechanism': '包机制与外部包详解',
-            'markdown-format-guide': '文件格式指南',
+        }
+    },
+    git: {
+        title: 'Git 与版本管理',
+        docs: {
+            'git-overview': '总览与学习路径',
             'version-control-basics': '版本管理是什么',
             'git-basics': 'Git 本体详解',
+            'vscode-source-control': 'VS Code Source Control',
+            'git-integration': 'Git 与 VS Code 集成',
+            'git-remote-sync': '云仓库同步与备份',
+            'git-hosting-platforms': 'Git 托管平台比较',
+            'gitignore-file': '.gitignore',
+        }
+    },
+    markdown: {
+        title: 'Markdown 与格式',
+        docs: {
+            'markdown-overview': '总览与写作路径',
+            'markdown-vscode-workflow': 'VS Code 里的 Markdown 工作流',
+            'markdown-links-preview': '链接、图片与预览联动',
+            'markdown-diagrams-math': 'Mermaid、KaTeX 与高级块',
+            'markdown-format-guide': '文件格式指南',
         }
     },
     projectFiles: {
@@ -46,30 +84,31 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
         docs: {
             'anhproject-file': 'anhproject.md',
             'project-config-file': 'project-config.json5',
-            'gitignore-file': '.gitignore',
             'wcignore-file': '.wcignore',
-            'character-gallery-file': `${LEGACY_RESOURCE_KEYWORDS.character}.*`,
             'sensitive-words-file': `${LEGACY_RESOURCE_KEYWORDS.sensitive}.*`,
             'vocabulary-file': `${LEGACY_RESOURCE_KEYWORDS.vocabulary}.*`,
             'regex-patterns-file': 'regex-patterns.*',
-            'roles-markdown-file': 'roles.md',
             'mcp-config-file': 'mcp.json',
         }
     },
     roles: {
-        title: '角色与资源',
+        title: '角色系统',
         docs: {
+            'roles-overview': '总览与建模路径',
+            'everything-is-role': '一切皆角色',
             'role-management': '角色管理',
-            'sensitive-words': '敏感词检测',
-            'vocabulary': '词汇表',
-            'regex-coloring': '正则着色',
-            'regex-tutorial': '正则表达式入门',
+            'roles-markdown-file': 'roles.md',
+            'character-gallery-file': `${LEGACY_RESOURCE_KEYWORDS.character}.*`,
+            'global-role-panel': '全局角色面板',
+            'role-completion': '角色补全',
+            'relationship': '角色关系图',
+            'role-relationship-graph': '角色关系图谱',
+            'timeline': '时间线',
         }
     },
     writing: {
         title: '写作辅助',
         docs: {
-            'role-completion': '角色补全',
             'word-count': '字数统计',
             'time-stats': '写作时间统计',
             'writing-dashboard': '创作工作台',
@@ -80,6 +119,10 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
             'outline': '大纲',
             'export': '导出与复制',
             'writing-explorer': '写作资源管理器',
+            'sensitive-words': '敏感词检测',
+            'vocabulary': '词汇表',
+            'regex-coloring': '正则着色',
+            'regex-tutorial': '正则表达式入门',
         }
     },
     advanced: {
@@ -87,13 +130,7 @@ const DOC_CATEGORIES: Record<string, { title: string; docs: Record<string, strin
         docs: {
             'external-resource': '外部资源目录',
             'reference-heatmap': '引用维护与热力图',
-            'git-integration': 'Git 与 VS Code 集成',
-            'git-hosting-platforms': 'Git 托管平台比较',
-            'git-remote-sync': '云仓库同步与备份',
             'data-import-migration': '从旧项目迁入数据',
-            'relationship': '角色关系图',
-            'role-relationship-graph': '角色关系图谱',
-            'timeline': '时间线',
             'script-runtime': '脚本运行时',
             'ai-mcp': 'AI 与 MCP 集成',
             'webdav': 'WebDAV 同步',
@@ -263,6 +300,12 @@ async function releaseDocsToWorkspace(_docId: string): Promise<void> {
     const files = fs.readdirSync(docsDir).filter(f => f.endsWith('.html'));
     for (const file of files) {
         fs.copyFileSync(path.join(docsDir, file), path.join(targetDir, file));
+    }
+
+    const sourceImagesDir = path.join(extensionPath, 'images');
+    const targetImagesDir = path.join(targetDir, 'images');
+    if (fs.existsSync(sourceImagesDir)) {
+        fs.cpSync(sourceImagesDir, targetImagesDir, { recursive: true });
     }
 
     await vscode.window.showInformationMessage(

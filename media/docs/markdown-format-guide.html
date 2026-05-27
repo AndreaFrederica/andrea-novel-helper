@@ -102,7 +102,12 @@ ___
   <li><code>#FF6B6B</code> 这类颜色值也会作为颜色标签识别，方便追踪角色颜色、敏感词颜色和其他视觉标记。</li>
   <li><code>\#标签</code>：默认按普通转义文本保留；如需在预览和导出中显示为 <code>#标签</code>，可开启“渲染转义标签”。</li>
 </ul>
-<div class="doc-note">双链补全会从当前工作区里的 Markdown / TXT 文件名生成候选；标签补全会从工作区已有标签中生成候选。ANH 会把双链、标题和标签索引缓存到当前项目的 <code>novel-helper/.anh-fsdb/obsidian-index.json</code>，后续只增量更新变更文件。左侧“标签”侧边栏按“标签 → 文件”的结构展示已有标签，其中颜色标签会单独分组，并用对应颜色渲染节点图标。普通标签可以直接查看引用，也可以在右键菜单中基于标签创建角色或绑定到已有角色；绑定关系使用角色 UUID，保存到 <code>novel-helper/.anh-fsdb/tag-role-bindings.json</code>。绑定不会改写角色语义，也不会把标签变成另一套角色来源；角色仍由原角色文件和角色系统负责，但绑定后的 <code>#标签</code> 会作为该角色的外部别名键参与识别、补全和 hover，角色详情中也会把已绑定标签作为元数据展示。预览、复制纯文本、TXT 导出、Typst 预览和 Typst 导出会按设置渲染双链和标签；可关闭标签渲染，让 <code>#标签</code> 只作为整理标记存在于源文件中。</div>
+<div class="doc-note">双链补全会从当前工作区里的 Markdown / TXT 文件名生成候选；标签补全会从工作区已有标签中生成候选。ANH 会把双链、标题和标签索引缓存到当前项目的 <code>novel-helper/.anh-fsdb/obsidian-index.json</code>，后续只增量更新变更文件。左侧“标签”侧边栏按“标签 → 文件”的结构展示已有标签，其中颜色标签会单独分组，并用对应颜色渲染节点图标。普通标签可以直接查看引用，也可以在右键菜单中基于标签创建角色或绑定到已有角色；绑定关系使用角色 UUID，保存到 <code>novel-helper/.anh-fsdb/tag-role-bindings.json</code>。绑定不会改写角色语义，也不会把标签变成另一套角色来源；角色仍由原角色文件和角色系统负责，但绑定后的 <code>#标签</code> 会作为该角色的外部别名键参与识别、补全和 hover，角色详情中也会把已绑定标签作为元数据展示。标签活动栏里还提供“角色追踪”视图，可手动建立分组，把关心的角色固定下来并按引用文件展开查看。预览、复制纯文本、TXT 导出、Typst 预览和 Typst 导出会按设置渲染双链和标签；可关闭标签渲染，让 <code>#标签</code> 只作为整理标记存在于源文件中。</div>
+<figure style="margin:16px 0 18px;">
+  <img src="images/docs/anh/标签和角色追踪.png" alt="ANH 标签与角色追踪截图" style="width:100%;max-width:1200px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+  <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">标签侧栏与角色追踪实拍图。Obsidian 风格标签不是只会高亮，它还能在侧边栏里反查文件，并和角色追踪联动。</figcaption>
+</figure>
+<div class="doc-note"><b>这张图重点看</b>：左上是“标签”视图，按标签名聚合文件；左下是“角色追踪”视图，会把你关心的角色按文件展开；正文里蓝色的 <code>#标签</code> 和 <code>[[双链]]</code> 都能被识别，这正是 ANH 的 Obsidian 兼容能力。</div>
 
 <h4>二、角色/资源文件格式</h4>
 <p>ANH 支持多种格式编写角色库、词汇表、敏感词库等资源文件：</p>
@@ -190,9 +195,39 @@ ___
 <ul>
     <li><b>基础字段</b>：类型、颜色、别名、描述、所属、优先级</li>
     <li><b>角色专属</b>：性别、年龄、职业、性格、外貌、背景、技能、弱点、目标、动机、恐惧、秘密、台词、备注、标签</li>
+  <li><b>结构关系字段</b>：继承自（<code>extend</code> / <code>extends</code>）、派生自（<code>derived</code> / <code>derivedFrom</code>）、包含角色（<code>includes</code> / <code>composedOf</code> / <code>uses</code> / <code>parts</code>）</li>
     <li><b>敏感词专属</b>：修复（每行一个修复建议）、严重级别</li>
     <li><b>正则专属</b>：正则、正则标志</li>
     <li><b>样式</b>：粗体、斜体、删除线、下划线、背景色</li>
+</ul>
+
+<h4>角色层级和引用写法</h4>
+<p>Markdown 角色文件除了平铺字段，也支持直接表达角色之间的结构关系：</p>
+<pre><code>## 量产近卫
+
+### 类型
+模板
+
+### 颜色
+#8899AA
+
+## 星港近卫
+
+### 类型
+配角
+
+### 继承自
+量产近卫
+
+### 包含角色
+制式步枪
+识别吊牌
+</code></pre>
+<ul>
+  <li><b>继承</b> 会尝试继承上游角色的可继承字段。</li>
+  <li><b>派生</b> 更偏向“语义来源”，默认不自动拷贝字段；需要显式配合 <code>inherit: true</code> 才复制字段。</li>
+  <li><b>包含角色 / 引用角色</b> 只是建立组合关系，不会像继承那样改写当前角色字段。</li>
+  <li>这些字段既可以写角色名，也可以写 UUID；多项组合关系可按逗号或换行分隔。</li>
 </ul>
 
 <h4>常见错误</h4>
@@ -261,9 +296,14 @@ ___
     <li><code>regex</code> / <code>正则</code> — 正则表达式（类型为"正则表达式"时使用）</li>
     <li><code>regexFlags</code> / <code>正则标志</code> — 正则标志，如 <code>"gi"</code></li>
     <li><code>wordSegmentFilter</code> / <code>分词过滤</code> — 是否启用分词过滤</li>
+    <li><code>extend</code> / <code>extends</code> / <code>继承自</code> — 继承来源，可写角色名、UUID 或 <code>{ uuid }</code> 对象</li>
+    <li><code>derived</code> / <code>derivedFrom</code> / <code>派生自</code> — 派生来源；如需同时继承字段，可再配合 <code>inherit: true</code></li>
+    <li><code>includes</code> / <code>composedOf</code> / <code>uses</code> / <code>parts</code> — 组合/引用的其他角色，可写单项、数组或 <code>{ uuid }</code> 对象</li>
     <li><code>style</code> / <code>样式</code> — 样式对象：<code>{ color, backgroundColor, bold, italic, strikethrough, underline }</code></li>
     <li>扩展字段：<code>age</code>/<code>年龄</code>、<code>gender</code>/<code>性别</code>、<code>occupation</code>/<code>职业</code>、<code>personality</code>/<code>性格</code>、<code>appearance</code>/<code>外貌</code>、<code>background</code>/<code>背景</code>、<code>skill</code>/<code>技能</code>、<code>weakness</code>/<code>弱点</code>、<code>goal</code>/<code>目标</code>、<code>motivation</code>/<code>动机</code>、<code>fear</code>/<code>恐惧</code>、<code>secret</code>/<code>秘密</code>、<code>quote</code>/<code>台词</code>、<code>note</code>/<code>备注</code>、<code>tag</code>/<code>标签</code></li>
 </ul>
+
+  <div class="doc-note">JSON5 还支持直接写嵌套角色树。子角色可以放在 <code>children</code>、<code>childRoles</code>、<code>subRoles</code>、<code>roles</code>、<code>characters</code> 等键里；加载时会自动扁平化，并把父级信息映射到父子关系字段。</div>
 
 <h4>正则表达式 JSON5 示例</h4>
 <pre><code>[
@@ -333,7 +373,7 @@ g
     <li><b>自定义字段（custom）</b>：任意用户定义的字段</li>
 </ul>
 <p>编辑器还支持字段显示名本地化（中文 / 英文 / 日文 / 原始 key）、查询键候选生成、随机角色生成器、UUID 复制反馈，以及前景色、背景色和文本样式的集中编辑。</p>
-<div class="doc-note"><code>.json5</code> 和 <code>.ojson5</code> 的数据结构相同；区别主要是打开方式和识别优先级。<code>.ojson</code> 是旧式标记扩展名，仍可作为外部资源标识识别，但新文件推荐用 <code>.ojson5</code>。</div>
+<div class="doc-note"><code>.json5</code> 和 <code>.ojson5</code> 的数据结构相同；区别主要是打开方式和识别优先级。<code>.ojson</code> 是旧式标记扩展名，仍可作为外部资源标识识别，但新文件推荐用 <code>.ojson5</code>。编辑器保存和 UUID 自动写回默认优先使用无损写回，尽量保留你原先手写的注释、空白和字段顺序；如需关闭，可把 <code>AndreaNovelHelper.json5.losslessEditorEnabled</code> 设为 <code>false</code>。</div>
 
 <h4>三、CSV 格式详解</h4>
 <p>表格格式，扩展名 <code>.csv</code>。实际解析器支持逗号、Tab、分号三种分隔符，并会自动检测。适合从 Excel、表格软件或 AI 批量导入简单条目。</p>

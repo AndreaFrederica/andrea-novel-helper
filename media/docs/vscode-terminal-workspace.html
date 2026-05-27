@@ -1,0 +1,156 @@
+<div class="doc-section beginner">
+<h4>这一页讲什么</h4>
+<p>这页讲 VS Code 里的<strong>终端、任务、工作区</strong>。很多人会把 VS Code 当成“只能编辑文本的窗口”，但它其实内置了完整终端和项目级配置能力。</p>
+
+<h4>终端是什么</h4>
+<p>终端就是 VS Code 底部那块可以输入命令的区域。你可以把它看成“不用离开编辑器的命令行”。</p>
+<ul>
+    <li><b>打开/关闭终端</b>：<kbd>Ctrl+`</kbd></li>
+    <li><b>新建终端</b>：<kbd>Ctrl+Shift+`</kbd></li>
+    <li><b>菜单入口</b>：Terminal → New Terminal</li>
+</ul>
+<p>在 Windows 上，你常见的终端 Shell 会包括 PowerShell、命令提示符、Git Bash、WSL 等。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-terminal-integrated.png" alt="VS Code 官方集成终端示意图" style="width:100%;max-width:980px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">官方集成终端示意图。先认终端标签、加号、新建分屏和关闭按钮，再开始学命令会轻松很多。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：TERMINAL = 终端面板；bash - hello-world = 当前终端标签；+ = 新建终端；分栏图标 = 分屏终端；垃圾桶 = 关闭终端；X = 关闭当前标签。</div>
+
+<h4>为什么写作者也要会终端</h4>
+<ul>
+    <li>运行 Git 命令。</li>
+    <li>安装或更新扩展依赖。</li>
+    <li>跑构建、导出、打包命令。</li>
+    <li>处理一些批量文件操作。</li>
+    <li>查看脚本输出和错误日志。</li>
+</ul>
+<p>你不必成为命令行高手，但至少要知道终端在哪、怎么切目录、怎么复制输出。</p>
+
+<h4>终端最常见的操作</h4>
+<ul>
+    <li><b>切换不同 Shell</b>：终端面板右上角下拉菜单里选。</li>
+    <li><b>开多个终端</b>：点加号创建多个实例。</li>
+    <li><b>分屏终端</b>：把终端一分为二，适合一边跑服务一边看日志。</li>
+    <li><b>杀掉终端</b>：垃圾桶图标或右键关闭。</li>
+    <li><b>在资源管理器某文件夹打开终端</b>：右键文件夹，Open in Integrated Terminal。</li>
+</ul>
+
+<h4>默认工作目录</h4>
+<p>VS Code 终端默认会从你当前打开的工作区根目录启动。这意味着：</p>
+<ul>
+    <li>你打开的是小说项目文件夹，终端就从这个项目开始。</li>
+    <li>很多命令不用先手动切路径。</li>
+    <li>ANH 项目里的命令通常都可以直接跑。</li>
+</ul>
+
+<h4>终端里也能搜索、复制、跳文件</h4>
+<ul>
+    <li><b><kbd>Ctrl+F</kbd></b>：在终端输出中查找。</li>
+    <li><b>复制粘贴</b>：Windows 下一般是 <kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd>。</li>
+    <li><b>文件链接</b>：很多输出里的文件路径可以按住 Ctrl 点击直接打开。</li>
+</ul>
+<p>如果命令输出报错位置，VS Code 终端往往能直接把你带到对应文件和行号。</p>
+
+<h4>任务是什么</h4>
+<p>任务可以理解成“事先定义好的一键命令”。比如：</p>
+<ul>
+    <li>一键编译。</li>
+    <li>一键构建 webview。</li>
+    <li>一键启动预览服务。</li>
+    <li>一键打包扩展。</li>
+</ul>
+<p>在当前仓库里，VS Code 已经有现成任务，例如 watch、打包扩展等。这就是为什么你在 VS Code 里经常能直接运行构建任务，而不必每次手敲完整命令。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-tasks-hero.png" alt="VS Code 官方任务选择示意图" style="width:100%;max-width:760px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">官方任务示意图。任务的本质就是把常用命令收成可搜索、可复用、可共享的入口。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：task = 在命令面板里筛任务；build / buildAll / buildTests = 可执行任务；OUTPUT / Tasks = 任务输出面板。</div>
+
+<h4>工作区是什么</h4>
+<p>在 VS Code 语境里，工作区通常就是你打开的项目文件夹。它不只是一个路径，还代表：</p>
+<ul>
+    <li>当前文件树。</li>
+    <li>工作区设置。</li>
+    <li>任务配置。</li>
+    <li>调试配置。</li>
+    <li>扩展在该项目下的状态。</li>
+</ul>
+<p>所以“打开项目”不是简单的浏览文件，而是在切换一整套环境。</p>
+
+<h4>Workspace Trust 是什么</h4>
+<p>官方 Getting Started 文档把 Workspace Trust 放在很前面。它的意思是：你是否信任这个项目里的代码和配置可以被执行。</p>
+<ul>
+    <li><b>你自己建的小说项目</b>：通常可以信任。</li>
+    <li><b>网上下载的不明仓库</b>：先检查再决定。</li>
+    <li><b>限制模式</b>：某些功能会被禁用，例如终端或自动执行类能力会受影响。</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>终端管理：标签、分组、编辑器终端</h4>
+<p>官方 Terminal Basics 文档里提到，终端不只有底部面板一种形态：</p>
+<ul>
+    <li><b>普通终端面板</b>：最常见。</li>
+    <li><b>分组终端</b>：多个终端并排显示。</li>
+    <li><b>Editor Area Terminal</b>：把终端当成编辑器标签放到中间区域。</li>
+    <li><b>New Window Terminal</b>：把终端移到新窗口。</li>
+</ul>
+<p>如果你一边写文档一边盯着长日志，用编辑器终端或新窗口终端会比底部小面板更舒服。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-terminal-editor.png" alt="VS Code 官方编辑器区域终端示意图" style="width:100%;max-width:760px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">终端也可以像普通标签页一样放进编辑器区。对双屏或长日志场景，这往往比底部小面板更好看也更清楚。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：pwsh = PowerShell 终端；终端标签出现在编辑器标签栏里，说明它已经不是底部面板模式，而是编辑器区域终端。</div>
+
+<h4>Split CWD 和目录继承</h4>
+<p>官方还特别提到 <code>terminal.integrated.splitCwd</code>。它控制分屏终端的工作目录继承方式。</p>
+<p>如果你经常在不同子目录开多个终端，这个设置能明显减少“为什么新终端跑到根目录了”的困惑。</p>
+
+<h4>Run Selected Text / Run Active File</h4>
+<p>VS Code 终端可以直接执行编辑器里选中的文本，或运行当前活动文件。这对脚本、批量命令、一次性调试非常省事。</p>
+<p>你不必手动复制整段到终端，特别适合处理 PowerShell、Shell 片段或简单脚本。</p>
+
+<h4>Tasks 与 .vscode</h4>
+<p>大多数项目级自动化配置都放在 <code>.vscode/</code> 里：</p>
+<ul>
+    <li><code>.vscode/settings.json</code>：工作区设置。</li>
+    <li><code>.vscode/tasks.json</code>：任务。</li>
+    <li><code>.vscode/launch.json</code>：调试配置。</li>
+</ul>
+<p>官方 Tips & Tricks 把这块归类为“workspace-specific configuration files”。也就是说，这些文件不是你的正文内容，但它们决定了项目在 VS Code 里的体验。</p>
+
+<h4>工作区设置和用户设置的实际边界</h4>
+<ul>
+    <li><b>工作区设置</b>：适合项目约定，例如换行、缩进、排除目录、终端 cwd、搜索排除。</li>
+    <li><b>用户设置</b>：适合个人习惯，例如主题、字体、全局快捷键。</li>
+</ul>
+<p>写小说时，如果某个设置只想影响这个项目，就尽量写入工作区而不是全局。</p>
+
+<h4>任务的几个典型使用场景</h4>
+<ol>
+    <li>把常用构建命令固化成任务。</li>
+    <li>给打包/编译/预览分配明确入口。</li>
+    <li>在团队里共享同一套任务，减少“你这边怎么运行”的沟通成本。</li>
+    <li>和默认构建任务结合，用 <kbd>Ctrl+Shift+B</kbd> 快速执行。</li>
+</ol>
+
+<h4>终端里的链接、滚动和复制细节</h4>
+<p>官方终端文档提到很多不显眼但非常实用的能力：</p>
+<ul>
+    <li><b>文件链接识别</b>：日志里的文件路径可点击。</li>
+    <li><b>URL 识别</b>：终端里的网址可直接打开浏览器。</li>
+    <li><b>滚动缓冲区</b>：默认保留一定历史行数，可调 <code>terminal.integrated.scrollback</code>。</li>
+    <li><b>多行粘贴警告</b>：防止误把大段内容直接执行。</li>
+</ul>
+
+<h4>故障排查：终端为什么不好用</h4>
+<ul>
+    <li><b>打不开</b>：先看是不是 Restricted Mode / Workspace Trust 限制。</li>
+    <li><b>Shell 不对</b>：检查终端 profile。</li>
+    <li><b>目录不对</b>：检查当前工作区和 <code>terminal.integrated.cwd</code>。</li>
+    <li><b>渲染怪异</b>：可尝试调整 GPU acceleration。</li>
+    <li><b>快捷键冲突</b>：去键盘快捷键页看终端命令映射。</li>
+</ul>
+
+<div class="doc-note">这页和 <a class="doc-ref-link" data-doc="vscode-settings-customization"><strong>设置、配置与扩展</strong></a> 是配套的。前者告诉你“终端和工作区是什么”，后者告诉你“这些东西具体写到哪里、怎么保存、如何覆盖”。</div>
+</div>

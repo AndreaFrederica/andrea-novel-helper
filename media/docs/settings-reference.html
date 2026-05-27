@@ -1,0 +1,567 @@
+<div class="doc-section beginner">
+<h4>设置总览</h4>
+<p>ANH 提供了 <b>267 个配置项</b>，覆盖排版、字数统计、错别字检查、角色管理、导出、同步等各个方面。所有设置都在 VS Code 的"设置"界面中（<kbd>Ctrl+,</kbd>），搜索 <code>AndreaNovelHelper</code> 或 <code>andrea</code> 即可找到。</p>
+
+<h4>如何修改设置</h4>
+<ol>
+    <li><b>图形化快速设置</b> — 命令面板输入 "ANH: Quick Settings"，提供表单化的高频设置编辑</li>
+    <li><b>快速设置面板</b> — 按 <kbd>Ctrl+Alt+I</kbd> 打开，直接开关排版、字数等功能</li>
+    <li><b>VS Code 设置界面</b> — <kbd>Ctrl+,</kbd> 搜索 <code>AndreaNovelHelper</code></li>
+    <li><b>直接编辑 settings.json</b> — 适合批量修改或导入导出配置</li>
+</ol>
+
+<h4>设置的作用域</h4>
+<p>大部分设置属于<b>全局设置</b>（个人使用习惯），保存在用户级别的 settings.json 中。少数设置（如角色文件路径）属于<b>工作区设置</b>，可以跟随项目走。</p>
+
+<h4>设置分类速查</h4>
+<ul>
+    <li><b>排版</b>（<code>andrea.typeset.*</code>）— 自动格式化、括号配对、智能回车</li>
+    <li><b>字数统计</b>（<code>AndreaNovelHelper.wordCount.*</code>）— 统计单位、状态栏显示、性能</li>
+    <li><b>写作时间</b>（<code>AndreaNovelHelper.timeStats.*</code>）— 计时、里程碑、粘贴行为</li>
+    <li><b>错别字检查</b>（<code>AndreaNovelHelper.typo.*</code>）— LLM 配置、扫描策略、高亮</li>
+    <li><b>角色显示</b>（<code>AndreaNovelHelper.docRoles.* / allRoles.* / roles.*</code>）— 分组、排序、图标</li>
+    <li><b>批注</b>（<code>AndreaNovelHelper.comments.*</code>）— 样式、悬停、重定位</li>
+    <li><b>Typst 导出</b>（<code>andrea.typst.*</code>）— 模板、输出格式、字体</li>
+    <li><b>自动 Git</b>（<code>AndreaNovelHelper.autoGit.*</code>）— 自动提交、推送、拉取</li>
+    <li><b>WebDAV 同步</b>（<code>AndreaNovelHelper.webdav.*</code>）— 同步策略、忽略列表</li>
+    <li><b>包管理器</b>（<code>AndreaNovelHelper.packageManager.* / package.*</code>）— 目录可见性、拖拽</li>
+    <li><b>翻译</b>（<code>AndreaNovelHelper.translate.*</code>）— 目标语言、处理方式</li>
+    <li><b>Obsidian 兼容</b>（<code>AndreaNovelHelper.obsidian.*</code>）— 双链、标签渲染</li>
+    <li><b>脚本</b>（<code>AndreaNovelHelper.scripts.*</code>）— 脚本目录、处理器</li>
+    <li><b>数据库</b>（<code>AndreaNovelHelper.database.*</code>）— 后端选择、SQLite 调优</li>
+    <li><b>自动滚动</b>（<code>AndreaNovelHelper.autoScroll.*</code>）— 滚动比例、防抖</li>
+    <li><b>智能标签锁定</b>（<code>AndreaNovelHelper.smartTabGroupLock.*</code>）— 窗体类型、排除列表</li>
+    <li><b>补全</b>（<code>AndreaNovelHelper.completion.* / lookupKeys.*</code>）— 触发模式、拼音</li>
+    <li><b>调试</b>（<code>AndreaNovelHelper.debug.*</code>）— 日志开关</li>
+</ul>
+
+<div class="doc-note">以下按功能模块详细列出每个配置项的键名、类型、默认值和说明。配置键以 <code>AndreaNovelHelper.</code> 或 <code>andrea.</code> 为前缀。</div>
+</div>
+
+<div class="doc-section pro">
+
+<!-- ========== 排版 ========== -->
+<h4>排版（andrea.typeset.*）</h4>
+<p>控制保存文件时的自动格式化行为。排版功能<b>修改文本内容本身</b>，会影响 Git diff。</p>
+
+<h4>段首缩进</h4>
+<ul>
+    <li><code>andrea.typeset.indentFirstTwoSpaces</code> — <code>boolean</code>，默认 <code>true</code>。启用段首缩进</li>
+    <li>缩进量回退到编辑器的 <code>tabSize</code> / <code>insertSpaces</code> 设置。智能避开 Markdown 标题、列表、代码块等结构</li>
+</ul>
+
+<h4>段间空行</h4>
+<ul>
+    <li><code>andrea.typeset.blankLinesBetweenParas</code> — <code>integer</code>，默认 <code>1</code>（范围 0-6）。段落之间插入的空行数</li>
+    <li><code>andrea.typeset.addBlanks.sentenceEnders</code> — <code>array[string]</code>，默认 <code>["。","！","？","…","；","：","!","?",";",":","."]</code>。句末标点列表，遇到这些标点后才可能插入空行</li>
+    <li><code>andrea.typeset.addBlanks.trailingClosers</code> — <code>array[string]</code>，默认包含 <code>」</code>、<code>』</code>、<code>》</code>、<code>）</code> 等 19 个后置括号。句末标点后紧跟的括号不触发空行</li>
+    <li><code>andrea.typeset.addBlanks.leadingOpeners</code> — <code>array[string]</code>，默认包含 <code>「</code>、<code>『</code>、<code>（</code>、<code>《</code> 等 10 个前导括号。段首括号不触发空行</li>
+</ul>
+
+<h4>去尾空格</h4>
+<ul>
+    <li><code>andrea.typeset.trimTrailingSpaces</code> — <code>boolean</code>，默认 <code>true</code>。保存时删除行尾多余空格</li>
+</ul>
+
+<h4>智能引号补全</h4>
+<ul>
+    <li><code>andrea.typeset.enableAutoPairs</code> — <code>boolean</code>，默认 <code>true</code>。输入左引号/括号时自动补全右引号/括号</li>
+    <li><code>andrea.typeset.pairs</code> — <code>array[string]</code>，默认 <code>["()","[]","{}","""","''","「」","『』","《》","〈〉","（）"]</code>。自动配对的括号对列表</li>
+</ul>
+
+<h4>智能回车与跳出</h4>
+<ul>
+    <li><code>andrea.typeset.enableSmartEnter</code> — <code>boolean</code>，默认 <code>true</code>。在引号/括号内按回车时自动跳出并换行</li>
+    <li><code>andrea.typeset.enableSmartExit</code> — <code>boolean</code>，默认 <code>true</code>。输入右括号时，如果光标右侧已有相同括号则自动跳过</li>
+</ul>
+
+<h4>中文输入法修复</h4>
+<ul>
+    <li><code>andrea.typeset.enableChineseIMEFix</code> — <code>boolean</code>，默认 <code>false</code>。修复中文输入法与自动配对的冲突</li>
+    <li><code>andrea.typeset.chineseIMEDelay</code> — <code>number</code>，默认 <code>50</code>（范围 0-500 毫秒）。输入法修复延迟</li>
+</ul>
+
+<h4>状态栏</h4>
+<ul>
+    <li><code>andrea.typeset.statusBar.compact</code> — <code>boolean</code>，默认 <code>true</code>。版式状态栏显示为简略模式</li>
+    <li><code>andrea.typeset.statusBar.alwaysShow</code> — <code>boolean</code>，默认 <code>true</code>。始终显示版式工具条</li>
+</ul>
+
+<!-- ========== 字数统计 ========== -->
+<h4>字数统计（AndreaNovelHelper.wordCount.*）</h4>
+
+<h4>统计单位与显示</h4>
+<ul>
+    <li><code>AndreaNovelHelper.wordCount.primaryUnit</code> — <code>string</code>，默认 <code>"excludePunct"</code>。首要显示单位：<code>excludePunct</code>（不含标点）、<code>includePunct</code>（含标点）、<code>nonWSNoPunct</code>（非空白不含标点）</li>
+    <li><code>AndreaNovelHelper.wordCount.displayFormat</code> — <code>string</code>，默认 <code>"wan"</code>。显示格式：<code>raw</code>（原始数字）、<code>wan</code>（万）、<code>k</code>（千 k）、<code>qian</code>（千）</li>
+</ul>
+
+<h4>状态栏</h4>
+<ul>
+    <li><code>AndreaNovelHelper.wordCount.statusBar.mode</code> — <code>string</code>，默认 <code>"semi"</code>。<code>detailed</code>（详细）、<code>semi</code>（半详细）、<code>compact</code>（精简）</li>
+    <li><code>AndreaNovelHelper.wordCount.statusBar.compact</code> — <code>boolean</code>，默认 <code>false</code>。状态栏精简模式</li>
+    <li><code>AndreaNovelHelper.wordCount.statusBar.speedUnit</code> — <code>string</code>，默认 <code>"cpm"</code>。速度单位：<code>cpm</code>（字/分钟）或 <code>cph</code>（字/小时）</li>
+</ul>
+
+<h4>排序与索引</h4>
+<ul>
+    <li><code>AndreaNovelHelper.wordCount.order.showIndexInLabel</code> — <code>boolean</code>，默认 <code>true</code>。在标签中显示章节索引编号</li>
+    <li><code>AndreaNovelHelper.wordCount.order.step</code> — <code>number</code>，默认 <code>10</code>（最小 1）。索引步长（如每 10 章编号一次）</li>
+    <li><code>AndreaNovelHelper.wordCount.order.padWidth</code> — <code>number</code>，默认 <code>3</code>（最小 0）。索引编号宽度（前导零填充）</li>
+    <li><code>AndreaNovelHelper.wordCount.order.autoResequence</code> — <code>boolean</code>，默认 <code>true</code>。文件变化后自动重新排序索引</li>
+</ul>
+
+<h4>忽略规则</h4>
+<ul>
+    <li><code>AndreaNovelHelper.wordCount.respectGitignore</code> — <code>boolean</code>，默认 <code>true</code>。写作资源管理器是否遵循 .gitignore</li>
+    <li><code>AndreaNovelHelper.wordCount.respectWcignore</code> — <code>boolean</code>，默认 <code>true</code>。写作资源管理器是否遵循 .wcignore</li>
+    <li><code>AndreaNovelHelper.wordCount.referenceVisibleExtensions</code> — <code>array[string]</code>，默认包含 58 种扩展名（tjson5、png、jpg、pdf 等）。显示为参考资料但不计入统计的文件类型</li>
+</ul>
+
+<h4>性能</h4>
+<ul>
+    <li><code>AndreaNovelHelper.wordCount.maxWorkers</code> — <code>number</code>，默认 <code>0</code>（自动，范围 0-128）。最大工作线程数</li>
+    <li><code>AndreaNovelHelper.wordCount.maxWorkersUpperLimit</code> — <code>number</code>，默认 <code>8</code>（范围 1-128）。工作线程上限</li>
+    <li><code>AndreaNovelHelper.wordCount.largeFileThreshold</code> — <code>number</code>，默认 <code>51200</code>（最小 1024）。大文件阈值（字节），超过此值使用近似统计</li>
+    <li><code>AndreaNovelHelper.wordCount.largeFileAvgBytesPerChar</code> — <code>number</code>，默认 <code>3</code>（范围 0.5-10）。大文件平均字节数估算</li>
+    <li><code>AndreaNovelHelper.wordCount.skipStartupStatCheck</code> — <code>boolean</code>，默认 <code>false</code>。危险选项：跳过启动时的 fs.stat 校验</li>
+    <li><code>AndreaNovelHelper.wordCount.parallelStatCheck</code> — <code>boolean</code>，默认 <code>true</code>。启用并行批量 fs.stat 校验</li>
+</ul>
+
+<!-- ========== 写作时间统计 ========== -->
+<h4>写作时间统计（AndreaNovelHelper.timeStats.*）</h4>
+
+<h4>基本配置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.enabledLanguages</code> — <code>array[string]</code>，默认 <code>["markdown","plaintext"]</code>。统计启用的语言类型</li>
+    <li><code>AndreaNovelHelper.timeStats.idleThresholdMs</code> — <code>number</code>，默认 <code>30000</code>（范围 5000-300000）。闲置阈值，超过此时间无输入则停止计时</li>
+    <li><code>AndreaNovelHelper.timeStats.bucketSizeMs</code> — <code>number</code>，默认 <code>60000</code>（范围 10000-600000）。统计时间桶大小（毫秒）</li>
+    <li><code>AndreaNovelHelper.timeStats.imeDebounceMs</code> — <code>number</code>，默认 <code>350</code>（范围 100-2000）。输入法防抖延迟</li>
+    <li><code>AndreaNovelHelper.timeStats.exitIdleOn</code> — <code>string</code>，默认 <code>"text-change"</code>。退出闲置触发方式：<code>text-change</code>、<code>window-focus</code>、<code>editor-change</code></li>
+</ul>
+
+<h4>里程碑</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.milestone.enabled</code> — <code>boolean</code>，默认 <code>true</code>。启用字数里程碑通知</li>
+    <li><code>AndreaNovelHelper.timeStats.milestone.targets</code> — <code>array[number]</code>，默认 <code>[1000,2000,5000,10000,20000,50000,100000]</code>。里程碑目标字数</li>
+    <li><code>AndreaNovelHelper.timeStats.milestone.notificationType</code> — <code>string</code>，默认 <code>"information"</code>。通知类型：<code>information</code>（通知栏）或 <code>modal</code>（弹窗）</li>
+</ul>
+
+<h4>粘贴行为</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.includePaste</code> — <code>boolean</code>，默认 <code>false</code>。粘贴内容是否计入统计</li>
+    <li><code>AndreaNovelHelper.timeStats.includePasteInSpeed</code> — <code>boolean</code>，默认 <code>false</code>。粘贴是否计入速度计算</li>
+    <li><code>AndreaNovelHelper.timeStats.includePasteInAddedCounters</code> — <code>boolean</code>，默认 <code>true</code>。粘贴是否计入新增字符统计</li>
+    <li><code>AndreaNovelHelper.timeStats.pasteThresholdChars</code> — <code>number</code>，默认 <code>32</code>（范围 1-100000）。粘贴判定阈值，超过此字符数视为粘贴</li>
+</ul>
+
+<h4>大文件与性能</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.largeFile.thresholdBytes</code> — <code>number</code>，默认 <code>65536</code>（最小 4096）。大文件阈值</li>
+    <li><code>AndreaNovelHelper.timeStats.largeFile.approximate</code> — <code>boolean</code>，默认 <code>true</code>。大文件使用近似统计</li>
+    <li><code>AndreaNovelHelper.timeStats.largeFile.accurateEveryChanges</code> — <code>number</code>，默认 <code>80</code>（最小 5）。每 N 次变更执行一次精确统计</li>
+    <li><code>AndreaNovelHelper.timeStats.largeFile.accurateEveryMs</code> — <code>number</code>，默认 <code>60000</code>（最小 5000）。精确统计时间间隔</li>
+</ul>
+
+<h4>错别字延迟</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.typoDelay.enabled</code> — <code>boolean</code>，默认 <code>false</code>。启用变更时间窗口延迟发送错别字请求</li>
+    <li><code>AndreaNovelHelper.timeStats.typoDelay.windowMs</code> — <code>number</code>，默认 <code>5000</code>（范围 100-1000000）。时间窗口时长</li>
+</ul>
+
+<h4>状态栏</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.statusBar.alignment</code> — <code>string</code>，默认 <code>"left"</code>。对齐方式：<code>left</code> 或 <code>right</code></li>
+    <li><code>AndreaNovelHelper.timeStats.statusBar.priority</code> — <code>number</code>，默认 <code>1</code>（范围 -1000 到 1000）。状态栏优先级</li>
+</ul>
+
+<h4>其他</h4>
+<ul>
+    <li><code>AndreaNovelHelper.timeStats.respectWcignore</code> — <code>boolean</code>，默认 <code>false</code>。是否遵循 .wcignore 忽略规则</li>
+    <li><code>AndreaNovelHelper.timeStats.persistReadOnlySessions</code> — <code>boolean</code>，默认 <code>false</code>。只读会话是否持久化</li>
+    <li><code>AndreaNovelHelper.timeStats.debug</code> — <code>boolean</code>，默认 <code>false</code>。调试模式</li>
+</ul>
+
+<!-- ========== 错别字检查 ========== -->
+<h4>错别字检查（AndreaNovelHelper.typo.*）</h4>
+
+<h4>基本开关</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.enabled</code> — <code>boolean</code>，默认 <code>false</code>。启用错别字识别与诊断</li>
+    <li><code>AndreaNovelHelper.typo.mode</code> — <code>string</code>，默认 <code>"macro"</code>。<code>macro</code>（规则匹配）或 <code>llm</code>（大语言模型）</li>
+    <li><code>AndreaNovelHelper.typo.autoIdentifyOnOpen</code> — <code>boolean</code>，默认 <code>true</code>。打开文档时自动识别</li>
+    <li><code>AndreaNovelHelper.typo.autoScanOnChange</code> — <code>boolean</code>，默认 <code>true</code>。编辑变更时自动扫描</li>
+    <li><code>AndreaNovelHelper.typo.warningLevel</code> — <code>string</code>，默认 <code>"warning"</code>。诊断级别：<code>error</code>、<code>warning</code>、<code>information</code>、<code>hint</code></li>
+</ul>
+
+<h4>高亮显示</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.enableHighlight</code> — <code>boolean</code>，默认 <code>false</code>。是否添加标黄背景</li>
+    <li><code>AndreaNovelHelper.typo.highlightColor</code> — <code>string</code>，默认 <code>"#fff3a3"</code>。标黄背景色（CSS 颜色）</li>
+    <li><code>AndreaNovelHelper.typo.applyPartialDecorationsImmediately</code> — <code>boolean</code>，默认 <code>false</code>。在 LLM 分段结果阶段是否立即应用高亮（避免闪烁）</li>
+</ul>
+
+<h4>角色抑制</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.suppressRolesMode</code> — <code>string</code>，默认 <code>"roleNameExact"</code>。角色名抑制模式：
+        <ul>
+            <li><code>none</code> — 不抑制</li>
+            <li><code>roleNameExact</code> — 错字文本与角色名完全相等时抑制</li>
+            <li><code>regexContain</code> — 被正则表达式角色完全包含整段时抑制</li>
+            <li><code>nonSensitiveIntersect</code> — 与任意非敏感角色相交则抑制（旧版）</li>
+        </ul>
+    </li>
+</ul>
+
+<h4>服务端配置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.service.baseUrl</code> — <code>string</code>，默认 <code>"http://127.0.0.1:8001"</code>。错别字服务 API 地址</li>
+    <li><code>AndreaNovelHelper.typo.timeoutMs</code> — <code>number</code>，默认 <code>30000</code>（范围 1000-300000）。超时时间</li>
+    <li><code>AndreaNovelHelper.typo.batchSize</code> — <code>number</code>，默认 <code>30</code>（范围 1-200）。每次批量调用的句子数</li>
+    <li><code>AndreaNovelHelper.typo.docConcurrency</code> — <code>number</code>，默认 <code>3</code>（范围 1-10）。每个文档并发扫描的最大请求数</li>
+    <li><code>AndreaNovelHelper.typo.docGroupSize</code> — <code>number</code>，默认 <code>3</code>（范围 1-20）。连续段落的合并扫描组大小</li>
+</ul>
+
+<h4>客户端直连 LLM</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.clientLLM.enabled</code> — <code>boolean</code>，默认 <code>false</code>。使用本地直连大模型（实验功能）</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.apiBase</code> — <code>string</code>，默认 <code>"https://api.deepseek.com/v1"</code>。Chat Completions 兼容 API Base</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.apiKey</code> — <code>string</code>，默认 <code>""</code>。API Key</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.model</code> — <code>string</code>，默认 <code>"deepseek-v3"</code>。模型名称</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.temperature</code> — <code>number</code>，默认 <code>0</code>（范围 0-2）</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.enableThinking</code> — <code>boolean</code>，默认 <code>false</code>。启用深度思考模型的思考过程</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.thinkingProvider</code> — <code>string</code>，默认 <code>"auto"</code>。思考参数预设：<code>auto</code>、<code>glm</code>、<code>deepseek</code>、<code>qwen</code>、<code>custom</code></li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.customThinkingEnabled</code> — <code>boolean</code>，默认 <code>false</code>。自定义 thinking 字段（仅 custom 模式）</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.customThinkingEnabledValue</code> — <code>boolean</code>，默认 <code>true</code></li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.customThinkingDisabledValue</code> — <code>boolean</code>，默认 <code>false</code></li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.qwenThinkingMethod</code> — <code>string</code>，默认 <code>"parameter"</code>。通义千问 thinking 控制：<code>parameter</code> 或 <code>suffix</code></li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.geminiThinkingBudget</code> — <code>number</code>，默认 <code>-1</code>。Gemini 思考预算（-1=动态，0=禁用）</li>
+    <li><code>AndreaNovelHelper.typo.clientLLM.geminiApiFormat</code> — <code>string</code>，默认 <code>"openai"</code>。Gemini API 格式：<code>openai</code> 或 <code>native</code></li>
+</ul>
+
+<h4>服务端 LLM</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.llm.model</code> — <code>string</code>，默认 <code>"deepseek-v3"</code></li>
+    <li><code>AndreaNovelHelper.typo.llm.apiKey</code> — <code>string</code>，默认 <code>""</code></li>
+    <li><code>AndreaNovelHelper.typo.llm.apiBase</code> — <code>string</code>，默认 <code>""</code></li>
+</ul>
+
+<h4>缓存与持久化</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.maxDocs</code> — <code>number</code>，默认 <code>10</code>（范围 1-200）。内存数据库最大文档数（LRU 淘汰）</li>
+    <li><code>AndreaNovelHelper.typo.keepCacheOnClose</code> — <code>boolean</code>，默认 <code>true</code>。关闭编辑器后保留缓存</li>
+    <li><code>AndreaNovelHelper.typo.persistence.enabled</code> — <code>boolean</code>，默认 <code>false</code>。启用持久化存储</li>
+    <li><code>AndreaNovelHelper.typo.persistence.autoCleanup</code> — <code>boolean</code>，默认 <code>true</code>。自动清理过期数据</li>
+    <li><code>AndreaNovelHelper.typo.persistence.maxAgeDays</code> — <code>number</code>，默认 <code>30</code>（范围 1-365）。数据最大保存天数</li>
+</ul>
+
+<h4>调试</h4>
+<ul>
+    <li><code>AndreaNovelHelper.typo.debug.llmTrace</code> — <code>boolean</code>，默认 <code>false</code>。输出客户端 LLM 请求与响应</li>
+    <li><code>AndreaNovelHelper.typo.debug.serverTrace</code> — <code>boolean</code>，默认 <code>false</code>。输出服务端 HTTP 请求概要</li>
+    <li><code>AndreaNovelHelper.typo.debug.compactTrace</code> — <code>boolean</code>，默认 <code>false</code>。调试输出压缩为单行</li>
+    <li><code>AndreaNovelHelper.typo.debug.traceMaxLen</code> — <code>number</code>，默认 <code>1200</code>（范围 200-10000）。单条输出最大长度</li>
+</ul>
+
+<!-- ========== 角色显示 ========== -->
+<h4>角色显示</h4>
+<p>角色在不同视图中的显示方式由三组配置控制：<code>docRoles</code>（当前文章角色）、<code>allRoles</code>（全部角色）、<code>roles</code>（通用显示）。包管理器中的角色节点由 <code>package.roleNodes</code> 控制。</p>
+
+<h4>当前文章角色（AndreaNovelHelper.docRoles.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.docRoles.groupBy</code> — <code>string</code>，默认 <code>"affiliation"</code>。分组依据：<code>affiliation</code>（归属）、<code>type</code>（类型）、<code>none</code>（不分组）</li>
+    <li><code>AndreaNovelHelper.docRoles.primaryGroup</code> — <code>string</code>，默认 <code>"affiliation"</code>。第一级别分组</li>
+    <li><code>AndreaNovelHelper.docRoles.respectAffiliation</code> — <code>boolean</code>，默认 <code>true</code>。遵循归属字段分组</li>
+    <li><code>AndreaNovelHelper.docRoles.respectType</code> — <code>boolean</code>，默认 <code>true</code>。遵循类型字段分组</li>
+    <li><code>AndreaNovelHelper.docRoles.typeOrder</code> — <code>array[string]</code>，默认 <code>["主角","主要角色","反派","配角","联动角色","词汇","敏感词","正则表达式","unknown"]</code>。类型排序</li>
+    <li><code>AndreaNovelHelper.docRoles.useCustomGroups</code> — <code>boolean</code>，默认 <code>false</code>。启用自定义分组</li>
+    <li><code>AndreaNovelHelper.docRoles.customGroups</code> — <code>array[object]</code>。自定义分组规则（每项含 name、matchType、patterns）</li>
+    <li><code>AndreaNovelHelper.docRoles.details.showColorOnValue</code> — <code>boolean</code>，默认 <code>true</code>。值行显示颜色预览色块</li>
+    <li><code>AndreaNovelHelper.docRoles.details.enableRoleExpansion</code> — <code>boolean</code>，默认 <code>true</code>。允许角色节点展开查看详情</li>
+    <li><code>AndreaNovelHelper.docRoles.details.alwaysExpandable</code> — <code>boolean</code>，默认 <code>true</code>。角色属性详情总是可展开</li>
+    <li><code>AndreaNovelHelper.docRoles.details.wrapColumn</code> — <code>number</code>，默认 <code>20</code>（范围 5-200）。详情软折行宽度</li>
+    <li><code>AndreaNovelHelper.docRoles.display.useRoleSvgIfPresent</code> — <code>boolean</code>，默认 <code>false</code>。优先使用角色 svg 字段作为图标</li>
+    <li><code>AndreaNovelHelper.docRoles.display.colorizeRoleName</code> — <code>boolean</code>，默认 <code>false</code>。名称旁显示色块标记</li>
+    <li><code>AndreaNovelHelper.docRoles.inheritExpandedFromPrevious</code> — <code>boolean</code>，默认 <code>true</code>。切换文档时继承上一个文档的展开集合</li>
+</ul>
+
+<h4>全部角色（AndreaNovelHelper.allRoles.*）</h4>
+<p>配置结构与 docRoles 基本一致，额外包含：</p>
+<ul>
+    <li><code>AndreaNovelHelper.allRoles.syncWithDocRoles</code> — <code>boolean</code>，默认 <code>true</code>。与"当前文章角色"显示设置保持同步</li>
+</ul>
+
+<h4>角色通用显示（AndreaNovelHelper.roles.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.roles.details.showColorOnValue</code> — <code>boolean</code>，默认 <code>true</code>。值行显示颜色预览</li>
+    <li><code>AndreaNovelHelper.roles.display.useRoleSvgIfPresent</code> — <code>boolean</code>，默认 <code>false</code>。优先使用 svg 作为图标</li>
+    <li><code>AndreaNovelHelper.roles.details.alwaysExpandable</code> — <code>boolean</code>，默认 <code>true</code>。总是可展开</li>
+    <li><code>AndreaNovelHelper.roles.details.enableWrapping</code> — <code>boolean</code>，默认 <code>true</code>。展开后启用软折行</li>
+    <li><code>AndreaNovelHelper.roles.details.wrapColumn</code> — <code>number</code>，默认 <code>20</code>（范围 5-200）。折行宽度</li>
+    <li><code>AndreaNovelHelper.roles.details.enableRoleExpansion</code> — <code>boolean</code>，默认 <code>true</code>。允许展开</li>
+</ul>
+
+<h4>包管理器角色节点（AndreaNovelHelper.package.roleNodes.*）</h4>
+<p>配置结构与 roles.* 一致，控制包管理器文件子树中的角色节点显示。</p>
+
+<!-- ========== 批注 ========== -->
+<h4>批注（AndreaNovelHelper.comments.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.comments.authorName</code> — <code>string</code>，默认 <code>""</code>。作者显示名（留空用系统用户名）</li>
+    <li><code>AndreaNovelHelper.comments.showInOverviewRuler</code> — <code>boolean</code>，默认 <code>true</code>。在概览标尺中显示标记</li>
+    <li><code>AndreaNovelHelper.comments.hoverEnabled</code> — <code>boolean</code>，默认 <code>true</code>。悬停显示批注内容</li>
+    <li><code>AndreaNovelHelper.comments.showGutterInfo</code> — <code>boolean</code>，默认 <code>true</code>。行号区域显示信息图标</li>
+    <li><code>AndreaNovelHelper.comments.style.mode</code> — <code>string</code>，默认 <code>"underline"</code>。展示风格：<code>underline</code>（下划线）或 <code>highlight</code>（高亮背景）</li>
+    <li><code>AndreaNovelHelper.comments.style.underlineStyle</code> — <code>string</code>，默认 <code>"solid"</code>。下划线样式：<code>solid</code>、<code>wavy</code>、<code>dotted</code>、<code>dashed</code></li>
+    <li><code>AndreaNovelHelper.comments.style.underlineColor</code> — <code>string</code>，默认 <code>"#0e639c"</code>。下划线颜色</li>
+    <li><code>AndreaNovelHelper.comments.style.highlightOffset</code> — <code>number</code>，默认 <code>0.06</code>（范围 0-0.5）。高亮背景强度</li>
+    <li><code>AndreaNovelHelper.comments.relink.strict</code> — <code>boolean</code>，默认 <code>true</code>。严格重定位模式</li>
+    <li><code>AndreaNovelHelper.comments.cleanup.mode</code> — <code>string</code>，默认 <code>"delete-thread"</code>。无法重定位时的处理：<code>delete-thread</code>、<code>delete-range</code>、<code>mark-resolved</code>、<code>none</code></li>
+</ul>
+
+<!-- ========== 翻译 ========== -->
+<h4>翻译（AndreaNovelHelper.translate.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.translate.targets</code> — <code>array[string]</code>，默认 <code>["中文","英文","日语","德语","法语","韩语","繁体中文","拉丁语","希腊语"]</code>。可选目标语言</li>
+    <li><code>AndreaNovelHelper.translate.defaultTarget</code> — <code>string</code>，默认 <code>"中文"</code>。默认目标语言</li>
+    <li><code>AndreaNovelHelper.translate.alwaysUseDefaultTarget</code> — <code>boolean</code>，默认 <code>false</code>。跳过语言选择</li>
+    <li><code>AndreaNovelHelper.translate.defaultAction</code> — <code>string</code>，默认 <code>"replaceSelection"</code>。结果处理方式：<code>replaceSelection</code>（替换选中）、<code>openInNewTab</code>（新标签）、<code>copyToClipboard</code>（复制）</li>
+    <li><code>AndreaNovelHelper.translate.alwaysUseDefaultAction</code> — <code>boolean</code>，默认 <code>false</code>。跳过处理方式选择</li>
+</ul>
+
+<!-- ========== Typst 导出 ========== -->
+<h4>Typst 排版导出（andrea.typst.*）</h4>
+<ul>
+    <li><code>andrea.typst.cliPath</code> — <code>string</code>，默认 <code>"typst"</code>。Typst CLI 路径</li>
+    <li><code>andrea.typst.templatesDir</code> — <code>string</code>，默认 <code>"${workspaceFolder}/templates/typst"</code>。扩展外置模板目录</li>
+    <li><code>andrea.typst.externalTemplatesDir</code> — <code>string</code>，默认 <code>"${workspaceFolder}/novel-helper/templates/typst"</code>。项目模板路径</li>
+    <li><code>andrea.typst.defaultTemplate</code> — <code>string</code>，默认 <code>"sample"</code>。默认模板包</li>
+    <li><code>andrea.typst.defaultRenderer</code> — <code>string</code>，默认 <code>"internal"</code>。内容生成器</li>
+    <li><code>andrea.typst.output.format</code> — <code>string</code>，默认 <code>"pdf"</code>。导出格式：<code>pdf</code>、<code>png</code>、<code>svg</code></li>
+    <li><code>andrea.typst.output.ppi</code> — <code>number</code>，默认 <code>144</code>。PNG 导出分辨率</li>
+    <li><code>andrea.typst.pages</code> — <code>string</code>，默认 <code>""</code>。导出页码范围（如 <code>2,3-6,8-</code>）</li>
+    <li><code>andrea.typst.font.paths</code> — <code>array[string]</code>，默认 <code>[]</code>。额外字体路径</li>
+    <li><code>andrea.typst.cleanupTemp</code> — <code>boolean</code>，默认 <code>false</code>。导出后清理临时目录</li>
+    <li><code>andrea.typst.preview.storage</code> — <code>string</code>，默认 <code>"memory"</code>。预览存储方式：<code>memory</code> 或 <code>file</code></li>
+    <li><code>andrea.typst.preview.tempDir</code> — <code>string</code>，默认 <code>"${workspaceFolder}/build/typst/preview"</code>。预览临时目录</li>
+</ul>
+
+<!-- ========== 自动 Git ========== -->
+<h4>自动 Git（AndreaNovelHelper.autoGit.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.autoGit.enabled</code> — <code>boolean</code>，默认 <code>false</code>。启用自动 Git</li>
+    <li><code>AndreaNovelHelper.autoGit.checkIntervalSeconds</code> — <code>number</code>，默认 <code>30</code>（范围 10-300）。检查间隔（秒）</li>
+    <li><code>AndreaNovelHelper.autoGit.commitMessageTemplate</code> — <code>string</code>，默认 <code>"Auto commit: {timestamp}"</code>。提交信息模板</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPull</code> — <code>boolean</code>，默认 <code>true</code>。检测到远程变更时自动拉取</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPush</code> — <code>boolean</code>，默认 <code>true</code>。本地提交后自动推送</li>
+    <li><code>AndreaNovelHelper.autoGit.includeUntracked</code> — <code>boolean</code>，默认 <code>false</code>。是否包含未跟踪文件</li>
+    <li><code>AndreaNovelHelper.autoGit.compactStatus</code> — <code>boolean</code>，默认 <code>true</code>。状态栏简洁模式</li>
+    <li><code>AndreaNovelHelper.autoGit.excludePatterns</code> — <code>array[string]</code>，默认 <code>["*.tmp","*.log",".DS_Store","Thumbs.db"]</code>。排除文件模式</li>
+</ul>
+
+<!-- ========== WebDAV 同步 ========== -->
+<h4>WebDAV 同步（AndreaNovelHelper.webdav.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.webdav.sync.strategy</code> — <code>string</code>，默认 <code>"timestamp"</code>。同步策略：<code>timestamp</code>、<code>size</code>、<code>both</code>、<code>content</code></li>
+    <li><code>AndreaNovelHelper.webdav.sync.timeTolerance</code> — <code>number</code>，默认 <code>15000</code>（范围 0-60000）。时间戳比较容差（毫秒）</li>
+    <li><code>AndreaNovelHelper.webdav.sync.enableSmartComparison</code> — <code>boolean</code>，默认 <code>true</code>。智能比较算法</li>
+    <li><code>AndreaNovelHelper.webdav.sync.ignoredDirectories</code> — <code>array[string]</code>，默认包含 25 个目录（.git、node_modules 等）</li>
+    <li><code>AndreaNovelHelper.webdav.sync.ignoredFiles</code> — <code>array[string]</code>，默认 <code>[".DS_Store","Thumbs.db","desktop.ini","*.tmp","*.temp","*.log","*.pid","*.lock"]</code></li>
+    <li><code>AndreaNovelHelper.webdav.sync.ignoreAppDataDirectories</code> — <code>boolean</code>，默认 <code>true</code>。忽略 .anh-fsdb 等内部目录</li>
+    <li><code>AndreaNovelHelper.webdav.sync.showDiffTable</code> — <code>boolean</code>，默认 <code>false</code>。同步后显示差异表</li>
+    <li><code>AndreaNovelHelper.webdav.sync.enableMetadataSidecar</code> — <code>boolean</code>，默认 <code>true</code>。启用元数据缓存</li>
+    <li><code>AndreaNovelHelper.webdav.sync.metadataSidecarSuffix</code> — <code>string</code>，默认 <code>".anhmeta.json"</code>。缓存文件后缀</li>
+    <li><code>AndreaNovelHelper.webdav.sync.skipDatabaseAccess</code> — <code>boolean</code>，默认 <code>true</code>。跳过数据库提升速度</li>
+    <li><code>AndreaNovelHelper.webdav.sync.autoSync.enabled</code> — <code>boolean</code>，默认 <code>false</code>。启用定时自动同步</li>
+    <li><code>AndreaNovelHelper.webdav.sync.autoSync.intervalMinutes</code> — <code>number</code>，默认 <code>30</code>（范围 1-1440）。同步间隔（分钟）</li>
+    <li><code>AndreaNovelHelper.webdav.sync.autoSync.method</code> — <code>string</code>，默认 <code>"bidirectional"</code>。同步方法：<code>bidirectional</code>、<code>upload</code>、<code>download</code></li>
+</ul>
+
+<!-- ========== 包管理器 ========== -->
+<h4>包管理器（AndreaNovelHelper.packageManager.* / package.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.packageManager.enableAutoKeywordNaming</code> — <code>boolean</code>，默认 <code>true</code>。自动关键词命名</li>
+    <li><code>AndreaNovelHelper.packageManager.hideOutlineStorage</code> — <code>boolean</code>，默认 <code>true</code>。隐藏大纲存储目录</li>
+    <li><code>AndreaNovelHelper.packageManager.hideCommentsFolder</code> — <code>boolean</code>，默认 <code>true</code>。隐藏批注目录</li>
+    <li><code>AndreaNovelHelper.packageManager.hideTypoFolder</code> — <code>boolean</code>，默认 <code>true</code>。隐藏错别字目录</li>
+    <li><code>AndreaNovelHelper.packageManager.hideDashboardFolder</code> — <code>boolean</code>，默认 <code>false</code>。隐藏创作工作台目录</li>
+    <li><code>AndreaNovelHelper.packageManager.hideDocsFolder</code> — <code>boolean</code>，默认 <code>false</code>。隐藏项目文档目录</li>
+    <li><code>AndreaNovelHelper.packageManager.showGeneralResourceFiles</code> — <code>boolean</code>，默认 <code>true</code>。显示普通资源文件</li>
+    <li><code>AndreaNovelHelper.packageManager.showRoleFileChangeNotifications</code> — <code>boolean</code>，默认 <code>false</code>。显示角色文件变更提示</li>
+    <li><code>AndreaNovelHelper.package.dragDefaultAction</code> — <code>string</code>，默认 <code>"move"</code>。拖拽默认操作：<code>move</code>、<code>copy</code>、<code>ask</code></li>
+    <li><code>AndreaNovelHelper.package.iconStyle</code> — <code>string</code>，默认 <code>"auto"</code>。图标显示方式：<code>auto</code>、<code>theme</code>、<code>custom</code></li>
+</ul>
+
+<!-- ========== 角色合并优先级 ========== -->
+<h4>角色合并优先级（AndreaNovelHelper.rolePriority.*）</h4>
+<p>当同一角色在多个文件中定义时，控制合并优先级策略。</p>
+<ul>
+    <li><code>AndreaNovelHelper.rolePriority</code> — <code>object</code>。包含以下子项：
+        <ul>
+            <li><code>strategy</code> — <code>"loadOrder"</code>（按加载顺序）或 <code>"custom"</code>（自定义）</li>
+            <li><code>enableFileNamePriority</code> — 是否启用文件名优先级（默认 false）</li>
+            <li><code>enableFileTypePriority</code> — 是否启用文件类型优先级（默认 false）</li>
+            <li><code>enableLocationPriority</code> — 是否启用位置优先级（默认 false）</li>
+            <li><code>fileNamePriority.prefixes</code> — 文件名前缀优先级映射（如 <code>"__"</code>=1000, <code>"!!"</code>=2000）</li>
+            <li><code>fileTypePriority</code> — 文件类型优先级（<code>.json5</code>=2, <code>.md</code>=1, <code>.txt</code>=0）</li>
+            <li><code>locationPriority</code> — 位置优先级（external=100, internal=0）</li>
+            <li><code>defaultPriority</code> — 默认优先级（0）</li>
+        </ul>
+    </li>
+</ul>
+
+<!-- ========== 智能标签锁定 ========== -->
+<h4>智能标签组锁定（AndreaNovelHelper.smartTabGroupLock.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.enabled</code> — <code>boolean</code>，默认 <code>true</code>。启用智能锁定</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.enableBuiltinTypes</code> — <code>boolean</code>，默认 <code>true</code>。启用内置窗体类型</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.excludeRoleEditor</code> — <code>boolean</code>，默认 <code>true</code>。排除角色卡编辑器</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.excludeDiffEditor</code> — <code>boolean</code>，默认 <code>true</code>。排除差异编辑器</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.excludeNotesDiff</code> — <code>boolean</code>，默认 <code>true</code>。排除 Notes 差异编辑器</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.customWebviewTypes</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义 WebView 类型</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.customEditorTypes</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义编辑器类型</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.customUriSchemes</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义 URI 方案</li>
+    <li><code>AndreaNovelHelper.smartTabGroupLock.customNotebookTypes</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义笔记本类型</li>
+</ul>
+
+<!-- ========== 数据库 ========== -->
+<h4>数据库（AndreaNovelHelper.database.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.database.backend</code> — <code>string</code>，默认 <code>"json"</code>。后端类型：<code>json</code> 或 <code>sqlite</code></li>
+    <li><code>AndreaNovelHelper.database.sqlite.enableWAL</code> — <code>boolean</code>，默认 <code>true</code>。启用 WAL 模式</li>
+    <li><code>AndreaNovelHelper.database.sqlite.cacheSize</code> — <code>number</code>，默认 <code>2560</code>（范围 256-10240）。缓存大小（页数）</li>
+    <li><code>AndreaNovelHelper.database.sqlite.enableMmap</code> — <code>boolean</code>，默认 <code>true</code>。启用内存映射 IO</li>
+    <li><code>AndreaNovelHelper.database.sqlite.initQueueTimeoutMs</code> — <code>number</code>，默认 <code>15000</code>（范围 1000-120000）。初始化等待超时</li>
+    <li><code>AndreaNovelHelper.database.autoMigrate</code> — <code>boolean</code>，默认 <code>false</code>。切换后端时自动迁移数据</li>
+</ul>
+
+<!-- ========== 脚本 ========== -->
+<h4>脚本（AndreaNovelHelper.scripts.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.scripts.root</code> — <code>string</code>，默认 <code>"novel-helper/scripts"</code>。脚本目录</li>
+    <li><code>AndreaNovelHelper.scripts.defaultPlainTextProcessor</code> — <code>string</code>，默认 <code>"internal"</code>。纯文本导出处理器</li>
+</ul>
+
+<!-- ========== 自动滚动 ========== -->
+<h4>自动滚动（AndreaNovelHelper.autoScroll.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.autoScroll.enabled</code> — <code>boolean</code>，默认 <code>false</code>。启用自动滚动</li>
+    <li><code>AndreaNovelHelper.autoScroll.ratio</code> — <code>number</code>，默认 <code>1</code>（范围 0.1-0.7）。滚动目标比例</li>
+    <li><code>AndreaNovelHelper.autoScroll.debounceDelay</code> — <code>number</code>，默认 <code>0</code>（范围 0-2000）。防抖延迟（毫秒）</li>
+</ul>
+
+<!-- ========== Obsidian 兼容 ========== -->
+<h4>Obsidian 兼容（AndreaNovelHelper.obsidian.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.obsidian.renderWikilinks</code> — <code>boolean</code>，默认 <code>true</code>。渲染 <code>[[双链]]</code></li>
+    <li><code>AndreaNovelHelper.obsidian.renderTags</code> — <code>boolean</code>，默认 <code>true</code>。渲染 <code>#标签</code></li>
+    <li><code>AndreaNovelHelper.obsidian.renderEscapedTags</code> — <code>boolean</code>，默认 <code>false</code>。渲染转义标签</li>
+</ul>
+
+<!-- ========== Markdown ========== -->
+<h4>Markdown 处理（AndreaNovelHelper.markdown.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.markdown.separatorRenderMode</code> — <code>string</code>，默认 <code>"preserve"</code>。分割线处理：<code>render</code>、<code>hidden</code>、<code>preserve</code></li>
+    <li><code>AndreaNovelHelper.markdown.txtExportSeparatorMode</code> — <code>string</code>，默认 <code>"preserve"</code>。TXT 导出分割线：<code>follow</code>、<code>hidden</code>、<code>preserve</code></li>
+    <li><code>AndreaNovelHelper.markdownToolbarEnabled</code> — <code>boolean</code>，默认 <code>true</code>。启用 Markdown 工具栏</li>
+    <li><code>AndreaNovelHelper.markdownToolbarHeight</code> — <code>number</code>，默认 <code>28</code>（范围 20-50）。工具栏高度（像素）</li>
+</ul>
+
+<!-- ========== 补全与查询 ========== -->
+<h4>补全与查询键（AndreaNovelHelper.completion.* / lookupKeys.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.completion.triggerMode</code> — <code>string</code>，默认 <code>"loose"</code>。触发模式：<code>loose</code>、<code>startsWith</code>、<code>symbolLoose</code>、<code>symbolStartsWith</code></li>
+    <li><code>AndreaNovelHelper.completion.symbolPrefixes</code> — <code>array[string]</code>，默认 <code>["@"]</code>。符号前缀</li>
+    <li><code>AndreaNovelHelper.completion.segmenterType</code> — <code>string</code>，默认 <code>"auto"</code>。分词器：<code>auto</code>、<code>intl</code>、<code>jieba</code></li>
+    <li><code>AndreaNovelHelper.lookupKeys.treatPinyinAsAlias</code> — <code>boolean</code>，默认 <code>false</code>。拼音按别名展示</li>
+    <li><code>AndreaNovelHelper.lookupKeys.autoGeneratePinyin</code> — <code>boolean</code>，默认 <code>false</code>。自动生成拼音查询键</li>
+    <li><code>AndreaNovelHelper.lookupKeys.treatRomanizedAsAlias</code> — <code>boolean</code>，默认 <code>false</code>。罗马字按别名展示</li>
+    <li><code>AndreaNovelHelper.lookupKeys.autoGenerateRomanized</code> — <code>boolean</code>，默认 <code>false</code>。自动生成罗马字查询键</li>
+    <li><code>AndreaNovelHelper.lookupKeys.useLlmRomanization</code> — <code>boolean</code>，默认 <code>false</code>。罗马字使用 LLM</li>
+</ul>
+
+<!-- ========== 其他 ========== -->
+<h4>其他配置</h4>
+
+<h4>文件路径</h4>
+<ul>
+    <li><code>AndreaNovelHelper.rolesFile</code> — <code>string</code>，默认 <code>"novel-helper/character-gallery.json5"</code>。角色文件路径</li>
+    <li><code>AndreaNovelHelper.sensitiveWordsFile</code> — <code>string</code>，默认 <code>"novel-helper/sensitive-words.json5"</code>。敏感词文件路径</li>
+    <li><code>AndreaNovelHelper.vocabularyFile</code> — <code>string</code>，默认 <code>"novel-helper/vocabulary.json5"</code>。词汇文件路径</li>
+    <li><code>AndreaNovelHelper.regexPatternsFile</code> — <code>string</code>，默认 <code>"novel-helper/regex-patterns.json5"</code>。正则模式文件路径</li>
+    <li><code>AndreaNovelHelper.outlinePath</code> — <code>string</code>，默认 <code>"novel-helper/outline"</code>。大纲路径</li>
+</ul>
+
+<h4>文件类型与工作区</h4>
+<ul>
+    <li><code>AndreaNovelHelper.supportedFileTypes</code> — <code>array[string]</code>，默认 <code>["markdown","plaintext","json5","csv","ojson","ojson5","rjson","rjson5","tjson5","toml"]</code>。支持的文件类型</li>
+    <li><code>AndreaNovelHelper.minChars</code> — <code>number</code>，默认 <code>1</code>（最小 1）。最少字符数</li>
+    <li><code>AndreaNovelHelper.workspaceDisabled</code> — <code>boolean</code>，默认 <code>false</code>。禁用工作区</li>
+    <li><code>AndreaNovelHelper.useVsCodeManagedDisabling</code> — <code>boolean</code>，默认 <code>false</code>。按 VS Code 扩展管理决定启用/禁用</li>
+</ul>
+
+<h4>自定义关键词</h4>
+<ul>
+    <li><code>AndreaNovelHelper.customCharacterFileKeywords</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义角色文件关键词</li>
+    <li><code>AndreaNovelHelper.customSensitiveWordsFileKeywords</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义敏感词文件关键词</li>
+    <li><code>AndreaNovelHelper.customVocabularyFileKeywords</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义词汇文件关键词</li>
+    <li><code>AndreaNovelHelper.customRegexFileKeywords</code> — <code>array[string]</code>，默认 <code>[]</code>。自定义正则文件关键词</li>
+</ul>
+
+<h4>词汇与补全</h4>
+<ul>
+    <li><code>AndreaNovelHelper.enableWordSegmentFilter</code> — <code>boolean</code>，默认 <code>true</code>。启用词汇过滤</li>
+    <li><code>AndreaNovelHelper.wordSegment.autoFilterMaxLength</code> — <code>integer</code>，默认 <code>1</code>（范围 1-6）。自动过滤最大长度</li>
+    <li><code>AndreaNovelHelper.defaultRoleLookupKeys</code> — <code>array[string]</code>，默认 <code>[]</code>。默认角色索引键</li>
+    <li><code>AndreaNovelHelper.extendedLookupKeyPrefixes</code> — <code>array[string]</code>，默认 <code>[]</code>。扩展索引键前缀</li>
+</ul>
+
+<h4>其他</h4>
+<ul>
+    <li><code>AndreaNovelHelper.hugeFile.thresholdBytes</code> — <code>number</code>，默认 <code>51200</code>（范围 1024-10485760）。超大文件阈值</li>
+    <li><code>AndreaNovelHelper.hugeFile.suppressWarning</code> — <code>boolean</code>，默认 <code>false</code>。抑制超大文件警告</li>
+    <li><code>AndreaNovelHelper.decorations.cacheSize</code> — <code>number</code>，默认 <code>5</code>（范围 0-20）。装饰缓存大小</li>
+    <li><code>AndreaNovelHelper.sensitiveWords.warningLevel</code> — <code>string</code>，默认 <code>"error"</code>。敏感词诊断级别</li>
+    <li><code>AndreaNovelHelper.roleFile.basicFieldsDiagnosticLevel</code> — <code>string</code>，默认 <code>"warning"</code>。角色文件缺少基础字段时的诊断级别</li>
+    <li><code>AndreaNovelHelper.roleEditor.localizedKeyLabels</code> — <code>boolean</code>，默认 <code>true</code>。角色编辑器字段名本地化</li>
+    <li><code>andrea.roleJson5.openWithRoleManager</code> — <code>boolean</code>，默认 <code>true</code>。默认使用角色卡管理器打开 JSON5 角色文件</li>
+    <li><code>AndreaNovelHelper.json5.losslessEditorEnabled</code> — <code>boolean</code>，默认 <code>true</code>。JSON5 无损写回</li>
+    <li><code>AndreaNovelHelper.outline.lazyMode</code> — <code>boolean</code>，默认 <code>true</code>。大纲懒加载</li>
+    <li><code>AndreaNovelHelper.hello.enabled</code> — <code>boolean</code>，默认 <code>true</code>。启动时显示 Hello 首页</li>
+    <li><code>AndreaNovelHelper.hello.forceVsCodeManagedDisabling</code> — <code>boolean</code>，默认 <code>true</code>。Hello 跟随 VS Code 扩展开关</li>
+    <li><code>AndreaNovelHelper.whatsNew.autoShow</code> — <code>boolean</code>，默认 <code>true</code>。更新后自动显示 What's New</li>
+    <li><code>AndreaNovelHelper.startupSnapshot.enabled</code> — <code>boolean</code>，默认 <code>true</code>。启用启动快照</li>
+    <li><code>AndreaNovelHelper.startupSnapshot.deleteOnDisable</code> — <code>boolean</code>，默认 <code>true</code>。禁用时删除快照</li>
+    <li><code>AndreaNovelHelper.startupSnapshot.showNotification</code> — <code>boolean</code>，默认 <code>true</code>。显示快照通知</li>
+</ul>
+
+<h4>文件追踪（AndreaNovelHelper.fileTracker.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.fileTracker.respectWcignore</code> — <code>boolean</code>，默认 <code>false</code>。遵循 .wcignore</li>
+    <li><code>AndreaNovelHelper.fileTracker.respectGitignore</code> — <code>boolean</code>，默认 <code>true</code>。遵循 .gitignore</li>
+    <li><code>AndreaNovelHelper.fileTracker.trustCallerFilters</code> — <code>boolean</code>，默认 <code>false</code>。信任调用方过滤器</li>
+    <li><code>AndreaNovelHelper.fileTracker.writeLegacySnapshot</code> — <code>boolean</code>，默认 <code>false</code>。写入旧版快照</li>
+    <li><code>AndreaNovelHelper.fileTracker.enableVerboseLogging</code> — <code>boolean</code>，默认 <code>false</code>。详细日志</li>
+</ul>
+
+<h4>创作工作台（AndreaNovelHelper.writingDashboard.*）</h4>
+<ul>
+    <li><code>AndreaNovelHelper.writingDashboard.widget.showHeader</code> — <code>boolean</code>，默认 <code>true</code>。独立打开组件时显示标题栏</li>
+    <li><code>AndreaNovelHelper.writingDashboard.planSidebar.groupByTime</code> — <code>boolean</code>，默认 <code>true</code>。每日计划按年月分组</li>
+</ul>
+
+<h4>外部资源目录</h4>
+<ul>
+    <li><code>AndreaNovelHelper.externalFolder.ignoredDirectories</code> — <code>array[string]</code>，默认包含 9 个目录（.git、.vscode、node_modules 等）</li>
+    <li><code>AndreaNovelHelper.externalFolder.markerKeywords</code> — <code>array[string]</code>，默认包含 36 个关键词（"character-gallery"、"role"、"角色"、"人物" 等）</li>
+    <li><code>AndreaNovelHelper.externalFolder.enableMdLibraryNameMarkers</code> — <code>boolean</code>，默认 <code>true</code>。允许 .md 文件作为外部资源标记</li>
+</ul>
+
+<h4>调试</h4>
+<ul>
+    <li><code>AndreaNovelHelper.debug.completionLog</code> — <code>boolean</code>，默认 <code>false</code>。补全调试日志</li>
+    <li><code>AndreaNovelHelper.debug.roleFileDetection</code> — <code>boolean</code>，默认 <code>false</code>。角色文件识别调试</li>
+    <li><code>AndreaNovelHelper.debug.smartRoleAdder</code> — <code>boolean</code>，默认 <code>false</code>。角色合并调试</li>
+</ul>
+
+</div>

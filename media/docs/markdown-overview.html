@@ -1,0 +1,47 @@
+<div class="doc-section beginner">
+<h4>这一组文档在解决什么问题</h4>
+<p>ANH 的日常写作离不开 Markdown，但这个“大类”其实包含两套不同问题：</p>
+<ul>
+    <li><b>正文怎么用 Markdown 写得顺手</b>。</li>
+    <li><b>项目里的角色、词汇、关系、时间线等资源文件应该选什么格式</b>。</li>
+ </ul>
+<p>以前这些内容主要压在一篇“文件格式指南”里，现在拆成独立分类，方便按工作流阅读。</p>
+
+<h4>建议阅读顺序</h4>
+<ol>
+    <li><a class="doc-ref-link" data-doc="markdown-vscode-workflow"><strong>VS Code 里的 Markdown 工作流</strong></a>：先搞清编辑、Outline、标题跳转、自动补全这些基础动作。</li>
+    <li><a class="doc-ref-link" data-doc="markdown-links-preview"><strong>链接、图片与预览联动</strong></a>：解决链接失效、图片路径、双栏预览、移动文件后链接更新。</li>
+    <li><a class="doc-ref-link" data-doc="markdown-diagrams-math"><strong>Mermaid、KaTeX 与高级块</strong></a>：补图表、公式和预览安全边界。</li>
+    <li><a class="doc-ref-link" data-doc="markdown-format-guide"><strong>文件格式指南</strong></a>：最后再回来看 ANH 资源文件为什么会分成 Markdown、JSON5、CSV、TOML、XJSON5 这些格式。</li>
+ </ol>
+
+<h4>写作者先记住两件事</h4>
+<ul>
+    <li><b>正文章节文件</b> 用标准 Markdown。</li>
+    <li><b>资源文件</b> 不一定都该用同一种格式，应该按“手写舒服”还是“结构严格”来选。</li>
+ </ul>
+
+<h4>和角色系统的边界</h4>
+<p><a class="doc-ref-link" data-doc="roles-markdown-file"><strong>roles.md</strong></a> 这种文件虽然也是 Markdown，但它属于角色系统的建模文档；这里更侧重的是 Markdown 作为一种写作格式、预览格式和链接格式怎样在 VS Code 里工作。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>为什么 Markdown 不能只讲语法糖</h4>
+<p>很多教程把 Markdown 讲成“标题、粗体、列表、表格”就结束了，但对 ANH 用户真正关键的是下面这些工程化问题：</p>
+<ul>
+    <li>标题结构怎样影响 Outline 和导航。</li>
+    <li>文件移动后链接怎样自动更新。</li>
+    <li>图片路径怎样保持跨目录稳定。</li>
+    <li>预览、复制、导出、Typst、双链、标签之间的边界在哪里。</li>
+    <li>什么内容该继续留在 Markdown，什么内容该改成 JSON5、CSV 或专用图形文件。</li>
+ </ul>
+
+<h4>这组文档的定位</h4>
+<ul>
+    <li><b>Markdown 原生工作流</b>：对齐 VS Code 官方 Markdown 文档。</li>
+    <li><b>ANH 的写作增强</b>：解释双链、标签、角色着色、导出链路。</li>
+    <li><b>格式选择</b>：把“写作正文”和“结构化资源”分开处理。</li>
+ </ul>
+
+<div class="doc-note">如果你现在最具体的困扰是“我只想知道某个文件到底该用什么扩展名”，可以直接跳到 <a class="doc-ref-link" data-doc="markdown-format-guide"><strong>文件格式指南</strong></a>。</div>
+</div>

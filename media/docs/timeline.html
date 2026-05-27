@@ -151,5 +151,25 @@
 
 <h4>创建时间线文件</h4>
 <p>在包管理器中右键目录节点 → "创建时间线文件 (.tjson5)"，输入文件名即可生成带模板的 <code>.tjson5</code> 文件。</p>
+<h4>甘特视图操作</h4>
+<p>甘特图编辑器提供以下操作：</p>
+<ul>
+    <li><b>拖拽调整</b> — 拖动事件条目调整时间跨度和顺序</li>
+    <li><b>缩放</b> — 滚轮缩放时间轴粒度</li>
+    <li><b>筛选</b> — 按事件类型、角色或状态筛选显示</li>
+    <li><b>关联</b> — 点击事件可查看关联的角色和地点</li>
+</ul>
+
+<h4>时间格式规范</h4>
+<p>时间线支持完全自定义的时间体系。以下是常见的格式示例：</p>
+<ul>
+    <li><b>章节式</b>：<code>"第一章"</code>、<code>"第二章"</code>、<code>"终章"</code></li>
+    <li><b>日期式</b>：<code>"2024年春"</code>、<code>"3月15日"</code>、<code>"傍晚"</code></li>
+    <li><b>纪元式</b>：<code>"第三纪元"</code>、<code>"新历100年"</code></li>
+    <li><b>阶段式</b>：<code>"早"</code>、<code>"中"</code>、<code>"晚"</code>、<code>"序幕"</code></li>
+    <li><b>数值式</b>：<code>"1"</code>、<code>"2"</code>、<code>"3"</code>（适合简单排序）</li>
+</ul>
+<p>时间值是纯字符串，不要求特定格式。ANH 会按字符串顺序排列事件。</p>
+
 <div class="doc-note">时间线支持完全自定义的时间体系，不要求使用真实日期。事件使用 <code>title</code> 而非 <code>name</code>，时间使用 <code>date</code> 而非 <code>time</code>。角色和地点统一放在 <code>bindings</code> 数组中，通过 <code>type</code> 区分。</div>
 </div>

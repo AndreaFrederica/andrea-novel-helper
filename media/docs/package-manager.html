@@ -1,6 +1,11 @@
 <div class="doc-section beginner">
 <h4>什么是包管理器</h4>
 <p>包管理器就是 ANH 的<strong>资料文件夹浏览器</strong>。你可以把它想象成一个"档案柜"，每个"抽屉"（包）里放着不同类型的资料：角色卡、敏感词表、世界观词汇等。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/anh/package-manager.png" alt="ANH 包管理器截图" style="width:100%;max-width:1100px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">包管理器实拍图。它不是普通文件树，而是把 ANH 识别到的项目设置、资源包和角色文件整理成更适合写作的入口。</figcaption>
+</figure>
+<div class="doc-note"><b>这张图重点看</b>：最上面的“常用功能”是一组直达入口；“项目设置文件”是根目录配置；下面的 <code>novel-helper</code> 才是资源包根；展开角色文件后还能直接看到“1 个角色 / 28 个角色”这类统计。</div>
 
 <div class="doc-note">如果你想知道的不是“这个树怎么点”，而是<strong>包到底按什么规则识别、外部包怎么被扫描出来、内部包和外部包冲突时谁生效</strong>，请直接看 <a class="doc-ref-link" data-doc="package-mechanism"><strong>包机制与外部包详解</strong></a>。那一页是按代码实现写的。</div>
 
@@ -48,6 +53,7 @@
 <h4>常用操作</h4>
 <ul>
     <li><b>展开"常用功能"</b> — 打开向导、项目设置、引用维护、文档中心等快捷入口</li>
+    <li><b>打开"全局角色面板"</b> — 在一个独立面板里按类型、包、关键词搜索所有角色和词条</li>
     <li><b>展开"项目设置文件"</b> — 直接打开工作区根目录下的 <code>anhproject.md</code> 和 <code>project-config.json5</code></li>
     <li><b>右键目录/外部文件夹</b> — 弹出创建菜单，可新建各类资源文件</li>
     <li><b>拖放</b> — 把文件从一个包拖到另一个包</li>
@@ -62,6 +68,7 @@
     <li><b>+ 项目设置</b> — 编辑项目配置文件</li>
     <li><b>+ 创作工作台</b> — 打开任务、计划、时钟和写作记录工作台</li>
     <li><b>+ 角色关系图谱</b> — 查看角色引用和关系表生成的网络图谱</li>
+    <li><b>+ 全局角色面板</b> — 以独立 Webview 搜索、筛选和浏览整个角色库，支持查看原始字段、头像和设定图</li>
     <li><b>+ 引用维护和热力图</b> — 打开角色出场分析和引用索引维护</li>
     <li><b>+ 外部资源目录管理</b> — 管理挂载的外部目录</li>
     <li><b>+ Copilot 文档释放</b> — 将内置 Copilot 指令、Prompt 和 Skills 文档写入当前项目</li>
@@ -71,6 +78,30 @@
     <li><b>+ 文档中心</b> — 打开文档中心</li>
     <li><b>+ 图形化快速设置</b> — 可视化调整写作环境，带实时预览</li>
 </ul>
+
+<h4>资源文件自动命名</h4>
+<p>新版包管理器在创建或重命名角色/敏感词/词汇资源文件时，会默认使用“名称 + 固定英文关键词”的方式命名：</p>
+<ul>
+    <li>角色资源默认追加 <code>_role</code></li>
+    <li>敏感词资源默认追加 <code>_sensitive</code></li>
+    <li>词汇资源默认追加 <code>_vocab</code></li>
+</ul>
+<p>例如输入“主角设定”，默认会生成类似 <code>主角设定_role.md</code>。这样做的目的，是让文件既保留人类可读名称，又稳定命中资源识别规则。</p>
+<div class="doc-note">这个行为由 <code>AndreaNovelHelper.packageManager.enableAutoKeywordNaming</code> 控制。关闭后会恢复旧行为：你自己完全决定文件名，包管理器不再自动追加固定关键词。</div>
+
+<h4>显示过滤与内部目录隐藏</h4>
+<p>包管理器现在支持把一部分<strong>内部目录</strong>从资源树里隐藏，避免日常写作时被工作数据打扰。默认会隐藏：</p>
+<ul>
+    <li><code>outline</code> / <code>free-outline</code> 等大纲存储目录</li>
+    <li><code>novel-helper/comments</code> 批注目录</li>
+    <li><code>novel-helper/typo</code> 错别字数据目录</li>
+</ul>
+<p>你也可以按需继续隐藏 <code>novel-helper/dashboard</code> 和 <code>novel-helper/docs</code>，或者关闭“显示普通资源文件”，让包管理器只保留会被识别为角色/敏感词/词汇/关系/时间线等资源的文件。</p>
+<div class="doc-note">这些开关都可以在 <code>AndreaNovelHelper.packageManager.*</code> 里调整，也可以直接从“图形化快速设置 → 包管理器”里改。切换后包管理器会立即刷新，无需重启窗口。</div>
+
+<h4>角色文件变更提示</h4>
+<p>当包管理器监听到角色文件被创建、修改、删除或重命名时，可以选择是否弹出提示消息。</p>
+<p>如果你正在做批量导入或外部脚本同步，觉得提示太频繁，可以关闭 <code>AndreaNovelHelper.packageManager.showRoleFileChangeNotifications</code>；默认是关闭的。</p>
 
 <h4>项目设置文件节点</h4>
 <p><b>项目设置文件</b>节点按真实路径显示当前工作区根目录下的两个配置文件：</p>
@@ -160,6 +191,7 @@
     <li><b>+ 项目设置</b> — 打开 <code>anhproject.md</code> 和 <code>project-config.json5</code></li>
     <li><b>+ 创作工作台</b> — 打开可自由平铺的任务、计划、时钟、计时器和写作记录面板</li>
     <li><b>+ 角色关系图谱</b> — 聚合角色文件引用、<code>relations</code> 标记和关系表，查看全局角色网络</li>
+    <li><b>+ 全局角色面板</b> — 独立面板，支持按名称、类型、包路径、别名和描述搜索全部角色；可直接打开定义文件</li>
     <li><b>+ 引用维护和热力图</b> — 管理角色引用索引、查看出场可视化</li>
     <li><b>+ 外部资源目录管理</b> — 扫描、添加、移除外部资源目录</li>
     <li><b>+ Copilot 文档释放</b> — 导出内置 <code>.github/copilot-instructions.md</code>、Agent Skills 和 Prompt 文档，供 VS Code Copilot / Cursor 等工具读取项目约定</li>
@@ -207,6 +239,7 @@
     <li><code>AndreaNovelHelper.package.dragDefaultAction</code> — 拖放默认操作：move / copy / ask</li>
     <li><code>AndreaNovelHelper.package.iconStyle</code> — 文件图标样式：auto / theme / custom</li>
     <li><code>AndreaNovelHelper.package.mdLibraryNameRecognition</code> — Markdown 库名识别开关</li>
+    <li><code>AndreaNovelHelper.packageManager.enableAutoKeywordNaming</code> — 创建/重命名资源文件时是否自动追加固定英文关键词</li>
 </ul>
 
 <div class="doc-note">包管理器支持 Markdown、JSON5/OJSON5、CSV、TXT、TOML 等角色资源格式，并识别 RJSON5/TJSON5 这类专用编辑器格式。对大多数手工维护的设定，Markdown 通常最舒服；Excel / 表格来源先落 CSV；字段复杂、样式多、结构化要求高时再用 JSON5。</div>

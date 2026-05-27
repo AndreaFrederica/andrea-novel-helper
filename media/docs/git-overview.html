@@ -1,0 +1,52 @@
+<div class="doc-section beginner">
+<h4>这一组文档在解决什么问题</h4>
+<p>Git 以前零散地挂在 VS Code 基础、核心概念和高级功能里，用户很难判断“我现在到底该先学概念、先学按钮，还是先学同步”。现在把它单独做成一个大类，按学习顺序组织。</p>
+
+<h4>建议阅读顺序</h4>
+<ol>
+    <li><a class="doc-ref-link" data-doc="version-control-basics"><strong>版本管理是什么</strong></a>：先建立为什么要有提交、历史、回滚、分支。</li>
+    <li><a class="doc-ref-link" data-doc="git-basics"><strong>Git 本体详解</strong></a>：把 add、commit、branch、merge、rebase、stash 这些机制弄明白。</li>
+    <li><a class="doc-ref-link" data-doc="vscode-source-control"><strong>VS Code Source Control</strong></a>：看这些概念在 VS Code 原生界面里对应哪些按钮。</li>
+    <li><a class="doc-ref-link" data-doc="git-integration"><strong>Git 与 VS Code 集成</strong></a>：看 ANH 项目里实际怎么把 Git 工作流落地。</li>
+    <li><a class="doc-ref-link" data-doc="git-remote-sync"><strong>云仓库同步与备份</strong></a>：处理多设备同步、远端仓库和备份。</li>
+    <li><a class="doc-ref-link" data-doc="git-hosting-platforms"><strong>Git 托管平台比较</strong></a>：选 GitHub、GitLab、Gitee、Codeberg、CODING 等平台。</li>
+    <li><a class="doc-ref-link" data-doc="gitignore-file"><strong>.gitignore</strong></a>：知道哪些文件应该进仓库，哪些不应该。</li>
+ </ol>
+
+<h4>最少先会哪几件事</h4>
+<ul>
+    <li>看改动。</li>
+    <li>写提交。</li>
+    <li>把仓库推到远端。</li>
+    <li>在出错时知道优先看 diff 和历史，而不是直接覆盖文件。</li>
+ </ul>
+
+<h4>对写作者尤其重要的点</h4>
+<ul>
+    <li><b>Git 不是程序员专属工具</b>，它本质上是你的写作历史保险箱。</li>
+    <li><b>同步不等于备份</b>，真正可靠的同步一定包含提交历史和远端仓库。</li>
+    <li><b>UI 按钮背后仍然是 Git 机制</b>，所以学一点本体概念能大幅减少误操作。</li>
+ </ul>
+</div>
+
+<div class="doc-section pro">
+<h4>为什么要把 Git 从旧分类里拆出来</h4>
+<p>因为 Git 不是 VS Code 的一个小子功能，也不是“高级用户才需要”的附属项。它至少横跨三层：</p>
+<ul>
+    <li><b>概念层</b>：什么是版本、分支、提交、回滚。</li>
+    <li><b>工具层</b>：Git 命令行和仓库模型。</li>
+    <li><b>界面层</b>：VS Code Source Control、Graph、Timeline、Merge Editor。</li>
+ </ul>
+<p>如果把这三层继续拆散，新手会以为“我只需要会点提交按钮”，结果一遇到冲突、误删、同步错乱就完全失控。</p>
+
+<h4>对 ANH 项目的推荐工作流</h4>
+<ol>
+    <li>项目初始化完成后尽快建仓库。</li>
+    <li>把角色、正文、配置的关键里程碑做成清晰提交。</li>
+    <li>在重要重构前先提交一次，而不是指望撤销键。</li>
+    <li>跨设备写作时养成先 pull、再写、再 commit、再 push 的节奏。</li>
+    <li>把 <code>novel-helper</code> 里的项目数据和正文一起纳入同一个版本流。</li>
+ </ol>
+
+<div class="doc-note">如果你其实已经会 Git 命令，只是不熟 VS Code 面板，直接跳到 <a class="doc-ref-link" data-doc="vscode-source-control"><strong>VS Code Source Control</strong></a>；如果你最关心的是“我该怎么在两台电脑之间同步小说工程”，直接跳到 <a class="doc-ref-link" data-doc="git-remote-sync"><strong>云仓库同步与备份</strong></a>。</div>
+</div>

@@ -82,6 +82,11 @@ Reimu
     <li>在表单里填写角色信息，保存即可</li>
 </ol>
 <p>新版角色卡编辑器提供表格化界面，并保留经典编辑路径。工具栏可切换字段显示名语言（中文、英文、日文）或显示原始 JSON key；这只影响界面展示，保存时仍写回真实字段名。编辑器还内置随机角色生成器和拼音 / 罗马字查询键候选弹窗，生成或选择后可直接追加到当前角色字段。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/anh/角色json5编辑器.png" alt="ANH 角色 JSON5 编辑器截图" style="width:100%;max-width:1200px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">角色 JSON5 编辑器实拍图。左边是角色列表，右边是字段表单，适合不想直接手写 JSON5 的用户。</figcaption>
+</figure>
+<div class="doc-note"><b>这张图重点看</b>：左侧“角色（1）/ 添加角色”负责管理当前文件里的角色数量；右上角“表格 / 经典 / 字段显示名”控制界面模式；中间大表单可以直接改名称、类型、描述、别名、查询键和样式；顶部“随机生成角色”是辅助起草入口。</div>
 
 <h4>文件命名建议</h4>
 <p>推荐用这些名字，ANH 会自动识别：</p>
@@ -89,6 +94,15 @@ Reimu
     <li><code>character-gallery.md</code> / <code>character-gallery.json5</code></li>
     <li><code>my-character.md</code> / <code>my-character.json5</code></li>
 </ul>
+<p>如果你通过包管理器新建或重命名资源文件，默认还会自动追加固定英文关键词，例如 <code>主角设定_role.md</code>、<code>禁用词_sensitive.txt</code>、<code>星港术语_vocab.toml</code>。这样更容易被资源识别器命中，也更适合在一个目录里混放多种资源文件。</p>
+
+<h4>全局查看角色</h4>
+<p>除了树视图展开文件，你还可以直接打开<b>全局角色面板</b>：</p>
+<ul>
+    <li>在欢迎页点击“全局角色面板”</li>
+    <li>或在包管理器“常用功能”里点击 <b>+ 全局角色面板</b></li>
+</ul>
+<p>这个面板会把当前工作区里已经加载的角色、词汇、敏感词、正则规则条目统一列出来，并支持按名称、类型、包路径和关键词筛选。对带 <code>avatar</code>、<code>illustrations</code> 或 Markdown 图片的角色，它还会把本地图片转换为可预览的 webview 资源。</p>
 </div>
 
 <div class="doc-section pro">
@@ -112,6 +126,16 @@ Reimu
     <li>正则：正则/regex/pattern、正则标志/regexFlags/flags/匹配标志</li>
     <li>其他：优先级/priority、分词过滤/wordSegmentFilter/分词筛选</li>
 </ul>
+
+<h4>层级、继承、派生和组合</h4>
+<p>ANH 现在支持把角色关系直接写进角色文件，而不只依赖单独的关系表：</p>
+<ul>
+    <li><b>继承</b>：<code>extend</code> / <code>extends</code> / <code>继承自</code>，表示当前角色继承另一个角色，可写角色名或 UUID</li>
+    <li><b>派生</b>：<code>derived</code> / <code>derivedFrom</code> / <code>派生自</code>，表示语义上来源于某个原型；默认不自动拷贝字段，配合 <code>inherit: true</code> 时才复制可继承字段</li>
+    <li><b>组合/引用</b>：<code>includes</code> / <code>composedOf</code> / <code>uses</code> / <code>parts</code>，表示这个角色包含或引用其他角色；这是引用关系，不会像继承那样自动合并字段</li>
+    <li><b>父子层级</b>：JSON5 中允许用 <code>children</code>、<code>childRoles</code>、<code>subRoles</code>、<code>roles</code>、<code>characters</code> 等键直接嵌套子角色</li>
+</ul>
+<div class="doc-note">当多个同名角色都可能被引用时，解析器会优先选择同文件角色，其次同包角色，再回退到其他位置的匹配项。这样能减少大型项目里“同名模板/同名部件”被串错的概率。</div>
 
 <p><b>示例</b>：</p>
 <pre><code># 主角人物
@@ -145,6 +169,7 @@ Reimu
 <ul>
     <li>文件内容必须是一个<b>JSON5 数组</b>，每个元素是一个角色对象</li>
     <li>也兼容对象格式（键为角色名）和含 <code>roles</code> / <code>characters</code> 键的对象</li>
+    <li>也兼容嵌套角色树：子角色可放在 <code>children</code> / <code>childRoles</code> / <code>subRoles</code> / <code>roles</code> / <code>characters</code> 等字段里，加载时会自动扁平化并补上父级引用</li>
     <li>支持中文键名：名称、类型、描述、颜色、别名、修复、优先级、分词过滤、正则、正则标志、样式、拼音查询键、罗马字查询键、拼写查询键 等</li>
     <li>扩展名 <code>.json5</code> 或 <code>.ojson5</code>（后者会被优先识别为外部角色标记）</li>
 </ul>
@@ -196,6 +221,7 @@ Reimu
     <li><b>自定义字段</b> — 任意键值对，支持 string/number/boolean/string[] 四种类型</li>
 </ul>
 <p>编辑器按 VS Code 的 <code>files.autoSave</code> 策略执行。当 autoSave 开启时修改自动写回磁盘；当 autoSave=off 时，修改会形成 dirty 状态，需要手动按 Ctrl+S 保存。</p>
+<div class="doc-note">JSON5 / OJSON5 / RJSON5 / TJSON5 编辑器和 UUID 自动回写现在默认会优先使用“无损写回”。也就是说，改动字段时尽量只更新必要的值，保留原来的注释、空白、字段顺序和手工排版。这个行为由 <code>AndreaNovelHelper.json5.losslessEditorEnabled</code> 控制。</div>
 
 <h4>文件命名</h4>
 <p>角色库文件推荐使用以下命名：</p>

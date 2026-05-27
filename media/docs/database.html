@@ -1,0 +1,66 @@
+<div class="doc-section beginner">
+<h4>数据库是什么</h4>
+<p>ANH 使用数据库来存储各种运行时数据，比如文件追踪记录、写作统计、角色分组等。你可以选择使用 JSON 格式或 SQLite 格式的数据库后端。</p>
+
+<h4>两种后端</h4>
+<ul>
+    <li><b>JSON 后端</b>（默认）— 数据存储在 <code>novel-helper/.anh-fsdb/</code> 目录下的 JSON 文件中。简单直观，适合小型项目</li>
+    <li><b>SQLite 后端</b> — 数据存储在 <code>novel-helper/.anh-fsdb/tracking.db</code> 文件中。性能更好，适合大型项目</li>
+</ul>
+
+<h4>什么时候需要切换</h4>
+<ul>
+    <li>项目文件很多（几百个以上），JSON 后端可能会变慢</li>
+    <li>需要更好的并发性能</li>
+    <li>需要更小的磁盘占用</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>数据库系统由 <code>src/database/</code> 目录下的文件实现：</p>
+<ul>
+    <li><code>DatabaseFactory.ts</code> — 根据配置创建合适的后端</li>
+    <li><code>IDatabaseBackend.ts</code> — 后端接口定义</li>
+    <li><code>JSONShardedBackend.ts</code> — JSON 分片后端</li>
+    <li><code>SQLiteBackend.ts</code> — SQLite 后端</li>
+    <li><code>DatabaseMigration.ts</code> — 数据迁移工具</li>
+</ul>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.database.backend</code> — 后端类型：<code>json</code>（默认）或 <code>sqlite</code></li>
+    <li><code>AndreaNovelHelper.database.sqlite.enableWAL</code> — SQLite WAL 模式（默认 true，推荐开启）</li>
+    <li><code>AndreaNovelHelper.database.sqlite.cacheSize</code> — SQLite 缓存大小（默认 2560 页）</li>
+    <li><code>AndreaNovelHelper.database.sqlite.enableMmap</code> — SQLite 内存映射 I/O（默认 true）</li>
+    <li><code>AndreaNovelHelper.database.debug</code> — 调试日志（默认 false）</li>
+</ul>
+
+<h4>数据目录</h4>
+<p>所有数据库文件存储在 <code>novel-helper/.anh-fsdb/</code> 目录下：</p>
+<ul>
+    <li>JSON 后端：多个 <code>.json</code> 分片文件</li>
+    <li>SQLite 后端：<code>tracking.db</code> 文件</li>
+    <li>其他数据：<code>role-tracking.json</code>、<code>tag-role-bindings.json</code> 等</li>
+</ul>
+
+<h4>相关命令</h4>
+<ul>
+    <li><code>AndreaNovelHelper.database.switchBackend</code> — 切换数据库后端</li>
+    <li><code>AndreaNovelHelper.database.migrate</code> — 执行数据迁移</li>
+    <li><code>AndreaNovelHelper.database.showStatus</code> — 显示数据库状态</li>
+    <li><code>AndreaNovelHelper.database.healthCheck</code> — 健康检查</li>
+    <li><code>AndreaNovelHelper.database.optimize</code> — 优化数据库</li>
+    <li><code>AndreaNovelHelper.database.compare</code> — 比较不同后端的数据</li>
+</ul>
+
+<h4>切换后端</h4>
+<p>使用命令 <code>AndreaNovelHelper.database.switchBackend</code> 可以在 JSON 和 SQLite 之间切换。切换时 ANH 会自动迁移现有数据。</p>
+
+<h4>注意事项</h4>
+<ul>
+    <li>SQLite 后端需要系统支持原生模块（扩展已包含预编译的二进制文件）</li>
+    <li>WAL 模式提供更好的并发读性能，但需要文件系统支持</li>
+    <li>大文件阈值设置（<code>AndreaNovelHelper.hugeFile.thresholdBytes</code>）会影响数据库操作的性能优化策略</li>
+</ul>
+</div>

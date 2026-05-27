@@ -1,0 +1,80 @@
+<div class="doc-section beginner">
+<h4>角色追踪是什么</h4>
+<p>角色追踪让你把角色分组管理。比如你可以创建"本卷出场"、"已退场"、"需要补充设定"等分组，把角色拖到对应的组里，方便管理和查看进度。</p>
+
+<h4>怎么使用</h4>
+<ol>
+    <li>在活动栏点击 ANH 侧边栏图标</li>
+    <li>找到"角色追踪"视图</li>
+    <li>右键可以创建新分组、重命名、删除</li>
+    <li>拖拽角色到不同分组即可移动</li>
+</ol>
+
+<h4>默认分组</h4>
+<p>ANH 会自动创建一个"默认追踪"分组，所有未手动归类的角色都会显示在这里。这个默认分组不能被删除，但可以重命名。</p>
+
+<h4>可以做什么</h4>
+<ul>
+    <li>创建自定义分组（如"主线角色"、"支线角色"、"龙套"）</li>
+    <li>在分组间拖拽移动角色</li>
+    <li>从分组中移除角色（不影响角色本身）</li>
+    <li>重命名分组</li>
+    <li>删除不需要的分组</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>实现机制</h4>
+<p>角色追踪的数据存储在 <code>novel-helper/.anh-fsdb/role-tracking.json</code>，由 <code>src/language/roleTrackingStore.ts</code> 管理。</p>
+
+<h4>数据格式</h4>
+<pre><code>{
+  "version": 1,
+  "groups": [
+    {
+      "id": "default",
+      "name": "默认追踪",
+      "order": 0,
+      "roleUuids": ["uuid-1", "uuid-2"]
+    },
+    {
+      "id": "group-abc123",
+      "name": "本卷出场",
+      "order": 100,
+      "roleUuids": ["uuid-3"]
+    }
+  ]
+}</code></pre>
+
+<h4>分组字段</h4>
+<ul>
+    <li><code>id</code> — 分组唯一标识（<code>default</code> 为默认分组，新建分组使用时间戳+随机字符串）</li>
+    <li><code>name</code> — 分组显示名称</li>
+    <li><code>order</code> — 排序值，数字越小越靠前</li>
+    <li><code>roleUuids</code> — 该分组中的角色 UUID 列表（保持插入顺序）</li>
+</ul>
+
+<h4>相关命令</h4>
+<ul>
+    <li><code>andrea.roleTracking.refresh</code> — 刷新追踪数据</li>
+    <li><code>andrea.roleTracking.addGroup</code> — 新建分组</li>
+    <li><code>andrea.roleTracking.renameGroup</code> — 重命名分组</li>
+    <li><code>andrea.roleTracking.deleteGroup</code> — 删除分组</li>
+    <li><code>andrea.roleTracking.addRole</code> — 添加角色到分组</li>
+    <li><code>andrea.roleTracking.removeRole</code> — 从分组移除角色</li>
+    <li><code>andrea.roleTracking.moveRole</code> — 移动角色到另一个分组</li>
+    <li><code>andrea.roleTracking.openRole</code> — 打开角色文件</li>
+    <li><code>andrea.roleTracking.showReferences</code> — 查看角色引用</li>
+</ul>
+
+<h4>排序规则</h4>
+<p>分组按 <code>order</code> 值升序排列，相同 order 值时按名称的中文 locale 排序。新分组的 order 值为当前最大值 +100。</p>
+
+<h4>注意事项</h4>
+<ul>
+    <li>角色追踪使用角色的 UUID 而非名字来引用角色，所以重命名角色不会影响追踪关系</li>
+    <li>默认分组（id 为 <code>default</code>）不能被删除，但可以重命名</li>
+    <li>一个角色可以同时出现在多个分组中</li>
+    <li>删除分组不会删除其中的角色，只是取消分组关系</li>
+</ul>
+</div>

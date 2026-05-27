@@ -1,0 +1,126 @@
+<div class="doc-section beginner">
+<h4>这一页讲什么</h4>
+<p>这页讲 VS Code 作为编辑器本体最实用的能力：<strong>输入、选中、改字、跳转、预览</strong>。你不需要会写代码，很多功能对写小说、写设定、写大纲同样有用。</p>
+
+<h4>最基础但最重要的几件事</h4>
+<ul>
+    <li><b><kbd>Ctrl+S</kbd></b>：保存。</li>
+    <li><b><kbd>Ctrl+Z</kbd></b>：撤销。</li>
+    <li><b><kbd>Ctrl+Y</kbd></b>：重做。</li>
+    <li><b><kbd>Ctrl+F</kbd></b>：查找。</li>
+    <li><b><kbd>Ctrl+H</kbd></b>：替换。</li>
+    <li><b><kbd>Ctrl+L</kbd></b>：选中整行。</li>
+</ul>
+<p>如果你只记住这些，已经比很多刚接触编辑器的人高效。</p>
+
+<h4>多光标：一次改很多处</h4>
+<p>VS Code 官方把多光标当成核心编辑功能之一。它非常适合批量改重复文本。</p>
+<ul>
+    <li><b>Alt + 鼠标点击</b>：在多个位置放多个光标。</li>
+    <li><b><kbd>Ctrl+Alt+Up</kbd> / <kbd>Ctrl+Alt+Down</kbd></b>：向上或向下增加光标。</li>
+    <li><b><kbd>Ctrl+D</kbd></b>：选中下一个相同词。</li>
+    <li><b><kbd>Ctrl+Shift+L</kbd></b>：选中当前词的所有出现位置。</li>
+</ul>
+<p>例如你想把一组相似字段一起改成统一格式，或者把几行前缀同时补全，多光标会比一行一行改快很多。</p>
+
+<h4>整行移动和复制</h4>
+<ul>
+    <li><b><kbd>Alt+Up</kbd> / <kbd>Alt+Down</kbd></b>：整行上移/下移。</li>
+    <li><b><kbd>Shift+Alt+Up</kbd> / <kbd>Shift+Alt+Down</kbd></b>：复制当前行到上方/下方。</li>
+</ul>
+<p>这对整理大纲顺序、调章节标题、复制模板段落特别顺手。</p>
+
+<h4>缩进与选择范围</h4>
+<ul>
+    <li><b>Tab</b>：右缩进。</li>
+    <li><b>Shift+Tab</b>：左缩进。</li>
+    <li><b><kbd>Shift+Alt+Left</kbd></b>：缩小选择范围。</li>
+    <li><b><kbd>Shift+Alt+Right</kbd></b>：扩大选择范围。</li>
+</ul>
+<p>扩大/缩小选择范围在改 Markdown 列表、大纲块、括号内容时非常方便，因为你不必手拖鼠标慢慢选。</p>
+
+<h4>跳到指定位置</h4>
+<ul>
+    <li><b><kbd>Ctrl+G</kbd></b>：跳到指定行。</li>
+    <li><b><kbd>Alt+Left</kbd></b>：返回上一个位置。</li>
+    <li><b><kbd>Alt+Right</kbd></b>：前进到下一个位置。</li>
+    <li><b><kbd>Ctrl+Home</kbd></b>：跳文件开头。</li>
+    <li><b><kbd>Ctrl+End</kbd></b>：跳文件结尾。</li>
+</ul>
+<p>如果你经常在正文和设定之间跳来跳去，返回/前进比重新找文件快得多。</p>
+
+<h4>Markdown 预览</h4>
+<p>VS Code 原生就支持 Markdown 预览：</p>
+<ul>
+    <li><b><kbd>Ctrl+Shift+V</kbd></b>：打开 Markdown 预览。</li>
+    <li><b><kbd>Ctrl+K V</kbd></b>：左右并排编辑和预览。</li>
+</ul>
+<p>如果你用 Markdown 写大纲、设定或章节，这个能力很基础。ANH 也有自己的写作预览和增强渲染，两者可以互补使用。</p>
+
+<h4>建议、补全和悬停</h4>
+<p>即使不是编程，VS Code 也会在很多文件里提供建议：</p>
+<ul>
+    <li><b>输入时自动弹建议</b>：例如路径、设置键名、某些语言的片段。</li>
+    <li><b><kbd>Ctrl+Space</kbd></b>：手动触发建议框。</li>
+    <li><b>鼠标悬停</b>：看说明、定义、错误详情。</li>
+</ul>
+<p>在 ANH 里，角色补全、跳转、悬停说明会把这套原生编辑体验进一步增强。</p>
+
+<h4>格式化和折叠</h4>
+<ul>
+    <li><b><kbd>Shift+Alt+F</kbd></b>：格式化整个文档。</li>
+    <li><b><kbd>Ctrl+K Ctrl+F</kbd></b>：格式化选中内容。</li>
+    <li><b><kbd>Ctrl+Shift+[</kbd></b> / <kbd>Ctrl+Shift+]</kbd></b>：折叠/展开代码块或结构块。</li>
+</ul>
+<p>注意：小说正文通常不适合随便格式化，但 JSON、设置文件、脚本文件非常适合。折叠功能则对大纲、长 Markdown 和 JSON 很有价值。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>列选择和块选择</h4>
+<p>官方 Tips & Tricks 里很强调 Column Selection。按住 <kbd>Shift+Alt</kbd> 拖动鼠标，可以进行矩形选择。</p>
+<p>这在处理表格式文本、手工对齐字段、批量删前缀时比普通选择更快。</p>
+
+<h4>Go to Symbol / Outline / Breadcrumbs 的分工</h4>
+<ul>
+    <li><b><kbd>Ctrl+Shift+O</kbd></b>：当前文件按符号跳转。</li>
+    <li><b>Outline</b>：可视化结构树。</li>
+    <li><b>Breadcrumbs</b>：顶部快速跳转栏。</li>
+</ul>
+<p>在 Markdown 中，这三者很多时候实际上都能映射到标题层级导航。区别只是入口不同：一个走快捷键，一个走侧栏，一个走顶部。</p>
+
+<h4>代码折叠对长 Markdown 也有效</h4>
+<p>很多人以为折叠只是给程序员的。实际上 Markdown 标题、某些注释区块和结构化内容同样可以折叠。</p>
+<p>如果你有一篇很长的世界观文档，可以把一级标题以下内容都折起来，只看目录结构进行快速浏览。</p>
+
+<h4>Trim Trailing Whitespace 与保存习惯</h4>
+<p>官方快捷键里有 <kbd>Ctrl+K Ctrl+X</kbd> 清理行尾空格。很多团队会在保存时自动做这件事。</p>
+<p>对纯小说正文来说影响通常不大，但对 Markdown 表格、代码块、配置文件会让差异更干净。ANH 也有自己的去尾空格能力，重点是避免两套机制互相打架。</p>
+
+<h4>Side by Side 编辑和锁定滚动</h4>
+<p>官方文档提到可以并排编辑，还可以做 Locked Scrolling。对写作者比较有用的场景包括：</p>
+<ul>
+    <li>左边旧稿，右边重写稿。</li>
+    <li>左边正文，右边设定。</li>
+    <li>左边 Markdown，右边预览。</li>
+    <li>左边原文，右边翻译稿。</li>
+</ul>
+
+<h4>Markdown 之外也要会看 JSON</h4>
+<p>哪怕你主要写小说，也迟早会打开：</p>
+<ul>
+    <li><code>.vscode/settings.json</code></li>
+    <li><code>project-config.json5</code></li>
+    <li>某些扩展配置</li>
+</ul>
+<p>所以建议至少熟悉：折叠、格式化、括号匹配、行号跳转、错误提示这几件基础动作。</p>
+
+<h4>编辑器与 ANH 的关系</h4>
+<p>你可以把 VS Code 编辑器理解成“底盘”，ANH 是“写作增强层”。</p>
+<ul>
+    <li><b>VS Code 提供</b>：标签、分屏、搜索、撤销、补全框、预览、终端、设置。</li>
+    <li><b>ANH 增强</b>：角色补全、角色着色、写作统计、设定视图、文档中心、项目初始化。</li>
+</ul>
+<p>如果基础编辑动作不熟，ANH 再强也会被你用成“只能记角色名的插件”。</p>
+
+<div class="doc-note">继续阅读推荐：如果你想把这些动作都收敛到键盘上，去看 <a class="doc-ref-link" data-doc="vscode-keybindings"><strong>命令面板与快捷键</strong></a>；如果你想配置保存、自动换行、字体和工作区行为，去看 <a class="doc-ref-link" data-doc="vscode-settings-customization"><strong>设置、配置与扩展</strong></a>。</div>
+</div>

@@ -28,6 +28,31 @@
 
 <h4>不想统计某些文件</h4>
 <p>在工作区根目录创建 <code>.wcignore</code>，写入要排除的路径或文件名。默认也会遵循 <code>.gitignore</code>。当 <code>.wcignore</code> 或 <code>.gitignore</code> 变化时，ANH 会自动刷新字数统计。</p>
+
+<h4>.wcignore 语法</h4>
+<p><code>.wcignore</code> 使用与 <code>.gitignore</code> 相同的语法：</p>
+<pre><code># 注释行
+*.tmp
+drafts/
+secret-*.md
+!important-draft.md    # 取消排除（取反）
+**/temp/               # 递归匹配所有 temp 目录
+chapter-*.md           # 通配符匹配</code></pre>
+<ul>
+    <li><code>#</code> 开头为注释</li>
+    <li><code>!</code> 开头为取反（取消排除）</li>
+    <li><code>*</code> 通配符匹配任意字符</li>
+    <li><code>**</code> 递归匹配任意目录层级</li>
+    <li>每行一个规则，空行会被忽略</li>
+</ul>
+
+<h4>Typst 导出字数</h4>
+<p>使用 Typst 模板导出时，字数统计信息会自动传递给模板。你可以在 Typst 模板中引用字数数据来显示统计信息。</p>
+<ul>
+    <li>命令面板 → "ANH: 使用 Typst 模板导出" 或右键文件选择导出</li>
+    <li>字数数据包含 CJK 字符数、英文单词数、总字数等</li>
+    <li>可通过 <code>AndreaNovelHelper.wordCount.exportTypst</code> 命令导出</li>
+</ul>
 </div>
 
 <div class="doc-section pro">

@@ -1,123 +1,96 @@
 <div class="doc-section beginner">
-<h4>VS Code 最常用的几个区域</h4>
-<p>如果你以前没用过 VS Code，先记住这几个地方就够开始写作：</p>
+<h4>这一组文档在解决什么问题</h4>
+<p>很多 ANH 用户不是不会写小说，而是<strong>不熟 VS Code 这套工作台本身</strong>：不知道面板和侧边栏的区别，不知道设置写到哪里，不知道为什么 Git、搜索、终端、工作区会一起工作。</p>
+<p>所以这里不再只放一页概述，而是把 VS Code 基础拆成一个完整大类。结构主要参考 VS Code 官方文档的 Getting Started、User Interface、Settings、Keybindings、Terminal、Source Control 等章节，但会用更贴近写作和 ANH 的语境重写。</p>
+
+<h4>建议阅读顺序</h4>
+<ol>
+    <li><a class="doc-ref-link" data-doc="vscode-interface"><strong>界面与布局</strong></a>：先搞清活动栏、侧边栏、编辑器、面板、状态栏各是什么。</li>
+    <li><a class="doc-ref-link" data-doc="vscode-files-search"><strong>文件、标签与全局搜索</strong></a>：解决“怎么找文件、找内容、找历史”。</li>
+    <li><a class="doc-ref-link" data-doc="vscode-editing"><strong>编辑器与高效编辑</strong></a>：解决“怎么改字更快”。</li>
+    <li><a class="doc-ref-link" data-doc="vscode-terminal-workspace"><strong>终端、任务与工作区</strong></a>：解决“项目环境怎么在 VS Code 里运转”。</li>
+    <li><a class="doc-ref-link" data-doc="vscode-settings-customization"><strong>设置、配置与扩展</strong></a>：解决“设置到底存在哪里、怎么覆盖”。</li>
+    <li><a class="doc-ref-link" data-doc="vscode-keybindings"><strong>命令面板与快捷键</strong></a>：解决“找不到功能时怎么办”。</li>
+</ol>
+
+<h4>读完基础之后建议继续补哪几类</h4>
 <ul>
-    <li><b>活动栏</b> — 最左边一列图标，用来切换资源管理器、搜索、Git、扩展、ANH 等侧栏</li>
-    <li><b>侧边栏</b> — 活动栏点开后的面板，例如文件列表、搜索结果、Git 改动列表</li>
-    <li><b>编辑器</b> — 中间写正文的区域，可以同时打开多个标签页</li>
-    <li><b>状态栏</b> — 最底部一条，显示编码、行列、Git 分支、ANH 字数/时间统计等信息</li>
-    <li><b>命令面板</b> — 按 <kbd>Ctrl+Shift+P</kbd> 打开，几乎所有功能都能从这里搜索执行</li>
+    <li><a class="doc-ref-link" data-doc="extension-marketplace-overview"><strong>扩展与市场</strong></a>：解决“扩展到底从哪装、不同编辑器为什么不一样”。</li>
+    <li><a class="doc-ref-link" data-doc="git-overview"><strong>Git 与版本管理</strong></a>：解决“怎么在 VS Code 和终端之间建立统一版本流”。</li>
+    <li><a class="doc-ref-link" data-doc="markdown-overview"><strong>Markdown 与格式</strong></a>：解决“正文怎么写、资源文件该选什么格式”。</li>
+    <li><a class="doc-ref-link" data-doc="roles-overview"><strong>角色系统</strong></a>：解决“角色、关系、时间线和补全是怎么串起来的”。</li>
 </ul>
 
-<h4>资源管理器：管理文件</h4>
-<p>资源管理器就是 VS Code 的文件管理器。点击活动栏最上方的文件图标即可打开。</p>
+<h4>如果你只想先会最少的东西</h4>
+<p>那就先把下面 7 件事练熟：</p>
 <ul>
-    <li><b>打开项目</b>：菜单选择“文件 → 打开文件夹”，打开你的小说项目根目录</li>
-    <li><b>新建文件</b>：在资源管理器里右键文件夹，选择“新建文件”</li>
-    <li><b>新建文件夹</b>：右键文件夹，选择“新建文件夹”</li>
-    <li><b>重命名/删除</b>：右键文件或文件夹，选择对应操作</li>
-    <li><b>拖拽移动</b>：把文件拖到另一个文件夹即可移动</li>
+    <li>打开文件夹，而不是只打开单个文件。</li>
+    <li><kbd>Ctrl+Shift+P</kbd> 打开命令面板。</li>
+    <li><kbd>Ctrl+P</kbd> 快速打开文件。</li>
+    <li><kbd>Ctrl+Shift+F</kbd> 全局搜索。</li>
+    <li><kbd>Ctrl+`</kbd> 打开终端。</li>
+    <li><kbd>Ctrl+,</kbd> 打开设置。</li>
+    <li><kbd>Ctrl+Shift+G</kbd> 打开源代码管理。</li>
 </ul>
-<p>ANH 还会在资源管理器里增加<strong>写作资源管理器（小说助手）</strong>和<strong>当前文章角色</strong>，前者看章节字数，后者看当前文章出现的角色。</p>
+<p>只要这 7 件事熟了，ANH 绝大部分功能你都能顺利落地。</p>
 
-<h4>搜索：找正文和设定</h4>
-<p>点击活动栏的放大镜，或按 <kbd>Ctrl+Shift+F</kbd> 打开全局搜索。</p>
+<h4>和 ANH 的关系怎么理解</h4>
+<p>可以把 VS Code 当成<strong>底层写作工作台</strong>，ANH 是叠在上面的<strong>小说工作流增强层</strong>：</p>
 <ul>
-    <li><b>普通搜索</b>：输入角色名、地点名、章节标题，查所有文件</li>
-    <li><b>区分大小写/全词匹配</b>：搜索框右侧有开关</li>
-    <li><b>正则搜索</b>：点击 <code>.*</code> 开关后可以用正则表达式</li>
-    <li><b>限定范围</b>：在“要包含的文件”里写 <code>docs/**/*.md</code> 这类路径模式</li>
-    <li><b>替换</b>：展开替换框，可以批量替换；大批量替换前建议先提交 Git</li>
+    <li><b>VS Code 负责</b>：文件树、搜索、分屏、终端、Git、设置、快捷键、扩展系统。</li>
+    <li><b>ANH 负责</b>：项目初始化、角色/词汇资源、写作统计、预览、关系图、快速设置、文档中心。</li>
 </ul>
+<p>如果 VS Code 基础不熟，你会觉得 ANH“功能很多但入口混乱”；一旦把底层工作台用顺，ANH 的所有入口就会变得自然。</p>
 
-<h4>Git 集成：保存版本</h4>
-<p>Git 是版本控制工具。它可以记录每次修改，方便回退、对比和同步。</p>
+<h4>这里和其他文档的边界</h4>
 <ul>
-    <li><b>打开 Git 面板</b>：点击活动栏的分支图标，名字通常是“源代码管理”</li>
-    <li><b>查看改动</b>：面板里会列出已修改、新增、删除的文件</li>
-    <li><b>暂存</b>：点击文件旁的 <code>+</code>，表示准备把这个文件放进下一次提交</li>
-    <li><b>提交</b>：在消息框写一句说明，例如“完成第一章初稿”，点击提交</li>
-    <li><b>同步</b>：有远程仓库时，可以推送和拉取远端改动</li>
-</ul>
-<p>ANH 的项目初始化向导可以帮你检查 Git、设置用户名邮箱、创建初始提交。不了解 Git 时，至少养成“写完一段就提交一次”的习惯。</p>
-
-<h4>设置：改编辑器和 ANH 行为</h4>
-<p>设置有两种层级：</p>
-<ul>
-    <li><b>用户设置</b> — 影响你电脑上所有 VS Code 项目</li>
-    <li><b>工作区设置</b> — 只影响当前小说项目，适合写作格式、ANH 功能开关</li>
-</ul>
-<p>打开方式：点击左下角齿轮 → 设置，或按 <kbd>Ctrl+,</kbd>。搜索框输入关键词，例如 <code>word wrap</code>、<code>font size</code>、<code>AndreaNovelHelper</code>。</p>
-
-<h4>推荐先改的设置</h4>
-<ul>
-    <li><b>自动换行</b>：搜索 <code>word wrap</code>，开启后长段落不会横向滚动</li>
-    <li><b>字体大小</b>：搜索 <code>font size</code></li>
-    <li><b>迷你地图</b>：搜索 <code>minimap</code>，写小说时可关闭</li>
-    <li><b>自动保存</b>：搜索 <code>auto save</code>，按习惯开启或关闭</li>
-    <li><b>编码</b>：中文写作推荐 UTF-8</li>
+    <li><b>这组文档讲 VS Code 原生能力</b>。</li>
+    <li><a class="doc-ref-link" data-doc="plugin-settings"><strong>插件设置</strong></a> 讲的是 ANH 自己贡献的设置。</li>
+    <li><a class="doc-ref-link" data-doc="quick-settings"><strong>快速设置</strong></a> 讲的是 ANH 面向写作者做的快捷入口。</li>
+    <li><a class="doc-ref-link" data-doc="git-integration"><strong>Git 与 VS Code 集成</strong></a> 更偏把 Git 工作流映射到 ANH 项目里。</li>
 </ul>
 </div>
 
 <div class="doc-section pro">
-<h4>资源管理器和 ANH 视图</h4>
-<p>VS Code 原生资源管理器显示真实文件系统；ANH 包管理器显示 <code>novel-helper/</code> 资源包；写作资源管理器显示可统计的正文文件和参考资料。三者用途不同：</p>
+<h4>这组内容为什么要独立成大分类</h4>
+<p>之前把 VS Code 基础压成一页，信息密度太低，只能解决“我大概知道哪里是搜索、哪里是 Git”。但用户真正卡住的问题往往更具体：</p>
 <ul>
-    <li><b>VS Code 资源管理器</b>：项目所有文件，最通用</li>
-    <li><b>写作资源管理器（小说助手）</b>：章节、文件夹字数、排序、新建文章、导出</li>
-    <li><b>包管理器</b>：角色库、词汇表、敏感词、正则、关系图、时间线等设定资源</li>
+    <li>为什么有些设置是全局生效，有些只影响当前项目？</li>
+    <li>为什么文件树能隐藏目录，但搜索还是会搜到？</li>
+    <li>为什么快捷键有时候生效，有时候不生效？</li>
+    <li>为什么 VS Code 里的 Git 和我终端里的 Git 看起来像两套东西？</li>
+    <li>为什么同一个项目在另一台电脑打开布局和设置会不一样？</li>
+    <li>为什么 AI、终端、任务、工作区信任会互相影响？</li>
+</ul>
+<p>这些都已经超出“单页新手导览”的承载范围，所以现在拆成专题页。</p>
+
+<h4>官方资料映射关系</h4>
+<p>为了避免这组文档只是经验帖，结构是按官方资料体系收敛的：</p>
+<ul>
+    <li><b>User Interface</b> → 对应“界面与布局”。</li>
+    <li><b>Getting Started</b> → 对应整个学习路径和基础动作。</li>
+    <li><b>Settings</b> → 对应“设置、配置与扩展”。</li>
+    <li><b>Keybindings</b> → 对应“命令面板与快捷键”。</li>
+    <li><b>Terminal Basics</b> → 对应“终端、任务与工作区”。</li>
+    <li><b>Tips and Tricks</b> → 分散吸收进文件导航、编辑效率、分屏和布局章节。</li>
+</ul>
+<p>其中 Source Control 相关内容现在不再混挂在“VS Code 基础”里，而是拆进独立的 <a class="doc-ref-link" data-doc="git-overview"><strong>Git 与版本管理</strong></a> 分类，避免“工具概念”和“编辑器入门”继续混在一起。</p>
+
+<h4>针对写作者的阅读建议</h4>
+<ul>
+    <li><b>纯写作用户</b>：优先看界面、文件搜索、设置、Git。</li>
+    <li><b>会做一点脚本或自动化</b>：把终端、任务、快捷键也读掉。</li>
+    <li><b>多设备切换写作</b>：重点补 Settings Sync、Profile、Git 同步。</li>
+    <li><b>大量使用 AI 或扩展</b>：重点补命令面板、键盘冲突、工作区信任。</li>
 </ul>
 
-<h4>搜索细节</h4>
-<ul>
-    <li><code>Ctrl+F</code> — 当前文件内搜索</li>
-    <li><code>Ctrl+Shift+F</code> — 全工作区搜索</li>
-    <li><code>Ctrl+H</code> — 当前文件替换</li>
-    <li><b>包含/排除</b>：可以用 <code>novel/**/*.md</code>、<code>!node_modules</code> 这类 glob 模式</li>
-    <li><b>搜索结果</b>：点击结果会跳到对应文件和行；替换前可以逐个预览</li>
-</ul>
-
-<h4>Git 面板基础流程</h4>
+<h4>你读完这组之后应该达到什么状态</h4>
 <ol>
-    <li>确认左下角或状态栏显示当前分支，例如 <code>main</code></li>
-    <li>写作或修改设定文件</li>
-    <li>打开“源代码管理”，检查改动文件列表</li>
-    <li>点击文件查看差异：左侧旧内容，右侧新内容</li>
-    <li>暂存需要提交的文件</li>
-    <li>输入提交说明并提交</li>
-    <li>需要同步到远端时再执行同步/推送</li>
+    <li>知道每个主要 UI 区域在干什么。</li>
+    <li>知道工作区、设置、扩展、任务分别落到哪里。</li>
+    <li>知道怎样在不离开 VS Code 的情况下完成绝大多数日常操作。</li>
+    <li>知道 ANH 和 VS Code 原生能力的边界，不再把所有问题都归到 ANH 头上。</li>
 </ol>
-<p>不要把 <code>node_modules/</code>、构建输出、临时文件提交进仓库。ANH 初始化向导会帮你写入常见 <code>.gitignore</code> 规则。</p>
 
-<h4>设置 JSON</h4>
-<p>设置页面右上角可以打开 JSON。常见位置：</p>
-<ul>
-    <li><b>用户设置 JSON</b>：全局生效</li>
-    <li><b>工作区设置 JSON</b>：当前项目的 <code>.vscode/settings.json</code></li>
-    <li><b>ANH 项目设置</b>：工作区根目录的 <code>anhproject.md</code> 和 <code>project-config.json5</code></li>
-</ul>
-<p>不熟悉 JSON 时，优先使用设置图形界面或 ANH 的项目设置页。手改 JSON 时注意逗号和引号。</p>
-
-<h4>ANH 快速设置</h4>
-<p>按 <kbd>Ctrl+Alt+I</kbd> 或从命令面板执行“ANH 快速设置”，可以直接修改常用写作选项：</p>
-<ul>
-    <li>段间空行数、首行缩进、去尾空格</li>
-    <li>智能引号、智能回车、跳出括号</li>
-    <li>Word Wrap、迷你地图、字体大小</li>
-    <li>字数单位、粘贴统计、<code>.wcignore</code> 管理</li>
-    <li>角色显示、里程碑提醒、错别字相关设置</li>
-</ul>
-
-<h4>常用快捷键</h4>
-<ul>
-    <li><kbd>Ctrl+Shift+P</kbd> — 命令面板</li>
-    <li><kbd>Ctrl+P</kbd> — 快速打开文件</li>
-    <li><kbd>Ctrl+,</kbd> — 设置</li>
-    <li><kbd>Ctrl+S</kbd> — 保存</li>
-    <li><kbd>Ctrl+F</kbd> / <kbd>Ctrl+Shift+F</kbd> — 文件内搜索 / 全局搜索</li>
-    <li><kbd>Ctrl+`</kbd> — 终端</li>
-    <li><kbd>Ctrl+B</kbd> — 显示/隐藏侧边栏</li>
-</ul>
-
-<div class="doc-note">把 VS Code 当成“带版本管理和全文搜索的写作文件夹”即可。先会资源管理器、搜索、Git 提交、设置这四件事，再逐步使用 ANH 的包管理器、角色补全和统计功能。</div>
+<div class="doc-note">如果你现在最具体的痛点是“我老是找不到入口”，先读 <a class="doc-ref-link" data-doc="vscode-keybindings"><strong>命令面板与快捷键</strong></a>；如果痛点是“项目看起来很乱”，先读 <a class="doc-ref-link" data-doc="vscode-files-search"><strong>文件、标签与全局搜索</strong></a>。</div>
 </div>

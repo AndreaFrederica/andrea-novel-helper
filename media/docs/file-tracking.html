@@ -1,0 +1,77 @@
+<div class="doc-section beginner">
+<h4>文件追踪是什么</h4>
+<p>文件追踪是 ANH 的底层功能，自动记录项目中所有文件的创建、修改、删除和重命名。这些追踪数据被多个上层功能使用，比如写作统计、写作仪表板和数据同步。</p>
+
+<h4>它在后台工作</h4>
+<p>文件追踪是自动运行的，你不需要手动操作。它会：</p>
+<ul>
+    <li>监听工作区内所有文件的变化</li>
+    <li>按照忽略规则跳过不需要追踪的文件</li>
+    <li>记录每个文件变化的时间、大小等信息</li>
+</ul>
+
+<h4>哪些文件会被追踪</h4>
+<ul>
+    <li>所有 Markdown (.md) 和纯文本 (.txt) 文件</li>
+    <li>角色文件（.json5, .ojson5 等）</li>
+    <li>其他项目相关文件</li>
+</ul>
+
+<h4>哪些文件会被忽略</h4>
+<ul>
+    <li>符合 <code>.gitignore</code> 规则的文件</li>
+    <li>符合 <code>.ftignore</code> 规则的文件</li>
+    <li><code>node_modules</code>、<code>.git</code> 等标准忽略目录</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>文件追踪由 <code>src/utils/tracker/fileTracker.ts</code> 和 <code>src/utils/tracker/fileTrackingData.ts</code> 实现。</p>
+
+<h4>文件追踪器配置</h4>
+<ul>
+    <li><code>workspaceRoot</code> — 工作区根目录</li>
+    <li><code>respectGitignore</code> — 是否遵循 <code>.gitignore</code>（默认 true）</li>
+    <li><code>includePatterns</code> — 包含模式（glob）</li>
+    <li><code>excludePatterns</code> — 排除模式（glob）</li>
+</ul>
+
+<h4>.ftignore 文件</h4>
+<p>与 <code>.gitignore</code> 语法相同的忽略文件，专门用于文件追踪的排除规则。在工作区根目录创建 <code>.ftignore</code> 即可使用。</p>
+
+<h4>事件类型</h4>
+<ul>
+    <li><code>create</code> — 文件创建</li>
+    <li><code>change</code> — 文件修改</li>
+    <li><code>delete</code> — 文件删除</li>
+    <li><code>rename</code> — 文件重命名（包含旧路径）</li>
+</ul>
+
+<h4>追踪数据</h4>
+<p>每个文件变化事件包含：</p>
+<ul>
+    <li><code>type</code> — 变化类型</li>
+    <li><code>filePath</code> — 文件路径</li>
+    <li><code>oldPath</code> — 旧路径（仅重命名时）</li>
+    <li><code>timestamp</code> — 时间戳</li>
+    <li><code>size</code> — 文件大小</li>
+    <li><code>mtime</code> — 修改时间</li>
+</ul>
+
+<h4>相关命令</h4>
+<ul>
+    <li><code>AndreaNovelHelper.showFileTrackingStats</code> — 显示追踪统计</li>
+    <li><code>AndreaNovelHelper.fileTracking.repairPathKeys</code> — 修复路径键</li>
+    <li><code>AndreaNovelHelper.fileTracking.cleanAbsolutePaths</code> — 清理绝对路径</li>
+    <li><code>AndreaNovelHelper.exportTrackingData</code> — 导出追踪数据</li>
+    <li><code>AndreaNovelHelper.gcFileTracking</code> — 垃圾回收追踪数据</li>
+    <li><code>AndreaNovelHelper.cleanupMissingFiles</code> — 清理不存在的文件记录</li>
+</ul>
+
+<h4>配置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.fileTracker.ignoredDirs</code> — 额外忽略的目录</li>
+    <li><code>AndreaNovelHelper.fileTracker.verboseLogging</code> — 是否开启详细日志</li>
+</ul>
+</div>

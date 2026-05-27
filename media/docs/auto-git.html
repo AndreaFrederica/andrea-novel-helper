@@ -1,0 +1,69 @@
+<div class="doc-section beginner">
+<h4>自动 Git 是什么</h4>
+<p>自动 Git 让 ANH 在后台自动监控文件变化，定期把修改提交到 Git 仓库。你不需要手动频繁 commit，ANH 会帮你打理好版本控制。</p>
+
+<h4>它能做什么</h4>
+<ul>
+    <li>自动检测文件变化并定期提交</li>
+    <li>使用模板化的提交信息（如"自动保存：新增 3 个文件，修改 5 个文件"）</li>
+    <li>可选自动 push 到远程仓库</li>
+    <li>可选自动 pull 最新更改</li>
+    <li>在状态栏显示 Git 和 WebDAV 的同步状态</li>
+</ul>
+
+<h4>怎么使用</h4>
+<ol>
+    <li>确保项目已初始化 Git 仓库</li>
+    <li>在设置中开启自动 Git（<code>AndreaNovelHelper.autoGit.enabled</code>）</li>
+    <li>ANH 会在后台自动运行</li>
+</ol>
+
+<h4>状态栏</h4>
+<p>状态栏的 "ANH:Sync" 按钮会显示 Git 和 WebDAV 的同步状态。点击可以查看详细信息。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>自动 Git 由 <code>src/sync/autoGitService.ts</code> 实现，配合 <code>src/utils/Git/autoGitUtils.ts</code> 和 <code>src/utils/Git/gitHeadMonitor.ts</code>。</p>
+
+<h4>工作原理</h4>
+<ul>
+    <li><b>HEAD 监听</b> — 使用 <code>GitHeadMonitor</code> 定期检查 Git HEAD 变化和工作区状态</li>
+    <li><b>文件监听</b> — 通过 <code>FileSystemWatcher</code> 监听文件变化</li>
+    <li><b>自动提交</b> — 检测到变化后按配置的间隔自动提交</li>
+    <li><b>状态栏更新</b> — 实时更新同步状态到状态栏</li>
+</ul>
+
+<h4>配置项</h4>
+<ul>
+    <li><code>AndreaNovelHelper.autoGit.enabled</code> — 是否启用自动 Git（默认 false）</li>
+    <li><code>AndreaNovelHelper.autoGit.checkIntervalSeconds</code> — 检查间隔（秒，默认 30）</li>
+    <li><code>AndreaNovelHelper.autoGit.commitMessageTemplate</code> — 提交信息模板</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPull</code> — 是否自动 pull（默认 true）</li>
+    <li><code>AndreaNovelHelper.autoGit.autoPush</code> — 是否自动 push（默认 true）</li>
+    <li><code>AndreaNovelHelper.autoGit.includeUntracked</code> — 是否包含未跟踪文件（默认 false）</li>
+    <li><code>AndreaNovelHelper.autoGit.excludePatterns</code> — 排除模式列表</li>
+    <li><code>AndreaNovelHelper.autoGit.compactStatus</code> — 状态栏简洁模式（默认 true）</li>
+</ul>
+
+<h4>相关命令</h4>
+<ul>
+    <li><code>AndreaNovelHelper.setupGitIdentity</code> — 设置 Git 身份信息</li>
+</ul>
+
+<h4>侧边栏视图</h4>
+<p>自动 Git 在 ANH 侧边栏中提供了一个树视图，显示：</p>
+<ul>
+    <li>当前 Git 分支</li>
+    <li>待提交的文件列表</li>
+    <li>远程仓库状态</li>
+    <li>快捷操作（提交、推送、拉取）</li>
+</ul>
+
+<h4>安全考虑</h4>
+<ul>
+    <li>自动 push 默认关闭，需要手动开启</li>
+    <li>提交信息模板支持排除特定文件和目录</li>
+    <li>可以在状态栏随时查看和控制同步状态</li>
+</ul>
+</div>

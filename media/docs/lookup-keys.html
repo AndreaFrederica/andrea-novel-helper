@@ -1,0 +1,65 @@
+<div class="doc-section beginner">
+<h4>检索词是什么</h4>
+<p>检索词是角色的搜索关键字，用于在编辑器中输入时快速匹配和补全角色名。比如角色"博丽灵梦"的检索词可以是"灵梦"、"Reimu"、拼音"lingmeng"等。</p>
+
+<h4>为什么需要检索词</h4>
+<ul>
+    <li>角色全名太长时，用简称也能快速找到</li>
+    <li>外文角色可以用原文名搜索</li>
+    <li>拼音检索词让你用拼音首字母也能匹配</li>
+</ul>
+
+<h4>怎么设置</h4>
+<p>在角色文件中添加检索词字段即可：</p>
+<pre><code>## 博丽灵梦
+
+### 类型
+主角
+
+### 检索词
+灵梦
+Reimu
+lingmeng</code></pre>
+
+<h4>自动生成</h4>
+<p>ANH 可以自动生成拼音和罗马字检索词，无需手动输入。在设置中开启即可。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>检索词前缀</h4>
+<p>ANH 识别以下字段名作为检索词（大小写不敏感）：</p>
+<ul>
+    <li><code>lookupKeys</code> / <code>lookupKey</code></li>
+    <li><code>searchKeys</code> / <code>searchKey</code></li>
+    <li><code>queryKeys</code> / <code>queryKey</code></li>
+    <li><code>keywords</code> / <code>keyword</code></li>
+    <li><code>查询键</code> / <code>查询词</code></li>
+    <li><code>检索键</code> / <code>检索词</code></li>
+    <li><code>索引键</code> / <code>索引词</code></li>
+    <li><code>反查键</code> / <code>反查词</code></li>
+    <li><code>关键词</code> / <code>关键字</code></li>
+</ul>
+
+<h4>检索词类型</h4>
+<ul>
+    <li><b>通用</b>（generic）— 任意文本检索词</li>
+    <li><b>拼音</b>（pinyin）— 字段名含 <code>pinyin</code> 或 <code>拼音</code></li>
+    <li><b>罗马字</b>（romanized）— 字段名含 <code>romanized</code></li>
+    <li><b>拼写</b>（spelling）— 字段名含 <code>spelling</code></li>
+</ul>
+
+<h4>自动生成配置</h4>
+<ul>
+    <li><code>AndreaNovelHelper.lookupKeys.autoGeneratePinyin</code> — 自动生成拼音检索词</li>
+    <li><code>AndreaNovelHelper.lookupKeys.autoGenerateRomanized</code> — 自动生成罗马字检索词</li>
+</ul>
+
+<h4>扩展检索词前缀</h4>
+<p>可以通过 <code>project-config.json5</code> 中的 <code>extendedLookupKeyPrefixes</code> 添加自定义的检索词字段名：</p>
+<pre><code>{
+  extendedLookupKeyPrefixes: ["别名键", "aliasKey"]
+}</code></pre>
+
+<h4>实现</h4>
+<p>检索词系统由 <code>src/utils/roleLookupKeys.ts</code> 和 <code>src/utils/roleLookupKeyGeneration.ts</code> 实现。检索词在角色加载时自动提取，用于补全和搜索匹配。</p>
+</div>

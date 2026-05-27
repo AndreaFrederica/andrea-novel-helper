@@ -1,0 +1,60 @@
+<div class="doc-section beginner">
+<h4>自定义快捷键是什么</h4>
+<p>ANH 提供了一些内置快捷键，你也可以通过 VS Code 的快捷键设置自定义它们。ANH 还提供了一个 Enter 键覆盖功能，确保在 Markdown 编辑器中按 Enter 时使用 ANH 的智能换行而不是其他扩展的。</p>
+
+<h4>内置快捷键</h4>
+<p>ANH 注册了以下命令，你可以在 VS Code 的快捷键设置中为它们分配按键：</p>
+<ul>
+    <li><code>andrea.smartEnter</code> — 智能换行</li>
+    <li><code>andrea.toggleSmartExit</code> — 切换智能跳出引号</li>
+    <li><code>andrea.formatDocument</code> — 格式化文档</li>
+    <li><code>andrea.toggleAutoPairs</code> — 切换自动配对</li>
+    <li><code>andrea.toggleSmartEnter</code> — 切换智能换行</li>
+    <li><code>andrea.autoScroll.toggleMenu</code> — 自动滚动菜单</li>
+    <li><code>andrea.quickSettings</code> — 快速设置</li>
+</ul>
+
+<h4>怎么修改快捷键</h4>
+<ol>
+    <li>打开命令面板输入"Preferences: Open Keyboard Shortcuts (JSON)"</li>
+    <li>在 <code>keybindings.json</code> 中添加规则</li>
+    <li>保存后立即生效</li>
+</ol>
+</div>
+
+<div class="doc-section pro">
+<h4>实现</h4>
+<p>快捷键管理由 <code>src/keybindings/keybindingsIO.ts</code> 和 <code>src/keybindings/ensureEnterOverride.ts</code> 实现。</p>
+
+<h4>Enter 键覆盖</h4>
+<p><code>ensureEnterOverride</code> 功能会自动检测其他扩展（如 Markdown All in One）是否注册了 Enter 键绑定，并确保 ANH 的 <code>andrea.smartEnter</code> 具有更高优先级。这保证了在 Markdown 编辑器中按 Enter 时使用 ANH 的智能换行。</p>
+
+<h4>快捷键 I/O 工具</h4>
+<p><code>keybindingsIO.ts</code> 提供了读写 <code>keybindings.json</code> 的工具函数：</p>
+<ul>
+    <li><code>readUserKeybindings()</code> — 读取当前 Profile 的快捷键配置</li>
+    <li><code>writeUserKeybindings(doc, rules)</code> — 写入快捷键配置</li>
+    <li><code>upsertRule(rules, rule)</code> — 添加或更新规则</li>
+    <li><code>removeRule(rules, command, key?)</code> — 移除规则</li>
+</ul>
+
+<h4>支持多 Profile</h4>
+<p>VS Code 支持多 Profile（如"写作"、"编程"），每个 Profile 有独立的 <code>keybindings.json</code>。ANH 的快捷键工具会自动识别当前 Profile 的配置文件路径。</p>
+
+<h4>JSONC 解析</h4>
+<p><code>keybindings.json</code> 使用 JSONC 格式（支持注释和尾逗号）。ANH 使用 <code>jsonc-parser</code> 解析，确保兼容性。</p>
+
+<h4>示例：添加自定义 Enter 绑定</h4>
+<pre><code>{
+  "key": "enter",
+  "command": "andrea.smartEnter",
+  "when": "editorTextFocus && !suggestWidgetVisible && !inlineSuggestionVisible"
+}</code></pre>
+
+<h4>注意事项</h4>
+<ul>
+    <li>修改 <code>keybindings.json</code> 需要重启或重新加载窗口才能完全生效</li>
+    <li>ANH 的 Enter 覆盖只在 Markdown 和纯文本文件中生效</li>
+    <li>如果其他扩展也注册了 Enter 键，可能会产生冲突。ANH 的覆盖机制会自动处理常见的冲突</li>
+</ul>
+</div>

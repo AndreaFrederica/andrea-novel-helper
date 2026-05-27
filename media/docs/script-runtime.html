@@ -84,7 +84,15 @@ export default async function(ctx, args) {
 </ul>
 
 <h4>Hooks 与处理器扩展</h4>
-<p>脚本如果导出 <code>activate(ctx)</code> 或 <code>register(ctx)</code>，ANH 会在脚本扩展加载时调用它。可用 hooks 包括 <code>extensionActivated</code>、<code>documentSaved</code>、<code>beforePlainTextExport</code>、<code>afterPlainTextExport</code>、<code>beforeTypstRender</code>、<code>afterTypstRender</code>。</p>
+<p>脚本如果导出 <code>activate(ctx)</code> 或 <code>register(ctx)</code>，ANH 会在脚本扩展加载时调用它。可用 hooks 包括：</p>
+<ul>
+    <li><code>extensionActivated</code> — 扩展激活时触发</li>
+    <li><code>documentSaved</code> — 文档保存时触发，参数包含文件名</li>
+    <li><code>beforePlainTextExport</code> — 纯文本导出前触发</li>
+    <li><code>afterPlainTextExport</code> — 纯文本导出后触发</li>
+    <li><code>beforeTypstRender</code> — Typst 渲染前触发</li>
+    <li><code>afterTypstRender</code> — Typst 渲染后触发</li>
+</ul>
 <pre><code>export function activate(ctx) {
     ctx.hooks.on('documentSaved', async (event, runtime) => {
         runtime.output.appendLine(`保存了: ${event.fileName}`);

@@ -1,0 +1,103 @@
+<div class="doc-section beginner">
+<h4>官方 VS Code 默认在用什么市场</h4>
+<p>官方 VS Code 文档里说的“Extension Marketplace”，默认指的是 <strong>Visual Studio Marketplace</strong>。你在扩展视图里搜扩展、查看评分、点 Install，通常走的就是这条路径。</p>
+
+<h4>最常用的入口</h4>
+<ul>
+    <li><b><kbd>Ctrl+Shift+X</kbd></b> 打开扩展视图。</li>
+    <li><b>搜索框</b> 输入扩展名、作者名或功能关键词。</li>
+    <li><b>详情页</b> 查看简介、命令、设置、支持的语言和功能贡献。</li>
+    <li><b>齿轮菜单</b> 处理禁用、卸载、降级、安装其他版本等管理动作。</li>
+ </ul>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-extension-marketplace.png" alt="VS Code 官方扩展市场界面示意图" style="width:100%;max-width:900px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">官方扩展视图示意图。新手先熟悉搜索框、扩展卡片和详情入口，装扩展就不容易乱。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：Extensions: Marketplace = 扩展市场列表；Install = 安装；Repository = 仓库主页；License = 许可证；Details = 详情； Contributions = 功能贡献；Changelog = 更新日志。</div>
+
+<h4>你在市场里通常会看到什么</h4>
+<ul>
+    <li><b>扩展名称和发布者</b>：先确认是不是你要的那个作者。</li>
+    <li><b>安装量、评分、更新日期</b>：用来快速判断活跃度和维护情况。</li>
+    <li><b>功能截图和 README</b>：决定它到底做什么。</li>
+    <li><b>Feature Contributions</b>：看它加了哪些命令、设置、语言支持、视图、菜单。</li>
+    <li><b>Dependencies / Extension Pack</b>：看它是否依赖其他扩展，或本身是否是扩展包。</li>
+ </ul>
+
+<h4>安装、禁用、卸载的区别</h4>
+<ul>
+    <li><b>安装</b>：把扩展加入当前编辑器环境。</li>
+    <li><b>禁用</b>：保留已安装状态，但暂时不让它生效。适合排查冲突。</li>
+    <li><b>卸载</b>：彻底移除。适合确定不再使用时。</li>
+ </ul>
+<p>很多排查工作都应该先“禁用试试”，而不是直接卸载。</p>
+
+<h4>推荐、过滤和分类</h4>
+<p>官方 Marketplace 支持按分类、关键字、推荐来源来浏览扩展。你会看到类似这些场景：</p>
+<ul>
+    <li><b>搜索关键词</b>：例如 markdown、git、theme、spell。</li>
+    <li><b>推荐扩展</b>：根据语言、工作区或常见工作流给出建议。</li>
+    <li><b>工作区推荐</b>：某个项目通过配置告诉团队“建议装这些扩展”。</li>
+    <li><b>扩展包</b>：一次装进一组互相关联的扩展。</li>
+ </ul>
+
+<h4>离线或手动安装：VSIX</h4>
+<p>官方扩展系统支持从 <code>.vsix</code> 文件安装扩展。这种方式适合：</p>
+<ul>
+    <li>企业或校园网络限制较多。</li>
+    <li>你需要锁定某个明确版本。</li>
+    <li>扩展作者直接提供 VSIX，而不是要求你在线搜。</li>
+ </ul>
+<p>但要注意，能否成功安装只是第一步，扩展运行时是否还依赖外部服务是另一回事。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>管理动作不只是“装完就完”</h4>
+<p>官方文档里，扩展管理至少包含下面几类常见操作：</p>
+<ul>
+    <li><b>Update</b>：更新到新版本。</li>
+    <li><b>Disable (Workspace)</b>：只对当前工作区禁用。</li>
+    <li><b>Disable (Always)</b>：全局禁用。</li>
+    <li><b>Install Another Version</b>：回退或切换版本。</li>
+    <li><b>Install from VSIX</b>：从离线包安装。</li>
+    <li><b>Show Installed Extensions</b>：只看本机已装内容。</li>
+ </ul>
+<p>对写作者最实用的不是“永远装更多”，而是会分辨哪些扩展应该长期启用，哪些扩展只在特定工作流或特定项目里启用。</p>
+
+<h4>推荐扩展和工作区扩展</h4>
+<p>官方扩展生态支持把“推荐装哪些扩展”记录到工作区配置里。这样团队成员或另一台设备打开项目时，就更容易装齐同一套工具链。对 ANH 项目来说，这个能力尤其适合：</p>
+<ul>
+    <li>统一 Markdown 预览增强扩展。</li>
+    <li>统一 Git 辅助扩展。</li>
+    <li>统一主题、字体或拼写检查工作流。</li>
+    <li>区分“写小说项目需要的扩展”和“你个人开发环境需要的扩展”。</li>
+ </ul>
+
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-extension-contributions.png" alt="VS Code 官方扩展功能贡献界面示意图" style="width:100%;max-width:900px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">扩展详情页里的 Feature Contributions。想看扩展到底加了哪些命令和设置，这里最直观。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：Feature Contributions = 功能贡献；Categories = 分类；Resources = 资源链接；Marketplace / Repository / License = 市场页 / 仓库 / 许可证；Install = 安装按钮。</div>
+
+<h4>安全、签名和企业限制</h4>
+<p>官方 Marketplace 文档已经把安全和来源管理讲得更细了，尤其是签名校验、企业环境 allowlist 之类的能力。普通个人用户不一定每天都会碰到，但至少要知道一点：<strong>扩展不是只看功能，还要看来源、维护者、更新频率和安装方式</strong>。</p>
+
+<h4>排查“装了扩展后编辑器不对劲”的基本顺序</h4>
+<ol>
+    <li>先看扩展详情页最近更新时间和变更说明。</li>
+    <li>再用禁用动作判断是不是这个扩展导致的。</li>
+    <li>必要时为当前工作区单独禁用，而不是直接影响所有项目。</li>
+    <li>如果需要回滚，使用“安装其他版本”或临时改用 VSIX。</li>
+    <li>如果你用的不是官方 VS Code，再确认问题是不是扩展源差异导致的。</li>
+ </ol>
+
+<h4>对 ANH 用户的实际建议</h4>
+<ul>
+    <li><b>写作核心环境</b>：优先保证 ANH、Git、Markdown 预览、拼写或输入法辅助这几类稳定。</li>
+    <li><b>花哨增强</b>：主题、图标、动画类扩展尽量后装，避免把问题来源搞复杂。</li>
+    <li><b>出现冲突时</b>：优先按工作区禁用，保留你其他项目的使用习惯。</li>
+    <li><b>跨编辑器切换时</b>：不要默认 Marketplace 和 OpenVSX 上的可用扩展完全一致。</li>
+ </ul>
+
+<div class="doc-note">如果你现在用的是 VSCodium 或其他 code-compatible editor，请继续看 <a class="doc-ref-link" data-doc="openvsx-compatible-editors"><strong>OpenVSX 与兼容编辑器</strong></a>；如果你想把扩展安装、设置范围和工作区定制串起来，再回到 <a class="doc-ref-link" data-doc="vscode-settings-customization"><strong>设置、配置与扩展</strong></a>。</div>
+</div>

@@ -1,0 +1,47 @@
+<div class="doc-section beginner">
+<h4>这一页讲什么</h4>
+<p>VS Code 官方 Markdown 现在已经支持一些更高级的内容块，比如 <strong>Mermaid 图表</strong> 和 <strong>KaTeX 数学公式</strong>。对纯正文作者来说，这些不一定天天用；但只要你会做设定文档、时间线说明、规则系统、世界观笔记，它们就很有价值。</p>
+
+<h4>Mermaid 适合拿来做什么</h4>
+<ul>
+    <li>章节流程图。</li>
+    <li>势力关系草图。</li>
+    <li>任务链和事件触发顺序。</li>
+    <li>设定系统的层级结构。</li>
+ </ul>
+
+<h4>KaTeX 适合拿来做什么</h4>
+<ul>
+    <li>规则型世界观里的公式表达。</li>
+    <li>硬科幻或推理文档里的符号说明。</li>
+    <li>设定笔记中的结构化数学写法。</li>
+ </ul>
+
+<h4>什么时候不该用</h4>
+<ul>
+    <li>正文章节里只为了炫技而塞图表。</li>
+    <li>明明一小段自然语言就能解释清，却写成复杂公式或流程图。</li>
+    <li>输出目标不支持这些块，但你又没有准备退化方案。</li>
+ </ul>
+</div>
+
+<div class="doc-section pro">
+<h4>官方文档强调的边界</h4>
+<ul>
+    <li><b>Mermaid</b> 是嵌入在 Markdown 预览里的图表能力，不等于任意第三方渲染器都会和它完全一致。</li>
+    <li><b>KaTeX</b> 是预览支持的数学渲染能力，核心问题往往不在语法本身，而在目标渲染链是否一致。</li>
+    <li><b>Preview security</b> 依然重要，尤其当文档里出现外链资源或更复杂的嵌入时。</li>
+ </ul>
+
+<h4>对 ANH 用户的实际建议</h4>
+<ul>
+    <li>把 Mermaid 更多地用于设定、关系、流程说明，不要强塞进章节正文。</li>
+    <li>把 KaTeX 当作资料写作能力，而不是正文默认能力。</li>
+    <li>如果你后续要导出到 Typst 或其他链路，提前验证这些高级块是否能一致转换，不要写完再补救。</li>
+ </ul>
+
+<h4>和 ANH 其他图形功能的关系</h4>
+<p>如果你要的是正式的角色关系图或时间线编辑，优先看 <a class="doc-ref-link" data-doc="role-relationship-graph"><strong>角色关系图谱</strong></a> 和 <a class="doc-ref-link" data-doc="timeline"><strong>时间线</strong></a>；Markdown 里的 Mermaid 更适合轻量草图和说明文档。</p>
+
+<div class="doc-note">如果你最终想判断“这个内容到底该继续写在 Markdown 里，还是改成专用资源文件”，回去看 <a class="doc-ref-link" data-doc="markdown-format-guide"><strong>文件格式指南</strong></a>。</div>
+</div>

@@ -1,0 +1,77 @@
+<div class="doc-section beginner">
+<h4>名字生成器是什么</h4>
+<p>名字生成器帮助你快速生成符合不同文化背景的角色名字。当你为角色起名犯难时，可以按文化、性别、风格批量生成候选名，从中挑选或直接插入到角色文件中。</p>
+
+<h4>如何使用</h4>
+<ol>
+    <li>打开命令面板（<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>）</li>
+    <li>输入"生成随机名字"或"Generate Random Names"</li>
+    <li>按提示选择文化背景、性别、风格和数量</li>
+    <li>从生成结果中选择喜欢的名字</li>
+</ol>
+
+<h4>快速生成</h4>
+<p>如果不想一步步选择，可以使用"快速生成名字"命令，它会用默认设置直接生成 5 个名字供你挑选。</p>
+
+<h4>支持的文化</h4>
+<p>名字生成器支持 30+ 种文化背景，包括中文（简体/繁体）、英文（美式/英式）、法文、德文、西班牙文、意大利文、葡萄牙文、俄文、日语、韩文、阿拉伯文、印地文、北欧语言、东欧语言等。</p>
+
+<h4>生成风格</h4>
+<ul>
+    <li><b>现代</b> — 当代常见名字</li>
+    <li><b>经典</b> — 传统/古典风格名字</li>
+    <li><b>奇幻</b> — 奇幻小说风格名字</li>
+    <li><b>科幻</b> — 科幻作品风格名字（仅英文）</li>
+    <li><b>历史</b> — 历史时期风格名字</li>
+</ul>
+
+<h4>角色生成</h4>
+<p>除了单独生成名字，还可以使用"随机生成角色"命令一次性生成包含名字、性别等信息的完整角色。"分步生成角色"命令则会逐步引导你完成角色创建。</p>
+</div>
+
+<div class="doc-section pro">
+<h4>名字生成服务</h4>
+<p>名字生成基于 <code>src/services/nameGeneratorService.ts</code> 实现，使用可插拔的策略架构。内置三种生成策略：</p>
+<ul>
+    <li><b>Faker 本地化策略</b> — 基于 <code>@faker-js/faker</code>，支持所有 faker 本地化，是大部分文化的默认策略</li>
+    <li><b>奇幻策略</b> — 从音节库组合生成奇幻风格名字，支持高等奇幻和黑暗奇幻子风格</li>
+    <li><b>回退策略</b> — 当其他策略失败时使用的基础名字列表</li>
+</ul>
+
+<h4>命令列表</h4>
+<ul>
+    <li><code>andrea-novel-helper.generateRandomNames</code> — 打开完整对话框，逐步选择文化、性别、风格、数量</li>
+    <li><code>andrea-novel-helper.quickGenerateName</code> — 用默认设置快速生成 5 个名字</li>
+    <li><code>andrea-novel-helper.generateRandomCharacter</code> — 随机生成完整角色</li>
+    <li><code>andrea-novel-helper.generateStepByStepCharacter</code> — 分步引导生成角色</li>
+    <li><code>andrea-novel-helper.showNameGeneratorStats</code> — 显示生成统计信息</li>
+</ul>
+
+<h4>生成选项</h4>
+<ul>
+    <li><code>culture</code> — 文化代码（如 <code>zh_CN</code>、<code>en_US</code>、<code>ja</code>、<code>fantasy</code>）</li>
+    <li><code>gender</code> — 性别：<code>male</code>、<code>female</code>、<code>neutral</code>、<code>any</code></li>
+    <li><code>style</code> — 风格：<code>modern</code>、<code>classic</code>、<code>fantasy</code>、<code>sci-fi</code>、<code>historical</code>、<code>high-fantasy</code>、<code>dark-fantasy</code></li>
+    <li><code>count</code> — 生成数量</li>
+    <li><code>includeSurname</code> — 是否包含姓氏</li>
+</ul>
+
+<h4>生成结果字段</h4>
+<ul>
+    <li><code>fullName</code> — 完整名字（中文：姓+名；西方：名+姓）</li>
+    <li><code>firstName</code> — 名字部分</li>
+    <li><code>lastName</code> — 姓氏部分</li>
+    <li><code>culture</code> — 文化代码</li>
+    <li><code>gender</code> — 性别</li>
+    <li><code>style</code> — 风格</li>
+    <li><code>origin</code> — 生成来源（Faker/Fantasy/Fallback）</li>
+    <li><code>alternativeFullName</code> — 替代全名（如日语的带空格版本）</li>
+</ul>
+
+<h4>中文名字特别说明</h4>
+<p>中文名字采用"姓+名"格式（如"张伟"），日语和韩语同理。西方语言采用"名 姓"格式（如"John Smith"）。日语会额外生成带空格的替代全名（如"佐藤 誠"），可用于别名字段。</p>
+
+<h4>依赖</h4>
+<p>名字生成依赖 <code>@faker-js/faker</code> 包，该包在扩展安装时自动包含。奇幻策略为内置实现，不依赖外部包。</p>
+<div class="doc-note">生成的名字仅作为灵感参考。如果你需要生成更符合特定文化细节的名字，可以考虑结合 LLM 脚本进行二次加工。</div>
+</div>

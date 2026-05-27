@@ -1,0 +1,58 @@
+<div class="doc-section beginner">
+<h4>OpenVSX 是什么</h4>
+<p>OpenVSX 是一个开放的扩展注册表。很多基于开源 Code 构建的编辑器，会把扩展来源指向 OpenVSX，或者提供自己的扩展源适配层。</p>
+
+<h4>为什么它和官方 Marketplace 要分开讲</h4>
+<p>因为这两者不是同一个东西。官方 VS Code 文档默认讲的是 Visual Studio Marketplace；而 OpenVSX 文档讲的是另一套可公开使用的扩展分发方案。你不能看到界面很像 VS Code，就默认它们的扩展来源、可用扩展、发布规则完全相同。</p>
+
+<h4>兼容编辑器里最常见的现实情况</h4>
+<ul>
+    <li><b>有的编辑器默认接官方 Marketplace</b>。</li>
+    <li><b>有的编辑器默认接 OpenVSX</b>。</li>
+    <li><b>有的编辑器允许通过发行版配置改扩展源</b>。</li>
+    <li><b>有的编辑器会在官方市场和开放市场之间做额外兼容层</b>。</li>
+ </ul>
+<p>所以最稳妥的做法不是背“某某编辑器一定怎样”，而是先查你当前发行版自己的文档。</p>
+
+<h4>为什么同一个扩展会出现“这里有，那里没有”</h4>
+<ul>
+    <li><b>发布渠道不同</b>：作者可能只发到了某一个市场。</li>
+    <li><b>同步时间不同</b>：不同扩展源的上架和更新节奏可能不一样。</li>
+    <li><b>依赖不同</b>：扩展可能依赖某些只在特定发行版里才有的服务或 API。</li>
+    <li><b>发行版策略不同</b>：某些编辑器会限制或调整市场接入方式。</li>
+ </ul>
+
+<h4>对普通用户最有用的判断方法</h4>
+<ol>
+    <li>先确认你现在用的是哪一个编辑器发行版。</li>
+    <li>再确认这个发行版默认连接哪个扩展源。</li>
+    <li>如果搜不到扩展，先查作者是否同时发布到了 OpenVSX 或提供 VSIX。</li>
+    <li>如果扩展装上了但行为异常，再查这个扩展是否依赖某些发行版专有服务。</li>
+ </ol>
+</div>
+
+<div class="doc-section pro">
+<h4>OpenVSX 文档里真正值得记住的点</h4>
+<p>OpenVSX 的使用文档明确展示过一种典型配置方式：某些 code-compatible editor 可以通过发行版的 <code>product.json</code> 之类配置，把 <code>extensionsGallery</code> 指向 <code>open-vsx.org</code> 相关接口。这说明“扩展市场到底连到哪里”本质上是<strong>发行版配置</strong>的一部分，而不是一个只看 UI 就能判断的前端按钮问题。</p>
+
+<h4>为什么这里要特别谨慎措辞</h4>
+<p>关于“某些 VS Code forks 是否允许直接使用 Microsoft Marketplace”，公开资料里经常存在版本差异、发行版差异和授权讨论。更稳妥的写法是：</p>
+<ul>
+    <li><b>官方 VS Code 默认文档语境</b>：Visual Studio Marketplace。</li>
+    <li><b>很多兼容编辑器常见替代路径</b>：OpenVSX 或发行版自定义扩展源。</li>
+    <li><b>不要把两者写成完全等价</b>，也不要把某个发行版的市场接入能力写成放之四海皆准的结论。</li>
+ </ul>
+
+<h4>对 ANH 用户的迁移建议</h4>
+<ul>
+    <li><b>如果你主要需求是写作</b>：优先确认 ANH、本地 Markdown 预览、Git 辅助这些核心扩展是否可用。</li>
+    <li><b>如果你跨设备或跨编辑器切换</b>：给自己保留一份核心扩展清单，不要只依赖某一个市场里的“已安装历史”。</li>
+    <li><b>如果团队里编辑器不统一</b>：文档里最好写清扩展名称、发布者、备选安装源、必要时提供 VSIX。</li>
+    <li><b>如果你正在排查教程失效</b>：先看教程默认前提是不是官方 VS Code，而你当前是不是兼容编辑器。</li>
+ </ul>
+
+<h4>一句话总结</h4>
+<p>Marketplace 解决的是“官方 VS Code 默认怎么装扩展”；OpenVSX 解决的是“开放生态和兼容编辑器怎样分发扩展”。两者会互相参照，但不应该被混写成同一件事。</p>
+
+<div class="doc-note">如果你已经确认自己使用的是官方 VS Code，回去读 <a class="doc-ref-link" data-doc="extension-marketplace"><strong>VS Code 扩展市场详解</strong></a> 就够了；如果你只是想知道扩展装完后怎么和设置范围、工作区行为联动，再看 <a class="doc-ref-link" data-doc="vscode-settings-customization"><strong>设置、配置与扩展</strong></a>。</div>
+</div>

@@ -40,5 +40,25 @@
     <li><b>审稿后</b>：把外部反馈录入为批注，统一跟踪解决进度</li>
 </ul>
 
+<h4>导出批注</h4>
+<p>批注管理器支持将批注导出为多种格式：</p>
+<ul>
+    <li><b>导出为 Markdown</b> — 将批注导出为 Markdown 文件，方便分享和归档</li>
+    <li><b>导出为 JSON</b> — 将批注导出为 JSON 格式，方便程序处理和数据迁移</li>
+</ul>
+<p>导出操作在批注管理器的命令面板或右键菜单中可用。</p>
+
+<h4>批注相关命令</h4>
+<ul>
+    <li><code>andrea.comments.open</code> — 打开批注管理器</li>
+    <li><code>andrea.comments.add</code> — 添加新批注</li>
+    <li><code>andrea.comments.resolve</code> — 标记批注为已解决</li>
+    <li><code>andrea.comments.reopen</code> — 重新打开已解决的批注</li>
+    <li><code>andrea.commentsExplorer.exportToMarkdown</code> — 导出为 Markdown</li>
+    <li><code>andrea.commentsExplorer.exportToJson</code> — 导出为 JSON</li>
+    <li><code>andrea.commentsExplorer.filterByStatus</code> — 按状态筛选</li>
+    <li><code>andrea.commentsExplorer.search</code> — 搜索批注</li>
+</ul>
+
 <div class="doc-note">批注管理器不会替代正文注释语法。正文注释适合不需要线程和状态的小备注；批注适合需要跳转、回复和解决状态的修改任务。</div>
 </div>

@@ -1,0 +1,144 @@
+<div class="doc-section beginner">
+<h4>这一页讲什么</h4>
+<p>这页讲 VS Code 的<strong>命令面板和快捷键</strong>。如果你经常“知道某个功能存在，但忘了按钮在哪”，这页会非常值。</p>
+
+<h4>命令面板：最应该先学会的入口</h4>
+<p>按 <kbd>Ctrl+Shift+P</kbd> 打开命令面板。几乎所有功能都能从这里搜到。</p>
+<ul>
+    <li><b>搜命令</b>：输入中文或英文关键词。</li>
+    <li><b>看默认快捷键</b>：很多命令右侧会显示快捷键。</li>
+    <li><b>不用记菜单层级</b>：不知道按钮在哪时，先开命令面板。</li>
+</ul>
+<p>新手最值得养成的习惯就是：找不到功能时，不要先翻菜单，先按 <kbd>Ctrl+Shift+P</kbd>。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-command-palette.png" alt="VS Code 官方命令面板示意图" style="width:100%;max-width:980px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">官方命令面板示意图。只要会看这张图，你基本就知道“找不到按钮时该去哪”。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：&gt; = 命令模式；Go to File = 转到文件；Go to Line/Column = 转到行 / 列；Go to Symbol in Editor = 转到当前文件符号；Go to Symbol in Workspace = 转到整个工作区符号；Show and Run Commands = 显示并运行命令。</div>
+
+<h4>命令面板和 Quick Open 的关系</h4>
+<ul>
+    <li><b><kbd>Ctrl+Shift+P</kbd></b>：偏“找命令”。</li>
+    <li><b><kbd>Ctrl+P</kbd></b>：偏“找文件”。</li>
+</ul>
+<p>官方 Getting Started 文档还提到，命令面板其实支持多种模式：</p>
+<ul>
+    <li><b><code>&gt;</code></b>：命令模式。</li>
+    <li><b>直接输入文件名</b>：快速打开模式。</li>
+    <li><b><code>#</code></b>：符号搜索模式。</li>
+</ul>
+
+<h4>先记住一组高频快捷键</h4>
+<ul>
+    <li><b><kbd>Ctrl+Shift+P</kbd></b>：命令面板。</li>
+    <li><b><kbd>Ctrl+P</kbd></b>：快速打开文件。</li>
+    <li><b><kbd>Ctrl+,</kbd></b>：设置。</li>
+    <li><b><kbd>Ctrl+Shift+F</kbd></b>：全局搜索。</li>
+    <li><b><kbd>Ctrl+Shift+G</kbd></b>：源代码管理。</li>
+    <li><b><kbd>Ctrl+Shift+X</kbd></b>：扩展。</li>
+    <li><b><kbd>Ctrl+`</kbd></b>：终端。</li>
+    <li><b><kbd>Ctrl+B</kbd></b>：切换侧边栏。</li>
+</ul>
+<p>如果你只用鼠标，VS Code 也能工作；但只要你愿意记住上面这几项，效率会明显提升。</p>
+
+<h4>键盘快捷键编辑器</h4>
+<p>按 <kbd>Ctrl+K Ctrl+S</kbd> 打开 Keyboard Shortcuts Editor。这里可以：</p>
+<ul>
+    <li>搜索某个命令现在绑定了什么键。</li>
+    <li>给命令重新设置快捷键。</li>
+    <li>删除某个快捷键。</li>
+    <li>恢复默认快捷键。</li>
+</ul>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-keybindings-editor.png" alt="VS Code 官方快捷键编辑器示意图" style="width:100%;max-width:980px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">官方快捷键编辑器示意图。新手最实用的一招，就是先学会过滤出“自己改过的快捷键”。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：Keyboard Shortcuts = 快捷键编辑器；@source:user = 只看用户自定义；Command = 命令；Keybinding = 按键绑定；When = 生效条件；Show User Keybindings = 显示用户快捷键。</div>
+
+<h4>什么时候值得改快捷键</h4>
+<ul>
+    <li>你每天都会用某个命令。</li>
+    <li>默认快捷键太绕，记不住。</li>
+    <li>某个键位和你熟悉的软件冲突。</li>
+    <li>你想把高频写作动作放在更顺手的位置。</li>
+</ul>
+<p>但不要为了“显得专业”就改一大堆。先从 1 到 3 个高频动作开始，最稳。</p>
+
+<h4>查看当前有哪些自定义快捷键</h4>
+<p>官方 Keyboard Shortcuts 文档提到可以过滤“只看用户修改过的快捷键”。这对排查冲突很有帮助，尤其是你装了很多扩展以后。</p>
+
+<h4>如果快捷键不生效怎么办</h4>
+<ul>
+    <li>先看是否被别的命令抢走。</li>
+    <li>再看当前焦点是不是在编辑器、终端、搜索框还是侧边栏。</li>
+    <li>最后看是不是和系统快捷键冲突。</li>
+</ul>
+</div>
+
+<div class="doc-section pro">
+<h4>Customize Shortcuts for UI Actions</h4>
+<p>官方文档特别提到一个很好用的入口：右键某个 UI 动作，直接选择 Configure Keybinding。这样 VS Code 会自动把你带到对应命令，并尽量保留它的上下文条件。</p>
+
+<h4>keybindings.json 是什么</h4>
+<p>和设置有 <code>settings.json</code> 一样，快捷键也有自己的底层文件：<code>keybindings.json</code>。</p>
+<p>图形界面适合大多数用户；<code>keybindings.json</code> 则适合做更精确的改动，例如带条件的快捷键、连续命令、移除默认绑定。</p>
+<figure style="margin:16px 0 18px;">
+    <img src="images/docs/vscode/vscode-keybindings-widget.png" alt="VS Code 官方定义快捷键弹窗示意图" style="width:100%;max-width:760px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+    <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">定义快捷键时，VS Code 会直接弹出录入框让你按组合键。这比纯手写 JSON 更适合第一次上手。</figcaption>
+</figure>
+<div class="doc-note"><b>图上英文对照</b>：keybindings.json = 快捷键配置文件；Press desired key combination and ENTER = 按下想绑定的组合键后回车；Define Keybinding = 定义快捷键。</div>
+
+<h4>键盘规则的三个核心字段</h4>
+<p>官方把一条快捷键规则定义为：</p>
+<pre><code>{
+  "key": "ctrl+f",
+  "command": "actions.find",
+  "when": "editorTextFocus"
+}</code></pre>
+<ul>
+    <li><b><code>key</code></b>：按键。</li>
+    <li><b><code>command</code></b>：执行的命令 ID。</li>
+    <li><b><code>when</code></b>：什么情况下这条规则才生效。</li>
+</ul>
+
+<h4>when 子句为什么重要</h4>
+<p>同一个按键在不同上下文里可以做不同事，关键就在 <code>when</code>。</p>
+<p>例如：</p>
+<ul>
+    <li>编辑器聚焦时，<kbd>F5</kbd> 可能是启动调试。</li>
+    <li>调试中时，<kbd>F5</kbd> 变成继续执行。</li>
+    <li>终端聚焦时，很多键又会交给 Shell。</li>
+</ul>
+<p>这也是“明明设置了快捷键，为什么有时候不触发”的根本原因之一。</p>
+
+<h4>冲突检测和故障排查</h4>
+<p>官方提供了两种很关键的排查能力：</p>
+<ul>
+    <li><b>Show Same Keybindings</b>：查某个键位绑定了哪些命令。</li>
+    <li><b>Developer: Toggle Keyboard Shortcuts Troubleshooting</b>：记录按键分发日志。</li>
+</ul>
+<p>如果你修改快捷键后毫无反应，别靠猜，直接看冲突和日志。</p>
+
+<h4>移除默认快捷键</h4>
+<p>官方文档说明，可以在 <code>keybindings.json</code> 中用带减号的命令 ID 来移除默认规则。例如：</p>
+<pre><code>{ "key": "tab", "command": "-jumpToNextSnippetPlaceholder" }</code></pre>
+<p>这适合处理某些扩展或系统行为把你常用按键占掉的情况。</p>
+
+<h4>运行多个命令</h4>
+<p>官方还支持 <code>runCommands</code>，让一个快捷键连续执行多个命令。这很强，但也更容易把自己绕晕。</p>
+<p>对普通写作用户而言，不建议一开始就做复杂链式快捷键。先把“打开终端”“打开图形化快速设置”“切换侧边栏”这类单命令绑定稳定就够了。</p>
+
+<h4>键盘布局差异</h4>
+<p>官方文档专门提醒：快捷键显示会受键盘布局影响。也就是说，别人的教程写的某个键位，在你的非美式布局键盘上可能显示成另一种组合。</p>
+<p>如果你经常遇到“教程说 Ctrl+\，我这边显示完全不一样”，优先怀疑键盘布局，不要先怀疑功能消失了。</p>
+
+<h4>和 ANH 的实际结合</h4>
+<ul>
+    <li>你可以给“打开图形化快速设置”自定义快捷键。</li>
+    <li>你可以给“打开文档中心”加快捷键。</li>
+    <li>你可以给“Open in Integrated Terminal”或“运行某个任务”绑定组合键。</li>
+    <li>你也可以把 AI、终端、搜索、字数统计相关动作放进自己的肌肉记忆里。</li>
+</ul>
+
+<div class="doc-note">如果你已经理解“命令是什么、快捷键如何分发”，下一步就可以读 <a class="doc-ref-link" data-doc="vscode-source-control"><strong>内建 Git 与版本流</strong></a>，因为 Git 面板里大多数动作本质上也都能从命令面板和快捷键触发。</div>
+</div>
