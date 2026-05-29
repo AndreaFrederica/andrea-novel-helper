@@ -198,5 +198,6 @@
   "command.notes.revealTrackedInWritingExplorer.title": "定位到對應資源節點",
   "command.notes.openTrackedOutlineForResource.title": "開啟對應大綱",
   "command.notes.revealTrackedInOutlineTree.title": "定位到對應大綱樹節點",
-  "command.notes.revealTrackedOutlineStorage.title": "定位對應大綱檔案"
+  "command.notes.revealTrackedOutlineStorage.title": "定位對應大綱檔案",
+  "config.obsidian.index.enabled.description": "啟用 Obsidian 相容索引。關閉後，啟動時不會掃描工作區中的雙向連結、標題和標籤；預覽與匯出渲染仍可使用。"
 }

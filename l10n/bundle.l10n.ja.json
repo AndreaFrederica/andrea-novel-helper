@@ -198,5 +198,6 @@
   "command.notes.revealTrackedInWritingExplorer.title": "対応するリソースノードを表示",
   "command.notes.openTrackedOutlineForResource.title": "対応するアウトラインを開く",
   "command.notes.revealTrackedInOutlineTree.title": "対応するアウトラインツリーノードを表示",
-  "command.notes.revealTrackedOutlineStorage.title": "アウトライン保存ファイルを表示"
+  "command.notes.revealTrackedOutlineStorage.title": "アウトライン保存ファイルを表示",
+  "config.obsidian.index.enabled.description": "Obsidian 互換インデックスを有効にします。無効にすると、起動時にワークスペース内のウィキリンク、見出し、タグをスキャンしません。プレビューとエクスポートのレンダリングは引き続き利用できます。"
 }
