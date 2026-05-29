@@ -43,6 +43,132 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
+  prepare:
+    name: Prepare build matrices
+    runs-on: ubuntu-latest
+    outputs:
+      build_matrix: ${{ steps.matrix.outputs.build_matrix }}
+      build_count: ${{ steps.matrix.outputs.build_count }}
+      linux_matrix: ${{ steps.matrix.outputs.linux_matrix }}
+      linux_count: ${{ steps.matrix.outputs.linux_count }}
+    steps:
+      - name: Filter requested platforms
+        id: matrix
+        shell: bash
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          desktop = [
+              {
+                  "os": "macos-latest",
+                  "target": "darwin-arm64",
+                  "platform": "darwin",
+                  "arch": "arm64",
+              },
+              {
+                  "os": "macos-13",
+                  "target": "darwin-x64",
+                  "platform": "darwin",
+                  "arch": "x64",
+              },
+              {
+                  "os": "windows-latest",
+                  "target": "win32-x64",
+                  "platform": "win32",
+                  "arch": "x64",
+              },
+          ]
+          linux = [
+              {
+                  "target": "linux-x64",
+                  "platform": "linux",
+                  "arch": "x64",
+                  "build_target": "",
+                  "linker_env": "",
+                  "linker_value": "",
+              },
+              {
+                  "target": "linux-arm64",
+                  "platform": "linux",
+                  "arch": "arm64",
+                  "build_target": "aarch64-unknown-linux-gnu",
+                  "linker_env": "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER",
+                  "linker_value": "aarch64-linux-gnu-gcc",
+              },
+              {
+                  "target": "linux-armhf",
+                  "platform": "linux",
+                  "arch": "arm",
+                  "build_target": "arm-unknown-linux-gnueabihf",
+                  "linker_env": "CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER",
+                  "linker_value": "arm-linux-gnueabihf-gcc",
+              },
+          ]
+
+          requested = [
+              value.strip()
+              for value in os.environ.get("PLATFORMS", "").split(",")
+              if value.strip()
+          ]
+          known = {item["target"] for item in desktop + linux}
+          invalid = sorted(set(requested) - known)
+          if invalid:
+              print("Unknown platform target(s): " + ", ".join(invalid), file=sys.stderr)
+              print("Allowed targets: " + ", ".join(sorted(known)), file=sys.stderr)
+              sys.exit(1)
+
+          def selected(items):
+              return items if not requested else [
+                  item for item in items if item["target"] in requested
+              ]
+
+          build_matrix = selected(desktop)
+          linux_matrix = selected(linux)
+          output_path = os.environ["GITHUB_OUTPUT"]
+          with open(output_path, "a", encoding="utf-8") as output:
+              output.write(f"build_count={len(build_matrix)}\n")
+              output.write(f"linux_count={len(linux_matrix)}\n")
+              output.write(
+                  "build_matrix="
+                  + json.dumps(
+                      build_matrix
+                      or [
+                          {
+                              "os": "ubuntu-latest",
+                              "target": "skip",
+                              "platform": "skip",
+                              "arch": "x64",
+                          }
+                      ],
+                      separators=(",", ":"),
+                  )
+                  + "\n"
+              )
+              output.write(
+                  "linux_matrix="
+                  + json.dumps(
+                      linux_matrix
+                      or [
+                          {
+                              "target": "skip",
+                              "platform": "skip",
+                              "arch": "x64",
+                              "build_target": "",
+                              "linker_env": "",
+                              "linker_value": "",
+                          }
+                      ],
+                      separators=(",", ":"),
+                  )
+                  + "\n"
+              )
+          PY
+
   webview:
     name: Build webview (Quasar) once
     runs-on: ubuntu-latest
@@ -70,23 +196,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # macOS: 用不同 Runner 架构生成对应二进制，避免 arm64/x64 混淆
-          - os: macos-latest # 当前为 macOS arm64
-            target: darwin-arm64
-            platform: darwin
-            arch: arm64
-          - os: macos-13 # macOS x86_64
-            target: darwin-x64
-            platform: darwin
-            arch: x64
-          - os: windows-latest
-            target: win32-x64
-            platform: win32
-            arch: x64
+        include: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
     runs-on: ${{ matrix.os }}
-    needs: webview
-    if: inputs.platforms == '' || contains(inputs.platforms, matrix.target)
+    needs: [prepare, webview]
+    if: ${{ needs.prepare.outputs.build_count != '0' }}
 
     env:
       # 扩展根目录；若在子目录请改成实际路径，例如 packages/extension
@@ -243,29 +356,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: linux-x64
-            platform: linux
-            arch: x64
-            build_target: ""
-            linker_env: ""
-            linker_value: ""
-          - target: linux-arm64
-            platform: linux
-            arch: arm64
-            build_target: aarch64-unknown-linux-gnu
-            linker_env: CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER
-            linker_value: aarch64-linux-gnu-gcc
-          - target: linux-armhf
-            platform: linux
-            arch: arm
-            build_target: arm-unknown-linux-gnueabihf
-            linker_env: CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER
-            linker_value: arm-linux-gnueabihf-gcc
+        include: ${{ fromJSON(needs.prepare.outputs.linux_matrix) }}
 
     runs-on: ubuntu-latest
-    needs: webview
-    if: inputs.platforms == '' || contains(inputs.platforms, matrix.target)
+    needs: [prepare, webview]
+    if: ${{ needs.prepare.outputs.linux_count != '0' }}
 
     container:
       image: debian:bookworm
@@ -346,8 +441,12 @@ jobs:
         working-directory: ${{ env.WORKDIR }}/packages/enigo-keyboard
         env:
           BUILD_TARGET: ${{ matrix.build_target }}
-          ${{ matrix.linker_env }}: ${{ matrix.linker_value }}
+          LINKER_ENV: ${{ matrix.linker_env }}
+          LINKER_VALUE: ${{ matrix.linker_value }}
         run: |
+          if [ -n "$LINKER_ENV" ]; then
+            export "$LINKER_ENV=$LINKER_VALUE"
+          fi
           # Use CI-specific build script (supports BUILD_TARGET for cross)
           npm run build:ci
 
@@ -428,8 +527,8 @@ jobs:
 
   publish:
     name: Publish to Marketplace
-    needs: [build, build-linux]
-    if: ${{ inputs.publish == true || github.event_name == 'push' && github.ref_type == 'tag' }}
+    needs: [prepare, build, build-linux]
+    if: ${{ always() && (inputs.publish == true || github.event_name == 'push' && github.ref_type == 'tag') && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     environment: publish
     permissions:
