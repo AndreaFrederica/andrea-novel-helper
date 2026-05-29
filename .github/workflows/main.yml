@@ -16,10 +16,36 @@ on:
           - both
         default: exp
         required: true
-      platforms:
-        description: "构建平台（逗号分隔，留空=全部）"
-        required: false
-        default: ""
+      build_darwin_arm64:
+        description: "构建 darwin-arm64（macOS Apple Silicon）"
+        type: boolean
+        required: true
+        default: true
+      build_darwin_x64:
+        description: "构建 darwin-x64（macOS Intel）"
+        type: boolean
+        required: true
+        default: false
+      build_win32_x64:
+        description: "构建 win32-x64（Windows x64）"
+        type: boolean
+        required: true
+        default: true
+      build_linux_x64:
+        description: "构建 linux-x64"
+        type: boolean
+        required: true
+        default: true
+      build_linux_arm64:
+        description: "构建 linux-arm64"
+        type: boolean
+        required: true
+        default: true
+      build_linux_armhf:
+        description: "构建 linux-armhf"
+        type: boolean
+        required: true
+        default: true
       publish:
         description: "打完是否立即发布到 Marketplace（需要 VSCE_PAT）"
         type: boolean
@@ -56,7 +82,13 @@ jobs:
         id: matrix
         shell: bash
         env:
-          PLATFORMS: ${{ inputs.platforms }}
+          EVENT_NAME: ${{ github.event_name }}
+          BUILD_DARWIN_ARM64: ${{ inputs.build_darwin_arm64 }}
+          BUILD_DARWIN_X64: ${{ inputs.build_darwin_x64 }}
+          BUILD_WIN32_X64: ${{ inputs.build_win32_x64 }}
+          BUILD_LINUX_X64: ${{ inputs.build_linux_x64 }}
+          BUILD_LINUX_ARM64: ${{ inputs.build_linux_arm64 }}
+          BUILD_LINUX_ARMHF: ${{ inputs.build_linux_armhf }}
         run: |
           python3 - <<'PY'
           import json
@@ -110,21 +142,39 @@ jobs:
               },
           ]
 
-          requested = [
-              value.strip()
-              for value in os.environ.get("PLATFORMS", "").split(",")
-              if value.strip()
-          ]
-          known = {item["target"] for item in desktop + linux}
-          invalid = sorted(set(requested) - known)
-          if invalid:
-              print("Unknown platform target(s): " + ", ".join(invalid), file=sys.stderr)
-              print("Allowed targets: " + ", ".join(sorted(known)), file=sys.stderr)
+          default_enabled = {
+              "darwin-arm64": True,
+              "darwin-x64": False,
+              "win32-x64": True,
+              "linux-x64": True,
+              "linux-arm64": True,
+              "linux-armhf": True,
+          }
+          input_names = {
+              "darwin-arm64": "BUILD_DARWIN_ARM64",
+              "darwin-x64": "BUILD_DARWIN_X64",
+              "win32-x64": "BUILD_WIN32_X64",
+              "linux-x64": "BUILD_LINUX_X64",
+              "linux-arm64": "BUILD_LINUX_ARM64",
+              "linux-armhf": "BUILD_LINUX_ARMHF",
+          }
+
+          def enabled(target):
+              if os.environ.get("EVENT_NAME") != "workflow_dispatch":
+                  return default_enabled[target]
+              return os.environ.get(input_names[target], "").lower() == "true"
+
+          selected_targets = {
+              target for target in input_names
+              if enabled(target)
+          }
+          if not selected_targets:
+              print("At least one platform checkbox must be selected.", file=sys.stderr)
               sys.exit(1)
 
           def selected(items):
-              return items if not requested else [
-                  item for item in items if item["target"] in requested
+              return [
+                  item for item in items if item["target"] in selected_targets
               ]
 
           build_matrix = selected(desktop)
@@ -316,6 +366,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p dist
           node -e '
             const fs=require("fs");
             const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
@@ -490,6 +541,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p dist
           node -e '
             const fs=require("fs");
             const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
