@@ -20,6 +20,7 @@ Options:
   --openvsx-only        Publish only to Open VSX
   --std-only            Publish only anh-std-*.vsix
   --exp-only            Publish only anh-exp-*.vsix as pre-release
+  --exp-as-release      Publish anh-exp-*.vsix to the stable/release channel
   --target <target>     Publish only one target, e.g. linux-arm64. Can be repeated.
   --allow-version-mismatch
                         Do not verify VSIX versions against package.json
@@ -41,6 +42,7 @@ function parseArgs(argv) {
     openvsx: true,
     std: true,
     exp: true,
+    expAsRelease: false,
     targets: [],
     allowVersionMismatch: false,
     dryRun: false,
@@ -66,6 +68,8 @@ function parseArgs(argv) {
     } else if (arg === '--exp-only') {
       opts.std = false;
       opts.exp = true;
+    } else if (arg === '--exp-as-release') {
+      opts.expAsRelease = true;
     } else if (arg === '--target') {
       const value = argv[++i];
       if (!value || value.startsWith('--')) {
@@ -331,7 +335,10 @@ function validatePackageVersions(files, opts) {
   }
 
   const stdVersion = readRootPackageVersion();
-  const expVersion = nextPatchVersion(stdVersion);
+  const presentVariants = new Set(files.map((file) => variantOf(file)));
+  const expVersion = presentVariants.has('std') && presentVariants.has('exp')
+    ? nextPatchVersion(stdVersion)
+    : stdVersion;
   const errors = [];
   for (const file of files) {
     const variant = variantOf(file);
@@ -367,7 +374,7 @@ function shouldSkip(file, opts) {
 }
 
 function publishToMarketplace(file, opts, env) {
-  const isPreRelease = variantOf(file) === 'exp';
+  const isPreRelease = variantOf(file) === 'exp' && !opts.expAsRelease;
   const preReleaseArg = isPreRelease ? ['--pre-release'] : [];
   run('npx', [
     '--yes',
@@ -382,7 +389,7 @@ function publishToMarketplace(file, opts, env) {
 }
 
 function publishToOpenVsx(file, opts, env) {
-  const isPreRelease = variantOf(file) === 'exp';
+  const isPreRelease = variantOf(file) === 'exp' && !opts.expAsRelease;
   const preReleaseArg = isPreRelease ? ['--pre-release'] : [];
   run('npx', [
     '--yes',
@@ -438,7 +445,8 @@ async function main() {
   console.log(`Targets: ${[opts.marketplace ? 'VS Code Marketplace' : '', opts.openvsx ? 'Open VSX' : ''].filter(Boolean).join(', ')}`);
   console.log('Files to publish:');
   for (const file of publishable) {
-    console.log(`  - ${path.relative(repoRoot, file)} (${variantOf(file) === 'exp' ? 'pre-release' : 'release'}, v${packageVersions.get(file)})`);
+    const isRelease = variantOf(file) !== 'exp' || opts.expAsRelease;
+    console.log(`  - ${path.relative(repoRoot, file)} (${isRelease ? 'release' : 'pre-release'}, v${packageVersions.get(file)})`);
   }
   for (const { file, reason } of skipped) {
     console.log(`Skipping ${path.relative(repoRoot, file)}: ${reason}`);
@@ -467,7 +475,7 @@ async function main() {
   try {
     for (const file of publishable) {
       const label = file.startsWith(repoRoot) ? path.relative(repoRoot, file) : path.basename(file);
-      const variant = variantOf(file) === 'exp' ? 'pre-release' : 'release';
+      const variant = variantOf(file) === 'exp' && !opts.expAsRelease ? 'pre-release' : 'release';
       const ver = packageVersions.get(file);
 
       if (opts.marketplace) {
