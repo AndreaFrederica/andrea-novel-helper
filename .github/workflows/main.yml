@@ -660,7 +660,7 @@ jobs:
 
             ## Variants
             - `std`: Stable build; disables `onStartupFinished` to follow VS Code activation standards; normal startup.
-            - `exp`: Preview build; patch version +1; enables `onStartupFinished` to start early; marked pre-release and must be installed manually.
+            - `exp`: Preview build; enables `onStartupFinished` to start early; marked pre-release and must be installed manually. Single-variant builds keep the base version, while `both` builds use patch version +1 for `exp`.
             - Both variants share the same features and fixes for this release; only activation timing differs.
 
       - name: Create GitHub Release (combined via body_path)
@@ -680,7 +680,7 @@ jobs:
           body: |
             ## Variants
             - `std`: Stable build; disables `onStartupFinished` to follow VS Code activation standards; normal startup.
-            - `exp`: Preview build; patch version +1; enables `onStartupFinished` to start early; marked pre-release and must be installed manually.
+            - `exp`: Preview build; enables `onStartupFinished` to start early; marked pre-release and must be installed manually. Single-variant builds keep the base version, while `both` builds use patch version +1 for `exp`.
             - Both variants share the same features and fixes for this release; only activation timing differs.
 
       - name: Create GitHub Release (combined auto)
@@ -700,5 +700,5 @@ jobs:
 
             ## Variants
             - `std`: Stable build; disables `onStartupFinished` to follow VS Code activation standards; normal startup.
-            - `exp`: Preview build; patch version +1; enables `onStartupFinished` to start early; marked pre-release and must be installed manually.
+            - `exp`: Preview build; enables `onStartupFinished` to start early; marked pre-release and must be installed manually. Single-variant builds keep the base version, while `both` builds use patch version +1 for `exp`.
             - Both variants share the same features and fixes for this release; only activation timing differs.

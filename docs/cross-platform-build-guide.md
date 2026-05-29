@@ -93,10 +93,9 @@ cd andrea-novel-helper
 bash scripts/macos-vm-build.sh
 ```
 
-脚本会使用 `pixi` 创建/复用本地环境，安装 npm 依赖，构建 webview 与 `@anh/enigo-keyboard` 原生模块，重建 `@vscode/sqlite3` 的 Electron 版本，并输出：
+脚本会使用 `pixi` 创建/复用本地环境，安装 npm 依赖，构建 webview 与 `@anh/enigo-keyboard` 原生模块，重建 `@vscode/sqlite3` 的 Electron 版本。默认按单版本流程仅输出：
 
 ```text
-dist/anh-std-darwin-x64.vsix
 dist/anh-exp-darwin-x64.vsix
 ```
 
@@ -105,6 +104,9 @@ dist/anh-exp-darwin-x64.vsix
 ```bash
 # 只打标准版
 bash scripts/macos-vm-build.sh --variant std
+
+# 同时打标准版和预发布版
+bash scripts/macos-vm-build.sh --variant both
 
 # 指定 VS Code Electron headers 版本
 bash scripts/macos-vm-build.sh --electron-version 30.0.9

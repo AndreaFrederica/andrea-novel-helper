@@ -3,7 +3,7 @@ set -euo pipefail
 
 TARGET="${TARGET:-darwin-x64}"
 ELECTRON_VERSION="${ELECTRON_VERSION:-30.0.9}"
-VARIANT="${VARIANT:-both}"
+VARIANT="${VARIANT:-exp}"
 INSTALL_PIXI="${INSTALL_PIXI:-1}"
 SKIP_NPM_CI="${SKIP_NPM_CI:-0}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +16,7 @@ Usage:
 Options:
   --target <target>             VS Code target. Default: darwin-x64
   --electron-version <version>  Electron headers version. Default: 30.0.9
-  --variant <std|exp|both>      Package variant. Default: both
+  --variant <std|exp|both>      Package variant. Default: exp
   --skip-npm-ci                 Reuse existing node_modules
   --no-install-pixi             Do not bootstrap pixi when it is missing
   -h, --help                    Show this help
@@ -29,9 +29,11 @@ Fresh Intel macOS VM flow:
   cd andrea-novel-helper
   bash scripts/macos-vm-build.sh
 
-Output:
-  dist/anh-std-darwin-x64.vsix
+Default output:
   dist/anh-exp-darwin-x64.vsix
+
+Build both variants when needed:
+  bash scripts/macos-vm-build.sh --variant both
 USAGE
 }
 
@@ -172,4 +174,8 @@ SKIP_WEBVIEW=1 pixi run node scripts/pixi-local-build.js "$VARIANT" "$TARGET"
 
 echo
 echo "Build complete. Artifacts:"
-ls -lh dist/anh-*-"$TARGET".vsix
+if [[ "$VARIANT" == "both" ]]; then
+  ls -lh "dist/anh-std-$TARGET.vsix" "dist/anh-exp-$TARGET.vsix"
+else
+  ls -lh "dist/anh-$VARIANT-$TARGET.vsix"
+fi
