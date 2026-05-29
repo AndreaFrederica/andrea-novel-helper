@@ -86,9 +86,7 @@ jobs:
             arch: x64
     runs-on: ${{ matrix.os }}
     needs: webview
-    if: >-
-      inputs.platforms == '' ||
-      contains(inputs.platforms, matrix.target)
+    if: inputs.platforms == '' || contains(inputs.platforms, matrix.target)
 
     env:
       # 扩展根目录；若在子目录请改成实际路径，例如 packages/extension
@@ -267,9 +265,7 @@ jobs:
 
     runs-on: ubuntu-latest
     needs: webview
-    if: >-
-      inputs.platforms == '' ||
-      contains(inputs.platforms, matrix.target)
+    if: inputs.platforms == '' || contains(inputs.platforms, matrix.target)
 
     container:
       image: debian:bookworm
