@@ -104,7 +104,7 @@ ___
 </ul>
 <div class="doc-note">双链补全会从当前工作区里的 Markdown / TXT 文件名生成候选；标签补全会从工作区已有标签中生成候选。ANH 会把双链、标题和标签索引缓存到当前项目的 <code>novel-helper/.anh-fsdb/obsidian-index.json</code>，后续只增量更新变更文件。左侧“标签”侧边栏按“标签 → 文件”的结构展示已有标签，其中颜色标签会单独分组，并用对应颜色渲染节点图标。普通标签可以直接查看引用，也可以在右键菜单中基于标签创建角色或绑定到已有角色；绑定关系使用角色 UUID，保存到 <code>novel-helper/.anh-fsdb/tag-role-bindings.json</code>。绑定不会改写角色语义，也不会把标签变成另一套角色来源；角色仍由原角色文件和角色系统负责，但绑定后的 <code>#标签</code> 会作为该角色的外部别名键参与识别、补全和 hover，角色详情中也会把已绑定标签作为元数据展示。标签活动栏里还提供“角色追踪”视图，可手动建立分组，把关心的角色固定下来并按引用文件展开查看。预览、复制纯文本、TXT 导出、Typst 预览和 Typst 导出会按设置渲染双链和标签；可关闭标签渲染，让 <code>#标签</code> 只作为整理标记存在于源文件中。</div>
 <figure style="margin:16px 0 18px;">
-  <img src="images/docs/anh/标签和角色追踪.png" alt="ANH 标签与角色追踪截图" style="width:100%;max-width:1200px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
+  <img src="images/docs/anh/tags-and-role-tracking.png" alt="ANH 标签与角色追踪截图" style="width:100%;max-width:1200px;height:auto;border:1px solid var(--vscode-panel-border);border-radius:8px;display:block;margin:0 auto;">
   <figcaption style="margin-top:8px;font-size:12px;color:var(--vscode-descriptionForeground);text-align:center;">标签侧栏与角色追踪实拍图。Obsidian 风格标签不是只会高亮，它还能在侧边栏里反查文件，并和角色追踪联动。</figcaption>
 </figure>
 <div class="doc-note"><b>这张图重点看</b>：左上是“标签”视图，按标签名聚合文件；左下是“角色追踪”视图，会把你关心的角色按文件展开；正文里蓝色的 <code>#标签</code> 和 <code>[[双链]]</code> 都能被识别，这正是 ANH 的 Obsidian 兼容能力。</div>

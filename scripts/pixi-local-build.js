@@ -28,7 +28,7 @@ function readPackage() {
   return JSON.parse(original);
 }
 
-function modify(variant) {
+function modify(variant, buildBothVariants) {
   const pkg = readPackage();
   const ev = new Set(pkg.activationEvents || []);
 
@@ -36,12 +36,14 @@ function modify(variant) {
     ev.delete('onStartupFinished');
   } else {
     ev.add('onStartupFinished');
-    const parts = pkg.version.split('.').map(Number);
-    if (parts.length !== 3 || parts.some(Number.isNaN)) {
-      throw new Error(`Invalid semver: ${pkg.version}`);
+    if (buildBothVariants) {
+      const parts = pkg.version.split('.').map(Number);
+      if (parts.length !== 3 || parts.some(Number.isNaN)) {
+        throw new Error(`Invalid semver: ${pkg.version}`);
+      }
+      parts[2] += 1;
+      pkg.version = parts.join('.');
     }
-    parts[2] += 1;
-    pkg.version = parts.join('.');
   }
 
   pkg.activationEvents = [...ev];
@@ -72,13 +74,13 @@ function parseTarget(targetArg) {
   return { platform, arch };
 }
 
-function packageVariant(variant, targetArg) {
+function packageVariant(variant, targetArg, buildBothVariants) {
   const out = `dist/anh-${variant}-${targetArg}.vsix`;
   const args = ['vsce', 'package', '--target', targetArg];
   if (variant === 'exp') args.push('--pre-release');
   args.push('--out', out);
 
-  modify(variant);
+  modify(variant, buildBothVariants);
   try {
     run('npx', args);
   } finally {
@@ -90,6 +92,7 @@ function main() {
   const variantArg = process.argv[2] || 'std';
   const targetArg = process.argv[3] || mapTarget();
   const variants = variantArg === 'both' ? ['std', 'exp'] : [variantArg];
+  const buildBothVariants = variants.length === 2;
   const ev = process.env.ELECTRON_VERSION || '30.0.9';
   const { platform, arch } = parseTarget(targetArg);
 
@@ -116,7 +119,7 @@ function main() {
 
   fs.mkdirSync('dist', { recursive: true });
   for (const variant of variants) {
-    packageVariant(variant, targetArg);
+    packageVariant(variant, targetArg, buildBothVariants);
   }
 }
 
