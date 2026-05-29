@@ -1,6 +1,6 @@
 # Change Log
 
-## [0.5.6] - 2026-05-20
+## [0.5.6] - 2026-05-29
 
 ### ✨ 新增
 
@@ -89,12 +89,62 @@
 - 新增 `src/test/roleLoadRefresh.unit.test.ts`：覆盖全量清空重建、增量单文件替换、SmartRoleAdder stale-map 防护三种场景。
 - 新增 `src/test/markdownParser.test.ts`：Markdown 角色解析单元测试。
 
+#### 批量导出面板
+- 新增 **批量导出 Webview 面板**（`andrea.batchExport.open`），以树形结构展示工作区中的章节文件，支持多选后批量导出为 PDF、PNG、SVG、HTML 或纯文本（TXT）。
+- 文件树排序与写作资源管理器完全一致：复用 `compareNames()` 章节号/中文数字/罗马数字/版本号感知排序算法。
+- 支持"保留目录结构"开关（默认开启），导出时在输出目录下自动创建子目录保持原始层级；关闭后所有文件平铺到输出目录根。
+- 选择文件夹时递归选中所有子目录和文件，折叠状态下也能正确生效。
+- 格式为纯文本时模板选择器自动灰掉，纯文本导出不经过 Typst 系统。
+- 面板支持持久化：展开的目录集合、选中的文件路径、当前格式、输出目录和目录结构开关均通过 `vscode.getState/setState` 恢复。
+- Hello 页面常用功能区新增"批量导出"快捷入口。
+
+#### Patchouli 预览阅读器
+- 新增 **Patchouli 预览阅读器**（`packages/patchouli-reader`），基于自研 Patchouli.js 排版引擎，使用 Quasar 框架构建 UI 层，支持分页阅读、翻页导航和多种排版设置。
+- 预览面板支持分页模式与滚动模式切换、字体大小/行距/边距调节、主题色选择等配置。
+- 新增 `PreviewSettingsPanel` 组件，提供浮动控制面板。
+- 修复分页模式下块级元素分割的回归问题，新增分页回归测试用例。
+
+#### Obsidian 兼容层与标签系统
+- 新增 **标签索引系统**：`src/language/obsidianIndex.ts` 和 `src/workers/obsidianIndexWorker.ts`，支持在后台线程中构建标签索引。
+- 新增 **标签资源管理器**（`TagExplorerView`）：侧边栏树视图展示所有 `#tag` 引用，按标签分组并显示使用位置，点击跳转。
+- 新增 **角色追踪视图**（`RoleTrackingView`）：展示角色在各文件中的引用和被引用关系，支持"谁提到我"和"我提到谁"双向追踪。
+- 新增 `src/language/tagRoleBridge.ts`：标签与角色引用的桥接层。
+- 新增 `src/language/roleTrackingStore.ts`：角色引用追踪数据存储。
+- 新增 `src/utils/obsidianInline.ts` / `obsidianInlineConfig.ts`：Obsidian 风格行内标记解析器。
+- TextMate 语法注入 `syntaxes/andrea-md-injection.tmLanguage.json`：为 Markdown 新增 `[[wikilink]]` 和 `#tag` 语法高亮支持。
+
+#### JSON5 无损写回
+- 所有 JSON5 编辑器（角色编辑器、关系编辑器、时间线编辑器）保存时采用**无损格式化**：保留原始文件的缩进风格、注释、尾逗号和字段顺序，不再在保存时重排整个文件。
+- 新增 `src/utils/json5Lossless.ts`：JSON5 无损解析与序列化工具。
+- 新增单元测试覆盖：`json5Lossless.test.ts`、`json5Lossless.editorFlow.test.ts`、`json5Lossless.templateVariants.test.ts`、`roleFileHandler.lossless.test.ts`、`roleUuidManager.lossless.test.ts`。
+
+#### 全局角色面板增强
+- **全局角色面板** 新增**原始源文件编辑**功能：点击角色条目可直接在面板中查看和编辑其 JSON5/Markdown 源文件，支持实时保存。
+- 新增 `MarkdownRenderer.vue` 组件，面板中 Markdown 内容直接渲染为富文本。
+- 角色面板支持按包、按类型过滤和搜索。
+
+#### 角色层级解析
+- 新增 `src/utils/roleHierarchy.ts`：角色层级解析，支持父子关系推断。
+- 新增 `src/utils/roleLineage.ts`：角色血统追踪，沿关系链推算家族谱系。
+- 关系加载器 `relationshipLoader.ts` 增强：支持从角色文件中提取层级信息并自动建立父子链接。
+- Markdown 解析器增强：支持 `## 子角色` 层级结构识别。
+
+#### 文档中心大幅扩展
+- 新增 **30+ 文档页面**，覆盖 VS Code 基础操作、文件格式指南、Git 版本控制、扩展设置参考、Obsidian 兼容、角色管理、时间线、标签等主题。
+- 文档查看器 `docViewerPage.ts` 新增面包屑导航、侧边栏目录和全文搜索。
+- 新增 `settings-reference.html`：完整设置项参考文档（567 行）。
+- Hello 首页新增写作资源管理器和批量导出快捷入口。
+
 ### 🚀 优化
 - **设置名称格式化**：提取 `src/Provider/utils/settingsSectionNames.ts`，覆盖约 30 个设置节的本地化；支持三层回退：i18n 翻译 → 内置多语言表（zh/ja/en）→ 自动 humanize。新增 `hello`、`package`、`roleEditor`、`scripts`、`writingDashboard` 等节。
 - **Quasar 框架全局样式**：`packages/webview/src/css/app.scss` 新增全局样式，背景色/文字色绑定 VS Code CSS 变量，字体绑定 `var(--vscode-font-family)`，确保 Quasar Webview 在主题切换时正确适配。
 - **Webview 面板图标统一**：新增 `src/Provider/utils/webviewPanelIcon.ts`，为所有 Webview 面板（预览、角色编辑器、快速设置、设置向导、Hello 页、What's New、 heatmap、dashboard、graph 等）设置统一品牌图标。
 - **Hello 页面协同判断**：当 Hello 启用时，跳过旧的首次设置向导弹窗和项目初始化弹窗；仅当没有打开文本编辑器时才自动显示 Hello 页面，避免干扰用户已有工作流。
 - `updateDecorations.ts` 移除硬编码的敏感词/词汇 `.txt` 文件跳过逻辑，改为更通用的处理方式。
+- **包管理器命名优化**：重命名包管理器中的内部显示名称，增加 Obsidian 兼容控制选项（标签索引开关、.gitignore/.wcignore 遵循开关）。
+- **角色优先级与查找键**：新增角色优先级排序配置和查找键（lookup key）本地化描述，支持中/英/日/繁四语言。
+- **引导流程改进**：向导页面新增快速设置快捷入口和文档中心链接；Hello 页面增加更多设置卡片（字体、自动换行、颜色模式）。
+- **扩展清单与设置注册**：补充遗漏的 `contributes` 条目和 `l10n` 键值，确保新增功能的设置项和命令在扩展清单中正确注册。
 
 ### ⚙️ 默认配置变更
 - `andrea.typeset.statusBar.compact`：默认 `false` → `true`（版式状态栏默认精简模式）。
@@ -108,6 +158,8 @@
   - 修复强制刷新时未清空 `sensitiveSourceFiles` 的 bug。
 - 修复 `src/wizard/workspaceInitCheck.ts` 未将 `.toml` 纳入有效资源扩展名的问题。
 - 修复右键从选择的文本创建角色/敏感词/词汇时 `selectOrCreateFile` 未支持 `.toml` 格式的问题。
+- 修复分页预览模式下块级元素（代码块、列表、引用）被不当分割的回归问题。
+- 修复 Markdown 纯文本提取中标签和 wiki 链接残留的问题（`md_plain.ts`）。
 
 ## [0.5.4] - 2026-05-10
 

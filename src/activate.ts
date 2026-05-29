@@ -69,6 +69,7 @@ import { registerTypoFeature } from './typo/typoService';
 import { registerTypoQuickSettings } from './typo/typoQuickSettings';
 import { registerTypstExport } from './commands/typstExport'
 import { registerExplorerTypstExport } from './commands/explorerTypstExport'
+import { registerBatchExport } from './commands/batchExport'
 import { registerTypstPreviewCommands, setTypstPreviewStatusBar } from './commands/typstPreview'
 import { TypstPreviewStatusBar } from './Provider/typstPreviewStatusBar'
 import { templateRegistry } from './typst/templateRegistry'
@@ -562,6 +563,7 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(onDidFinishRoles(() => { try { previewManager.broadcastRoleColors(); } catch { } }));
         registerTypstExport(context)
         registerExplorerTypstExport(context)
+        registerBatchExport(context)
         try { templateRegistry.init(context) } catch {}
         context.subscriptions.push(vscode.commands.registerCommand('andrea.typst.refreshTemplates', () => { try { (templateRegistry as any).scan?.() } catch {} }))
         // 批注专用面板与装饰

@@ -3,6 +3,35 @@ import * as vscode from 'vscode';
 
 const collator = new Intl.Collator('zh', { numeric: true, sensitivity: 'base' });
 
+/**
+ * 比较两个文件名的排序优先级（与写作资源管理器一致）。
+ * 返回负数表示 a 在前，正数表示 b 在前，0 表示相等。
+ * 用法：arr.sort((a, b) => compareNames(aName, bName))
+ */
+export function compareNames(aName: string, bName: string): number {
+    const la = aName.normalize('NFKC');
+    const lb = bName.normalize('NFKC');
+
+    const pa = parseChapterInfo(la);
+    const pb = parseChapterInfo(lb);
+
+    // 1) 两者都是章节型
+    if (pa && pb) {
+        if (pa.group !== pb.group) return pa.group - pb.group;
+        if (pa.volume !== pb.volume) return pa.volume - pb.volume;
+        if (pa.chapter !== pb.chapter) return pa.chapter - pb.chapter;
+        if (pa.part !== pb.part) return pa.part - pb.part;
+        if (pa.revision !== pb.revision) return pa.revision - pb.revision;
+        return fallbackNameCompare(la, lb);
+    }
+    // 2) 仅一方是章节型 → 章节型更靠前
+    if (pa && !pb) return -1;
+    if (!pa && pb) return 1;
+
+    // 3) 普通自然排序
+    return naturalCompare(la, lb);
+}
+
 export function sortItems(items: vscode.TreeItem[]) {
     items.sort((a, b) => {
         const aDir = a.collapsibleState !== vscode.TreeItemCollapsibleState.None;
