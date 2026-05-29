@@ -77,7 +77,7 @@ function parseTarget(targetArg) {
 function packageVariant(variant, targetArg, buildBothVariants) {
   const out = `dist/anh-${variant}-${targetArg}.vsix`;
   const args = ['vsce', 'package', '--target', targetArg];
-  if (variant === 'exp') args.push('--pre-release');
+  if (variant === 'exp' && buildBothVariants) args.push('--pre-release');
   args.push('--out', out);
 
   modify(variant, buildBothVariants);
