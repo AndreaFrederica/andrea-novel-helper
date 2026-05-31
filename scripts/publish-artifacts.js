@@ -19,8 +19,8 @@ Options:
   --marketplace-only    Publish only to VS Code Marketplace
   --openvsx-only        Publish only to Open VSX
   --std-only            Publish only anh-std-*.vsix
-  --exp-only            Publish only anh-exp-*.vsix as pre-release
-  --exp-as-release      Publish anh-exp-*.vsix to the stable/release channel
+  --exp-only            Publish only anh-exp-*.vsix
+  --exp-as-release      Publish anh-exp-*.vsix to the stable/release channel (default: pre-release)
   --target <target>     Publish only one target, e.g. linux-arm64. Can be repeated.
   --allow-version-mismatch
                         Do not verify VSIX versions against package.json

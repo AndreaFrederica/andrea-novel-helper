@@ -385,8 +385,13 @@ jobs:
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
-          echo "Packaging EXP (pre-release) to $OUT"
-          npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+          if [ "${{ inputs.variant }}" = "both" ]; then
+            echo "Packaging EXP (pre-release) to $OUT"
+            npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+          else
+            echo "Packaging EXP to $OUT"
+            npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          fi
           ls -al dist
 
       # 分别上传 STD/EXP 两个 VSIX 工件
@@ -560,8 +565,13 @@ jobs:
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           '
           OUT="dist/anh-exp-${{ matrix.target }}.vsix"
-          echo "Packaging EXP (pre-release) to $OUT"
-          npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+          if [ "${{ inputs.variant }}" = "both" ]; then
+            echo "Packaging EXP (pre-release) to $OUT"
+            npx vsce package --target ${{ matrix.target }} --pre-release --out "$OUT"
+          else
+            echo "Packaging EXP to $OUT"
+            npx vsce package --target ${{ matrix.target }} --out "$OUT"
+          fi
           ls -al dist
 
       # 分别上传 STD/EXP 两个 VSIX 工件
@@ -617,8 +627,13 @@ jobs:
               continue;
             fi
             if [[ "$f" == *"exp"* ]]; then
+              if [ "${{ inputs.variant }}" = "both" ]; then
               vsce publish --packagePath "$f" --pre-release
               ovsx publish "$f" --pre-release
+            else
+              vsce publish --packagePath "$f"
+              ovsx publish "$f"
+            fi
             else
               vsce publish --packagePath "$f"
               ovsx publish "$f"
