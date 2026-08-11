@@ -836,8 +836,8 @@ AndreaFrederica
 - 两者顺序执行：`pixi run local_both`
 
 说明：
-- 默认 Electron 版本为 `30.0.9`，可在命令前设置环境变量 `ELECTRON_VERSION` 覆盖
-- 本地脚本会自动重建 `@vscode/sqlite3` 原生模块并在打包时调整 `onStartupFinished`
+- SQLite 使用 Node 内置的 `node:sqlite`（VSCode 1.101+），不再需要编译任何原生 SQLite 模块
+- 本地脚本会在打包时调整 `onStartupFinished`
 - 打包输出位于 `dist/anh-std-<platform-arch>.vsix` 与 `dist/anh-exp-<platform-arch>.vsix`
 
 ### Linux 老系统兼容建议

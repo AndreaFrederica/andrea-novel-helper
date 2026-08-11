@@ -1,11 +1,12 @@
 /**
  * SQLite数据库后端实现
- * 使用 @vscode/sqlite3 提供高性能的本地存储
+ * 使用 Node.js 内置的 node:sqlite (Node >= 22.5) 提供本地存储，
+ * 无需独立编译任何原生模块。
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Database } from '@vscode/sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import {
     IDatabaseBackend,
     DatabaseConfig,
@@ -14,7 +15,7 @@ import {
 } from './IDatabaseBackend';
 
 export class SQLiteBackend implements IDatabaseBackend {
-    private db: Database | null = null;
+    private db: DatabaseSync | null = null;
     private config: DatabaseConfig;
     private dbPath: string;
     private initialized = false;
@@ -49,7 +50,7 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     private async getPathKeyForUuid(uuid: string): Promise<string | null> {
-        const row = await this.get<{ path: string }>(
+        const row = this.get<{ path: string }>(
             'SELECT path FROM path_mappings WHERE uuid = ? LIMIT 1',
             [uuid]
         );
@@ -68,13 +69,13 @@ export class SQLiteBackend implements IDatabaseBackend {
         }
 
         // 打开数据库
-        this.db = await this.openDatabase();
+        this.db = this.openDatabase();
 
         // 创建表结构
-        await this.createTables();
+        this.createTables();
 
         // 配置性能优化
-        await this.optimizeDatabase();
+        this.optimizeDatabase();
 
         this.initialized = true;
 
@@ -83,19 +84,15 @@ export class SQLiteBackend implements IDatabaseBackend {
         }
     }
 
-    private openDatabase(): Promise<Database> {
-        return new Promise((resolve, reject) => {
-            const db = new Database(this.dbPath, (err) => {
-                if (err) {
-                    reject(new Error(`打开SQLite数据库失败: ${err.message}`));
-                } else {
-                    resolve(db);
-                }
-            });
-        });
+    private openDatabase(): DatabaseSync {
+        try {
+            return new DatabaseSync(this.dbPath);
+        } catch (err) {
+            throw new Error(`打开SQLite数据库失败: ${err instanceof Error ? err.message : String(err)}`);
+        }
     }
 
-    private async createTables(): Promise<void> {
+    private createTables(): void {
         const sql = `
             -- 文件元数据表
             CREATE TABLE IF NOT EXISTS file_metadata (
@@ -148,7 +145,7 @@ export class SQLiteBackend implements IDatabaseBackend {
             CREATE INDEX IF NOT EXISTS idx_writing_file_summary_today ON writing_file_summary(today_key, today_peak_cpm);
         `;
 
-        await this.exec(sql);
+        this.exec(sql);
     }
 
     private mapWritingFileSummaryRow(row: {
@@ -179,104 +176,61 @@ export class SQLiteBackend implements IDatabaseBackend {
         };
     }
 
-    private async optimizeDatabase(): Promise<void> {
+    private optimizeDatabase(): void {
         const config = this.config.sqlite || {};
 
         // 启用WAL模式（Write-Ahead Logging）提升并发性能
         if (config.enableWAL !== false) {
-            await this.exec('PRAGMA journal_mode = WAL;');
+            this.exec('PRAGMA journal_mode = WAL;');
         }
 
         // 设置缓存大小（默认10MB，约2560页）
         const cacheSize = config.cacheSize || 2560;
-        await this.exec(`PRAGMA cache_size = -${cacheSize};`);
+        this.exec(`PRAGMA cache_size = -${cacheSize};`);
 
         // 启用内存映射IO（默认64MB）
         if (config.enableMmap !== false) {
-            await this.exec('PRAGMA mmap_size = 67108864;');
+            this.exec('PRAGMA mmap_size = 67108864;');
         }
 
         // 其他性能优化
-        await this.exec('PRAGMA synchronous = NORMAL;');
-        await this.exec('PRAGMA temp_store = MEMORY;');
-        await this.exec('PRAGMA page_size = 4096;');
+        this.exec('PRAGMA synchronous = NORMAL;');
+        this.exec('PRAGMA temp_store = MEMORY;');
+        this.exec('PRAGMA page_size = 4096;');
     }
 
-    private exec(sql: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (!this.db) {
-                reject(new Error('数据库未初始化'));
-                return;
-            }
-            this.db.exec(sql, (err) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
-        });
+    private exec(sql: string): void {
+        if (!this.db) {
+            throw new Error('数据库未初始化');
+        }
+        this.db.exec(sql);
     }
 
-    private run(sql: string, params: any[]): Promise<void> {
-        return new Promise((resolve, reject) => {
-            if (!this.db) {
-                reject(new Error('数据库未初始化'));
-                return;
-            }
-            this.db.run(sql, params, (err) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve();
-                }
-            });
-        });
+    private run(sql: string, params: any[]): void {
+        if (!this.db) {
+            throw new Error('数据库未初始化');
+        }
+        this.db.prepare(sql).run(...params);
     }
 
-    private get<T = any>(sql: string, params: any[]): Promise<T | null> {
-        return new Promise((resolve, reject) => {
-            if (!this.db) {
-                reject(new Error('数据库未初始化'));
-                return;
-            }
-            this.db.get(sql, params, (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row as T | null);
-                }
-            });
-        });
+    private get<T = any>(sql: string, params: any[]): T | null {
+        if (!this.db) {
+            throw new Error('数据库未初始化');
+        }
+        const row = this.db.prepare(sql).get(...params) as T | undefined;
+        return row ?? null;
     }
 
-    private all<T = any>(sql: string, params: any[]): Promise<T[]> {
-        return new Promise((resolve, reject) => {
-            if (!this.db) {
-                reject(new Error('数据库未初始化'));
-                return;
-            }
-            this.db.all(sql, params, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows as T[]);
-                }
-            });
-        });
+    private all<T = any>(sql: string, params: any[]): T[] {
+        if (!this.db) {
+            throw new Error('数据库未初始化');
+        }
+        return this.db.prepare(sql).all(...params) as T[];
     }
 
     async close(): Promise<void> {
         if (this.db) {
-            await new Promise<void>((resolve, reject) => {
-                this.db!.close((err) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve();
-                    }
-                });
-            });
+            this.db.close();
             this.db = null;
             this.initialized = false;
 
@@ -297,26 +251,26 @@ export class SQLiteBackend implements IDatabaseBackend {
                 data = excluded.data,
                 updated_at = excluded.updated_at
         `;
-        await this.run(sql, [uuid, data, now, metadata.createdAt || now]);
+        this.run(sql, [uuid, data, now, metadata.createdAt || now]);
     }
 
     async saveFileMetadataBatch(entries: Array<{ uuid: string; metadata: any }>): Promise<void> {
         if (entries.length === 0) return;
 
-        await this.exec('BEGIN TRANSACTION');
+        this.exec('BEGIN TRANSACTION');
         try {
             for (const { uuid, metadata } of entries) {
                 await this.saveFileMetadata(uuid, metadata);
             }
-            await this.exec('COMMIT');
+            this.exec('COMMIT');
         } catch (err) {
-            await this.exec('ROLLBACK');
+            this.exec('ROLLBACK');
             throw err;
         }
     }
 
     async loadFileMetadata(uuid: string): Promise<any | null> {
-        const row = await this.get<{ data: string }>(
+        const row = this.get<{ data: string }>(
             'SELECT data FROM file_metadata WHERE uuid = ?',
             [uuid]
         );
@@ -345,7 +299,7 @@ export class SQLiteBackend implements IDatabaseBackend {
         for (let i = 0; i < uuids.length; i += BATCH_SIZE) {
             const batch = uuids.slice(i, i + BATCH_SIZE);
             const placeholders = batch.map(() => '?').join(',');
-            const rows = await this.all<{ uuid: string; data: string }>(
+            const rows = this.all<{ uuid: string; data: string }>(
                 `SELECT uuid, data FROM file_metadata WHERE uuid IN (${placeholders})`,
                 batch
             );
@@ -369,20 +323,20 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async deleteFileMetadata(uuid: string): Promise<void> {
-        await this.run('DELETE FROM file_metadata WHERE uuid = ?', [uuid]);
+        this.run('DELETE FROM file_metadata WHERE uuid = ?', [uuid]);
     }
 
     async deleteFileMetadataBatch(uuids: string[]): Promise<void> {
         if (uuids.length === 0) return;
 
-        await this.exec('BEGIN TRANSACTION');
+        this.exec('BEGIN TRANSACTION');
         try {
             for (const uuid of uuids) {
                 await this.deleteFileMetadata(uuid);
             }
-            await this.exec('COMMIT');
+            this.exec('COMMIT');
         } catch (err) {
-            await this.exec('ROLLBACK');
+            this.exec('ROLLBACK');
             throw err;
         }
     }
@@ -397,27 +351,27 @@ export class SQLiteBackend implements IDatabaseBackend {
                 uuid = excluded.uuid,
                 updated_at = excluded.updated_at
         `;
-        await this.run(sql, [rel, uuid, now]);
+        this.run(sql, [rel, uuid, now]);
     }
 
     async savePathMappingBatch(mappings: Array<{ path: string; uuid: string }>): Promise<void> {
         if (mappings.length === 0) return;
 
-        await this.exec('BEGIN TRANSACTION');
+        this.exec('BEGIN TRANSACTION');
         try {
             for (const { path, uuid } of mappings) {
                 await this.savePathMapping(path, uuid);
             }
-            await this.exec('COMMIT');
+            this.exec('COMMIT');
         } catch (err) {
-            await this.exec('ROLLBACK');
+            this.exec('ROLLBACK');
             throw err;
         }
     }
 
     async getUuidByPath(path: string): Promise<string | null> {
         const rel = this.toRelKey(path);
-        const row = await this.get<{ uuid: string }>(
+        const row = this.get<{ uuid: string }>(
             'SELECT uuid FROM path_mappings WHERE path = ?',
             [rel]
         );
@@ -426,15 +380,15 @@ export class SQLiteBackend implements IDatabaseBackend {
 
     async deletePathMapping(path: string): Promise<void> {
         const rel = this.toRelKey(path);
-        await this.run('DELETE FROM path_mappings WHERE path = ?', [rel]);
+        this.run('DELETE FROM path_mappings WHERE path = ?', [rel]);
     }
 
     async deletePathMappingRaw(path: string): Promise<void> {
-        await this.run('DELETE FROM path_mappings WHERE path = ?', [path]);
+        this.run('DELETE FROM path_mappings WHERE path = ?', [path]);
     }
 
     async getAllPathMappings(): Promise<Map<string, string>> {
-        const rows = await this.all<{ path: string; uuid: string }>(
+        const rows = this.all<{ path: string; uuid: string }>(
             'SELECT path, uuid FROM path_mappings',
             []
         );
@@ -447,7 +401,7 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async getAllFileUuids(): Promise<string[]> {
-        const rows = await this.all<{ uuid: string }>(
+        const rows = this.all<{ uuid: string }>(
             'SELECT uuid FROM file_metadata',
             []
         );
@@ -464,11 +418,11 @@ export class SQLiteBackend implements IDatabaseBackend {
                 data = excluded.data,
                 updated_at = excluded.updated_at
         `;
-        await this.run(sql, [jsonData, now]);
+        this.run(sql, [jsonData, now]);
     }
 
     async loadIndex(): Promise<any | null> {
-        const row = await this.get<{ data: string }>(
+        const row = this.get<{ data: string }>(
             'SELECT data FROM index_data WHERE key = ?',
             ['main']
         );
@@ -484,11 +438,11 @@ export class SQLiteBackend implements IDatabaseBackend {
                 data = excluded.data,
                 updated_at = excluded.updated_at
         `;
-        await this.run(sql, [JSON.stringify({ ...summary, updatedAt }), updatedAt]);
+        this.run(sql, [JSON.stringify({ ...summary, updatedAt }), updatedAt]);
     }
 
     async loadWritingProjectSummary(): Promise<WritingProjectSummary | null> {
-        const row = await this.get<{ data: string }>(
+        const row = this.get<{ data: string }>(
             'SELECT data FROM writing_project_summary WHERE key = ?',
             ['main']
         );
@@ -517,7 +471,7 @@ export class SQLiteBackend implements IDatabaseBackend {
                 updated_at = excluded.updated_at
         `;
 
-        await this.run(sql, [
+        this.run(sql, [
             summary.uuid,
             this.toRelKey(summary.path),
             summary.totalMillis,
@@ -537,20 +491,20 @@ export class SQLiteBackend implements IDatabaseBackend {
             return;
         }
 
-        await this.exec('BEGIN TRANSACTION');
+        this.exec('BEGIN TRANSACTION');
         try {
             for (const summary of entries) {
                 await this.saveWritingFileSummary(summary);
             }
-            await this.exec('COMMIT');
+            this.exec('COMMIT');
         } catch (err) {
-            await this.exec('ROLLBACK');
+            this.exec('ROLLBACK');
             throw err;
         }
     }
 
     async loadWritingFileSummary(uuid: string): Promise<WritingFileSummary | null> {
-        const row = await this.get<{
+        const row = this.get<{
             uuid: string;
             path: string;
             total_millis: number | null;
@@ -572,7 +526,7 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async loadAllWritingFileSummaries(): Promise<Map<string, WritingFileSummary>> {
-        const rows = await this.all<{
+        const rows = this.all<{
             uuid: string;
             path: string;
             total_millis: number | null;
@@ -599,15 +553,15 @@ export class SQLiteBackend implements IDatabaseBackend {
     }
 
     async deleteWritingFileSummary(uuid: string): Promise<void> {
-        await this.run('DELETE FROM writing_file_summary WHERE uuid = ?', [uuid]);
+        this.run('DELETE FROM writing_file_summary WHERE uuid = ?', [uuid]);
     }
 
     async getStats(): Promise<{ totalFiles: number; totalMappings: number; dbSize?: number }> {
-        const fileCount = await this.get<{ count: number }>(
+        const fileCount = this.get<{ count: number }>(
             'SELECT COUNT(*) as count FROM file_metadata',
             []
         );
-        const mappingCount = await this.get<{ count: number }>(
+        const mappingCount = this.get<{ count: number }>(
             'SELECT COUNT(*) as count FROM path_mappings',
             []
         );
@@ -629,8 +583,8 @@ export class SQLiteBackend implements IDatabaseBackend {
 
     async optimize(): Promise<void> {
         // 执行VACUUM清理和优化数据库
-        await this.exec('VACUUM;');
-        await this.exec('ANALYZE;');
+        this.exec('VACUUM;');
+        this.exec('ANALYZE;');
 
         if (this.config.debug) {
             console.log('[SQLite] 数据库已优化');
@@ -643,7 +597,7 @@ export class SQLiteBackend implements IDatabaseBackend {
         index: any;
     }> {
         const files = new Map<string, any>();
-        const fileRows = await this.all<{ uuid: string; data: string }>(
+        const fileRows = this.all<{ uuid: string; data: string }>(
             'SELECT uuid, data FROM file_metadata',
             []
         );
@@ -662,12 +616,12 @@ export class SQLiteBackend implements IDatabaseBackend {
         pathMappings: Map<string, string>;
         index: any;
     }): Promise<void> {
-        await this.exec('BEGIN TRANSACTION');
+        this.exec('BEGIN TRANSACTION');
         try {
             // 清空现有数据
-            await this.exec('DELETE FROM file_metadata');
-            await this.exec('DELETE FROM path_mappings');
-            await this.exec('DELETE FROM index_data');
+            this.exec('DELETE FROM file_metadata');
+            this.exec('DELETE FROM path_mappings');
+            this.exec('DELETE FROM index_data');
 
             // 导入文件元数据
             for (const [uuid, metadata] of data.files) {
@@ -684,13 +638,13 @@ export class SQLiteBackend implements IDatabaseBackend {
                 await this.saveIndex(data.index);
             }
 
-            await this.exec('COMMIT');
+            this.exec('COMMIT');
 
             if (this.config.debug) {
                 console.log(`[SQLite] 数据导入完成: ${data.files.size} 个文件, ${data.pathMappings.size} 个路径映射`);
             }
         } catch (err) {
-            await this.exec('ROLLBACK');
+            this.exec('ROLLBACK');
             throw err;
         }
     }
@@ -712,7 +666,7 @@ export class SQLiteBackend implements IDatabaseBackend {
             }
 
             // 运行完整性检查
-            const result = await this.get<{ integrity_check: string }>(
+            const result = this.get<{ integrity_check: string }>(
                 'PRAGMA integrity_check',
                 []
             );
@@ -722,7 +676,7 @@ export class SQLiteBackend implements IDatabaseBackend {
             }
 
             // 检查表是否存在
-            const tables = await this.all<{ name: string }>(
+            const tables = this.all<{ name: string }>(
                 "SELECT name FROM sqlite_master WHERE type='table'",
                 []
             );

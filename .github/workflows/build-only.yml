@@ -101,16 +101,6 @@ jobs:
         working-directory: packages/enigo-keyboard
         run: npm run sign:macos
 
-      - name: Rebuild @vscode/sqlite3 for Electron
-        shell: bash
-        run: |
-          npm rebuild @vscode/sqlite3 \
-            --runtime=electron \
-            --target="$EV" \
-            --dist-url=https://electronjs.org/headers \
-            --platform='${{ matrix.platform }}' \
-            --arch='${{ matrix.arch }}'
-
       - name: Package STD variant
         shell: bash
         run: |
@@ -251,15 +241,6 @@ jobs:
 
       - name: Compile extension
         run: npm run compile
-
-      - name: Rebuild @vscode/sqlite3 for Electron
-        run: |
-          npm rebuild @vscode/sqlite3 \
-            --runtime=electron \
-            --target="$EV" \
-            --dist-url=https://electronjs.org/headers \
-            --platform='${{ matrix.platform }}' \
-            --arch='${{ matrix.arch }}'
 
       - name: Package STD variant
         shell: bash

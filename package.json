@@ -4,7 +4,7 @@
   "description": "功能较完备的小说写作辅助：角色/词汇/敏感词库定义与管理、引用追踪与角色引用热力图、异步高亮匹配、双重大纲与包管理、写作时间与字数统计、正则表达式与补全、文件追踪、时间线与角色关系等。ANH 已作为面向小说创作的 IDE 环境构建，提供从资源管理到编辑辅助的一体化工具。(A full-featured novel-writing assistant integrated into ANH — an IDE-like environment for novel authors: define and manage characters, vocabulary and sensitive-word libraries; track references and character usage (including heatmaps); async highlight matching; dual outlines and package management; timelines and relationship graphs; writing time and word-count statistics; regex patterns, completions and editor integrations; file tracking, WebDAV/AutoGit sync and other end-to-end writing tools.)",
   "version": "0.5.7",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.101.0"
   },
   "homepage": "https://anh.sirrus.cc",
   "publisher": "andreafrederica",
@@ -5098,7 +5098,6 @@
     "@modelcontextprotocol/sdk": "^1.22.0",
     "@node-rs/jieba": "^2.0.1",
     "@types/uuid": "^10.0.0",
-    "@vscode/sqlite3": "^5.1.8-vscode",
     "ahocorasick": "^1.0.2",
     "chardet": "^2.1.0",
     "chart.js": "^4.5.0",

@@ -66,14 +66,6 @@ function mapTarget() {
   return `${platform}-${arch}`;
 }
 
-function parseTarget(targetArg) {
-  const [platform, arch] = targetArg.split('-');
-  if (!platform || !arch) {
-    throw new Error(`Invalid target: ${targetArg}`);
-  }
-  return { platform, arch };
-}
-
 function packageVariant(variant, targetArg, buildBothVariants) {
   const out = `dist/anh-${variant}-${targetArg}.vsix`;
   const args = ['vsce', 'package', '--target', targetArg];
@@ -93,8 +85,6 @@ function main() {
   const targetArg = process.argv[3] || mapTarget();
   const variants = variantArg === 'both' ? ['std', 'exp'] : [variantArg];
   const buildBothVariants = variants.length === 2;
-  const ev = process.env.ELECTRON_VERSION || '30.0.9';
-  const { platform, arch } = parseTarget(targetArg);
 
   for (const variant of variants) {
     if (variant !== 'std' && variant !== 'exp') {
@@ -107,15 +97,6 @@ function main() {
   }
 
   run('npm', ['run', 'compile']);
-  run('npm', [
-    'rebuild',
-    '@vscode/sqlite3',
-    '--runtime=electron',
-    `--target=${ev}`,
-    '--dist-url=https://electronjs.org/headers',
-    `--platform=${platform}`,
-    `--arch=${arch}`,
-  ]);
 
   fs.mkdirSync('dist', { recursive: true });
   for (const variant of variants) {

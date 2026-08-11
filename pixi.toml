@@ -70,13 +70,6 @@ list_enigo_targets = { cmd = "npm run build:cross -- list", cwd = "packages/enig
 # Install Rust targets (run once per host)
 install_rust_targets = { cmd = "rustup target add x86_64-pc-windows-msvc x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu arm-unknown-linux-gnueabihf" }
 
-# SQLite rebuild tasks (for different platforms)
-rebuild_sqlite_win32 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=win32 --arch=x64" }
-rebuild_sqlite_darwin_x64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=darwin --arch=x64" }
-rebuild_sqlite_darwin_arm64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=darwin --arch=arm64" }
-rebuild_sqlite_linux_x64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=linux --arch=x64" }
-rebuild_sqlite_linux_arm64 = { cmd = "npm rebuild @vscode/sqlite3 --runtime=electron --target=30.0.9 --dist-url=https://electronjs.org/headers --platform=linux --arch=arm64" }
-
 # VSIX packaging tasks (STD and EXP variants) for all platforms
 package_std_win32 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.activationEvents=(pkg.activationEvents||[]).filter(x=>x!=='onStartupFinished'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target win32-x64 --out dist/anh-std-win32-x64.vsix" }
 package_exp_win32 = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target win32-x64 --pre-release --out dist/anh-exp-win32-x64.vsix" }
@@ -97,18 +90,18 @@ package_std_linux_armhf = { cmd = "mkdir -p dist && node -e \"const fs=require('
 package_exp_linux_armhf = { cmd = "mkdir -p dist && node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); const evs=new Set(pkg.activationEvents||[]); evs.add('onStartupFinished'); pkg.activationEvents=[...evs]; const parts=pkg.version.split('.').map(Number); parts[2]+=1; pkg.version=parts.join('.'); if(pkg.scripts&&pkg.scripts['vscode:prepublish']) pkg.scripts['vscode:prepublish']='npm run compile'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));\" && npx vsce package --target linux-armhf --pre-release --out dist/anh-exp-linux-armhf.vsix" }
 
 # Combined build tasks for local development (all platforms)
-build_std_win32 = { depends-on = ["build_enigo", "rebuild_sqlite_win32", "package_std_win32"] }
-build_exp_win32 = { depends-on = ["build_enigo", "rebuild_sqlite_win32", "package_exp_win32"] }
-build_std_darwin_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_x64", "package_std_darwin_x64"] }
-build_exp_darwin_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_x64", "package_exp_darwin_x64"] }
-build_std_darwin_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_arm64", "package_std_darwin_arm64"] }
-build_exp_darwin_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_darwin_arm64", "package_exp_darwin_arm64"] }
-build_std_linux_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_x64", "package_std_linux_x64"] }
-build_exp_linux_x64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_x64", "package_exp_linux_x64"] }
-build_std_linux_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_arm64", "package_std_linux_arm64"] }
-build_exp_linux_arm64 = { depends-on = ["build_enigo", "rebuild_sqlite_linux_arm64", "package_exp_linux_arm64"] }
-build_std_linux_armhf = { depends-on = ["build_enigo", "rebuild_sqlite_linux_armhf", "package_std_linux_armhf"] }
-build_exp_linux_armhf = { depends-on = ["build_enigo", "rebuild_sqlite_linux_armhf", "package_exp_linux_armhf"] }
+build_std_win32 = { depends-on = ["build_enigo", "package_std_win32"] }
+build_exp_win32 = { depends-on = ["build_enigo", "package_exp_win32"] }
+build_std_darwin_x64 = { depends-on = ["build_enigo", "package_std_darwin_x64"] }
+build_exp_darwin_x64 = { depends-on = ["build_enigo", "package_exp_darwin_x64"] }
+build_std_darwin_arm64 = { depends-on = ["build_enigo", "package_std_darwin_arm64"] }
+build_exp_darwin_arm64 = { depends-on = ["build_enigo", "package_exp_darwin_arm64"] }
+build_std_linux_x64 = { depends-on = ["build_enigo", "package_std_linux_x64"] }
+build_exp_linux_x64 = { depends-on = ["build_enigo", "package_exp_linux_x64"] }
+build_std_linux_arm64 = { depends-on = ["build_enigo", "package_std_linux_arm64"] }
+build_exp_linux_arm64 = { depends-on = ["build_enigo", "package_exp_linux_arm64"] }
+build_std_linux_armhf = { depends-on = ["build_enigo", "package_std_linux_armhf"] }
+build_exp_linux_armhf = { depends-on = ["build_enigo", "package_exp_linux_armhf"] }
 
 # Package all STD variants
 package_all_std = { depends-on = ["package_std_win32", "package_std_darwin_x64", "package_std_darwin_arm64", "package_std_linux_x64", "package_std_linux_arm64", "package_std_linux_armhf"] }
