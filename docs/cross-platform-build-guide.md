@@ -93,7 +93,7 @@ cd andrea-novel-helper
 bash scripts/macos-vm-build.sh
 ```
 
-脚本会使用 `pixi` 创建/复用本地环境，安装 npm 依赖，构建 webview 与 `@anh/enigo-keyboard` 原生模块，重建 `@vscode/sqlite3` 的 Electron 版本。默认按单版本流程仅输出：
+脚本会使用 `pixi` 创建/复用本地环境，安装 npm 依赖，构建 webview 与 `@anh/enigo-keyboard` 原生模块。SQLite 使用 Node 内置的 `node:sqlite`，无需再编译。默认按单版本流程仅输出：
 
 ```text
 dist/anh-exp-darwin-x64.vsix

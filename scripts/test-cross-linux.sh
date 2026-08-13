@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Quick local cross-build test for linux-arm64 / linux-armhf
 # Usage:
-#   TARGET=linux-arm64 EV=30.0.9 ./scripts/test-cross-linux.sh
-#   TARGET=linux-armhf EV=30.0.9 ./scripts/test-cross-linux.sh
+#   TARGET=linux-arm64 ./scripts/test-cross-linux.sh
+#   TARGET=linux-armhf ./scripts/test-cross-linux.sh
 set -euo pipefail
 
 if [[ "$(uname -s)" != "Linux" ]]; then
@@ -11,7 +11,6 @@ if [[ "$(uname -s)" != "Linux" ]]; then
 fi
 
 TARGET="${TARGET:-linux-arm64}"   # linux-arm64 | linux-armhf
-EV="${EV:-30.0.9}"                # Electron version for sqlite rebuild
 
 case "$TARGET" in
   linux-arm64)
@@ -34,7 +33,6 @@ echo "== Cross build test =="
 echo "TARGET: $TARGET"
 echo "ARCH:   $ARCH"
 echo "RUST:   $RUST_TARGET"
-echo "EV:     $EV"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pushd "$ROOT_DIR" >/dev/null
@@ -56,17 +54,9 @@ CARGO_TARGET_${RUST_TARGET^^}_LINKER="$LINKER" \
 npm run build:ci
 popd >/dev/null
 
-echo ">> Rebuild @vscode/sqlite3 for Electron ($TARGET)"
-npm rebuild @vscode/sqlite3 \
-  --runtime=electron \
-  --target="$EV" \
-  --dist-url=https://electronjs.org/headers \
-  --platform=linux \
-  --arch="$ARCH"
-
 echo ">> TypeScript compile"
 npm run compile
 
-echo "== Done. Verify enigo_keyboard.node and sqlite3.node correspond to $TARGET =="
+echo "== Done. Verify enigo_keyboard.node corresponds to $TARGET =="
 
 popd >/dev/null

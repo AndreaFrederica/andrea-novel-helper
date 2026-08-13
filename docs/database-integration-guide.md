@@ -12,7 +12,7 @@
 ### 2. 三种后端实现 ✅
 
 #### SQLiteBackend (src/database/SQLiteBackend.ts)
-- 使用 `@vscode/sqlite3`
+- 使用 Node.js 内置的 `node:sqlite`（Node >= 22.5，VSCode 1.101+ 已内置，无需独立编译原生模块）
 - **性能优化**:
   - WAL模式（并发写入优化）
   - 批量查询分批（避免SQL变量限制）
