@@ -217,6 +217,9 @@ function getStyleLabel(style: string): string {
   height: auto;
   min-height: unset;
   max-height: none;
+  min-width: 0;
+  box-sizing: border-box;
+  container-type: inline-size;
   padding: 12px;
   border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
   border-radius: 8px;
@@ -251,6 +254,10 @@ function getStyleLabel(style: string): string {
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
   align-items: end;
+}
+
+.generator-form > * {
+  min-width: 0;
 }
 
 .color-dot,
@@ -313,5 +320,21 @@ function getStyleLabel(style: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@container (max-width: 360px) {
+  .generator-form,
+  .candidate-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .candidate-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .candidate-row :deep(.q-btn) {
+    align-self: flex-end;
+  }
 }
 </style>

@@ -5,6 +5,7 @@ import { getRoleMatches } from '../context/roleAsyncShared';
 import { ahoCorasickManager } from '../utils/AhoCorasick/ahoCorasickManager';
 import { rangesOverlap } from '../utils/utils';
 import { getRoleLookupKeys, roleMatchesKey } from './roleLookupKeys';
+import { composeDecorationLayers, resolvePriorityLayer } from './roleDecorationLayers';
 
 export interface RoleUsageRangeOptions {
     hits?: Array<[number, string[]]>;
@@ -26,11 +27,41 @@ export interface RoleDecorationEntry {
 
 export interface RoleUsageRangeResult {
     roleToRanges: Map<Role, vscode.Range[]>;
+    foregroundRoleToRanges: Map<Role, vscode.Range[]>;
+    backgroundRoleToRanges: Map<Role, vscode.Range[]>;
     hoverEntries: { range: vscode.Range; role: Role }[];
     decorationEntries: RoleDecorationEntry[];
+    visualSegments: RoleVisualSegment[];
     snapshot: Map<string, vscode.Range[]>;
     fullText: string;
     hits: Array<[number, string[]]>;
+}
+
+export interface RoleVisualSegment {
+    range: vscode.Range;
+    foreground?: RoleDecorationEntry;
+    background?: RoleDecorationEntry;
+}
+
+function emptyResult(fullText = '', hits: Array<[number, string[]]> = []): RoleUsageRangeResult {
+    return {
+        roleToRanges: new Map(),
+        foregroundRoleToRanges: new Map(),
+        backgroundRoleToRanges: new Map(),
+        hoverEntries: [],
+        decorationEntries: [],
+        visualSegments: [],
+        snapshot: new Map(),
+        fullText,
+        hits,
+    };
+}
+
+function roleHasBackground(role: Role): boolean {
+    if (role.style && typeof role.style === 'object') {
+        return typeof role.style.backgroundColor === 'string' && role.style.backgroundColor.trim().length > 0;
+    }
+    return typeof role.backgroundColor === 'string' && role.backgroundColor.trim().length > 0;
 }
 
 export async function collectRoleUsageRanges(
@@ -42,14 +73,14 @@ export async function collectRoleUsageRanges(
     let fullText = options.fullText;
 
     if (cancellation?.isCancellationRequested) {
-        return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText: fullText ?? '', hits: hits ?? [] };
+        return emptyResult(fullText ?? '', hits ?? []);
     }
 
     if (!hits) {
         try {
             const matches = await getRoleMatches(doc, fullText);
             if (cancellation?.isCancellationRequested) {
-                return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText: fullText ?? '', hits: [] };
+                return emptyResult(fullText ?? '');
             }
             hits = matches.map(m => [m.end, m.pats]);
             if ((!hits || hits.length === 0) && roles.length > 0) {
@@ -108,7 +139,7 @@ export async function collectRoleUsageRanges(
 
     for (const [endIdx, arr] of hits) {
         if (cancellation?.isCancellationRequested) {
-            return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText, hits };
+            return emptyResult(fullText, hits);
         }
         for (const raw of arr) {
             const pat = raw.trim().normalize('NFC');
@@ -151,7 +182,7 @@ export async function collectRoleUsageRanges(
     const regexRoles = roles.filter(r => r.type === '正则表达式' && r.regex);
     for (const role of regexRoles) {
         if (cancellation?.isCancellationRequested) {
-            return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText, hits };
+            return emptyResult(fullText, hits);
         }
         try {
             const regex = new RegExp(role.regex!, role.regexFlags || 'g');
@@ -211,7 +242,7 @@ export async function collectRoleUsageRanges(
 
     for (const candidate of candidates) {
         if (cancellation?.isCancellationRequested) {
-            return { roleToRanges: new Map(), hoverEntries: [], decorationEntries: [], snapshot: new Map(), fullText, hits };
+            return emptyResult(fullText, hits);
         }
         if (candidate.role.type === '正则表达式') {
             const segments = calculateFreeSegments(candidate.start, candidate.end);
@@ -240,6 +271,8 @@ export async function collectRoleUsageRanges(
     }
 
     const roleToRanges = new Map<Role, vscode.Range[]>();
+    const foregroundRoleToRanges = new Map<Role, vscode.Range[]>();
+    const backgroundRoleToRanges = new Map<Role, vscode.Range[]>();
     const hoverEntries: { range: vscode.Range; role: Role }[] = [];
     const decorationEntries: RoleDecorationEntry[] = [];
     for (const c of selected) {
@@ -260,10 +293,70 @@ export async function collectRoleUsageRanges(
         roleToRanges.get(c.role)!.push(range);
     }
 
+    const foregroundSegments = resolvePriorityLayer(selected.map(candidate => ({
+        start: candidate.start,
+        end: candidate.end,
+        priority: candidate.priority,
+        value: candidate,
+    })));
+    const backgroundSegments = resolvePriorityLayer(candidates
+        .filter(candidate => roleHasBackground(candidate.role))
+        .map(candidate => ({
+            start: candidate.start,
+            end: candidate.end,
+            priority: candidate.priority,
+            value: candidate,
+        })));
+
+    const addVisualRange = (target: Map<Role, vscode.Range[]>, role: Role, start: number, end: number): vscode.Range => {
+        const range = new vscode.Range(doc.positionAt(start), doc.positionAt(end));
+        const ranges = target.get(role) || [];
+        ranges.push(range);
+        target.set(role, ranges);
+        return range;
+    };
+    const entryForSegment = (candidate: Candidate, start: number, end: number): RoleDecorationEntry => ({
+        range: new vscode.Range(doc.positionAt(start), doc.positionAt(end)),
+        role: candidate.role,
+        matchedText: fullText.substring(start, end),
+        pattern: candidate.pattern,
+        matchSource: candidate.matchSource,
+        priority: candidate.priority,
+        partial: candidate.partial || start !== candidate.start || end !== candidate.end,
+    });
+
+    for (const segment of foregroundSegments) {
+        addVisualRange(foregroundRoleToRanges, segment.value.role, segment.start, segment.end);
+    }
+    for (const segment of backgroundSegments) {
+        addVisualRange(backgroundRoleToRanges, segment.value.role, segment.start, segment.end);
+    }
+
+    const visualSegments: RoleVisualSegment[] = composeDecorationLayers(foregroundSegments, backgroundSegments)
+        .map(segment => ({
+            range: new vscode.Range(doc.positionAt(segment.start), doc.positionAt(segment.end)),
+            foreground: segment.foreground
+                ? entryForSegment(segment.foreground, segment.start, segment.end)
+                : undefined,
+            background: segment.background
+                ? entryForSegment(segment.background, segment.start, segment.end)
+                : undefined,
+        }));
+
     const snapshot = new Map<string, vscode.Range[]>();
     for (const [role, ranges] of roleToRanges) {
         snapshot.set(role.name, ranges);
     }
 
-    return { roleToRanges, hoverEntries, decorationEntries, snapshot, fullText, hits };
+    return {
+        roleToRanges,
+        foregroundRoleToRanges,
+        backgroundRoleToRanges,
+        hoverEntries,
+        decorationEntries,
+        visualSegments,
+        snapshot,
+        fullText,
+        hits,
+    };
 }

@@ -94,16 +94,11 @@ function tryRestoreFromCache(editor: vscode.TextEditor, docUri: string): boolean
         applyRanges.set(roleName, ranges);
     }
 
-    // 应用到编辑器：先设置缓存里有的角色，再清理其它角色
-    const present = new Set<string>(applyRanges.keys());
-    for (const [roleName, { deco }] of decorationMeta) {
-        const ranges = applyRanges.get(roleName) || [];
-        editor.setDecorations(deco, ranges);
-    }
-    for (const [roleName] of decorationMeta) {
-        if (!present.has(roleName)) {
-            const meta = decorationMeta.get(roleName)!;
-            editor.setDecorations(meta.deco, []);
+    // 文字与背景使用独立 decoration，恢复时分别应用。
+    for (const [roleName, meta] of decorationMeta) {
+        editor.setDecorations(meta.textDeco, applyRanges.get(textDecorationKey(roleName)) || []);
+        if (meta.backgroundDeco) {
+            editor.setDecorations(meta.backgroundDeco, applyRanges.get(backgroundDecorationKey(roleName)) || []);
         }
     }
 
@@ -133,9 +128,21 @@ export interface DecorationsUpdatedEvent { uri: vscode.Uri; rolesHighlighted: nu
 export const _onDidUpdateDecorations = new vscode.EventEmitter<DecorationsUpdatedEvent>();
 export const onDidUpdateDecorations = _onDidUpdateDecorations.event;
 
-// —— 装饰器元数据：角色名 → { deco, propsHash } ——
+const TEXT_DECORATION_PREFIX = 'text:';
+const BACKGROUND_DECORATION_PREFIX = 'background:';
+
+function textDecorationKey(roleName: string): string {
+    return `${TEXT_DECORATION_PREFIX}${roleName}`;
+}
+
+function backgroundDecorationKey(roleName: string): string {
+    return `${BACKGROUND_DECORATION_PREFIX}${roleName}`;
+}
+
+// —— 装饰器元数据：角色名 → 文字/背景 decoration ——
 interface DecoMeta {
-    deco: vscode.TextEditorDecorationType;
+    textDeco: vscode.TextEditorDecorationType;
+    backgroundDeco?: vscode.TextEditorDecorationType;
     propsHash: string;
 }
 const decorationMeta = new Map<string, DecoMeta>();
@@ -334,46 +341,48 @@ function ensureDecorationTypes(): Set<string> {
     for (const [roleName, propsHash] of newHashMap) {
         const prev = decorationMeta.get(roleName);
         if (!prev || prev.propsHash !== propsHash) {
-            prev?.deco.dispose();
+            prev?.textDeco.dispose();
+            prev?.backgroundDeco?.dispose();
 
             // 直接从 roles 数组获取角色对象
             const role = roles.find(r => r.name === roleName);
             const textStyle = getTextStyleFromRole(role);
             const props = JSON.parse(propsHash);
 
-            // 构建装饰选项
-            const decoOptions: vscode.DecorationRenderOptions = {
+            // 文字层不设置背景色，允许背景层跨过其它角色连续绘制。
+            const textDecoOptions: vscode.DecorationRenderOptions = {
                 rangeBehavior
             };
 
             // 设置颜色
-            decoOptions.color = props.color;
-
-            // 设置背景色
-            if (props.backgroundColor) {
-                decoOptions.backgroundColor = props.backgroundColor;
-            }
+            textDecoOptions.color = props.color;
 
             // 设置字体样式（斜体）
             const fontStyle = buildFontStyle(textStyle);
             if (fontStyle) {
-                decoOptions.fontStyle = fontStyle;
+                textDecoOptions.fontStyle = fontStyle;
             }
 
             // 设置字体粗细（粗体）
             const fontWeight = buildFontWeight(textStyle);
             if (fontWeight) {
-                decoOptions.fontWeight = fontWeight;
+                textDecoOptions.fontWeight = fontWeight;
             }
 
             // 设置文本装饰（下划线/删除线）
             const textDecoration = buildTextDecoration(textStyle);
             if (textDecoration) {
-                decoOptions.textDecoration = textDecoration;
+                textDecoOptions.textDecoration = textDecoration;
             }
 
-            const deco = vscode.window.createTextEditorDecorationType(decoOptions);
-            decorationMeta.set(roleName, { deco, propsHash });
+            const textDeco = vscode.window.createTextEditorDecorationType(textDecoOptions);
+            const backgroundDeco = props.backgroundColor
+                ? vscode.window.createTextEditorDecorationType({
+                    rangeBehavior,
+                    backgroundColor: props.backgroundColor,
+                })
+                : undefined;
+            decorationMeta.set(roleName, { textDeco, backgroundDeco, propsHash });
             changedRoles.add(roleName); // [ANCHOR A-1] 记录变化
         }
     }
@@ -381,7 +390,9 @@ function ensureDecorationTypes(): Set<string> {
     // 3) 删除多余的
     for (const oldName of Array.from(decorationMeta.keys())) {
         if (!newHashMap.has(oldName)) {
-            decorationMeta.get(oldName)!.deco.dispose();
+            const meta = decorationMeta.get(oldName)!;
+            meta.textDeco.dispose();
+            meta.backgroundDeco?.dispose();
             decorationMeta.delete(oldName);
             changedRoles.add(oldName); // [ANCHOR A-1] 删除也算变化
         }
@@ -476,7 +487,14 @@ export async function updateDecorations() {
     
 
         // 预构建 pattern -> role 映射（包含别名和fixes），避免依赖主线程 AC 的 patternMap 重建时序导致别名遗漏
-        const { roleToRanges, hoverEntries, snapshot, fullText: resolvedText, hits: resolvedHits } = await collectRoleUsageRanges(doc, { hits, fullText });
+        const {
+            roleToRanges,
+            foregroundRoleToRanges,
+            backgroundRoleToRanges,
+            hoverEntries,
+            fullText: resolvedText,
+            hits: resolvedHits,
+        } = await collectRoleUsageRanges(doc, { hits, fullText });
         hits = resolvedHits;
         fullText = resolvedText;
 
@@ -486,57 +504,75 @@ export async function updateDecorations() {
 
         updateUnboundTagDecorations(editor, fullText);
 
-        currentRangesByDoc.set(doc.uri.toString(), new Map(snapshot));
+        const visualSnapshot = new Map<string, vscode.Range[]>();
+        for (const [role, ranges] of foregroundRoleToRanges) {
+            visualSnapshot.set(textDecorationKey(role.name), ranges);
+        }
+        for (const [role, ranges] of backgroundRoleToRanges) {
+            visualSnapshot.set(backgroundDecorationKey(role.name), ranges);
+        }
+        currentRangesByDoc.set(doc.uri.toString(), visualSnapshot);
 
         // —— 按“文档×角色”做哈希比对，避免跨编辑器串扰 —— //
         const docKey = doc.uri.toString();               // 也可用 toString(true)
         const perDoc = getPerDocHashes(docKey);
         // [ANCHOR A-3] 若本轮有重建/删除的 DecorationType，则强制让这些角色在本 doc 里重绘
         if (changedRoles.size) {
-            for (const rn of changedRoles) perDoc.delete(rn);
+            for (const roleName of changedRoles) {
+                perDoc.delete(textDecorationKey(roleName));
+                perDoc.delete(backgroundDecorationKey(roleName));
+            }
         }
 
-
-        // 1) 给出现的角色 setRanges（若与上次相同则跳过）
-        for (const [role, ranges] of roleToRanges) {
-            const meta = decorationMeta.get(role.name)!;
-
+        const applyDecorationRanges = (
+            role: Role,
+            ranges: vscode.Range[],
+            key: string,
+            deco: vscode.TextEditorDecorationType
+        ) => {
+            const meta = decorationMeta.get(role.name);
+            if (!meta) return;
             const rangesHash = ranges
                 .map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`)
                 .join('|');
-
-            // ✅ 关键：把 DecorationType 的 propsHash 一并纳入比较
             const appliedKey = `${meta.propsHash}@${rangesHash}`;
-            const prevKey = perDoc.get(role.name) || '';
-
-            // 1) 给出现的角色 setRanges（若与上次相同则跳过；新 editor 一律强制）
-            for (const [role, ranges] of roleToRanges) {
-                const meta = decorationMeta.get(role.name)!;
-
-                const rangesHash = ranges
-                    .map(r => `${r.start.line},${r.start.character}-${r.end.line},${r.end.character}`)
-                    .join('|');
-
-                const appliedKey = `${meta.propsHash}@${rangesHash}`;
-                const prevKey = perDoc.get(role.name) || '';
-
-                // [ANCHOR C-3] 新 editor 或 键不同 → 必须重绘
-                if (forceApplyForNewEditor || prevKey !== appliedKey) {
-                    editor.setDecorations(meta.deco, ranges);
-                    perDoc.set(role.name, appliedKey);
-                }
+            const prevKey = perDoc.get(key) || '';
+            if (forceApplyForNewEditor || prevKey !== appliedKey) {
+                editor.setDecorations(deco, ranges);
+                perDoc.set(key, appliedKey);
             }
+        };
 
+        // 背景层先应用，文字层只设置前景/字体属性，因此可在背景上继续显示高优先级角色。
+        for (const [role, ranges] of backgroundRoleToRanges) {
+            const meta = decorationMeta.get(role.name);
+            if (meta?.backgroundDeco) {
+                applyDecorationRanges(role, ranges, backgroundDecorationKey(role.name), meta.backgroundDeco);
+            }
+        }
+        for (const [role, ranges] of foregroundRoleToRanges) {
+            const meta = decorationMeta.get(role.name);
+            if (meta) {
+                applyDecorationRanges(role, ranges, textDecorationKey(role.name), meta.textDeco);
+            }
         }
 
+        // 给未出现的角色清空对应层（仅影响当前文档）。
+        const presentForegroundNames = new Set(Array.from(foregroundRoleToRanges.keys()).map(role => role.name));
+        const presentBackgroundNames = new Set(Array.from(backgroundRoleToRanges.keys()).map(role => role.name));
+        for (const [roleName, meta] of decorationMeta) {
+            const textKey = textDecorationKey(roleName);
+            if (!presentForegroundNames.has(roleName)) {
+                editor.setDecorations(meta.textDeco, []);
+                perDoc.set(textKey, `${meta.propsHash}@`);
+            }
 
-        // 2) 给没出现的角色 clear（仅影响当前文档）
-        const presentNames = new Set(Array.from(roleToRanges.keys()).map(r => r.name));
-        for (const [roleName, { deco, propsHash }] of decorationMeta) {
-            if (!presentNames.has(roleName)) {
-                editor.setDecorations(deco, []);
-                // ✅ 关键：把“这个文档×角色在当前 props 下为空”的状态也带上 propsHash
-                perDoc.set(roleName, `${propsHash}@`);
+            const backgroundKey = backgroundDecorationKey(roleName);
+            if (meta.backgroundDeco && !presentBackgroundNames.has(roleName)) {
+                editor.setDecorations(meta.backgroundDeco, []);
+                perDoc.set(backgroundKey, `${meta.propsHash}@`);
+            } else if (!meta.backgroundDeco) {
+                perDoc.delete(backgroundKey);
             }
         }
 

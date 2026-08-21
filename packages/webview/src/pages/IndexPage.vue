@@ -1451,6 +1451,10 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
+.editor-scroll-area {
+  container-type: inline-size;
+}
+
 .index-page-content {
   flex-wrap: nowrap;
 }
@@ -1471,5 +1475,27 @@ onUnmounted(() => {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+@container (max-width: 620px) {
+  .editor-mode-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .role-editor-toolbar__actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+@container (max-width: 420px) {
+  .index-page-content {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .role-panel :deep(.q-expansion__content) {
+    padding: 8px;
+  }
 }
 </style>

@@ -25,7 +25,7 @@ on:
         description: "构建 darwin-x64（macOS Intel）"
         type: boolean
         required: true
-        default: false
+        default: true
       build_win32_x64:
         description: "构建 win32-x64（Windows x64）"
         type: boolean
@@ -103,7 +103,7 @@ jobs:
                   "arch": "arm64",
               },
               {
-                  "os": "macos-13",
+                  "os": "macos-15-intel",
                   "target": "darwin-x64",
                   "platform": "darwin",
                   "arch": "x64",
@@ -144,7 +144,7 @@ jobs:
 
           default_enabled = {
               "darwin-arm64": True,
-              "darwin-x64": False,
+              "darwin-x64": True,
               "win32-x64": True,
               "linux-x64": True,
               "linux-arm64": True,

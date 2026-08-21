@@ -42,7 +42,7 @@ jobs:
             target: win32-x64
             platform: win32
             arch: x64
-          - os: macos-13
+          - os: macos-15-intel
             target: darwin-x64
             platform: darwin
             arch: x64

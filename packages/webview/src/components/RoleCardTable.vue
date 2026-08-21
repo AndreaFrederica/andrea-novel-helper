@@ -1,7 +1,7 @@
 <template>
   <div class="role-table-editor">
-    <div class="role-table-editor__toolbar row items-center q-col-gutter-sm">
-      <div class="col-12 col-md-4">
+    <div class="role-table-editor__toolbar">
+      <div class="role-table-editor__field role-table-editor__field--name">
         <q-input
           :model-value="draft.base.name"
           dense
@@ -12,7 +12,7 @@
         />
       </div>
 
-      <div class="col-12 col-sm-6 col-md-3">
+      <div class="role-table-editor__field role-table-editor__field--type">
         <q-select
           v-model="typeModel"
           :options="typeOptions"
@@ -28,7 +28,7 @@
         />
       </div>
 
-      <div class="col-6 col-sm-3 col-md-2">
+      <div class="role-table-editor__field role-table-editor__field--priority">
         <q-input
           :model-value="draft.base.priority"
           dense
@@ -40,7 +40,7 @@
         />
       </div>
 
-      <div class="col-6 col-sm-3 col-md-3">
+      <div class="role-table-editor__field role-table-editor__field--affiliation">
         <q-input
           :model-value="draft.base.affiliation"
           dense
@@ -52,12 +52,14 @@
       </div>
     </div>
 
-    <div class="role-table-editor__meta row items-center q-gutter-sm">
+    <div class="role-table-editor__meta">
       <q-chip dense square :style="chipStyle">
         {{ draft.base.type || t('roleEditor.tableEditor.uncategorized') }}
       </q-chip>
-      <q-chip dense outline>
-        UUID: {{ draft.base.uuid || t('roleEditor.tableEditor.unset') }}
+      <q-chip dense outline class="role-table-editor__uuid">
+        <span class="role-table-editor__uuid-text">
+          UUID: {{ draft.base.uuid || t('roleEditor.tableEditor.unset') }}
+        </span>
         <q-btn
           v-if="draft.base.uuid"
           flat
@@ -345,7 +347,7 @@
       </tbody>
     </q-markup-table>
 
-    <div class="row items-center justify-between q-mt-sm">
+    <div class="role-table-editor__footer q-mt-sm">
       <div class="text-caption role-table-summary">
         {{ t('roleEditor.tableEditor.summary') }}
       </div>
@@ -870,6 +872,8 @@ function copyUUID() {
 .role-table-editor {
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+  container-type: inline-size;
   padding: 12px;
   border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
   border-radius: 8px;
@@ -878,12 +882,52 @@ function copyUUID() {
 }
 
 .role-table-editor__toolbar,
-.role-table-editor__meta {
+.role-table-editor__meta,
+.role-table-editor__footer {
+  min-width: 0;
+}
+
+.role-table-editor__toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(180px, 1.35fr) minmax(100px, 0.75fr) minmax(160px, 1fr);
+  gap: 8px;
+}
+
+.role-table-editor__field {
   min-width: 0;
 }
 
 .role-table-editor__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin: 10px 0 12px;
+}
+
+.role-table-editor__uuid {
+  max-width: 100%;
+  margin: 0;
+}
+
+.role-table-editor__uuid :deep(.q-chip__content) {
+  min-width: 0;
+  width: 100%;
+}
+
+.role-table-editor__uuid-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-table-editor__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
 }
 
 .role-table-editor :deep(.q-field--outlined .q-field__control),
@@ -1081,27 +1125,109 @@ function copyUUID() {
 }
 
 .role-table-dialog {
-  min-width: 420px;
+  width: min(420px, 92vw);
+  min-width: 0;
   max-width: 92vw;
   color: var(--vscode-editorWidget-foreground, var(--vscode-editor-foreground, inherit));
   background: var(--vscode-editorWidget-background, var(--vscode-editor-background, inherit));
   border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
 }
 
-@media (max-width: 720px) {
-  .role-field-table {
-    table-layout: auto;
+@container (max-width: 820px) {
+  .role-table-editor__toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .field-name,
-  .field-type,
-  .field-actions {
-    width: auto;
-    max-width: none;
+  .role-table-editor__field--name {
+    grid-column: 1 / -1;
   }
 
   .style-row {
     grid-template-columns: 1fr;
+  }
+
+  .role-field-table :deep(.q-table__middle) {
+    overflow: visible;
+  }
+
+  .role-field-table :deep(table),
+  .role-field-table :deep(tbody) {
+    display: block;
+    width: 100%;
+  }
+
+  .role-field-table :deep(thead) {
+    display: none;
+  }
+
+  .role-field-table :deep(tbody tr) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    width: 100%;
+    padding: 12px;
+    border-bottom: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.22));
+  }
+
+  .role-field-table :deep(tbody tr:last-child) {
+    border-bottom: 0;
+  }
+
+  .role-field-table :deep(tbody td) {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .role-field-table :deep(tbody td:nth-child(2)) {
+    grid-column: 1 / -1;
+  }
+
+  .field-name {
+    grid-column: 1 / -1;
+    width: auto;
+    max-width: none;
+    word-break: normal;
+  }
+
+  .field-type {
+    grid-column: 1;
+    width: auto;
+    align-self: center;
+  }
+
+  .field-actions {
+    grid-column: 2;
+    width: auto;
+    min-height: 0;
+    text-align: right;
+  }
+}
+
+@container (max-width: 460px) {
+  .role-table-editor {
+    padding: 10px;
+  }
+
+  .role-table-editor__toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .role-table-editor__field--name {
+    grid-column: auto;
+  }
+
+  .role-table-editor__footer {
+    align-items: stretch;
+  }
+
+  .role-table-editor__footer :deep(.q-btn) {
+    width: 100%;
+  }
+
+  .style-color-control {
+    width: 100%;
   }
 }
 </style>

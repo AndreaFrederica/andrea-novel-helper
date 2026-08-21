@@ -2289,11 +2289,11 @@ async function executeReferenceMaintenanceAction(actionLabel: string, workspaceR
 
             if (actionLabel.includes('清理数据库中的绝对路径')) {
                 progress.report({ increment: 20, message: '清理绝对路径...' });
-                await vscode.commands.executeCommand('AndreaNovelHelper.cleanAbsolutePaths');
+                await vscode.commands.executeCommand('AndreaNovelHelper.fileTracking.cleanAbsolutePaths');
                 progress.report({ increment: 80, message: '绝对路径清理完成' });
             } else if (actionLabel.includes('重建角色引用索引')) {
                 progress.report({ increment: 20, message: '重建引用索引...' });
-                await vscode.commands.executeCommand('AndreaNovelHelper.rebuildRoleIndex');
+                await vscode.commands.executeCommand('AndreaNovelHelper.roleUsage.rebuildIndex');
                 progress.report({ increment: 80, message: '引用索引重建完成' });
             } else if (actionLabel.includes('打开角色引用热力图')) {
                 progress.report({ increment: 20, message: '准备热力图数据...' });

@@ -548,28 +548,46 @@ export class PreviewManager {
         const enabledTypeSet = Array.isArray(enabledTypes) && enabledTypes.length > 0 ? new Set(enabledTypes) : undefined;
         const highlights: any[] = [];
         const result = await collectRoleUsageRanges(doc);
-        for (const entry of result.decorationEntries) {
-            const roleType = typeof entry.role.type === 'string' && entry.role.type ? entry.role.type : '角色';
-            if (enabledTypeSet && !enabledTypeSet.has(roleType)) { continue; }
-            const style = this.getTextStyleFromRole(entry.role, vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor') || '#7aa2f7');
-            const hover = this.buildPreviewRoleHover(entry.role, entry, style);
-            for (let line = entry.range.start.line; line <= entry.range.end.line; line++) {
-                const startChar = line === entry.range.start.line ? entry.range.start.character : 0;
+        const defaultColor = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>('defaultColor') || '#7aa2f7';
+        for (const segment of result.visualSegments) {
+            const foregroundType = segment.foreground?.role.type || '角色';
+            const backgroundType = segment.background?.role.type || '角色';
+            const foregroundEnabled = !!segment.foreground && (!enabledTypeSet || enabledTypeSet.has(foregroundType));
+            const backgroundEnabled = !!segment.background && (!enabledTypeSet || enabledTypeSet.has(backgroundType));
+            if (!foregroundEnabled && !backgroundEnabled) { continue; }
+
+            const displayEntry = foregroundEnabled ? segment.foreground! : segment.background!;
+            const displayRole = displayEntry.role;
+            const roleType = typeof displayRole.type === 'string' && displayRole.type ? displayRole.type : '角色';
+            const style: RoleTextStyle = foregroundEnabled
+                ? this.getTextStyleFromRole(segment.foreground!.role, defaultColor)
+                : {};
+            delete style.backgroundColor;
+            if (backgroundEnabled) {
+                const backgroundStyle = this.getTextStyleFromRole(segment.background!.role, defaultColor);
+                if (backgroundStyle.backgroundColor) {
+                    style.backgroundColor = backgroundStyle.backgroundColor;
+                }
+            }
+
+            const hover = this.buildPreviewRoleHover(displayRole, displayEntry, style);
+            for (let line = segment.range.start.line; line <= segment.range.end.line; line++) {
+                const startChar = line === segment.range.start.line ? segment.range.start.character : 0;
                 const lineText = doc.lineAt(line).text;
-                const endChar = line === entry.range.end.line ? entry.range.end.character : lineText.length;
+                const endChar = line === segment.range.end.line ? segment.range.end.character : lineText.length;
                 if (endChar <= startChar) { continue; }
                 highlights.push({
                     srcLine: line,
                     start: startChar,
                     end: endChar,
                     role: {
-                        name: entry.role.name,
+                        name: displayRole.name,
                         type: roleType,
                         style,
                     },
                     hover,
-                    matchSource: entry.matchSource,
-                    partial: entry.partial,
+                    matchSource: displayEntry.matchSource,
+                    partial: displayEntry.partial,
                 });
             }
         }
