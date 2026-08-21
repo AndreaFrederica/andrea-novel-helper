@@ -1162,10 +1162,17 @@ function copyUUID() {
 
   .role-field-table :deep(tbody tr) {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template:
+      'field-name field-name' auto
+      'field-value field-value' auto
+      'field-type field-actions' auto
+      / minmax(0, 1fr) auto;
     gap: 8px 12px;
     width: 100%;
+    height: auto;
+    min-height: 0;
     padding: 12px;
+    align-items: start;
     border-bottom: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.22));
   }
 
@@ -1176,31 +1183,35 @@ function copyUUID() {
   .role-field-table :deep(tbody td) {
     display: block;
     min-width: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
     padding: 0;
     border: 0;
   }
 
   .role-field-table :deep(tbody td:nth-child(2)) {
-    grid-column: 1 / -1;
+    grid-area: field-value;
   }
 
   .field-name {
-    grid-column: 1 / -1;
+    grid-area: field-name;
     width: auto;
     max-width: none;
     word-break: normal;
   }
 
   .field-type {
-    grid-column: 1;
+    grid-area: field-type;
     width: auto;
     align-self: center;
   }
 
   .field-actions {
-    grid-column: 2;
+    grid-area: field-actions;
     width: auto;
     min-height: 0;
+    align-self: center;
     text-align: right;
   }
 }

@@ -27,8 +27,6 @@ export interface RoleDecorationEntry {
 
 export interface RoleUsageRangeResult {
     roleToRanges: Map<Role, vscode.Range[]>;
-    foregroundRoleToRanges: Map<Role, vscode.Range[]>;
-    backgroundRoleToRanges: Map<Role, vscode.Range[]>;
     hoverEntries: { range: vscode.Range; role: Role }[];
     decorationEntries: RoleDecorationEntry[];
     visualSegments: RoleVisualSegment[];
@@ -46,8 +44,6 @@ export interface RoleVisualSegment {
 function emptyResult(fullText = '', hits: Array<[number, string[]]> = []): RoleUsageRangeResult {
     return {
         roleToRanges: new Map(),
-        foregroundRoleToRanges: new Map(),
-        backgroundRoleToRanges: new Map(),
         hoverEntries: [],
         decorationEntries: [],
         visualSegments: [],
@@ -271,8 +267,6 @@ export async function collectRoleUsageRanges(
     }
 
     const roleToRanges = new Map<Role, vscode.Range[]>();
-    const foregroundRoleToRanges = new Map<Role, vscode.Range[]>();
-    const backgroundRoleToRanges = new Map<Role, vscode.Range[]>();
     const hoverEntries: { range: vscode.Range; role: Role }[] = [];
     const decorationEntries: RoleDecorationEntry[] = [];
     for (const c of selected) {
@@ -308,13 +302,6 @@ export async function collectRoleUsageRanges(
             value: candidate,
         })));
 
-    const addVisualRange = (target: Map<Role, vscode.Range[]>, role: Role, start: number, end: number): vscode.Range => {
-        const range = new vscode.Range(doc.positionAt(start), doc.positionAt(end));
-        const ranges = target.get(role) || [];
-        ranges.push(range);
-        target.set(role, ranges);
-        return range;
-    };
     const entryForSegment = (candidate: Candidate, start: number, end: number): RoleDecorationEntry => ({
         range: new vscode.Range(doc.positionAt(start), doc.positionAt(end)),
         role: candidate.role,
@@ -324,13 +311,6 @@ export async function collectRoleUsageRanges(
         priority: candidate.priority,
         partial: candidate.partial || start !== candidate.start || end !== candidate.end,
     });
-
-    for (const segment of foregroundSegments) {
-        addVisualRange(foregroundRoleToRanges, segment.value.role, segment.start, segment.end);
-    }
-    for (const segment of backgroundSegments) {
-        addVisualRange(backgroundRoleToRanges, segment.value.role, segment.start, segment.end);
-    }
 
     const visualSegments: RoleVisualSegment[] = composeDecorationLayers(foregroundSegments, backgroundSegments)
         .map(segment => ({
@@ -350,8 +330,6 @@ export async function collectRoleUsageRanges(
 
     return {
         roleToRanges,
-        foregroundRoleToRanges,
-        backgroundRoleToRanges,
         hoverEntries,
         decorationEntries,
         visualSegments,
