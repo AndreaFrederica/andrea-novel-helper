@@ -132,27 +132,6 @@ stages:
             condition: eq(variables['Agent.OS'], 'Darwin')
             displayName: Sign macOS binary when identity is configured
 
-          - script: |
-              npm rebuild @vscode/sqlite3 ^
-                --runtime=electron ^
-                --target="$(ELECTRON_VERSION)" ^
-                --dist-url=https://electronjs.org/headers ^
-                --platform="$(platform)" ^
-                --arch="$(arch)"
-            condition: eq(variables['Agent.OS'], 'Windows_NT')
-            displayName: Rebuild @vscode/sqlite3 for Electron (Windows)
-
-          - script: |
-              set -euo pipefail
-              npm rebuild @vscode/sqlite3 \
-                --runtime=electron \
-                --target="$(ELECTRON_VERSION)" \
-                --dist-url=https://electronjs.org/headers \
-                --platform="$(platform)" \
-                --arch="$(arch)"
-            condition: ne(variables['Agent.OS'], 'Windows_NT')
-            displayName: Rebuild @vscode/sqlite3 for Electron (Unix)
-
           - pwsh: |
               New-Item -ItemType Directory -Force -Path dist | Out-Null
               $pkg = Get-Content package.json -Raw | ConvertFrom-Json
@@ -300,16 +279,6 @@ stages:
 
           - script: npm run compile
             displayName: Compile extension
-
-          - script: |
-              set -euo pipefail
-              npm rebuild @vscode/sqlite3 \
-                --runtime=electron \
-                --target="$(ELECTRON_VERSION)" \
-                --dist-url=https://electronjs.org/headers \
-                --platform="$(platform)" \
-                --arch="$(arch)"
-            displayName: Rebuild @vscode/sqlite3 for Electron
 
           - script: |
               set -euo pipefail

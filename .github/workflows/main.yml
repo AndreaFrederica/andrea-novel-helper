@@ -325,22 +325,6 @@ jobs:
         shell: bash
         run: npm run sign:macos
 
-      # 为目标 Electron + 平台/架构重建原生模块（跨平台统一用 bash）
-      - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
-        working-directory: ${{ env.WORKDIR }}
-        shell: bash
-        env:
-          npm_config_arch: ${{ matrix.arch }}
-          npm_config_target_arch: ${{ matrix.arch }}
-          npm_config_platform: ${{ matrix.platform }}
-        run: |
-          npm rebuild @vscode/sqlite3 \
-            --runtime=electron \
-            --target='${{ inputs.electron_version }}' \
-            --dist-url=https://electronjs.org/headers \
-            --platform='${{ matrix.platform }}' \
-            --arch='${{ matrix.arch }}'
-
       - name: Package STD variant
         if: inputs.variant == 'std' || inputs.variant == 'both'
         working-directory: ${{ env.WORKDIR }}
@@ -509,17 +493,6 @@ jobs:
       - name: Compile extension
         working-directory: ${{ env.WORKDIR }}
         run: npm run compile
-
-      - name: Rebuild @vscode/sqlite3 for Electron (${{ matrix.platform }}-${{ matrix.arch }})
-        working-directory: ${{ env.WORKDIR }}
-        shell: bash
-        run: |
-          npm rebuild @vscode/sqlite3 \
-            --runtime=electron \
-            --target='${{ inputs.electron_version }}' \
-            --dist-url=https://electronjs.org/headers \
-            --platform='${{ matrix.platform }}' \
-            --arch='${{ matrix.arch }}'
 
       - name: Package STD variant
         if: inputs.variant == 'std' || inputs.variant == 'both'
