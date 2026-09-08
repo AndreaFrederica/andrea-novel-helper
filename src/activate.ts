@@ -107,7 +107,8 @@ import { registerLookupKeyCommands } from './commands/lookupKeyCommands';
 import { ProjectConfigDecorator } from './projectConfig/projectConfigDecorator';
 import { ProjectConfigCompletionProvider } from './projectConfig/projectConfigCompletionProvider';
 import { ProjectKeywordConfigJson5CompletionProvider, ProjectKeywordConfigJson5Linter } from './projectConfig/projectKeywordConfigJson5';
-import { clearProjectKeywordConfigCache, isProjectKeywordConfigFile } from './projectConfig/projectKeywordConfig';
+import { clearAllProjectConfigCaches, isProjectKeywordConfigFile } from './projectConfig/projectKeywordConfig';
+import { promptProjectResourceConfigMigration } from './projectConfig/projectJson5Config';
 import { SmartTabGroupLockManager } from './utils/smartTabGroupLock';
 import { SmartTabGroupLockStatusBar } from './utils/smartTabGroupLockStatusBar';
 import { createCirclePackingDataProvider } from './data/circlePackingDataProvider';
@@ -721,6 +722,10 @@ export async function activate(context: vscode.ExtensionContext) {
         // 若未来需要独立于包管理器的精简模式，可在设置中加开关再恢复。
 
         // 首次激活：强制全量刷新（清空缓存）再做异步批次扫描，避免潜在遗留缓存/过滤导致的初次缺失
+        const activeWorkspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (activeWorkspaceRoot) {
+            await promptProjectResourceConfigMigration(activeWorkspaceRoot);
+        }
         loadRoles(true); // 不阻塞激活；内部仍按批次异步触发 _onDidChangeRoles / 完成事件
         initAutomaton();
 
@@ -808,7 +813,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     e.affectsConfiguration('AndreaNovelHelper.customVocabularyFileKeywords') ||
                     e.affectsConfiguration('AndreaNovelHelper.customRegexFileKeywords')
                 ) {
-                    clearProjectKeywordConfigCache();
+                    clearAllProjectConfigCaches();
                     loadRoles(true);
                     updateDecorations();
                 }
@@ -816,7 +821,7 @@ export async function activate(context: vscode.ExtensionContext) {
         );
 
         const refreshKeywordConfigDrivenRoles = (targetPath?: string) => {
-            clearProjectKeywordConfigCache(targetPath);
+            clearAllProjectConfigCaches(targetPath);
             loadRoles(true);
             updateDecorations();
         };

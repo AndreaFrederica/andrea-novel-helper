@@ -626,11 +626,25 @@ Markdown 中的相对图片 `![](images/a.png)` 会自动转换为绝对 `file:/
   sensitiveWordsFileKeywords: [],
   vocabularyFileKeywords: [],
   regexFileKeywords: [],
+
+  // 外部资源发现模式：marker（默认，仅识别 __init__.ojson5）
+  // 也可设为 explicit（仅 includes）或 all（旧的启发式扫描）
+  resourceDiscovery: 'marker',
+  // 旧配置兼容字段：true 等价于 all，false 等价于 explicit
+  autoDiscovery: false,
+  includes: [
+    { path: '资料库/共享角色.md', kind: 'role' },
+    { path: '资料库/角色/**/*.md', kind: 'role' },
+  ],
+  excludes: [
+    '资料库/草稿/**',
+  ],
 }
 ```
 
 > **优先级规则**：`project-config.json5` > VS Code 设置 (`AndreaNovelHelper.*`) > 内置默认值。
 > `defaultRoleLookupKeys` 会与 VS Code 设置 `AndreaNovelHelper.defaultRoleLookupKeys` **合并**，项目配置排在前面（去重后优先保留）。
+> `resourceDiscovery` 有三档：`marker`（默认，只把含 `__init__.ojson5` 的目录视为外部资源）、`explicit`（只加载 `includes`）和 `all`（启用旧的启发式扫描）。`includes` 支持工作区根目录下的文件、子目录和 `*` / `**` glob；工作区根目录不能作为目录 include。旧的 `autoDiscovery` 仍可兼容映射到 `all`/`explicit`。
 
 ### Markdown 格式示例
 

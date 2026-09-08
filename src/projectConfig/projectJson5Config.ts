@@ -3,10 +3,20 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import JSON5 from 'json5';
 import { isLookupKeyFamily, setExtendedLookupKeyPrefixes, uniqueRoleKeys } from '../utils/roleLookupKeys';
+import { tryLosslessJson5UpdateText } from '../utils/json5Lossless';
 import { PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from './constants';
 import { LEGACY_RESOURCE_KEYWORDS } from './resourceFileNaming';
 
 export type ProjectLibraryTargetKey = 'rolesFile' | 'sensitiveWordsFile' | 'vocabularyFile' | 'regexPatternsFile';
+
+export type ProjectIncludeKind = 'role' | 'sensitive' | 'vocabulary' | 'regex' | 'auto';
+export type ProjectResourceDiscoveryMode = 'marker' | 'explicit' | 'all';
+
+export interface ProjectResourceInclude {
+    path: string;
+    kind: ProjectIncludeKind;
+    recursive?: boolean;
+}
 
 export interface ProjectJson5Config {
     rolesFile?: string;
@@ -15,12 +25,17 @@ export interface ProjectJson5Config {
     regexPatternsFile?: string;
     defaultRoleLookupKeys: string[];
     extendedLookupKeyPrefixes?: string[];
+    resourceDiscovery: ProjectResourceDiscoveryMode;
+    /** @deprecated Use resourceDiscovery. Kept for old project-config.json5 files. */
+    autoDiscovery: boolean;
+    includes: ProjectResourceInclude[];
+    excludes: string[];
 }
 
 export interface ProjectJson5ExtraFieldDefinition {
     key: keyof ProjectJson5Config;
     detail: string;
-    valueType: 'string' | 'stringArray';
+    valueType: 'string' | 'stringArray' | 'boolean' | 'resourceIncludeArray';
     snippet: string;
 }
 
@@ -68,6 +83,30 @@ export const PROJECT_JSON5_EXTRA_FIELD_DEFINITIONS: readonly ProjectJson5ExtraFi
         valueType: 'stringArray',
         snippet: "extendedLookupKeyPrefixes: [\n  '$1'\n],",
     },
+    {
+        key: 'resourceDiscovery',
+        detail: '外部资源发现模式：marker 仅扫描 __init__.ojson5，explicit 仅加载 includes，all 启用旧的启发式扫描。',
+        valueType: 'string',
+        snippet: "resourceDiscovery: 'marker',",
+    },
+    {
+        key: 'autoDiscovery',
+        detail: '旧版兼容字段：true 映射到 all，false 映射到 explicit。新配置请使用 resourceDiscovery。',
+        valueType: 'boolean',
+        snippet: 'autoDiscovery: false,',
+    },
+    {
+        key: 'includes',
+        detail: '显式加载的资源文件、目录或 glob 路径。路径相对于工作区根目录。',
+        valueType: 'resourceIncludeArray',
+        snippet: "includes: [\n  { path: '资料库/**/*.md', kind: 'role' },\n],",
+    },
+    {
+        key: 'excludes',
+        detail: '从显式资源 include 结果中排除的相对路径或 glob。',
+        valueType: 'stringArray',
+        snippet: "excludes: [\n  '资料库/drafts/**',\n],",
+    },
 ] as const;
 
 const CACHE = new Map<string, ProjectJson5Config>();
@@ -75,7 +114,142 @@ const CACHE = new Map<string, ProjectJson5Config>();
 export function createEmptyProjectJson5Config(): ProjectJson5Config {
     return {
         defaultRoleLookupKeys: [],
+        resourceDiscovery: 'marker',
+        autoDiscovery: false,
+        includes: [],
+        excludes: [],
     };
+}
+
+export function normalizeProjectResourceIncludes(value: unknown): ProjectResourceInclude[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const result: ProjectResourceInclude[] = [];
+    const seen = new Set<string>();
+    for (const entry of value) {
+        const raw = typeof entry === 'string'
+            ? { path: entry, kind: 'auto' }
+            : entry && typeof entry === 'object' && !Array.isArray(entry)
+                ? entry as Record<string, unknown>
+                : undefined;
+        if (!raw || typeof raw.path !== 'string') {
+            continue;
+        }
+        const resourcePath = raw.path.trim().replace(/\\/g, '/');
+        if (!resourcePath) {
+            continue;
+        }
+        const kind = raw.kind === 'role' || raw.kind === 'sensitive' || raw.kind === 'vocabulary' || raw.kind === 'regex' || raw.kind === 'auto'
+            ? raw.kind
+            : 'auto';
+        const recursive = typeof raw.recursive === 'boolean' ? raw.recursive : undefined;
+        const key = `${resourcePath}\0${kind}\0${recursive === undefined ? '' : recursive ? '1' : '0'}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        result.push({ path: resourcePath, kind, ...(recursive === undefined ? {} : { recursive }) });
+    }
+    return result;
+}
+
+export function normalizeProjectResourceExcludes(value: unknown): string[] {
+    const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+    return Array.from(new Set(values
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map(entry => entry.trim().replace(/\\/g, '/'))
+        .filter(Boolean)));
+}
+
+export function updateProjectResourceIncludes(
+    workspaceRoot: string,
+    updater: (includes: ProjectResourceInclude[]) => ProjectResourceInclude[],
+): boolean {
+    const configPath = path.join(workspaceRoot, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME);
+    let record: Record<string, unknown> = {};
+    let originalText = '';
+    try {
+        if (fs.existsSync(configPath)) {
+            originalText = fs.readFileSync(configPath, 'utf8');
+            const parsed = JSON5.parse(originalText) as unknown;
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                record = { ...(parsed as Record<string, unknown>) };
+            }
+        }
+        record.includes = normalizeProjectResourceIncludes(updater(normalizeProjectResourceIncludes(record.includes)));
+        const lossless = tryLosslessJson5UpdateText(originalText, record, vscode.Uri.file(configPath));
+        fs.writeFileSync(configPath, lossless.text || `${JSON5.stringify(record, null, 2)}\n`, 'utf8');
+        clearProjectJson5ConfigCache(workspaceRoot);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * 首次读取旧项目配置时，询问是否补齐资源发现字段。
+ * 只补缺失字段，不覆盖现有配置；用户拒绝时仍使用运行时兼容默认值。
+ */
+export async function promptProjectResourceConfigMigration(workspaceRoot: string): Promise<boolean> {
+    const configPath = path.join(workspaceRoot, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME);
+    if (!fs.existsSync(configPath)) {
+        return false;
+    }
+
+    let originalText: string;
+    let record: Record<string, unknown>;
+    try {
+        originalText = fs.readFileSync(configPath, 'utf8');
+        const parsed = JSON5.parse(originalText) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return false;
+        }
+        record = { ...(parsed as Record<string, unknown>) };
+    } catch {
+        return false;
+    }
+
+    const hasResourceDiscovery = record.resourceDiscovery === 'marker' || record.resourceDiscovery === 'explicit' || record.resourceDiscovery === 'all';
+    const needsMigration = !hasResourceDiscovery || !Array.isArray(record.includes) || !Array.isArray(record.excludes) || typeof record.autoDiscovery !== 'boolean';
+    if (!needsMigration) {
+        return false;
+    }
+
+    const confirmed = await vscode.window.showInformationMessage(
+        '检测到旧版项目配置。是否补齐 resourceDiscovery、includes 和 excludes 默认设置？',
+        { modal: true },
+        '写入默认设置',
+        '暂不处理'
+    );
+    if (confirmed !== '写入默认设置') {
+        return false;
+    }
+
+    if (!hasResourceDiscovery) {
+        record.resourceDiscovery = record.autoDiscovery === true
+            ? 'all'
+            : record.autoDiscovery === false ? 'explicit' : 'marker';
+    }
+    if (typeof record.autoDiscovery !== 'boolean') {
+        record.autoDiscovery = record.resourceDiscovery === 'all';
+    }
+    if (!Array.isArray(record.includes)) {
+        record.includes = [];
+    }
+    if (!Array.isArray(record.excludes)) {
+        record.excludes = [];
+    }
+
+    try {
+        const lossless = tryLosslessJson5UpdateText(originalText, record, vscode.Uri.file(configPath));
+        fs.writeFileSync(configPath, lossless.text || `${JSON5.stringify(record, null, 2)}\n`, 'utf8');
+        clearProjectJson5ConfigCache(workspaceRoot);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function clearProjectJson5ConfigCache(workspaceRootOrPath?: string): void {
@@ -110,6 +284,19 @@ export function getProjectJson5Config(workspaceRootOrFilePath?: string): Project
                     config.regexPatternsFile = normalizeRelativePathSetting(parsed.regexPatternsFile);
                     config.defaultRoleLookupKeys = normalizeDefaultRoleLookupKeys(parsed.defaultRoleLookupKeys);
                     config.extendedLookupKeyPrefixes = normalizeExtendedPrefixes(parsed.extendedLookupKeyPrefixes);
+                    const configuredMode = parsed.resourceDiscovery;
+                    if (configuredMode === 'marker' || configuredMode === 'explicit' || configuredMode === 'all') {
+                        config.resourceDiscovery = configuredMode;
+                        config.autoDiscovery = configuredMode === 'all';
+                    } else if (parsed.autoDiscovery === true) {
+                        config.resourceDiscovery = 'all';
+                        config.autoDiscovery = true;
+                    } else if (parsed.autoDiscovery === false) {
+                        config.resourceDiscovery = 'explicit';
+                        config.autoDiscovery = false;
+                    }
+                    config.includes = normalizeProjectResourceIncludes(parsed.includes);
+                    config.excludes = normalizeProjectResourceExcludes(parsed.excludes);
                 }
             } catch {
                 // ignore invalid project-config.json5 here; linter surfaces diagnostics elsewhere

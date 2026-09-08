@@ -5069,6 +5069,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "test:role-load-refresh": "npm run compile && mocha --ui tdd --require ./scripts/register-node-unit-test-env.js \"out/test/roleLoadRefresh.unit.test.js\"",
+    "test:project-resource-manifest": "npm run compile && mocha --ui tdd --require ./scripts/register-node-unit-test-env.js \"out/test/projectResourceManifest.unit.test.js\"",
     "test:json5-lossless": "npm run compile && mocha --ui tdd --require ./scripts/register-node-unit-test-env.js \"out/test/json5Lossless.test.js\" \"out/test/json5Lossless.editorFlow.test.js\" \"out/test/json5Lossless.templateVariants.test.js\" \"out/test/roleFileHandler.lossless.test.js\" \"out/test/roleUuidManager.lossless.test.js\"",
     "publish:artifacts": "node scripts/publish-artifacts.js",
     "mcp:test": "ts-node scripts/mcp-test.ts",

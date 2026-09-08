@@ -21,6 +21,7 @@ import { enhanceAllRolesWithRelationships, clearRelationshipProperties } from '.
 import { SmartRoleAdder } from './roleMerger';
 import { isLikelyDelimitedRoleFileContent, parseDelimitedRoleFile } from './delimitedRoleFile';
 import { getProjectKeywordConfig, mergeProjectKeywordConfigs, type ProjectKeywordConfig } from '../projectConfig/projectKeywordConfig';
+import { getProjectJson5Config, type ProjectIncludeKind, type ProjectResourceInclude } from '../projectConfig/projectJson5Config';
 import { DEFAULT_PROJECT_KEYWORD_CONFIG } from '../projectConfig/resourceFileNaming';
 import { applyGeneratedLookupKeys } from './roleLookupKeyGeneration';
 import { shouldIncrementalRoleLoad } from './roleLoadMode';
@@ -43,6 +44,144 @@ type RoleFileAutoFixSnapshot = {
 const roleFileAutoFixSnapshots = new Map<string, RoleFileAutoFixSnapshot>();
 const isolatedRoleFiles = new Map<string, { reason: string; detail?: string; ts: number }>();
 const notifiedRoleFileIssues = new Set<string>();
+
+export type ResolvedProjectResource = {
+	filePath: string;
+	kind: ProjectIncludeKind;
+};
+
+export type ResolvedProjectResourceDirectory = {
+	directoryPath: string;
+	kind: ProjectIncludeKind;
+};
+
+function normalizeResolvedPath(filePath: string): string {
+	const resolved = path.resolve(filePath);
+	return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+function isPathInsideRoot(root: string, target: string): boolean {
+	const normalizedRoot = normalizeResolvedPath(root);
+	const normalizedTarget = normalizeResolvedPath(target);
+	return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}${path.sep}`);
+}
+
+function includeKindToType(kind: ProjectIncludeKind): string | undefined {
+	switch (kind) {
+		case 'role': return '角色';
+		case 'sensitive': return '敏感词';
+		case 'vocabulary': return '词汇';
+		case 'regex': return '正则表达式';
+		default: return undefined;
+	}
+}
+
+const PROJECT_RESOURCE_EXTENSIONS = ['.json5', '.ojson5', '.txt', '.md', '.csv', '.toml'];
+
+function isGlobPattern(value: string): boolean {
+	return /[*?\[\]{}()!]/.test(value);
+}
+
+function safeProjectRelativePath(workspaceRoot: string, value: string): string | undefined {
+	const normalized = value.trim().replace(/\\/g, '/');
+	if (!normalized || path.isAbsolute(normalized) || normalized.split('/').includes('..')) {
+		return undefined;
+	}
+	const absolute = path.resolve(workspaceRoot, normalized);
+	if (!isPathInsideRoot(workspaceRoot, absolute)) {
+		return undefined;
+	}
+	return normalized;
+}
+
+function expandProjectInclude(workspaceRoot: string, include: ProjectResourceInclude): string[] {
+	const relative = safeProjectRelativePath(workspaceRoot, include.path);
+	if (!relative) {
+		return [];
+	}
+
+	const hasGlob = isGlobPattern(relative);
+	let pattern = relative;
+	if (!hasGlob) {
+		const exactPath = path.resolve(workspaceRoot, relative);
+		try {
+			if (fs.existsSync(exactPath) && fs.statSync(exactPath).isDirectory()) {
+				pattern = `${relative.replace(/\/$/, '')}/${include.recursive === false ? '*' : '**/*'}`;
+			} else if (fs.existsSync(exactPath) && fs.statSync(exactPath).isFile()) {
+				return [exactPath];
+			} else {
+				return [];
+			}
+		} catch {
+			return [];
+		}
+	}
+
+	try {
+		return fastGlob.sync(pattern, {
+			cwd: workspaceRoot,
+			absolute: true,
+			onlyFiles: true,
+			dot: false,
+			unique: true,
+			ignore: ['novel-helper/.anh-fsdb/**', 'novel-helper/outline/**', 'novel-helper/comments/**', 'novel-helper/typo/**'],
+		}).filter(filePath => PROJECT_RESOURCE_EXTENSIONS.some(ext => filePath.toLowerCase().endsWith(ext)));
+	} catch {
+		return [];
+	}
+}
+
+export function resolveProjectResourceIncludes(workspaceRoot: string): {
+	files: ResolvedProjectResource[];
+	directories: ResolvedProjectResourceDirectory[];
+} {
+	const config = getProjectJson5Config(workspaceRoot);
+	const fileMap = new Map<string, ResolvedProjectResource>();
+	const directories: ResolvedProjectResourceDirectory[] = [];
+	const directoryKeys = new Set<string>();
+	const excludedFiles = new Set<string>();
+
+	for (const exclude of config.excludes || []) {
+		const relative = safeProjectRelativePath(workspaceRoot, exclude);
+		if (!relative) continue;
+		const matches = expandProjectInclude(workspaceRoot, { path: relative, kind: 'auto', recursive: true });
+		for (const match of matches) excludedFiles.add(normalizeResolvedPath(match));
+	}
+
+	for (const include of config.includes || []) {
+		const relative = safeProjectRelativePath(workspaceRoot, include.path);
+		if (!relative) continue;
+		const exactPath = path.resolve(workspaceRoot, relative);
+		try {
+			if (!isGlobPattern(relative) && fs.existsSync(exactPath) && fs.statSync(exactPath).isDirectory()) {
+				if (normalizeResolvedPath(exactPath) === normalizeResolvedPath(workspaceRoot)) continue;
+				const key = `${normalizeResolvedPath(exactPath)}\0${include.kind}`;
+				if (!directoryKeys.has(key)) {
+					directoryKeys.add(key);
+					directories.push({ directoryPath: exactPath, kind: include.kind });
+				}
+			}
+		} catch {
+			continue;
+		}
+
+		for (const filePath of expandProjectInclude(workspaceRoot, include)) {
+			const key = normalizeResolvedPath(filePath);
+			if (excludedFiles.has(key) || !isPathInsideRoot(workspaceRoot, filePath)) continue;
+			if (!fileMap.has(key)) {
+				fileMap.set(key, { filePath, kind: include.kind });
+			}
+		}
+	}
+
+	return { files: Array.from(fileMap.values()), directories };
+}
+
+export function isProjectResourceIncluded(filePath: string): boolean {
+	const workspaceRoot = vscode.workspace.workspaceFolders?.find(folder => isPathInsideRoot(folder.uri.fsPath, filePath))?.uri.fsPath;
+	if (!workspaceRoot) return false;
+	return resolveProjectResourceIncludes(workspaceRoot).files.some(item => normalizeResolvedPath(item.filePath) === normalizeResolvedPath(filePath));
+}
 let roleFileDiagnosticCollection: vscode.DiagnosticCollection | undefined;
 const roleFileIsolationDiagnostics = new Map<string, vscode.Diagnostic[]>();
 const roleFileValidationDiagnostics = new Map<string, Map<string, vscode.Diagnostic[]>>();
@@ -644,6 +783,8 @@ export function getLastExternalRoleFolderScanReport(): ExternalRoleFolderScanRep
 export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vscode.WorkspaceFolder[]): { externalFolders: string[]; report: ExternalRoleFolderScanReport; } {
 	const startedAt = Date.now();
 	const folders = workspaceFolders || vscode.workspace.workspaceFolders || [];
+	const workspaceRoot = folders[0]?.uri.fsPath;
+	const projectConfig = workspaceRoot ? getProjectJson5Config(workspaceRoot) : undefined;
 	const ignoredDirectories = getExternalIgnoredDirectories();
 	const markerKeywords = getExternalFolderMarkerKeywords();
 	const markerKeywordsLower = markerKeywords.map(k => k.toLowerCase());
@@ -653,6 +794,41 @@ export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vs
 	let totalCandidateFiles = 0;
 	let matchedLegacyInitFiles = 0;
 	let matchedMarkerFiles = 0;
+
+	const discoveryMode = projectConfig?.resourceDiscovery || (projectConfig?.autoDiscovery ? 'all' : 'explicit');
+
+	// explicit 模式只使用 project-config.json5 中显式声明的目录，不扫描整个工作区。
+	if (discoveryMode === 'explicit') {
+		const resolved = workspaceRoot ? resolveProjectResourceIncludes(workspaceRoot) : { files: [], directories: [] };
+		for (const directory of resolved.directories) {
+			if (workspaceRoot && normalizeResolvedPath(directory.directoryPath) === normalizeResolvedPath(workspaceRoot)) {
+				continue;
+			}
+			externalFolderSet.add(directory.directoryPath);
+		}
+		for (const file of resolved.files) {
+			if (sampleMatchedFiles.length < 120) sampleMatchedFiles.push(file.filePath);
+		}
+		matchedMarkerFiles = resolved.files.length + resolved.directories.length;
+		const externalFolders = Array.from(externalFolderSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+		const report: ExternalRoleFolderScanReport = {
+			generatedAt: new Date().toISOString(),
+			workspaceRoots: folders.map(f => f.uri.fsPath),
+			ignoredDirectories: [...ignoredDirectories],
+			markerKeywords: [...markerKeywords],
+			legacyInitEnabled: false,
+			totalCandidateFiles: resolved.files.length,
+			matchedLegacyInitFiles: 0,
+			matchedMarkerFiles,
+			externalFolderCount: externalFolders.length,
+			externalFolders,
+			sampleMatchedFiles,
+			durationMs: Date.now() - startedAt,
+		};
+		lastExternalRoleFolders = externalFolders;
+		lastExternalRoleFolderScanReport = report;
+		return { externalFolders, report };
+	}
 
 	// 先扫描 .anh-ignore 文件，收集被排除的目录
 	for (const folder of folders) {
@@ -689,6 +865,10 @@ export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vs
 
 		for (const filePath of candidates) {
 			const dirPath = path.dirname(filePath);
+			const candidateWorkspaceRoot = folders.find(folder => isPathInsideRoot(folder.uri.fsPath, filePath))?.uri.fsPath;
+			if (candidateWorkspaceRoot && normalizeResolvedPath(dirPath) === normalizeResolvedPath(candidateWorkspaceRoot)) {
+				continue;
+			}
 
 			// 如果目录被 .anh-ignore 排除，跳过
 			if (ignoredFolderSet.has(dirPath)) {
@@ -698,6 +878,14 @@ export function scanExternalRoleFoldersWithReport(workspaceFolders?: readonly vs
 			const baseName = path.basename(filePath);
 			const lowerName = baseName.toLowerCase();
 			if (lowerName === '__init__.ojson5') {
+				matchedLegacyInitFiles++;
+				externalFolderSet.add(dirPath);
+				sampleMatchedFiles.push(filePath);
+				continue;
+			}
+			// marker 模式只用 __init__.ojson5 作为目录授权标记；目录内部仍按原规则识别资源文件。
+			if (discoveryMode === 'marker') {
+				if (lowerName !== '__init__.ojson5') continue;
 				matchedLegacyInitFiles++;
 				externalFolderSet.add(dirPath);
 				sampleMatchedFiles.push(filePath);
@@ -1025,6 +1213,7 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	// 使用 fast-glob 扫描外部资源文件夹（兼容 __init__.ojson5 + 关键字标识）
 	const scanResult = scanExternalRoleFoldersWithReport(folders);
 	const externalRoleFolders = scanResult.externalFolders;
+	const projectResources = resolveProjectResourceIncludes(root);
 	console.log(`loadRoles: 找到 ${externalRoleFolders.length} 个外部角色文件夹:`, externalRoleFolders);
 
 	const changedRoleFiles = changedFiles ?? [];
@@ -1044,12 +1233,12 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 	}
 	roleManager?.setExternalFolders(externalRoleFolders);
 
-	// 检查 novel-helper 目录是否存在
-	if (!fs.existsSync(novelHelperRoot)) {
-		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot}`);
-		// 仍然尝试加载传统方式的文件（向后兼容）
-		loadTraditionalRoles(forceRefresh, shouldIncrementalUpdate ? changedRoleFiles : undefined);
-		return;
+	// 全量扫描时预先加载所有显式资源；增量路径只重新加载发生变化的文件。
+	const explicitResourcePaths = new Set(projectResources.files.map(resource => normalizeResolvedPath(resource.filePath)));
+	if (!shouldIncrementalUpdate) {
+		for (const resource of projectResources.files) {
+			loadRoleFile(resource.filePath, path.relative(root, path.dirname(resource.filePath)), path.basename(resource.filePath), includeKindToType(resource.kind));
+		}
 	}
 
 	// 增量文件更新仍同步处理（避免复杂化调用点）
@@ -1091,6 +1280,17 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		return;
 	}
 
+	// 没有内置目录时，显式 includes 仍然有效，并继续兼容传统库文件配置。
+	if (!fs.existsSync(novelHelperRoot)) {
+		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot}`);
+		loadTraditionalRoles(forceRefresh);
+		finalizeRoleCollection();
+		_onDidChangeRoles.fire();
+		generateCSpellDictionary();
+		_onDidFinishRoles.fire();
+		return;
+	}
+
 	// 全量异步扫描：分批读取目录，避免阻塞主线程
 
 	// 支持目录断点续扫：若一个目录在批次末尾被截断，记录下一个起始索引与缓存的 entries
@@ -1125,8 +1325,15 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 		console.warn(`loadRoles: novel-helper 目录不存在: ${novelHelperRoot} (异步扫描暂停)`);
 	}
 
-	// 添加外部文件夹到扫描队列
+	// 只有显式关闭自动发现时，外部目录由上面的 include 逐文件加载；
+	// 自动发现开启时才把扫描器返回的目录加入递归队列。
+	const explicitDirectoryKeys = new Set(projectResources.directories.map(item => normalizeResolvedPath(item.directoryPath)));
+	const resourceDiscoveryMode = getProjectJson5Config(root).resourceDiscovery;
 	for (const externalFolder of externalRoleFolders) {
+		const isExplicitDirectory = explicitDirectoryKeys.has(normalizeResolvedPath(externalFolder));
+		if (resourceDiscoveryMode === 'explicit' || (resourceDiscoveryMode === 'marker' && isExplicitDirectory)) {
+			continue;
+		}
 		const relPath = path.relative(root, externalFolder);
 		pendingDirs.push({ abs: externalFolder, rel: relPath, index: 0 });
 		console.log(`loadRoles: 添加外部文件夹到扫描队列: ${externalFolder} (rel: ${relPath})`);
@@ -1162,6 +1369,10 @@ export function loadRoles(forceRefresh: boolean = false, changedFiles?: string[]
 					if (entry.name === 'outline' || entry.name === '.anh-fsdb' || entry.name === 'typo' || entry.name === 'comments') continue;
 					pendingDirs.push({ abs: entryPath, rel: rel ? path.join(rel, entry.name) : entry.name, index: 0 });
 				} else if (entry.isFile()) {
+					if (explicitResourcePaths.has(normalizeResolvedPath(entryPath))) {
+						processed++;
+						continue;
+					}
 					// 需要传入完整路径以便 isRoleFile 进行内容嗅探（Markdown 无关键词场景）
 					const roleCandidate = isRoleFile(entry.name, entryPath);
 					console.log(`[loadRoles][scan] file="${entryPath}" roleCandidate=${roleCandidate}`);
@@ -1500,8 +1711,12 @@ export function isRoleFile(fileName: string, fileFullPath?: string): boolean {
  * @param packagePath 包路径（相对于 novel-helper）
  * @param fileName 文件名
  */
-function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
+function loadRoleFile(filePath: string, packagePath: string, fileName: string, forcedType?: string) {
 	console.log(`loadRoleFile: 加载文件 ${filePath}`);
+	if (path.basename(filePath).toLowerCase() === '__init__.ojson5') {
+		console.log(`loadRoleFile: 跳过外部资源目录标记文件 ${filePath}`);
+		return;
+	}
 	if (isRoleFileIsolated(filePath)) {
 		console.warn(`loadRoleFile: 文件已被隔离，跳过 ${filePath}`);
 		return;
@@ -1515,7 +1730,7 @@ function loadRoleFile(filePath: string, packagePath: string, fileName: string) {
 			return;
 		}
 		
-		const fileType = getFileType(fileName, filePath);
+		const fileType = forcedType || getFileType(fileName, filePath);
 
 		// JSON5-like role/relationship files: .json5, .ojson5, .rjson5
 		const lower = fileName.toLowerCase();
@@ -1947,13 +2162,34 @@ function performIncrementalUpdate(changedFiles: string[], novelHelperRoot: strin
 		
 		const fileName = path.basename(filePath);
 		// 只处理角色文件，关系文件由 updateRelationships 处理
-		if (!isRoleFile(fileName, filePath)) {
+		const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const explicitResource = workspaceRoot
+			? resolveProjectResourceIncludes(workspaceRoot).files.find(item => normalizeResolvedPath(item.filePath) === normalizeResolvedPath(filePath))
+			: undefined;
+		const isBuiltinResource = isPathInsideRoot(novelHelperRoot, filePath);
+		const isAutoDiscoveredResource = workspaceRoot
+			&& getProjectJson5Config(workspaceRoot).resourceDiscovery !== 'explicit'
+			&& lastExternalRoleFolders.some(folder => isPathInsideRoot(folder, filePath));
+		const traditionalResourceKeys = ['rolesFile', 'sensitiveWordsFile', 'vocabularyFile', 'regexPatternsFile'];
+		const isTraditionalResource = workspaceRoot && traditionalResourceKeys.some(key => {
+			const configured = vscode.workspace.getConfiguration('AndreaNovelHelper').get<string>(key);
+			if (!configured) return false;
+			const configuredPath = path.join(workspaceRoot, configured);
+			const txtPath = configuredPath.replace(/\.[^/.]+$/, '.txt');
+			return normalizeResolvedPath(filePath) === normalizeResolvedPath(configuredPath)
+				|| normalizeResolvedPath(filePath) === normalizeResolvedPath(txtPath);
+		});
+		if (!isBuiltinResource && !explicitResource && !isAutoDiscoveredResource && !isTraditionalResource) {
+			console.log(`performIncrementalUpdate: 跳过未声明的工作区资源 ${fileName}`);
+			continue;
+		}
+		if (!explicitResource && !isRoleFile(fileName, filePath)) {
 			console.log(`performIncrementalUpdate: 跳过非角色文件 ${fileName}`);
 			continue;
 		}
 		
 		const packagePath = path.relative(novelHelperRoot, path.dirname(filePath));
-		loadRoleFile(filePath, packagePath, fileName);
+		loadRoleFile(filePath, packagePath, fileName, explicitResource ? includeKindToType(explicitResource.kind) : undefined);
 	}
 	
 	// 为新加载的角色添加 UUID（异步执行，不阻塞主流程）

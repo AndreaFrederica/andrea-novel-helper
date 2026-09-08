@@ -7,14 +7,19 @@ import * as crypto from 'crypto';
 import { tokenizeComplexNames } from './utils';
 
 export function generateCSpellDictionary() {
-    if (!roles.length) return;
-
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) return;
 
     const root = folders[0].uri.fsPath;
     const vscodeDir = path.join(root, '.vscode');
     const dictPath = path.join(vscodeDir, 'cspell-roles.txt');
+
+    if (roles.length === 0) {
+        if (fs.existsSync(dictPath) && fs.readFileSync(dictPath, 'utf8') !== '') {
+            fs.writeFileSync(dictPath, '', 'utf8');
+        }
+        return;
+    }
 
     // 1. 收集角色名、别名和分词结果
     const wordSet = new Set<string>();

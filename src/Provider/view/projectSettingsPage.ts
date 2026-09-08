@@ -15,12 +15,20 @@ import {
 } from '../../projectConfig/projectKeywordConfig';
 import {
     PROJECT_LIBRARY_TARGET_DEFAULTS,
+    normalizeProjectResourceExcludes,
+    normalizeProjectResourceIncludes,
+    type ProjectResourceInclude,
+    type ProjectResourceDiscoveryMode,
     type ProjectLibraryTargetKey,
 } from '../../projectConfig/projectJson5Config';
 
 type ProjectSettingsJson5 = Record<ProjectLibraryTargetKey, string> & {
     defaultRoleLookupKeys: string[];
     extendedLookupKeyPrefixes: string[];
+    autoDiscovery: boolean;
+    resourceDiscovery: ProjectResourceDiscoveryMode;
+    includes: ProjectResourceInclude[];
+    excludes: string[];
 } & Record<ProjectKeywordConfigKey, string[]>;
 
 interface ProjectSettingsPayload {
@@ -192,6 +200,12 @@ function normalizeJson5Payload(value: Record<string, unknown>): ProjectSettingsJ
     }
     config.defaultRoleLookupKeys = normalizeStringArray(value.defaultRoleLookupKeys);
     config.extendedLookupKeyPrefixes = normalizeStringArray(value.extendedLookupKeyPrefixes);
+    config.autoDiscovery = value.autoDiscovery === true;
+    config.resourceDiscovery = value.resourceDiscovery === 'marker' || value.resourceDiscovery === 'explicit' || value.resourceDiscovery === 'all'
+        ? value.resourceDiscovery
+        : config.autoDiscovery ? 'all' : 'marker';
+    config.includes = normalizeProjectResourceIncludes(value.includes);
+    config.excludes = normalizeProjectResourceExcludes(value.excludes);
     for (const definition of PROJECT_KEYWORD_CONFIG_DEFINITIONS) {
         config[definition.key] = normalizeKeywordList(value[definition.key]);
     }
@@ -229,6 +243,10 @@ function createDefaultProjectJson5(): ProjectSettingsJson5 {
         sensitiveWordsFileKeywords: [],
         vocabularyFileKeywords: [],
         regexFileKeywords: [],
+        autoDiscovery: false,
+        resourceDiscovery: 'marker',
+        includes: [],
+        excludes: [],
     };
 }
 
@@ -249,6 +267,12 @@ function readProjectJson5(filePath: string): { config: ProjectSettingsJson5; err
         }
         config.defaultRoleLookupKeys = normalizeStringArray(parsed.defaultRoleLookupKeys);
         config.extendedLookupKeyPrefixes = normalizeStringArray(parsed.extendedLookupKeyPrefixes);
+        config.autoDiscovery = parsed.autoDiscovery === true;
+        config.resourceDiscovery = parsed.resourceDiscovery === 'marker' || parsed.resourceDiscovery === 'explicit' || parsed.resourceDiscovery === 'all'
+            ? parsed.resourceDiscovery
+            : parsed.autoDiscovery === true ? 'all' : parsed.autoDiscovery === false && 'autoDiscovery' in parsed ? 'explicit' : 'marker';
+        config.includes = normalizeProjectResourceIncludes(parsed.includes);
+        config.excludes = normalizeProjectResourceExcludes(parsed.excludes);
         for (const definition of PROJECT_KEYWORD_CONFIG_DEFINITIONS) {
             config[definition.key] = normalizeKeywordList(parsed[definition.key]);
         }
@@ -287,6 +311,16 @@ function renderProjectJson5(config: ProjectSettingsJson5): string {
         '  // 扩展索引键家族前缀（使系统将这些前缀开头的字段也识别为索引键）',
         `  extendedLookupKeyPrefixes: ${formatArray(config.extendedLookupKeyPrefixes)},`,
         '',
+        "  // 外部资源发现模式：marker（默认，仅识别 __init__.ojson5）、explicit（仅 includes）、all（旧的启发式扫描）",
+        `  resourceDiscovery: ${jsonString(config.resourceDiscovery)},`,
+        `  autoDiscovery: ${config.autoDiscovery ? 'true' : 'false'},`,
+        '',
+        '  // 显式加载的资源文件、目录或 glob 路径（相对于工作区根目录）',
+        `  includes: ${formatResourceIncludes(config.includes)},`,
+        '',
+        '  // 从 includes 展开结果中排除的相对路径或 glob',
+        `  excludes: ${formatArray(config.excludes)},`,
+        '',
         ...PROJECT_KEYWORD_CONFIG_DEFINITIONS.flatMap(definition => [
             `  // ${definition.detail}`,
             `  ${definition.key}: ${formatArray(config[definition.key])},`,
@@ -295,6 +329,17 @@ function renderProjectJson5(config: ProjectSettingsJson5): string {
         '}',
         '',
     ].join('\n');
+}
+
+function formatResourceIncludes(values: ProjectResourceInclude[]): string {
+    if (!values.length) {
+        return '[]';
+    }
+    const lines = values.map(value => {
+        const recursive = value.recursive ? ', recursive: true' : '';
+        return `    { path: ${jsonString(value.path)}, kind: ${jsonString(value.kind)}${recursive} },`;
+    });
+    return `[\n${lines.join('\n')}\n  ]`;
 }
 
 function formatArray(values: string[]): string {
@@ -563,6 +608,10 @@ function getProjectSettingsHtml(webview: vscode.Webview): string {
         const el = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
         let createdAt = '';
         let updatedAt = '';
+        let resourceIncludes = [];
+        let resourceExcludes = [];
+        let autoDiscovery = false;
+        let resourceDiscovery = 'marker';
 
         function listText(values) {
             return Array.isArray(values) ? values.join('\\n') : '';
@@ -592,6 +641,10 @@ function getProjectSettingsHtml(webview: vscode.Webview): string {
             el.tags.value = listText(project.tags);
             createdAt = project.createdAt || '';
             updatedAt = project.updatedAt || '';
+            resourceIncludes = Array.isArray(json5.includes) ? json5.includes : [];
+            resourceExcludes = Array.isArray(json5.excludes) ? json5.excludes : [];
+            autoDiscovery = json5.autoDiscovery === true;
+            resourceDiscovery = json5.resourceDiscovery || (autoDiscovery ? 'all' : 'marker');
             ['rolesFile', 'sensitiveWordsFile', 'vocabularyFile', 'regexPatternsFile'].forEach(id => { el[id].value = json5[id] || ''; });
             ['defaultRoleLookupKeys', 'extendedLookupKeyPrefixes', 'characterFileKeywords', 'sensitiveWordsFileKeywords', 'vocabularyFileKeywords', 'regexFileKeywords'].forEach(id => { el[id].value = listText(json5[id]); });
         }
@@ -619,7 +672,11 @@ function getProjectSettingsHtml(webview: vscode.Webview): string {
                     characterFileKeywords: parseList(el.characterFileKeywords.value),
                     sensitiveWordsFileKeywords: parseList(el.sensitiveWordsFileKeywords.value),
                     vocabularyFileKeywords: parseList(el.vocabularyFileKeywords.value),
-                    regexFileKeywords: parseList(el.regexFileKeywords.value)
+                    regexFileKeywords: parseList(el.regexFileKeywords.value),
+                    autoDiscovery,
+                    resourceDiscovery,
+                    includes: resourceIncludes,
+                    excludes: resourceExcludes
                 }
             };
         }

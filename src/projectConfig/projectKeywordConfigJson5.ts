@@ -78,7 +78,66 @@ export class ProjectKeywordConfigJson5Linter implements vscode.Disposable {
             diagnostics.push(...this.validateKeywordValue(document, definition, record[definition.key]));
         }
 
+        diagnostics.push(...this.validateResourceManifest(document, record));
+
         this.diagnosticCollection.set(document.uri, diagnostics);
+        return diagnostics;
+    }
+
+    private validateResourceManifest(document: vscode.TextDocument, record: Record<string, unknown>): vscode.Diagnostic[] {
+        const diagnostics: vscode.Diagnostic[] = [];
+        const manifestRange = this.findKeyRange(document, 'includes');
+        if ('resourceDiscovery' in record && (typeof record.resourceDiscovery !== 'string' || !['marker', 'explicit', 'all'].includes(record.resourceDiscovery))) {
+            diagnostics.push(new vscode.Diagnostic(this.findKeyRange(document, 'resourceDiscovery'), 'resourceDiscovery 必须是 marker、explicit 或 all', vscode.DiagnosticSeverity.Error));
+        }
+        if ('autoDiscovery' in record && typeof record.autoDiscovery !== 'boolean') {
+            diagnostics.push(new vscode.Diagnostic(this.findKeyRange(document, 'autoDiscovery'), 'autoDiscovery 必须是布尔值', vscode.DiagnosticSeverity.Error));
+        }
+        if ('excludes' in record && !(Array.isArray(record.excludes) && record.excludes.every(item => typeof item === 'string'))) {
+            diagnostics.push(new vscode.Diagnostic(this.findKeyRange(document, 'excludes'), 'excludes 必须是字符串数组', vscode.DiagnosticSeverity.Error));
+        }
+        if (!('includes' in record)) {
+            return diagnostics;
+        }
+        if (!Array.isArray(record.includes)) {
+            diagnostics.push(new vscode.Diagnostic(manifestRange, 'includes 必须是数组', vscode.DiagnosticSeverity.Error));
+            return diagnostics;
+        }
+        const allowedKinds = new Set(['role', 'sensitive', 'vocabulary', 'regex', 'auto']);
+        const validateIncludePath = (includePath: string, index: number) => {
+            const normalized = includePath.trim().replace(/\\/g, '/');
+            if (path.isAbsolute(normalized) || normalized.split('/').includes('..')) {
+                diagnostics.push(new vscode.Diagnostic(manifestRange, `includes[${index}].path 必须是工作区内的相对路径`, vscode.DiagnosticSeverity.Error));
+            } else if (normalized === '.' || normalized === './') {
+                diagnostics.push(new vscode.Diagnostic(manifestRange, `includes[${index}].path 不能直接包含工作区根目录`, vscode.DiagnosticSeverity.Error));
+            }
+        };
+        record.includes.forEach((entry, index) => {
+            if (typeof entry === 'string') {
+                if (!entry.trim()) {
+                    diagnostics.push(new vscode.Diagnostic(manifestRange, `includes[${index}] 不能为空`, vscode.DiagnosticSeverity.Error));
+                } else {
+                    validateIncludePath(entry, index);
+                }
+                return;
+            }
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+                diagnostics.push(new vscode.Diagnostic(manifestRange, `includes[${index}] 必须是路径字符串或对象`, vscode.DiagnosticSeverity.Error));
+                return;
+            }
+            const item = entry as Record<string, unknown>;
+            if (typeof item.path !== 'string' || !item.path.trim()) {
+                diagnostics.push(new vscode.Diagnostic(manifestRange, `includes[${index}].path 必须是非空字符串`, vscode.DiagnosticSeverity.Error));
+            } else {
+                validateIncludePath(item.path, index);
+            }
+            if (item.kind !== undefined && (typeof item.kind !== 'string' || !allowedKinds.has(item.kind))) {
+                diagnostics.push(new vscode.Diagnostic(manifestRange, `includes[${index}].kind 类型无效`, vscode.DiagnosticSeverity.Error));
+            }
+            if (item.recursive !== undefined && typeof item.recursive !== 'boolean') {
+                diagnostics.push(new vscode.Diagnostic(manifestRange, `includes[${index}].recursive 必须是布尔值`, vscode.DiagnosticSeverity.Error));
+            }
+        });
         return diagnostics;
     }
 

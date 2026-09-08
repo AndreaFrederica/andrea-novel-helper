@@ -7,7 +7,7 @@ import { roles, onDidChangeRoles } from '../../activate';
 import { Role } from '../../extension';
 import { generateCharacterGalleryJson5, generateSensitiveWordsJson5, generateVocabularyJson5, generateRegexPatternsTemplate, generateMarkdownRegexPatternsTemplate, generateMarkdownRoleTemplate, generateMarkdownSensitiveTemplate, generateMarkdownVocabularyTemplate, generateCharacterGalleryToml, generateSensitiveWordsToml, generateVocabularyToml } from '../../templates/templateGenerators';
 import { statSync } from 'fs';
-import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot, isRoleFile } from '../../utils/utils';
+import { loadRoles, scanExternalRoleFoldersWithReport, ExternalRoleFolderScanReport, isExternalResourceMarkerFile, isPathUnderAnyRoot, isProjectResourceIncluded, isRoleFile } from '../../utils/utils';
 import { generateUUIDv7 } from '../../utils/uuidUtils';
 import { updateDecorations } from '../../events/updateDecorations';
 import { registerFileChangeCallback, unregisterFileChangeCallback, FileChangeEvent } from '../../utils/tracker/globalFileTracking';
@@ -15,6 +15,7 @@ import { generateCustomFileName, generateDefaultFileName } from '../../utils/Par
 import { globalRelationshipManager } from '../../utils/globalRelationshipManager';
 import { AnyNode, RoleTreeDataProvider, RoleTreeItem } from './roleTreeView';
 import { PROJECT_CONFIG_MARKDOWN_FILE_NAME, PROJECT_KEYWORD_CONFIG_JSON5_FILE_NAME } from '../../projectConfig/constants';
+import { getProjectJson5Config, updateProjectResourceIncludes } from '../../projectConfig/projectJson5Config';
 import { getProjectKeywordConfig, mergeProjectKeywordConfigs, type ProjectKeywordConfig } from '../../projectConfig/projectKeywordConfig';
 import {
     DEFAULT_PROJECT_KEYWORD_CONFIG,
@@ -307,11 +308,11 @@ class ExternalResourceManageNode extends vscode.TreeItem {
     public readonly resourceUri: vscode.Uri;
 
     constructor(public readonly workspaceRoot: string) {
-        super('+ 外部资源目录管理', vscode.TreeItemCollapsibleState.None);
+        super('+ 外部资源管理', vscode.TreeItemCollapsibleState.None);
         this.resourceUri = vscode.Uri.file(workspaceRoot);
         this.contextValue = 'externalResourceManage';
         this.iconPath = new vscode.ThemeIcon('folder-library');
-        this.description = '扫描、添加、移除外部资源目录';
+        this.description = '声明、查看、移除外部资源';
         this.command = {
             command: 'AndreaNovelHelper.showExternalResourceManage',
             title: '打开外部资源目录管理面板',
@@ -1414,7 +1415,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
     const helperRoot = path.join(rootFsPath, 'novel-helper');
 
     const getManagedRoots = () => [helperRoot, ...provider.getExternalRoleFolders()];
-    const isManagedPath = (filePath: string) => isPathUnderAnyRoot(filePath, getManagedRoots());
+    const isManagedPath = (filePath: string) => isPathUnderAnyRoot(filePath, getManagedRoots()) || isProjectResourceIncluded(filePath);
     const isHelperPath = (filePath: string) => isPathUnderAnyRoot(filePath, [helperRoot]);
     const workspaceRoots = (vscode.workspace.workspaceFolders || []).map(folder => folder.uri.fsPath);
     const isWorkspacePath = (filePath: string) => isPathUnderAnyRoot(filePath, workspaceRoots);
@@ -1424,6 +1425,9 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         if (!isManagedPath(filePath)) {
             return false;
         }
+		if (isProjectResourceIncluded(filePath)) {
+			return true;
+		}
 
         // helperRoot 下继续沿用原有排除规则
         if (isHelperPath(filePath)) {
@@ -1473,7 +1477,7 @@ export function registerPackageManagerView(context: vscode.ExtensionContext) {
         if (isExternalResourceMarkerFile(baseName)) {
             return true;
         }
-        return isRoleFile(baseName, filePath);
+        return isProjectResourceIncluded(filePath) || isRoleFile(baseName, filePath);
     };
 
     // 统一的刷新处理函数
@@ -2356,14 +2360,14 @@ async function showExternalResourceManagePanel(provider: PackageManagerProvider)
                 detail: '重新搜索并更新外部资源目录列表'
             },
             {
-                label: '$(add) 添加外部资源目录',
-                description: '手动添加一个外部资源目录',
-                detail: '选择一个文件夹作为外部资源目录'
+                label: '$(add) 添加外部资源',
+                description: '手动声明一个资源文件或目录',
+                detail: '选择工作区内的文件或子目录，写入 project-config.json5'
             },
             {
-                label: '$(list-unordered) 查看外部资源目录列表',
-                description: '显示当前已识别的外部资源目录',
-                detail: `当前共 ${folders.length} 个外部资源目录`
+                label: '$(list-unordered) 查看 includes 列表',
+                description: '显示 project-config.json5 中的显式资源声明',
+                detail: `当前共 ${getProjectJson5Config(workspaceRoot).includes.length} 条声明`
             },
             {
                 label: '$(file-text) 查看扫描报告',
@@ -2388,6 +2392,10 @@ async function showExternalResourceManagePanel(provider: PackageManagerProvider)
 // 执行外部资源管理操作
 async function executeExternalResourceAction(actionLabel: string, provider: PackageManagerProvider): Promise<void> {
     try {
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!workspaceRoot) {
+            throw new Error('请先打开一个工作区');
+        }
         if (actionLabel.includes('重新扫描外部资源目录')) {
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -2407,132 +2415,87 @@ async function executeExternalResourceAction(actionLabel: string, provider: Pack
                 progress.report({ increment: 100, message: '完成' });
                 vscode.window.showInformationMessage(`外部资源扫描完成：${report.externalFolderCount} 个目录`);
             });
-        } else if (actionLabel.includes('添加外部资源目录')) {
+        } else if (actionLabel.includes('添加外部资源')) {
             const folders = await vscode.window.showOpenDialog({
-                canSelectFiles: false,
+                canSelectFiles: true,
                 canSelectFolders: true,
                 canSelectMany: false,
-                openLabel: '选择外部资源目录'
+                openLabel: '选择资源文件或目录'
             });
             if (folders && folders.length > 0) {
                 const selectedPath = folders[0].fsPath;
-                const initFilePath = path.join(selectedPath, '__init__.ojson5');
-                const ignoreFilePath = path.join(selectedPath, '.anh-ignore');
-
-                // 检查目录是否已经被识别
-                const currentFolders = provider.getExternalRoleFolders();
-                if (currentFolders.includes(selectedPath)) {
-                    vscode.window.showWarningMessage('该目录已是外部资源目录');
+                const normalizedRoot = path.resolve(workspaceRoot);
+                const normalizedSelected = path.resolve(selectedPath);
+                if (normalizedSelected.toLowerCase() === normalizedRoot.toLowerCase()) {
+                    vscode.window.showWarningMessage('不能直接包含工作区根目录，请选择具体文件或子目录');
+                    return;
+                }
+                if (!isPathUnderAnyRoot(normalizedSelected, [normalizedRoot])) {
+                    vscode.window.showWarningMessage('资源 include 目前只支持工作区根目录下的文件或目录');
                     return;
                 }
 
-                // 检查是否已有 __init__.ojson5 文件
-                if (fs.existsSync(initFilePath)) {
-                    vscode.window.showWarningMessage('该目录已包含 __init__.ojson5 文件，请重新扫描');
-                    provider.rescanExternalRoleFolders(false);
-                    provider.refresh();
+                const kindPick = await vscode.window.showQuickPick([
+                    { label: '角色', value: 'role' },
+                    { label: '敏感词', value: 'sensitive' },
+                    { label: '词汇', value: 'vocabulary' },
+                    { label: '正则表达式', value: 'regex' },
+                    { label: '自动识别', value: 'auto' },
+                ], { title: '选择资源类型', placeHolder: '此文件或目录按哪类资源加载？' });
+                if (!kindPick) return;
+
+                const relative = path.relative(normalizedRoot, normalizedSelected).replace(/\\/g, '/');
+                const isDirectory = fs.existsSync(normalizedSelected) && fs.statSync(normalizedSelected).isDirectory();
+                const entry = { path: relative, kind: kindPick.value as 'role' | 'sensitive' | 'vocabulary' | 'regex' | 'auto', ...(isDirectory ? { recursive: true } : {}) };
+                if (!updateProjectResourceIncludes(normalizedRoot, includes => [...includes, entry])) {
+                    vscode.window.showErrorMessage('写入 project-config.json5 失败');
                     return;
                 }
-
-                // 询问用户是否创建标记文件
-                const createInit = await vscode.window.showQuickPick([
-                    { label: '$(check) 创建标记文件', description: '创建 __init__.ojson5 标记此目录为外部资源目录' },
-                    { label: '$(x) 取消', description: '不创建文件' }
-                ], {
-                    placeHolder: `是否在 ${path.basename(selectedPath)} 中创建标记文件？`,
-                    title: '添加外部资源目录'
-                });
-
-                if (createInit && createInit.label.includes('创建标记文件')) {
-                    // 删除 .anh-ignore 文件（如果存在）
-                    if (fs.existsSync(ignoreFilePath)) {
-                        fs.unlinkSync(ignoreFilePath);
-                    }
-
-                    // 创建 __init__.ojson5 文件
-                    const initContent = `{
-  // 外部资源目录标记文件
-  // 此文件用于标识此目录为 Andrea Novel Helper 的外部资源目录
-  // 可以在此文件中添加目录级别的配置或备注
-  "description": "外部资源目录",
-  "createdAt": "${new Date().toISOString()}"
-}`;
-                    fs.writeFileSync(initFilePath, initContent, 'utf-8');
-                    provider.rescanExternalRoleFolders(false);
-                    provider.refresh();
-
-                    // 同时刷新角色数据
-                    try {
-                        loadRoles(true);
-                        updateDecorations();
-                    } catch (e) {
-                        console.error('[PackageManager] 添加外部资源目录后刷新角色失败:', e);
-                    }
-
-                    vscode.window.showInformationMessage(`已将 ${path.basename(selectedPath)} 标记为外部资源目录`);
-                }
+                provider.rescanExternalRoleFolders(false);
+                provider.refresh();
+                loadRoles(true);
+                updateDecorations();
+                vscode.window.showInformationMessage(`已添加资源 include: ${relative}`);
             }
-        } else if (actionLabel.includes('查看外部资源目录列表')) {
-            const folders = provider.getExternalRoleFolders();
-            if (folders.length === 0) {
-                vscode.window.showInformationMessage('当前没有外部资源目录');
+        } else if (actionLabel.includes('查看 includes 列表')) {
+            const includes = getProjectJson5Config(workspaceRoot).includes;
+            if (includes.length === 0) {
+                vscode.window.showInformationMessage('project-config.json5 中还没有 includes 声明');
                 return;
             }
-            const items = folders.map(f => ({
-                label: path.basename(f),
-                description: f,
-                detail: fs.existsSync(f) ? '已存在' : '路径不存在'
-            }));
+            const items = includes.map(include => {
+                const absolutePath = path.resolve(workspaceRoot, include.path);
+                return {
+                    label: include.path,
+                    description: include.kind,
+                    detail: fs.existsSync(absolutePath) ? absolutePath : 'glob 或路径当前不存在',
+                    include,
+                    absolutePath,
+                };
+            });
             const selected = await vscode.window.showQuickPick(items, {
-                placeHolder: '外部资源目录列表',
-                title: `共 ${folders.length} 个外部资源目录`
+                placeHolder: '显式资源 includes',
+                title: `共 ${includes.length} 条声明`
             });
             if (selected) {
-                // 提供操作选项
-                const action = await vscode.window.showQuickPick([
-                    { label: '$(folder) 在资源管理器中打开', description: selected.description },
-                    { label: '$(trash) 从列表中移除', description: selected.description }
-                ], { placeHolder: selected.label });
+                const actions: vscode.QuickPickItem[] = [];
+                if (fs.existsSync(selected.absolutePath)) {
+                    actions.push({ label: '$(folder) 在资源管理器中打开', description: selected.absolutePath });
+                }
+                actions.push({ label: '$(trash) 从 includes 中移除', description: selected.include.path });
+                const action = await vscode.window.showQuickPick(actions, { placeHolder: selected.label });
                 if (action) {
                     if (action.label.includes('在资源管理器中打开')) {
-                        vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(selected.description));
-                    } else if (action.label.includes('从列表中移除')) {
-                        const initFilePath = path.join(selected.description, '__init__.ojson5');
-                        const ignoreFilePath = path.join(selected.description, '.anh-ignore');
-
-                        // 检查是否有标记文件需要处理
-                        const hasInitFile = fs.existsSync(initFilePath);
-
-                        // 选择如何处理
-                        const removeAction = await vscode.window.showQuickPick<vscode.QuickPickItem>([
-                            { label: '$(circle-slash) 排除此目录', description: '创建 .anh-ignore 文件，防止再次被自动识别' },
-                            { label: '$(trash) 删除标记文件', description: '仅删除 __init__.ojson5 标记文件（目录内其他资源文件仍可能被识别）' },
-                            { label: '$(x) 取消', description: '不执行任何操作' }
-                        ], {
-                            placeHolder: `如何处理 ${path.basename(selected.description)}？${hasInitFile ? ' (包含 __init__.ojson5)' : ''}`,
-                            title: '移除外部资源目录'
-                        });
-
-                        if (!removeAction || removeAction.label.includes('取消')) {
+                        vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(selected.absolutePath));
+                    } else if (action.label.includes('从 includes 中移除')) {
+                        const removed = updateProjectResourceIncludes(workspaceRoot, current => current.filter(item =>
+                            item.path !== selected.include.path
+                            || item.kind !== selected.include.kind
+                            || item.recursive !== selected.include.recursive
+                        ));
+                        if (!removed) {
+                            vscode.window.showErrorMessage('更新 project-config.json5 失败');
                             return;
-                        }
-
-                        if (removeAction.label.includes('排除此目录')) {
-                            // 创建 .anh-ignore 文件
-                            const ignoreContent = `# Andrea Novel Helper 忽略标记
-# 此文件用于标记此目录不应被自动识别为外部资源目录
-# 创建时间: ${new Date().toISOString()}
-`;
-                            fs.writeFileSync(ignoreFilePath, ignoreContent, 'utf-8');
-
-                            // 同时删除 __init__.ojson5 如果存在
-                            if (hasInitFile) {
-                                fs.unlinkSync(initFilePath);
-                            }
-                        } else if (removeAction.label.includes('删除标记文件')) {
-                            if (hasInitFile) {
-                                fs.unlinkSync(initFilePath);
-                            }
                         }
 
                         provider.rescanExternalRoleFolders(false);
@@ -2546,7 +2509,7 @@ async function executeExternalResourceAction(actionLabel: string, provider: Pack
                             console.error('[PackageManager] 移除外部资源目录后刷新角色失败:', e);
                         }
 
-                        vscode.window.showInformationMessage(`已移除外部资源目录: ${selected.description}`);
+                        vscode.window.showInformationMessage(`已移除资源 include: ${selected.include.path}`);
                     }
                 }
             }
