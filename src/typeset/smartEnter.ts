@@ -32,7 +32,10 @@ export async function smartEnterImpl() {
     const enableSmartExit  = cfg.get<boolean>('andrea.typeset.enableSmartExit', true);
 
     const N = Math.max(0, cfg.get<number>('andrea.typeset.blankLinesBetweenParas', 1) ?? 1);
-    const indent = getIndentUnit(ed);
+    // 段间空行和段首缩进是两个独立的排版选项。关闭段首缩进时，
+    // 智慧切段仍应保留空行，但不能把编辑器的缩进单位插入新段落。
+    const indentFirstTwoSpaces = cfg.get<boolean>('andrea.typeset.indentFirstTwoSpaces', true);
+    const indent = indentFirstTwoSpaces ? getIndentUnit(ed) : '';
 
     const pairs = getPairsFromConfig();
     const closingSet = new Set(pairs.map(p => p.close));
